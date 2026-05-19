@@ -10,27 +10,47 @@ type ContainerSceneProps = {
   onSelectBox?: (boxId: string) => void
 }
 
-function makeLabelTexture(label: string, selected: boolean) {
+function makeFaceLabelTexture(label: string, color: string, selected: boolean) {
   const canvas = document.createElement('canvas')
-  canvas.width = 128
-  canvas.height = 128
+  canvas.width = 256
+  canvas.height = 256
   const context = canvas.getContext('2d')
   if (!context) {
     return new THREE.CanvasTexture(canvas)
   }
-  context.fillStyle = selected ? '#f3b21a' : '#ffffff'
-  context.strokeStyle = '#222222'
-  context.lineWidth = 8
+  context.fillStyle = color
+  context.fillRect(0, 0, canvas.width, canvas.height)
+
+  context.fillStyle = selected ? 'rgba(243, 178, 26, 0.92)' : 'rgba(255, 255, 255, 0.86)'
+  context.strokeStyle = selected ? '#f3b21a' : '#222222'
+  context.lineWidth = selected ? 14 : 10
   context.beginPath()
-  context.roundRect(12, 12, 104, 104, 18)
+  context.roundRect(42, 42, 172, 172, 22)
   context.fill()
   context.stroke()
   context.fillStyle = '#222222'
-  context.font = 'bold 66px Verdana, sans-serif'
+  context.font = 'bold 104px Verdana, sans-serif'
   context.textAlign = 'center'
   context.textBaseline = 'middle'
-  context.fillText(label, 64, 67)
-  return new THREE.CanvasTexture(canvas)
+  context.fillText(label, 128, 134, 142)
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  return texture
+}
+
+function makeBoxMaterials(box: PlacedBox, selected: boolean) {
+  const texture = makeFaceLabelTexture(box.label, box.color, selected)
+  return Array.from(
+    { length: 6 },
+    () =>
+      new THREE.MeshStandardMaterial({
+        map: texture,
+        roughness: 0.58,
+        metalness: 0.04,
+        emissive: selected ? new THREE.Color(0x332100) : new THREE.Color(0x000000),
+      }),
+  )
 }
 
 export function ContainerScene({ container, boxes, selectedBoxId, onSelectBox }: ContainerSceneProps) {
@@ -97,12 +117,8 @@ export function ContainerScene({ container, boxes, selectedBoxId, onSelectBox }:
 
     boxes.forEach((box) => {
       const geometry = new THREE.BoxGeometry(box.length * scale, box.height * scale, box.width * scale)
-      const material = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(box.color),
-        roughness: 0.55,
-        metalness: 0.05,
-        emissive: box.id === selectedBoxId ? new THREE.Color(0x332100) : new THREE.Color(0x000000),
-      })
+      const selected = box.id === selectedBoxId
+      const material = makeBoxMaterials(box, selected)
       const mesh = new THREE.Mesh(geometry, material)
       mesh.position.set(
         -length / 2 + (box.x + box.length / 2) * scale,
@@ -117,17 +133,10 @@ export function ContainerScene({ container, boxes, selectedBoxId, onSelectBox }:
 
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(geometry),
-        new THREE.LineBasicMaterial({ color: box.id === selectedBoxId ? 0xf3b21a : 0x252525, transparent: true, opacity: 0.72 }),
+        new THREE.LineBasicMaterial({ color: selected ? 0xf3b21a : 0x252525, transparent: true, opacity: 0.72 }),
       )
       edges.position.copy(mesh.position)
       scene.add(edges)
-
-      const labelTexture = makeLabelTexture(box.label, box.id === selectedBoxId)
-      const labelMaterial = new THREE.SpriteMaterial({ map: labelTexture, transparent: true })
-      const label = new THREE.Sprite(labelMaterial)
-      label.position.set(mesh.position.x, mesh.position.y + (box.height * scale) / 2 + 0.08, mesh.position.z)
-      label.scale.set(0.42, 0.42, 0.42)
-      scene.add(label)
     })
 
     const grid = new THREE.GridHelper(Math.max(length, width), 16, 0x8b8b8b, 0xbdbdbd)

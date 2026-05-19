@@ -35,10 +35,6 @@ export function orientations(item: CargoItem): BoxSize[] {
   const options = [
     base,
     { length: item.width, width: item.length, height: item.height },
-    { length: item.length, width: item.height, height: item.width },
-    { length: item.height, width: item.width, height: item.length },
-    { length: item.width, width: item.height, height: item.length },
-    { length: item.height, width: item.length, height: item.width },
   ]
 
   return options.filter(
@@ -118,7 +114,7 @@ function normalizePoints(points: Point[], container: ContainerSpec) {
       seen.add(key)
       return true
     })
-    .sort((a, b) => a.z - b.z || a.y - b.y || a.x - b.x)
+    .sort((a, b) => a.x - b.x || a.y - b.y || a.z - b.z)
 }
 
 function bestPlacement(item: CargoItem, container: ContainerSpec, placed: PlacedBox[], points: Point[]) {
@@ -136,9 +132,9 @@ function bestPlacement(item: CargoItem, container: ContainerSpec, placed: Placed
           box,
           point,
           score:
-            point.z * container.length * container.width +
-            point.y * container.length +
-            point.x +
+            point.x * container.width * container.height +
+            point.y * container.height +
+            point.z +
             (container.height - box.height) / 100000,
         })),
     )
