@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+:root {
+  font-family: Verdana, Geneva, Tahoma, sans-serif;
+  color: #3f3f3f;
+  background: #e6e6e6;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #555;
+}
+
+.field-input {
+  width: 100%;
+  border: 1px solid #a8a8a8;
+  background: white;
+  padding: 8px 9px;
+  font-size: 14px;
+  outline: none;
+}
+
+.field-input:focus {
+  border-color: #f2a900;
+  box-shadow: 0 0 0 2px rgba(242, 169, 0, 0.25);
+}
