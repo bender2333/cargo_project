@@ -120,6 +120,40 @@ server {
 - 如果部署到非站点根路径，需要同步配置 Vite `base`，否则静态资源路径可能不正确。
 - 导入导出在浏览器端完成，用户文件不会上传到服务器。
 
+### 当前远端服务器
+
+当前生产静态站点部署在 `cargo-server`：
+
+| 项目 | 值 |
+| --- | --- |
+| SSH 主机别名 | `cargo-server` |
+| 服务器 | `VM-0-12-opencloudos` |
+| 部署用户 | `root` |
+| 访问地址 | `http://101.33.232.150/` |
+| Web 服务 | Nginx |
+| 站点根目录 | `/usr/share/nginx/html` |
+| 备份目录格式 | `/root/cargo_project-backup-YYYYMMDD-HHMMSS` |
+
+当前远端 Nginx 直接从 `/usr/share/nginx/html` 提供静态文件。部署时先在本地构建，再上传 `dist/` 内容并覆盖站点根目录：
+
+```bash
+npm run build
+
+ssh cargo-server 'set -e; ts=$(date +%Y%m%d-%H%M%S); backup=/root/cargo_project-backup-$ts; mkdir -p "$backup"; cp -a /usr/share/nginx/html/. "$backup"/; echo "$backup"'
+ssh cargo-server 'rm -rf /tmp/cargo-dist && mkdir -p /tmp/cargo-dist'
+scp -r dist/* cargo-server:/tmp/cargo-dist/
+ssh cargo-server 'rsync -a --delete /tmp/cargo-dist/ /usr/share/nginx/html/ && chown -R root:root /usr/share/nginx/html && chmod -R a+rX /usr/share/nginx/html'
+ssh cargo-server 'curl -fsS http://127.0.0.1/ >/dev/null && echo deployed'
+```
+
+部署后从本机验证公网访问：
+
+```bash
+curl -I http://101.33.232.150/
+```
+
+最近一次部署备份目录：`/root/cargo_project-backup-20260520-170534`。
+
 ## 架构设计
 
 项目采用“UI 组合层 + 可测试业务逻辑 + 可视化组件”的结构，避免把核心装箱逻辑写死在 React 组件中。

@@ -108,3 +108,6 @@
 - Added collapsible container parameters and loading rules with visible summaries, cargo deletion, native drag/drop cargo reordering, report-area Excel import/export controls, and a dedicated import log tab for import summaries, warnings, and errors.
 - Expanded E2E coverage for default Chinese startup, report panel placement, collapsible sections, cargo deletion/export synchronization, input-order drag sorting, import log behavior, independent history restore, and five-plan local retention.
 - Verification: `npm run lint` passed; `npm test` passed 32 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 26 tests.
+- Completed subtask: document current remote deployment workflow.
+- Added the `cargo-server` access address, SSH alias, Nginx site root, backup path convention, deploy commands, and post-deploy public URL verification to `README.md`.
+- Verification: documentation-only change; code verification not rerun.
