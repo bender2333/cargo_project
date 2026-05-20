@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { containers, formatCubicMeters, getContainerVolume } from '../data/containers'
+import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from '../data/containers'
 import type { CargoItem, ContainerSpec, PackingResult, PlacedBox } from '../types'
 import { calculatePacking } from './packing'
 
@@ -26,6 +26,9 @@ const testContainer = (overrides: Partial<ContainerSpec> = {}): ContainerSpec =>
   width: 2000,
   height: 2000,
   maxWeight: 10_000,
+  doorGap: 0,
+  topGap: 0,
+  sideGap: 0,
   ...overrides,
 })
 
@@ -78,14 +81,22 @@ function expectValidPacking(container: ContainerSpec, result: PackingResult) {
 
 describe('container specs', () => {
   it('matches EasyCargo captured container dimensions', () => {
-    expect(containers.map((container) => container.label)).toEqual(["Container 20'", "Container 40'", "Container 40' HC"])
+    expect(containers.map((container) => container.label)).toEqual(["Container 20'", "Container 40'", "Container 40' HC", "Container 45' HC"])
     expect(containers[0]).toMatchObject({ length: 5758, width: 2352, height: 2385, maxWeight: 28200 })
     expect(containers[2]).toMatchObject({ length: 12117, width: 2388, height: 2694, maxWeight: 29600 })
+    expect(containers[3]).toMatchObject({ length: 13556, width: 2352, height: 2698, maxWeight: 27700 })
   })
 
   it('formats cubic millimeters as cubic meters', () => {
     expect(formatCubicMeters(1_000_000_000)).toBe('1.00 m³')
     expect(getContainerVolume(containers[0])).toBe(5758 * 2352 * 2385)
+  })
+
+  it('derives effective loading dimensions from door, top, and side gaps', () => {
+    const container = testContainer({ length: 4000, width: 2000, height: 2000, doorGap: 300, topGap: 100, sideGap: 50 })
+
+    expect(effectiveContainer(container)).toMatchObject({ length: 3700, width: 1900, height: 1900 })
+    expect(getContainerVolume(container)).toBe(3700 * 1900 * 1900)
   })
 })
 
@@ -261,6 +272,15 @@ describe('calculatePacking', () => {
     expectValidPacking(containers[0], result)
     expect(result.placedCount).toBe(1)
     expect(result.unplaced[0]).toMatchObject({ quantity: 1, reason: 'Exceeds maximum payload' })
+  })
+
+  it('uses effective dimensions after reserved gaps for boundary checks', () => {
+    const result = calculatePacking(testContainer({ length: 2000, width: 1000, height: 1000, doorGap: 200 }), [
+      cargo({ id: 'gap-blocked', label: 'G', length: 1900, width: 1000, height: 1000, quantity: 1, canRotate: false }),
+    ])
+
+    expect(result.placedCount).toBe(0)
+    expect(result.unplaced[0]).toMatchObject({ cargoId: 'gap-blocked', reason: 'Exceeds container dimensions' })
   })
 
   it('reports deterministic totals for a partially loaded container', () => {

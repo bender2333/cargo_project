@@ -11,6 +11,9 @@ const container: ContainerSpec = {
   width: 1000,
   height: 1000,
   maxWeight: 150,
+  doorGap: 0,
+  topGap: 0,
+  sideGap: 0,
 }
 
 function cargo(overrides: Partial<CargoItem>): CargoItem {

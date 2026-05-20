@@ -1,5 +1,5 @@
 import type { CargoItem, ContainerSpec, PackingDiagnostic, PackingLayer, PackingResult, PlacedBox } from '../types'
-import { getContainerVolume } from '../data/containers'
+import { effectiveContainer, getContainerVolume } from '../data/containers'
 
 type BoxSize = {
   length: number
@@ -223,6 +223,7 @@ function buildDiagnostics(placed: PlacedBox[], unplaced: PackingResult['unplaced
 }
 
 export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[]): PackingResult {
+  const effective = effectiveContainer(container)
   const placed: PlacedBox[] = []
   let extremePoints: Point[] = [{ x: 0, y: 0, z: 0 }]
   const unplacedMap = new Map<string, { cargoId: string; name: string; label: string; quantity: number; reason: string }>()
@@ -250,17 +251,17 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       })
     }
 
-    if (orientations(item).every((box) => !fitsInsideContainer({ x: 0, y: 0, z: 0 }, box, container))) {
+    if (orientations(item).every((box) => !fitsInsideContainer({ x: 0, y: 0, z: 0 }, box, effective))) {
       markUnplaced('Exceeds container dimensions')
       continue
     }
 
-    if (usedWeight + item.weight > container.maxWeight) {
+    if (usedWeight + item.weight > effective.maxWeight) {
       markUnplaced('Exceeds maximum payload')
       continue
     }
 
-    const placement = bestPlacement(item, container, placed, extremePoints)
+    const placement = bestPlacement(item, effective, placed, extremePoints)
     if (!placement) {
       markUnplaced('No remaining loading space')
       continue
@@ -296,7 +297,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         { x: point.x, y: point.y + box.width, z: point.z },
         { x: point.x, y: point.y, z: point.z + box.height },
       ],
-      container,
+      effective,
     )
     usedWeight += item.weight
   }
@@ -340,6 +341,6 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     containerVolume,
     volumeUtilization: containerVolume ? (usedVolume / containerVolume) * 100 : 0,
     usedWeight,
-    weightUtilization: container.maxWeight ? (usedWeight / container.maxWeight) * 100 : 0,
+    weightUtilization: effective.maxWeight ? (usedWeight / effective.maxWeight) * 100 : 0,
   }
 }

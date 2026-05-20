@@ -1,9 +1,10 @@
-import type { CargoItem, PackingResult } from '../types'
+import type { CargoItem, ContainerSpec, PackingResult } from '../types'
 
 export type HistoryPlan = {
   id: string
   createdAt: string
   containerId: string
+  container: ContainerSpec
   cargoItems: CargoItem[]
   placedCount: number
   totalCargoCount: number
@@ -16,7 +17,7 @@ type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
 const storageKey = 'cargo-packing-history'
 
 export function createHistoryPlan(
-  containerId: string,
+  container: ContainerSpec,
   cargoItems: CargoItem[],
   result: PackingResult,
   options: { createId?: () => string; now?: () => Date } = {},
@@ -27,7 +28,8 @@ export function createHistoryPlan(
   return {
     id: createId(),
     createdAt: now().toISOString(),
-    containerId,
+    containerId: container.id,
+    container: { ...container },
     cargoItems: cargoItems.map((item) => ({ ...item })),
     placedCount: result.placedCount,
     totalCargoCount: result.totalCargoCount,
@@ -47,7 +49,7 @@ export function readHistoryPlans(storage: StorageLike): HistoryPlan[] {
     if (!Array.isArray(parsed)) {
       return []
     }
-    return parsed.filter((item): item is HistoryPlan => Boolean(item?.id && item?.containerId && Array.isArray(item?.cargoItems)))
+    return parsed.filter((item): item is HistoryPlan => Boolean(item?.id && item?.containerId && item?.container && Array.isArray(item?.cargoItems)))
   } catch {
     return []
   }

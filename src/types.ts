@@ -6,6 +6,9 @@ export type ContainerSpec = {
   width: number
   height: number
   maxWeight: number
+  doorGap: number
+  topGap: number
+  sideGap: number
 }
 
 export type CargoItem = {

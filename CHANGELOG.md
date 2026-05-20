@@ -22,3 +22,6 @@
 - Completed subtask: add local history plan save and restore.
 - Added `historyPlans` helpers to snapshot container, cargo items, labels, layers, and result summary; added a History result tab for saving and restoring plans without introducing accounts or backend services.
 - Verification: `npm test` passed 23 tests; `npm run lint` passed; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 9 tests.
+- Completed subtask: add container gap controls, 45HQ, and custom container editing.
+- Extended container specs with door/top/side gap fields, added a 45HQ preset, and made effective loading dimensions respect reserved gaps before packing and visualization.
+- Verification: `npm test` passed 25 tests; `npm run lint` passed; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 10 tests.

@@ -58,19 +58,34 @@ test('loads the container calculator workspace', async ({ page }) => {
 
 test('updates parameters when selecting another container', async ({ page }) => {
   await page.goto('/')
-  const target = page.getByRole('button', { name: /Container 40' HC/ }).first()
+  const target = page.getByRole('button', { name: /Container 45' HC/ }).first()
   await target.click()
   await expect(target).toHaveClass(/bg-white/)
 })
 
+test('shows custom container fields and effective dimensions', async ({ page }) => {
+  await page.goto('/')
+  await page.getByLabel('Container type').selectOption('custom')
+  await page.getByLabel('Length mm').first().fill('15000')
+  await page.getByLabel('Width mm').first().fill('2400')
+  await page.getByLabel('Height mm').first().fill('2600')
+  await page.getByLabel('Max payload kg').fill('28000')
+  await page.getByLabel('Door gap mm').fill('300')
+  await page.getByLabel('Top gap mm').fill('100')
+  await page.getByLabel('Side gap mm').fill('50')
+
+  await expect(page.getByText('14,700 x 2,300 x 2,500 mm')).toBeVisible()
+})
+
 test('adds cargo and recalculates utilization', async ({ page }) => {
   await page.goto('/')
-  await page.getByLabel('Name', { exact: true }).fill('Tall crate')
-  await page.getByLabel('Length mm').fill('1200')
-  await page.getByLabel('Width mm').fill('800')
-  await page.getByLabel('Height mm').fill('600')
-  await page.getByLabel('Weight kg').fill('42')
-  await page.getByLabel('Quantity').fill('3')
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('Name', { exact: true }).fill('Tall crate')
+  await cargoForm.getByLabel('Length mm').fill('1200')
+  await cargoForm.getByLabel('Width mm').fill('800')
+  await cargoForm.getByLabel('Height mm').fill('600')
+  await cargoForm.getByLabel('Weight kg').fill('42')
+  await cargoForm.getByLabel('Quantity').fill('3')
   await page.getByRole('button', { name: '+ Add cargo item' }).click()
   await page.getByRole('button', { name: 'Load' }).click()
 
@@ -198,13 +213,14 @@ test('imports Chinese centimeter Excel fields with visible conversion warning', 
 
 test('saves and restores history plans with labels and layers intact', async ({ page }) => {
   await page.goto('/')
-  await page.getByLabel('Name', { exact: true }).fill('History crate')
-  await page.getByLabel('Label', { exact: true }).fill('H')
-  await page.getByLabel('Length mm').fill('1200')
-  await page.getByLabel('Width mm').fill('800')
-  await page.getByLabel('Height mm').fill('600')
-  await page.getByLabel('Weight kg').fill('42')
-  await page.getByLabel('Quantity').fill('3')
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('Name', { exact: true }).fill('History crate')
+  await cargoForm.getByLabel('Label', { exact: true }).fill('H')
+  await cargoForm.getByLabel('Length mm').fill('1200')
+  await cargoForm.getByLabel('Width mm').fill('800')
+  await cargoForm.getByLabel('Height mm').fill('600')
+  await cargoForm.getByLabel('Weight kg').fill('42')
+  await cargoForm.getByLabel('Quantity').fill('3')
   await page.getByRole('button', { name: '+ Add cargo item' }).click()
   await page.getByRole('button', { name: 'Load' }).click()
 

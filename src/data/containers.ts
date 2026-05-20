@@ -9,6 +9,9 @@ export const containers: ContainerSpec[] = [
     width: 2352,
     height: 2385,
     maxWeight: 28200,
+    doorGap: 0,
+    topGap: 0,
+    sideGap: 0,
   },
   {
     id: '40gp',
@@ -18,6 +21,9 @@ export const containers: ContainerSpec[] = [
     width: 2352,
     height: 2385,
     maxWeight: 26600,
+    doorGap: 0,
+    topGap: 0,
+    sideGap: 0,
   },
   {
     id: '40hq',
@@ -27,11 +33,38 @@ export const containers: ContainerSpec[] = [
     width: 2388,
     height: 2694,
     maxWeight: 29600,
+    doorGap: 0,
+    topGap: 0,
+    sideGap: 0,
+  },
+  {
+    id: '45hq',
+    label: "Container 45' HC",
+    description: '45 ft high cube container',
+    length: 13556,
+    width: 2352,
+    height: 2698,
+    maxWeight: 27700,
+    doorGap: 0,
+    topGap: 0,
+    sideGap: 0,
   },
 ]
 
+export function effectiveContainer(container: ContainerSpec): ContainerSpec {
+  return {
+    ...container,
+    id: `${container.id}-effective`,
+    label: `${container.label} effective`,
+    length: Math.max(0, container.length - container.doorGap),
+    width: Math.max(0, container.width - container.sideGap * 2),
+    height: Math.max(0, container.height - container.topGap),
+  }
+}
+
 export function getContainerVolume(container: ContainerSpec) {
-  return container.length * container.width * container.height
+  const effective = effectiveContainer(container)
+  return effective.length * effective.width * effective.height
 }
 
 export function formatCubicMeters(volumeMm3: number) {

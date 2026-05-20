@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx'
 import { ContainerScene } from './components/ContainerScene'
 import { ContainerPlan2D } from './components/ContainerPlan2D'
 import type { PlanViewMode } from './components/ContainerPlan2D'
-import { containers, formatCubicMeters, getContainerVolume } from './data/containers'
+import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from './data/containers'
 import { buildExportPlanRows } from './lib/exportPlan'
 import { createHistoryPlan, readHistoryPlans, saveHistoryPlan } from './lib/historyPlans'
 import type { HistoryPlan } from './lib/historyPlans'
@@ -31,6 +31,13 @@ const copy = {
     stackable: 'Stackable',
     add: '+ Add cargo item',
     cargoItems: 'Cargo items',
+    containerConfig: 'Container parameters',
+    containerType: 'Container type',
+    customContainer: 'Custom container',
+    maxWeight: 'Max payload kg',
+    doorGap: 'Door gap mm',
+    topGap: 'Top gap mm',
+    sideGap: 'Side gap mm',
     importExcel: 'Import XLSX',
     exportExcel: 'Export XLSX',
     importIssue: 'Import issue',
@@ -87,6 +94,13 @@ const copy = {
     stackable: '允许堆叠',
     add: '+ 添加货物',
     cargoItems: '货物项目',
+    containerConfig: '货柜参数',
+    containerType: '货柜类型',
+    customContainer: '自定义柜型',
+    maxWeight: '最大载重 kg',
+    doorGap: '柜门预留 mm',
+    topGap: '顶部余量 mm',
+    sideGap: '左右预留 mm',
     importExcel: '导入 XLSX',
     exportExcel: '导出 XLSX',
     importIssue: '导入问题',
@@ -145,6 +159,19 @@ const initialCargo: CargoItem[] = [
   },
 ]
 
+const customContainerDefaults = {
+  id: 'custom',
+  label: 'Custom container',
+  description: 'User defined container',
+  length: 12000,
+  width: 2350,
+  height: 2600,
+  maxWeight: 26000,
+  doorGap: 0,
+  topGap: 0,
+  sideGap: 0,
+}
+
 type CargoForm = Omit<CargoItem, 'id'>
 type WorkspaceView = '3d' | '2d'
 type ResultTab = 'layers' | 'details' | 'diagnostics' | 'history'
@@ -174,6 +201,8 @@ function Workbench() {
   const [locale, setLocale] = useState<Locale>('en')
   const t = copy[locale]
   const [selectedContainerId, setSelectedContainerId] = useState(containers[0].id)
+  const [containerOverrides, setContainerOverrides] = useState(() => Object.fromEntries(containers.map((container) => [container.id, container])))
+  const [customContainer, setCustomContainer] = useState(customContainerDefaults)
   const [cargoItems, setCargoItems] = useState<CargoItem[]>(initialCargo)
   const [form, setForm] = useState<CargoForm>(emptyForm)
   const [hasCalculated, setHasCalculated] = useState(true)
@@ -185,7 +214,10 @@ function Workbench() {
   const [importMessages, setImportMessages] = useState<string[]>([])
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null)
 
-  const selectedContainer = containers.find((container) => container.id === selectedContainerId) ?? containers[0]
+  const selectedContainer = selectedContainerId === 'custom'
+    ? customContainer
+    : containerOverrides[selectedContainerId] ?? containers[0]
+  const renderingContainer = effectiveContainer(selectedContainer)
   const result = useMemo(() => calculatePacking(selectedContainer, cargoItems), [cargoItems, selectedContainer])
   const activeLayer = result.layers.find((layer) => layer.id === activeLayerId)
   const visibleBoxes = hasCalculated
@@ -194,6 +226,21 @@ function Workbench() {
 
   const updateNumber = (field: keyof Pick<CargoForm, 'length' | 'width' | 'height' | 'weight' | 'quantity'>, value: string) => {
     setForm((current) => ({ ...current, [field]: Number(value) || 0 }))
+  }
+
+  const updateContainerNumber = (field: 'length' | 'width' | 'height' | 'maxWeight' | 'doorGap' | 'topGap' | 'sideGap', value: string) => {
+    const nextValue = Math.max(0, Number(value) || 0)
+    if (selectedContainerId === 'custom') {
+      setCustomContainer((current) => ({ ...current, [field]: nextValue }))
+      return
+    }
+    setContainerOverrides((current) => ({
+      ...current,
+      [selectedContainerId]: {
+        ...(current[selectedContainerId] ?? containers.find((container) => container.id === selectedContainerId) ?? containers[0]),
+        [field]: nextValue,
+      },
+    }))
   }
 
   const addCargo = (event: FormEvent) => {
@@ -240,13 +287,18 @@ function Workbench() {
   }
 
   const saveCurrentPlan = () => {
-    const next = createHistoryPlan(selectedContainer.id, cargoItems, result)
+    const next = createHistoryPlan(selectedContainer, cargoItems, result)
     setHistoryPlans(saveHistoryPlan(localStorage, next))
     setActiveResultTab('history')
   }
 
   const restorePlan = (plan: HistoryPlan) => {
     setSelectedContainerId(plan.containerId)
+    if (plan.containerId === 'custom') {
+      setCustomContainer(plan.container)
+    } else {
+      setContainerOverrides((current) => ({ ...current, [plan.containerId]: plan.container }))
+    }
     setCargoItems(plan.cargoItems)
     setActiveLayerId('all')
     setSelectedBoxId(null)
@@ -282,6 +334,28 @@ function Workbench() {
             <strong className="bg-[#f29ca8] px-4 py-3 text-sm">{t.group}</strong>
             <span className="flex-1 px-4 text-sm italic text-white">{t.note}</span>
           </div>
+          <section className="border-b border-[#c8c8c8] p-4">
+            <h2 className="mb-2 text-sm font-bold">{t.containerConfig}</h2>
+            <label className="field-label">{t.containerType}
+              <select className="field-input mt-1" value={selectedContainerId} onChange={(event) => setSelectedContainerId(event.target.value)}>
+                {containers.map((container) => <option key={container.id} value={container.id}>{container.label}</option>)}
+                <option value="custom">{t.customContainer}</option>
+              </select>
+            </label>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <label className="field-label">{t.length}<input className="field-input mt-1" type="number" value={selectedContainer.length} onChange={(event) => updateContainerNumber('length', event.target.value)} /></label>
+              <label className="field-label">{t.width}<input className="field-input mt-1" type="number" value={selectedContainer.width} onChange={(event) => updateContainerNumber('width', event.target.value)} /></label>
+              <label className="field-label">{t.height}<input className="field-input mt-1" type="number" value={selectedContainer.height} onChange={(event) => updateContainerNumber('height', event.target.value)} /></label>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <label className="field-label">{t.maxWeight}<input className="field-input mt-1" type="number" value={selectedContainer.maxWeight} onChange={(event) => updateContainerNumber('maxWeight', event.target.value)} /></label>
+              <label className="field-label">{t.doorGap}<input className="field-input mt-1" type="number" value={selectedContainer.doorGap} onChange={(event) => updateContainerNumber('doorGap', event.target.value)} /></label>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <label className="field-label">{t.topGap}<input className="field-input mt-1" type="number" value={selectedContainer.topGap} onChange={(event) => updateContainerNumber('topGap', event.target.value)} /></label>
+              <label className="field-label">{t.sideGap}<input className="field-input mt-1" type="number" value={selectedContainer.sideGap} onChange={(event) => updateContainerNumber('sideGap', event.target.value)} /></label>
+            </div>
+          </section>
           <form className="space-y-3 p-4" onSubmit={addCargo}>
             <div className="grid grid-cols-[1fr_56px] gap-2">
               <label className="field-label">{t.name}<input className="field-input mt-1" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></label>
@@ -353,7 +427,7 @@ function Workbench() {
           </div>
           <div className="absolute left-5 top-5 z-10 rounded bg-white/75 px-4 py-3 text-sm shadow">
             <strong>{selectedContainer.label}</strong>
-            <div>{selectedContainer.length.toLocaleString()} x {selectedContainer.width.toLocaleString()} x {selectedContainer.height.toLocaleString()} mm</div>
+            <div>{renderingContainer.length.toLocaleString()} x {renderingContainer.width.toLocaleString()} x {renderingContainer.height.toLocaleString()} mm</div>
           </div>
           <div className="absolute right-6 top-5 z-10 grid grid-cols-3 gap-5 rounded bg-white/70 px-5 py-3 text-center text-sm shadow">
             <div><strong>{t.weight}</strong><div>{result.usedWeight.toLocaleString()} kg</div></div>
@@ -361,9 +435,9 @@ function Workbench() {
             <div><strong>{t.loaded}</strong><div>{result.placedCount}/{result.totalCargoCount}</div></div>
           </div>
           {workspaceView === '3d' ? (
-            <ContainerScene boxes={visibleBoxes} container={selectedContainer} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
+            <ContainerScene boxes={visibleBoxes} container={renderingContainer} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
           ) : (
-            <ContainerPlan2D activeLayerId={activeLayerId} boxes={result.placed} container={selectedContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
+            <ContainerPlan2D activeLayerId={activeLayerId} boxes={result.placed} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
           )}
           <button className="absolute bottom-10 right-10 grid h-32 w-32 place-items-center rounded-full border-8 border-white bg-[#686868] text-3xl font-semibold text-white shadow-xl hover:bg-[#4c4c4c]" type="button" onClick={() => setHasCalculated(true)}>{t.load}</button>
         </section>
@@ -474,7 +548,7 @@ function Workbench() {
             )}
           </div>
           <div className="max-h-[320px] overflow-auto">
-            {containers.map((container) => (
+            {[...containers, customContainer].map((container) => (
               <button className={`block w-full border-b border-[#d1d1d1] px-3 py-4 text-left hover:bg-white ${container.id === selectedContainer.id ? 'bg-white' : ''}`} key={container.id} type="button" onClick={() => setSelectedContainerId(container.id)}>
                 <div className="mb-2 ml-auto h-6 w-28 bg-[#5f5f5f]" />
                 <strong>{container.label}</strong>

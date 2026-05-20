@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { CargoItem, PackingResult } from '../types'
+import type { CargoItem, ContainerSpec, PackingResult } from '../types'
 import { calculatePacking } from './packing'
 import { createHistoryPlan, readHistoryPlans, saveHistoryPlan } from './historyPlans'
 
@@ -27,16 +27,26 @@ const cargoItem: CargoItem = {
   stackable: true,
 }
 
+const container: ContainerSpec = {
+  id: 'container',
+  label: 'Container',
+  description: 'Test',
+  length: 3000,
+  width: 2000,
+  height: 2000,
+  maxWeight: 5000,
+  doorGap: 100,
+  topGap: 50,
+  sideGap: 25,
+}
+
 function result(): PackingResult {
-  return calculatePacking(
-    { id: 'container', label: 'Container', description: 'Test', length: 3000, width: 2000, height: 2000, maxWeight: 5000 },
-    [cargoItem],
-  )
+  return calculatePacking(container, [cargoItem])
 }
 
 describe('history plans', () => {
   it('creates a restorable snapshot with cargo labels and result summary', () => {
-    const plan = createHistoryPlan('container', [cargoItem], result(), {
+    const plan = createHistoryPlan(container, [cargoItem], result(), {
       createId: () => 'plan-1',
       now: () => new Date('2026-05-20T00:00:00.000Z'),
     })
@@ -45,6 +55,7 @@ describe('history plans', () => {
       id: 'plan-1',
       createdAt: '2026-05-20T00:00:00.000Z',
       containerId: 'container',
+      container,
       placedCount: 2,
       totalCargoCount: 2,
       layerCount: 2,
@@ -57,8 +68,8 @@ describe('history plans', () => {
     const store = storage('not-json')
     expect(readHistoryPlans(store)).toEqual([])
 
-    const first = createHistoryPlan('container', [cargoItem], result(), { createId: () => 'first' })
-    const second = createHistoryPlan('container', [cargoItem], result(), { createId: () => 'second' })
+    const first = createHistoryPlan(container, [cargoItem], result(), { createId: () => 'first' })
+    const second = createHistoryPlan(container, [cargoItem], result(), { createId: () => 'second' })
 
     saveHistoryPlan(store, first)
     expect(saveHistoryPlan(store, second).map((plan) => plan.id)).toEqual(['second', 'first'])
