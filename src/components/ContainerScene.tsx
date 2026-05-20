@@ -3,9 +3,13 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { ContainerSpec, PlacedBox } from '../types'
 
+export type SceneViewMode = 'iso' | 'top' | 'front' | 'side'
+
 type ContainerSceneProps = {
   container: ContainerSpec
   boxes: PlacedBox[]
+  activeLayerId: string
+  viewMode: SceneViewMode
   selectedBoxId?: string | null
   onSelectBox?: (boxId: string) => void
 }
@@ -39,7 +43,7 @@ function makeFaceLabelTexture(label: string, color: string, selected: boolean) {
   return texture
 }
 
-function makeBoxMaterials(box: PlacedBox, selected: boolean) {
+function makeBoxMaterials(box: PlacedBox, selected: boolean, opacity: number) {
   const texture = makeFaceLabelTexture(box.label, box.color, selected)
   return Array.from(
     { length: 6 },
@@ -49,11 +53,27 @@ function makeBoxMaterials(box: PlacedBox, selected: boolean) {
         roughness: 0.58,
         metalness: 0.04,
         emissive: selected ? new THREE.Color(0x332100) : new THREE.Color(0x000000),
+        transparent: opacity < 1,
+        opacity,
       }),
   )
 }
 
-export function ContainerScene({ container, boxes, selectedBoxId, onSelectBox }: ContainerSceneProps) {
+function cameraPositionForMode(mode: SceneViewMode, length: number, width: number, height: number) {
+  const distance = Math.max(length, width, height) * 1.25
+  if (mode === 'top') {
+    return new THREE.Vector3(0, distance, 0.01)
+  }
+  if (mode === 'front') {
+    return new THREE.Vector3(0, height * 0.55, distance)
+  }
+  if (mode === 'side') {
+    return new THREE.Vector3(distance, height * 0.55, 0)
+  }
+  return new THREE.Vector3(distance * 0.72, distance * 0.48, distance * 0.82)
+}
+
+export function ContainerScene({ container, boxes, activeLayerId, viewMode, selectedBoxId, onSelectBox }: ContainerSceneProps) {
   const mountRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -62,13 +82,20 @@ export function ContainerScene({ container, boxes, selectedBoxId, onSelectBox }:
       return
     }
 
+    const scale = 1 / 1000
+    const length = container.length * scale
+    const width = container.width * scale
+    const height = container.height * scale
+    const target = new THREE.Vector3(0, height / 2, 0)
+
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0xd9d9d9)
 
     const camera = new THREE.PerspectiveCamera(42, mount.clientWidth / mount.clientHeight, 0.1, 1000)
-    camera.position.set(10, 7, 12)
+    camera.position.copy(cameraPositionForMode(viewMode, length, width, height))
+    camera.lookAt(target)
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
     renderer.setPixelRatio(window.devicePixelRatio)
     renderer.setSize(mount.clientWidth, mount.clientHeight)
     renderer.shadowMap.enabled = true
@@ -76,7 +103,7 @@ export function ContainerScene({ container, boxes, selectedBoxId, onSelectBox }:
 
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
-    controls.target.set(0, 1.4, 0)
+    controls.target.copy(target)
     controls.maxDistance = 45
 
     const ambient = new THREE.HemisphereLight(0xffffff, 0x8d8d8d, 2.4)
@@ -86,11 +113,6 @@ export function ContainerScene({ container, boxes, selectedBoxId, onSelectBox }:
     key.position.set(7, 10, 5)
     key.castShadow = true
     scene.add(key)
-
-    const scale = 1 / 1000
-    const length = container.length * scale
-    const width = container.width * scale
-    const height = container.height * scale
 
     const floorGeometry = new THREE.BoxGeometry(length, 0.05, width)
     const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xb6b1a4, roughness: 0.85 })
@@ -118,7 +140,9 @@ export function ContainerScene({ container, boxes, selectedBoxId, onSelectBox }:
     boxes.forEach((box) => {
       const geometry = new THREE.BoxGeometry(box.length * scale, box.height * scale, box.width * scale)
       const selected = box.id === selectedBoxId
-      const material = makeBoxMaterials(box, selected)
+      const currentLayer = activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId
+      const opacity = selected || currentLayer ? 0.94 : 0.22
+      const material = makeBoxMaterials(box, selected, opacity)
       const mesh = new THREE.Mesh(geometry, material)
       mesh.position.set(
         -length / 2 + (box.x + box.length / 2) * scale,
@@ -133,7 +157,11 @@ export function ContainerScene({ container, boxes, selectedBoxId, onSelectBox }:
 
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(geometry),
-        new THREE.LineBasicMaterial({ color: selected ? 0xf3b21a : 0x252525, transparent: true, opacity: 0.72 }),
+        new THREE.LineBasicMaterial({
+          color: selected ? 0xf3b21a : currentLayer ? 0x252525 : 0x777777,
+          transparent: true,
+          opacity: selected || currentLayer ? 0.72 : 0.18,
+        }),
       )
       edges.position.copy(mesh.position)
       scene.add(edges)
@@ -189,7 +217,7 @@ export function ContainerScene({ container, boxes, selectedBoxId, onSelectBox }:
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       mount.removeChild(renderer.domElement)
     }
-  }, [container, boxes, selectedBoxId, onSelectBox])
+  }, [container, boxes, activeLayerId, viewMode, selectedBoxId, onSelectBox])
 
   return <div ref={mountRef} className="h-full min-h-[420px] w-full" data-testid="container-scene" />
 }

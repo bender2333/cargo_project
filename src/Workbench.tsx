@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import * as XLSX from 'xlsx'
 import { ContainerScene } from './components/ContainerScene'
+import type { SceneViewMode } from './components/ContainerScene'
 import { ContainerPlan2D } from './components/ContainerPlan2D'
 import type { PlanViewMode } from './components/ContainerPlan2D'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from './data/containers'
@@ -45,6 +46,7 @@ const copy = {
     load: 'Load',
     view2d: '2D',
     view3d: '3D',
+    isoView: 'Iso',
     topView: 'Top',
     frontView: 'Front',
     sideView: 'Side',
@@ -108,6 +110,7 @@ const copy = {
     load: '装箱',
     view2d: '2D',
     view3d: '3D',
+    isoView: '轴测',
     topView: '俯视',
     frontView: '正视',
     sideView: '侧视',
@@ -208,6 +211,7 @@ function Workbench() {
   const [hasCalculated, setHasCalculated] = useState(true)
   const [activeLayerId, setActiveLayerId] = useState('all')
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
+  const [sceneViewMode, setSceneViewMode] = useState<SceneViewMode>('iso')
   const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
   const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
   const [historyPlans, setHistoryPlans] = useState<HistoryPlan[]>(() => readHistoryPlans(localStorage))
@@ -424,6 +428,20 @@ function Workbench() {
                 ))}
               </>
             )}
+            {workspaceView === '3d' && (
+              <>
+                {[
+                  { id: 'iso' as const, label: t.isoView },
+                  { id: 'top' as const, label: t.topView },
+                  { id: 'front' as const, label: t.frontView },
+                  { id: 'side' as const, label: t.sideView },
+                ].map((view) => (
+                  <button className={`border px-3 py-1 ${sceneViewMode === view.id ? 'border-[#f3b21a] bg-white font-bold' : 'border-[#bbbbbb] bg-[#eeeeee]'}`} key={view.id} type="button" onClick={() => setSceneViewMode(view.id)}>
+                    {view.label}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
           <div className="absolute left-5 top-5 z-10 rounded bg-white/75 px-4 py-3 text-sm shadow">
             <strong>{selectedContainer.label}</strong>
@@ -435,7 +453,7 @@ function Workbench() {
             <div><strong>{t.loaded}</strong><div>{result.placedCount}/{result.totalCargoCount}</div></div>
           </div>
           {workspaceView === '3d' ? (
-            <ContainerScene boxes={visibleBoxes} container={renderingContainer} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
+            <ContainerScene activeLayerId={activeLayerId} boxes={hasCalculated ? result.placed : []} container={renderingContainer} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onSelectBox={setSelectedBoxId} />
           ) : (
             <ContainerPlan2D activeLayerId={activeLayerId} boxes={result.placed} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
           )}

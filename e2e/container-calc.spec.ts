@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { expect, test } from '@playwright/test'
+import type { Page } from '@playwright/test'
 import * as XLSX from 'xlsx'
 
 async function createWorkbookFile() {
@@ -48,6 +49,43 @@ async function createChineseWorkbookFile() {
   XLSX.utils.book_append_sheet(workbook, sheet, 'Cargo Items')
   XLSX.writeFile(workbook, filePath)
   return filePath
+}
+
+async function expectCanvasHasRenderedPixels(page: Page) {
+  const canvas = page.locator('canvas').first()
+  await expect(canvas).toBeVisible()
+  await page.waitForTimeout(150)
+
+  const distinctColors = await canvas.evaluate((node) => {
+    const canvasElement = node as HTMLCanvasElement
+    const gl = canvasElement.getContext('webgl2') ?? canvasElement.getContext('webgl')
+    if (!gl) {
+      return 0
+    }
+
+    const colors = new Set<string>()
+    const pixel = new Uint8Array(4)
+    const xSteps = [0.2, 0.35, 0.5, 0.65, 0.8]
+    const ySteps = [0.2, 0.35, 0.5, 0.65, 0.8]
+    xSteps.forEach((xStep) => {
+      ySteps.forEach((yStep) => {
+        gl.readPixels(
+          Math.floor(canvasElement.width * xStep),
+          Math.floor(canvasElement.height * yStep),
+          1,
+          1,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          pixel,
+        )
+        colors.add(`${Math.floor(pixel[0] / 8)}:${Math.floor(pixel[1] / 8)}:${Math.floor(pixel[2] / 8)}:${pixel[3]}`)
+      })
+    })
+
+    return colors.size
+  })
+
+  expect(distinctColors).toBeGreaterThan(1)
 }
 
 test('loads the container calculator workspace', async ({ page }) => {
@@ -143,6 +181,32 @@ test('renders an interactive 3D canvas', async ({ page }) => {
   await page.mouse.down()
   await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2 + 40)
   await page.mouse.up()
+  await expectCanvasHasRenderedPixels(page)
+})
+
+test('switches 3D camera views and keeps layer filtering visible', async ({ page }) => {
+  await page.goto('/')
+
+  for (const viewName of ['Top', 'Front', 'Side', 'Iso']) {
+    await page.getByRole('button', { name: viewName, exact: true }).click()
+    await expect(page.getByRole('button', { name: viewName, exact: true })).toHaveClass(/bg-white/)
+    await expectCanvasHasRenderedPixels(page)
+  }
+
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('Name', { exact: true }).fill('Layer stack')
+  await cargoForm.getByLabel('Label', { exact: true }).fill('L')
+  await cargoForm.getByLabel('Length mm').fill('1200')
+  await cargoForm.getByLabel('Width mm').fill('1000')
+  await cargoForm.getByLabel('Height mm').fill('600')
+  await cargoForm.getByLabel('Weight kg').fill('20')
+  await cargoForm.getByLabel('Quantity').fill('80')
+  await page.getByRole('button', { name: '+ Add cargo item' }).click()
+  await page.getByRole('button', { name: 'Load' }).click()
+
+  await page.getByRole('button', { name: /Layer 2/ }).first().click()
+  await expect(page.getByTestId('container-scene')).toBeVisible()
+  await expectCanvasHasRenderedPixels(page)
 })
 
 test('supports Excel import/export affordance and Chinese mode', async ({ page }) => {
