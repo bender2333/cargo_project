@@ -177,8 +177,17 @@ test('switches to 2D plan views and keeps labels visible', async ({ page }) => {
   await page.getByRole('button', { name: 'Side', exact: true }).click()
   await expect(page.getByTestId('container-plan-2d')).toBeVisible()
 
+  const svgDownloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export view' }).click()
+  const svgDownload = await svgDownloadPromise
+  expect(svgDownload.suggestedFilename()).toBe('packing-plan-side.svg')
+
   await page.getByRole('button', { name: '3D' }).click()
   await expect(page.getByTestId('container-scene')).toBeVisible()
+  const pngDownloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export view' }).click()
+  const pngDownload = await pngDownloadPromise
+  expect(pngDownload.suggestedFilename()).toBe('packing-plan-iso.png')
 })
 
 test('renders an interactive 3D canvas', async ({ page }) => {

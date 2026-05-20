@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import * as XLSX from 'xlsx'
 import { ContainerScene } from './components/ContainerScene'
@@ -41,6 +41,7 @@ const copy = {
     sideGap: 'Side gap mm',
     importExcel: 'Import XLSX',
     exportExcel: 'Export XLSX',
+    exportView: 'Export view',
     importIssue: 'Import issue',
     importWarning: 'Import warning',
     load: 'Load',
@@ -111,6 +112,7 @@ const copy = {
     sideGap: '左右预留 mm',
     importExcel: '导入 XLSX',
     exportExcel: '导出 XLSX',
+    exportView: '导出视图',
     importIssue: '导入问题',
     importWarning: '导入提醒',
     load: '装箱',
@@ -216,6 +218,15 @@ function formatDimensions(length: number | '', width: number | '', height: numbe
   return length === '' || width === '' || height === '' ? '-' : `${length} x ${width} x ${height}`
 }
 
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 function Workbench() {
   const [locale, setLocale] = useState<Locale>('en')
   const t = copy[locale]
@@ -233,6 +244,7 @@ function Workbench() {
   const [historyPlans, setHistoryPlans] = useState<HistoryPlan[]>(() => readHistoryPlans(localStorage))
   const [importMessages, setImportMessages] = useState<string[]>([])
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null)
+  const workspaceRef = useRef<HTMLElement | null>(null)
 
   const selectedContainer = selectedContainerId === 'custom'
     ? customContainer
@@ -305,6 +317,29 @@ function Workbench() {
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, sheet, 'Packing Plan')
     XLSX.writeFile(workbook, 'packing-plan.xlsx')
+  }
+
+  const exportCurrentView = () => {
+    if (workspaceView === '2d') {
+      const svg = workspaceRef.current?.querySelector('[data-testid="container-plan-2d"]')
+      if (!(svg instanceof SVGSVGElement)) {
+        throw new Error('2D plan is not available for export')
+      }
+      const source = new XMLSerializer().serializeToString(svg)
+      downloadBlob(new Blob([source], { type: 'image/svg+xml;charset=utf-8' }), `packing-plan-${planViewMode}.svg`)
+      return
+    }
+
+    const canvas = workspaceRef.current?.querySelector('canvas')
+    if (!(canvas instanceof HTMLCanvasElement)) {
+      throw new Error('3D canvas is not available for export')
+    }
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        throw new Error('3D canvas export failed')
+      }
+      downloadBlob(blob, `packing-plan-${sceneViewMode}.png`)
+    }, 'image/png')
   }
 
   const saveCurrentPlan = () => {
@@ -443,7 +478,7 @@ function Workbench() {
           </div>
         </aside>
 
-        <section className="relative min-h-[650px] bg-[#d8d8d8]">
+        <section className="relative min-h-[650px] bg-[#d8d8d8]" ref={workspaceRef}>
           <div className="absolute left-5 top-24 z-10 flex gap-2 rounded bg-white/75 p-2 text-sm shadow">
             <button className={`border px-3 py-1 ${workspaceView === '3d' ? 'border-[#f3b21a] bg-white font-bold' : 'border-[#bbbbbb] bg-[#eeeeee]'}`} type="button" onClick={() => setWorkspaceView('3d')}>
               {t.view3d}
@@ -478,6 +513,9 @@ function Workbench() {
                 ))}
               </>
             )}
+            <button className="border border-[#bbbbbb] bg-[#eeeeee] px-3 py-1" type="button" onClick={exportCurrentView}>
+              {t.exportView}
+            </button>
           </div>
           <div className="absolute left-5 top-5 z-10 rounded bg-white/75 px-4 py-3 text-sm shadow">
             <strong>{selectedContainer.label}</strong>
