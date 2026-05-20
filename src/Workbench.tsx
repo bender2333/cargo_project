@@ -70,7 +70,9 @@ const copy = {
     restore: 'Restore',
     noHistory: 'No saved plans',
     allLayers: 'All layers',
+    allLabels: 'All labels',
     currentLayer: 'Current layer',
+    labelFilter: 'Label filter',
     previousLayer: 'Prev',
     nextLayer: 'Next',
     showLayer: 'Show layer',
@@ -141,7 +143,9 @@ const copy = {
     restore: '恢复',
     noHistory: '暂无历史方案',
     allLayers: '全部层',
+    allLabels: '全部标签',
     currentLayer: '当前层',
+    labelFilter: '标签筛选',
     previousLayer: '上层',
     nextLayer: '下层',
     showLayer: '显示层',
@@ -237,6 +241,7 @@ function Workbench() {
   const [form, setForm] = useState<CargoForm>(emptyForm)
   const [hasCalculated, setHasCalculated] = useState(true)
   const [activeLayerId, setActiveLayerId] = useState('all')
+  const [activeLabelId, setActiveLabelId] = useState('all')
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
   const [sceneViewMode, setSceneViewMode] = useState<SceneViewMode>('iso')
   const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
@@ -254,8 +259,9 @@ function Workbench() {
   const detailRows = useMemo(() => buildExportPlanRows(cargoItems, result), [cargoItems, result])
   const activeLayer = result.layers.find((layer) => layer.id === activeLayerId)
   const visibleBoxes = hasCalculated
-    ? result.placed.filter((box) => activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId)
+    ? result.placed.filter((box) => (activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId) && (activeLabelId === 'all' || box.label === activeLabelId))
     : []
+  const labelOptions = [...new Set(result.labelStats.map((item) => item.label))]
   const activeLayerIndex = result.layers.findIndex((layer) => layer.id === activeLayerId)
 
   const updateNumber = (field: keyof Pick<CargoForm, 'length' | 'width' | 'height' | 'weight' | 'quantity'>, value: string) => {
@@ -357,6 +363,7 @@ function Workbench() {
     }
     setCargoItems(plan.cargoItems)
     setActiveLayerId('all')
+    setActiveLabelId('all')
     setSelectedBoxId(null)
     setHasCalculated(true)
   }
@@ -527,9 +534,9 @@ function Workbench() {
             <div><strong>{t.loaded}</strong><div>{result.placedCount}/{result.totalCargoCount}</div></div>
           </div>
           {workspaceView === '3d' ? (
-            <ContainerScene activeLayerId={activeLayerId} boxes={hasCalculated ? result.placed : []} container={renderingContainer} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onSelectBox={setSelectedBoxId} />
+            <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={hasCalculated ? result.placed : []} container={renderingContainer} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onSelectBox={setSelectedBoxId} />
           ) : (
-            <ContainerPlan2D activeLayerId={activeLayerId} boxes={result.placed} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
+            <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={result.placed} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
           )}
           <button className="absolute bottom-10 right-10 grid h-32 w-32 place-items-center rounded-full border-8 border-white bg-[#686868] text-3xl font-semibold text-white shadow-xl hover:bg-[#4c4c4c]" type="button" onClick={() => setHasCalculated(true)}>{t.load}</button>
         </section>
@@ -563,6 +570,12 @@ function Workbench() {
                     {t.nextLayer}
                   </button>
                 </div>
+                <label className="field-label mt-2">{t.labelFilter}
+                  <select aria-label={t.labelFilter} className="field-input mt-1" value={activeLabelId} onChange={(event) => setActiveLabelId(event.target.value)}>
+                    <option value="all">{t.allLabels}</option>
+                    {labelOptions.map((label) => <option key={label} value={label}>{label}</option>)}
+                  </select>
+                </label>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   {result.layers.map((layer) => (
                     <button className={`border px-2 py-1 text-left text-xs ${activeLayerId === layer.id ? 'border-[#f3b21a] bg-white' : 'border-[#bbb] bg-[#eee]'}`} key={layer.id} type="button" onClick={() => setActiveLayerId(layer.id)}>

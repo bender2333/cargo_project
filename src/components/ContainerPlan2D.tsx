@@ -6,6 +6,7 @@ type ContainerPlan2DProps = {
   container: ContainerSpec
   boxes: PlacedBox[]
   activeLayerId: string
+  activeLabelId: string
   mode: PlanViewMode
   selectedBoxId?: string | null
   onSelectBox?: (boxId: string) => void
@@ -40,7 +41,7 @@ function viewSize(container: ContainerSpec, mode: PlanViewMode) {
   return { width: container.length, height: container.width }
 }
 
-export function ContainerPlan2D({ container, boxes, activeLayerId, mode, selectedBoxId, onSelectBox }: ContainerPlan2DProps) {
+export function ContainerPlan2D({ container, boxes, activeLayerId, activeLabelId, mode, selectedBoxId, onSelectBox }: ContainerPlan2DProps) {
   const size = viewSize(container, mode)
   const viewBox = `0 0 ${size.width + padding * 2} ${size.height + padding * 2}`
 
@@ -58,8 +59,9 @@ export function ContainerPlan2D({ container, boxes, activeLayerId, mode, selecte
       {boxes.map((box) => {
         const projected = projectBox(box, mode)
         const isCurrentLayer = activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId
+        const isCurrentLabel = activeLabelId === 'all' || box.label === activeLabelId
         const isSelected = box.id === selectedBoxId
-        const opacity = isCurrentLayer ? 0.88 : 0.22
+        const opacity = isCurrentLayer && isCurrentLabel ? 0.88 : 0.18
 
         return (
           <g key={box.id} opacity={opacity}>

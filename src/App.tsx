@@ -292,7 +292,7 @@ function App() {
               <div>{(Math.max(0, selectedContainer.length - (result.placed.at(-1)?.x ?? 0)) / 1000).toFixed(2)} m</div>
             </div>
           </div>
-          <ContainerScene activeLayerId="all" boxes={hasCalculated ? result.placed : []} container={selectedContainer} viewMode="iso" />
+          <ContainerScene activeLabelId="all" activeLayerId="all" boxes={hasCalculated ? result.placed : []} container={selectedContainer} viewMode="iso" />
           <button
             className="absolute bottom-10 right-10 grid h-32 w-32 place-items-center rounded-full border-8 border-white bg-[#686868] text-3xl font-semibold text-white shadow-xl hover:bg-[#4c4c4c]"
             type="button"

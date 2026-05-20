@@ -190,6 +190,29 @@ test('switches to 2D plan views and keeps labels visible', async ({ page }) => {
   expect(pngDownload.suggestedFilename()).toBe('packing-plan-iso.png')
 })
 
+test('filters the plan view by cargo label', async ({ page }) => {
+  await page.goto('/')
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('Name', { exact: true }).fill('Label filtered crate')
+  await cargoForm.getByLabel('Label', { exact: true }).fill('B')
+  await cargoForm.getByLabel('Length mm').fill('1200')
+  await cargoForm.getByLabel('Width mm').fill('800')
+  await cargoForm.getByLabel('Height mm').fill('600')
+  await cargoForm.getByLabel('Weight kg').fill('42')
+  await cargoForm.getByLabel('Quantity').fill('2')
+  await page.getByRole('button', { name: '+ Add cargo item' }).click()
+  await page.getByRole('button', { name: 'Load' }).click()
+
+  await page.getByRole('button', { name: '2D' }).click()
+  await page.getByLabel('Label filter', { exact: true }).selectOption('B')
+  await expect(page.locator('rect[aria-label^="A Carton A"]').first().locator('xpath=..')).toHaveAttribute('opacity', '0.18')
+  await expect(page.locator('rect[aria-label^="B Label filtered crate"]').first().locator('xpath=..')).toHaveAttribute('opacity', '0.88')
+
+  await page.getByRole('button', { name: '3D' }).click()
+  await expect(page.getByTestId('container-scene')).toBeVisible()
+  await expectCanvasHasRenderedPixels(page)
+})
+
 test('renders an interactive 3D canvas', async ({ page }) => {
   await page.goto('/')
   const canvas = page.locator('canvas').first()

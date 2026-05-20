@@ -37,3 +37,6 @@
 - Completed subtask: export the current visual view.
 - Added an Export view action that downloads the current 2D projection as SVG and the current 3D camera view as PNG from the rendered workspace.
 - Verification: `npm run lint` passed; `npm test` passed 25 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 12 tests.
+- Completed subtask: add label filtering across plan views.
+- Added a label filter in the layer workspace and applied the same label dimming rules to 2D and 3D views while keeping selected boxes visible.
+- Verification: `npm run lint` passed; `npm test` passed 25 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 13 tests.

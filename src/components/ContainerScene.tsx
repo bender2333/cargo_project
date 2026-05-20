@@ -9,6 +9,7 @@ type ContainerSceneProps = {
   container: ContainerSpec
   boxes: PlacedBox[]
   activeLayerId: string
+  activeLabelId: string
   viewMode: SceneViewMode
   selectedBoxId?: string | null
   onSelectBox?: (boxId: string) => void
@@ -73,7 +74,7 @@ function cameraPositionForMode(mode: SceneViewMode, length: number, width: numbe
   return new THREE.Vector3(distance * 0.72, distance * 0.48, distance * 0.82)
 }
 
-export function ContainerScene({ container, boxes, activeLayerId, viewMode, selectedBoxId, onSelectBox }: ContainerSceneProps) {
+export function ContainerScene({ container, boxes, activeLayerId, activeLabelId, viewMode, selectedBoxId, onSelectBox }: ContainerSceneProps) {
   const mountRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -141,7 +142,8 @@ export function ContainerScene({ container, boxes, activeLayerId, viewMode, sele
       const geometry = new THREE.BoxGeometry(box.length * scale, box.height * scale, box.width * scale)
       const selected = box.id === selectedBoxId
       const currentLayer = activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId
-      const opacity = selected || currentLayer ? 0.94 : 0.22
+      const currentLabel = activeLabelId === 'all' || box.label === activeLabelId
+      const opacity = selected || (currentLayer && currentLabel) ? 0.94 : 0.18
       const material = makeBoxMaterials(box, selected, opacity)
       const mesh = new THREE.Mesh(geometry, material)
       mesh.position.set(
@@ -158,9 +160,9 @@ export function ContainerScene({ container, boxes, activeLayerId, viewMode, sele
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(geometry),
         new THREE.LineBasicMaterial({
-          color: selected ? 0xf3b21a : currentLayer ? 0x252525 : 0x777777,
+          color: selected ? 0xf3b21a : currentLayer && currentLabel ? 0x252525 : 0x777777,
           transparent: true,
-          opacity: selected || currentLayer ? 0.72 : 0.18,
+          opacity: selected || (currentLayer && currentLabel) ? 0.72 : 0.14,
         }),
       )
       edges.position.copy(mesh.position)
@@ -217,7 +219,7 @@ export function ContainerScene({ container, boxes, activeLayerId, viewMode, sele
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       mount.removeChild(renderer.domElement)
     }
-  }, [container, boxes, activeLayerId, viewMode, selectedBoxId, onSelectBox])
+  }, [container, boxes, activeLayerId, activeLabelId, viewMode, selectedBoxId, onSelectBox])
 
   return <div ref={mountRef} className="h-full min-h-[420px] w-full" data-testid="container-scene" />
 }
