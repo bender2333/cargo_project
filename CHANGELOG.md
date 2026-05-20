@@ -6,6 +6,9 @@
 - Completed subtask: expand project README documentation.
 - Documented project purpose, feature scope, quick start, scripts, build flow, static deployment, architecture, data flow, import/export behavior, test gates, and development constraints.
 - Verification: documentation-only change; code verification not rerun.
+- Completed subtask: record review findings and next-stage development plan.
+- Added `REVIEW.md` covering archive UI parity, 3D free-view affordance, inactive shipment/navigation controls, selectable loading rules, and stricter E2E expectations.
+- Verification: documentation-only change; code verification not rerun.
 - Completed subtask: move layer data into `PackingResult` and derive physical layers from support relationships instead of `z` height grouping.
 - Added label stats, loading steps, diagnostics, support metadata, and layer aggregates to packing results.
 - Updated the layer selector to use `physicalLayer` data from the calculation result.
