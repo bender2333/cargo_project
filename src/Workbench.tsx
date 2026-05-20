@@ -10,6 +10,7 @@ import { buildExportPlanRows } from './lib/exportPlan'
 import { createHistoryPlan, readHistoryPlans, saveHistoryPlan } from './lib/historyPlans'
 import type { HistoryPlan } from './lib/historyPlans'
 import { parseCargoRows } from './lib/importCargo'
+import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
 import type { CargoItem, Locale, PackingLayer } from './types'
 
@@ -255,8 +256,9 @@ function Workbench() {
     ? customContainer
     : containerOverrides[selectedContainerId] ?? containers[0]
   const renderingContainer = effectiveContainer(selectedContainer)
-  const result = useMemo(() => calculatePacking(selectedContainer, cargoItems), [cargoItems, selectedContainer])
-  const detailRows = useMemo(() => buildExportPlanRows(cargoItems, result), [cargoItems, result])
+  const displayCargoItems = useMemo(() => normalizeCargoLabelColors(cargoItems), [cargoItems])
+  const result = useMemo(() => calculatePacking(selectedContainer, displayCargoItems), [displayCargoItems, selectedContainer])
+  const detailRows = useMemo(() => buildExportPlanRows(displayCargoItems, result), [displayCargoItems, result])
   const activeLayer = result.layers.find((layer) => layer.id === activeLayerId)
   const visibleBoxes = hasCalculated
     ? result.placed.filter((box) => (activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId) && (activeLabelId === 'all' || box.label === activeLabelId))
@@ -349,7 +351,7 @@ function Workbench() {
   }
 
   const saveCurrentPlan = () => {
-    const next = createHistoryPlan(selectedContainer, cargoItems, result)
+    const next = createHistoryPlan(selectedContainer, displayCargoItems, result)
     setHistoryPlans(saveHistoryPlan(localStorage, next))
     setActiveResultTab('history')
   }
@@ -473,7 +475,7 @@ function Workbench() {
               </div>
             )}
             <div className="space-y-2">
-              {cargoItems.map((item) => (
+              {displayCargoItems.map((item) => (
                 <button className={`w-full border p-3 text-left text-sm ${result.placed.some((box) => box.cargoId === item.id && box.id === selectedBoxId) ? 'border-[#f3b21a] bg-[#fff7df]' : 'border-[#c9c9c9] bg-white'}`} key={item.id} type="button" onClick={() => setSelectedBoxId(result.placed.find((box) => box.cargoId === item.id)?.id ?? null)}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="flex items-center gap-2 font-semibold"><span className="grid h-6 w-6 place-items-center rounded bg-[#222] text-xs text-white">{item.label}</span><span className="h-3 w-3" style={{ backgroundColor: item.color }} />{item.name}</span>

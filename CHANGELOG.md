@@ -40,3 +40,6 @@
 - Completed subtask: add label filtering across plan views.
 - Added a label filter in the layer workspace and applied the same label dimming rules to 2D and 3D views while keeping selected boxes visible.
 - Verification: `npm run lint` passed; `npm test` passed 25 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 13 tests.
+- Completed subtask: enforce one color per cargo label.
+- Added `normalizeCargoLabelColors` and routed Workbench display, packing, details, export, and history saves through normalized label colors so one business label cannot split into multiple visual colors.
+- Verification: `npm run lint` passed; `npm test` passed 26 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 13 tests.
