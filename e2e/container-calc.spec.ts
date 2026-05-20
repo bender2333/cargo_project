@@ -51,6 +51,10 @@ async function createChineseWorkbookFile() {
   return filePath
 }
 
+function realWorkbookPath() {
+  return path.join(process.cwd(), 'test-data', 'excel', '俄罗斯整托装柜尺寸.xlsx')
+}
+
 async function createCsvFile() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cargo-calc-csv-'))
   const filePath = path.join(dir, 'cargo-import.csv')
@@ -387,6 +391,20 @@ test('imports Chinese centimeter Excel fields with visible conversion warning', 
     originalHeight: 500,
     plannedQuantity: 2,
   })
+})
+
+test('imports the real business workbook fixture into the cargo dataset', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('input[type="file"]').setInputFiles(realWorkbookPath())
+
+  await expect(page.getByText('Import success: 31')).toBeVisible()
+  await expect(page.getByText(/Rows converted from cm: 31/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /1 Cargo 1/ }).first()).toBeVisible()
+  await page.getByRole('button', { name: 'Load' }).click()
+
+  await page.getByRole('button', { name: 'Details' }).click()
+  await expect(page.getByRole('cell', { name: '1', exact: true }).first()).toBeVisible()
+  await expect(page.locator('tr').filter({ hasText: '1250 x 830 x 2500' }).first()).toBeVisible()
 })
 
 test('imports CSV cargo rows into the same packing flow', async ({ page }) => {

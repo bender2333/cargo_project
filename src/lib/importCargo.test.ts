@@ -57,12 +57,34 @@ describe('parseCargoRows', () => {
       { createId: () => 'fixed-id' },
     )
 
-    expect(result.items).toHaveLength(1)
+    expect(result.items).toHaveLength(2)
     expect(result.items[0]).toMatchObject({ label: 'A', name: 'Valid', length: 1000, quantity: 1 })
+    expect(result.items[1]).toMatchObject({ label: 'C', name: 'Missing quantity', length: 1000, quantity: 1 })
     expect(result.errors).toEqual([
       { row: 3, message: 'Missing or invalid length, width, or height.' },
-      { row: 4, message: 'Missing or invalid quantity.' },
     ])
-    expect(result.summary.importedRows).toBe(1)
+    expect(result.warnings).toContainEqual({ row: 4, message: 'Quantity was missing and defaulted to 1.' })
+    expect(result.summary.importedRows).toBe(2)
+  })
+
+  it('defaults missing quantity to one for row-per-item business workbooks', () => {
+    const result = parseCargoRows(
+      [
+        {
+          托盘: 1,
+          货物名称: 'Pallet item',
+          长cm: 100,
+          宽cm: 80,
+          高cm: 60,
+          整托重量kg: 40,
+        },
+      ],
+      { createId: () => 'fixed-id' },
+    )
+
+    expect(result.items).toEqual([
+      expect.objectContaining({ label: '1', name: 'Pallet item', quantity: 1, length: 1000, width: 800, height: 600 }),
+    ])
+    expect(result.warnings).toContainEqual({ row: 2, message: 'Quantity was missing and defaulted to 1.' })
   })
 })

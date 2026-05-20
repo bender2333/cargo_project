@@ -115,10 +115,15 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
       return
     }
 
-    const quantity = Math.floor(numberValue(valueFor(row, fields.quantity)))
+    const rawQuantity = valueFor(row, fields.quantity)
+    const quantity = rawQuantity === undefined ? 1 : Math.floor(numberValue(rawQuantity))
     if (quantity <= 0) {
       errors.push({ row: rowNumber, message: 'Missing or invalid quantity.' })
       return
+    }
+
+    if (rawQuantity === undefined) {
+      warnings.push({ row: rowNumber, message: 'Quantity was missing and defaulted to 1.' })
     }
 
     if (convertedFromCm) {
