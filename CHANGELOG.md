@@ -10,3 +10,6 @@
 - Completed subtask: export the calculated packing plan instead of only exporting cargo input rows.
 - Added `buildExportPlanRows` so exported spreadsheets include label, original dimensions, actual orientation, planned/placed/unplaced quantities, physical layer, work step, and failure reason from `PackingResult`.
 - Verification: `npm test` passed 19 tests; `npm run lint` passed; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 5 tests.
+- Completed subtask: surface label details and diagnostics in the result workspace.
+- Added right-side result tabs for layer view, label detail table, and compliance diagnostics using `PackingResult.labelStats`, `PackingResult.unplaced`, and `PackingResult.diagnostics`.
+- Verification: `npm test` passed 19 tests; `npm run lint` passed; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 6 tests.

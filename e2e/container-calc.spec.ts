@@ -57,6 +57,20 @@ test('adds cargo and recalculates utilization', async ({ page }) => {
   await expect(page.getByText('Layer-by-layer placement')).toBeVisible()
 })
 
+test('shows label detail and diagnostic result tabs', async ({ page }) => {
+  await page.goto('/')
+
+  await page.getByRole('button', { name: 'Details' }).click()
+  await expect(page.getByRole('columnheader', { name: 'Label' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'A' }).first()).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'Carton A' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: '18' }).first()).toBeVisible()
+
+  await page.getByRole('button', { name: 'Diagnostics' }).click()
+  await expect(page.getByText('INFO')).toBeVisible()
+  await expect(page.getByText('Calculated packing satisfies boundary, weight, overlap, and stacking checks.')).toBeVisible()
+})
+
 test('renders an interactive 3D canvas', async ({ page }) => {
   await page.goto('/')
   const canvas = page.locator('canvas').first()

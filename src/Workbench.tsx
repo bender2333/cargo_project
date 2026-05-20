@@ -38,11 +38,18 @@ const copy = {
     qty: 'qty',
     unloaded: 'Unloaded cargo',
     layers: 'Layer-by-layer placement',
+    details: 'Details',
+    diagnostics: 'Diagnostics',
     allLayers: 'All layers',
     currentLayer: 'Current layer',
     showLayer: 'Show layer',
     layerStats: 'Layer stats',
     supportedBy: 'Supported by',
+    planned: 'Planned',
+    placed: 'Placed',
+    unplacedCount: 'Unplaced',
+    failureReason: 'Failure reason',
+    noFailure: 'None',
     label: 'Label',
     buy: 'Buy',
     signOut: 'Sign out',
@@ -76,11 +83,18 @@ const copy = {
     qty: '数量',
     unloaded: '未装入货物',
     layers: '逐层添加货物',
+    details: '明细表',
+    diagnostics: '合规与诊断',
     allLayers: '全部层',
     currentLayer: '当前层',
     showLayer: '显示层',
     layerStats: '当前层统计',
     supportedBy: '支撑来源',
+    planned: '计划',
+    placed: '已装',
+    unplacedCount: '未装',
+    failureReason: '失败原因',
+    noFailure: '无',
     label: '标识',
     buy: '购买',
     signOut: '退出',
@@ -105,6 +119,7 @@ const initialCargo: CargoItem[] = [
 ]
 
 type CargoForm = Omit<CargoItem, 'id'>
+type ResultTab = 'layers' | 'details' | 'diagnostics'
 
 const emptyForm: CargoForm = {
   name: 'Carton B',
@@ -135,6 +150,7 @@ function Workbench() {
   const [form, setForm] = useState<CargoForm>(emptyForm)
   const [hasCalculated, setHasCalculated] = useState(true)
   const [activeLayerId, setActiveLayerId] = useState('all')
+  const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null)
 
   const selectedContainer = containers.find((container) => container.id === selectedContainerId) ?? containers[0]
@@ -284,25 +300,86 @@ function Workbench() {
 
         <aside className="border-l border-[#bcbcbc] bg-[#ececec] max-xl:col-span-2 max-lg:col-span-1">
           <div className="border-b border-[#bebebe] bg-[#d0d0d0] p-3">
-            <h2 className="font-bold">{t.layers}</h2>
-            <select className="mt-2 w-full border border-[#aaa] bg-white p-2" value={activeLayerId} onChange={(event) => setActiveLayerId(event.target.value)}>
-              <option value="all">{t.allLayers}</option>
-              {result.layers.map((layer) => <option key={layer.id} value={layer.id}>{layerName(layer, locale)}: {layer.count}</option>)}
-            </select>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {result.layers.map((layer) => (
-                <button className={`border px-2 py-1 text-left text-xs ${activeLayerId === layer.id ? 'border-[#f3b21a] bg-white' : 'border-[#bbb] bg-[#eee]'}`} key={layer.id} type="button" onClick={() => setActiveLayerId(layer.id)}>
-                  {layerName(layer, locale)}<br />{Math.round(layer.minZ)}-{Math.round(layer.maxZ)} mm<br />
-                  {layer.labels.map((entry) => `${entry.label} x${entry.count}`).join(', ')}
+            <div className="grid grid-cols-3 gap-1 text-xs font-bold">
+              {[
+                { id: 'layers' as const, label: t.layers },
+                { id: 'details' as const, label: t.details },
+                { id: 'diagnostics' as const, label: t.diagnostics },
+              ].map((tab) => (
+                <button className={`border px-2 py-2 ${activeResultTab === tab.id ? 'border-[#f3b21a] bg-white' : 'border-[#b8b8b8] bg-[#eeeeee]'}`} key={tab.id} type="button" onClick={() => setActiveResultTab(tab.id)}>
+                  {tab.label}
                 </button>
               ))}
             </div>
-            {activeLayer && (
-              <div className="mt-3 border-t border-[#bebebe] pt-2 text-xs">
-                <strong>{t.layerStats}</strong>
-                <p>{activeLayer.count} {t.qty}, {activeLayer.weight.toLocaleString()} kg, {formatCubicMeters(activeLayer.volume)}</p>
-                <p>{activeLayer.labels.map((entry) => `${entry.label} x${entry.count}`).join(', ')}</p>
-                {activeLayer.supportedBy.length > 0 && <p>{t.supportedBy}: {activeLayer.supportedBy.join(', ')}</p>}
+
+            {activeResultTab === 'layers' && (
+              <div className="mt-3">
+                <select className="w-full border border-[#aaa] bg-white p-2" value={activeLayerId} onChange={(event) => setActiveLayerId(event.target.value)}>
+                  <option value="all">{t.allLayers}</option>
+                  {result.layers.map((layer) => <option key={layer.id} value={layer.id}>{layerName(layer, locale)}: {layer.count}</option>)}
+                </select>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {result.layers.map((layer) => (
+                    <button className={`border px-2 py-1 text-left text-xs ${activeLayerId === layer.id ? 'border-[#f3b21a] bg-white' : 'border-[#bbb] bg-[#eee]'}`} key={layer.id} type="button" onClick={() => setActiveLayerId(layer.id)}>
+                      {layerName(layer, locale)}<br />{Math.round(layer.minZ)}-{Math.round(layer.maxZ)} mm<br />
+                      {layer.labels.map((entry) => `${entry.label} x${entry.count}`).join(', ')}
+                    </button>
+                  ))}
+                </div>
+                {activeLayer && (
+                  <div className="mt-3 border-t border-[#bebebe] pt-2 text-xs">
+                    <strong>{t.layerStats}</strong>
+                    <p>{activeLayer.count} {t.qty}, {activeLayer.weight.toLocaleString()} kg, {formatCubicMeters(activeLayer.volume)}</p>
+                    <p>{activeLayer.labels.map((entry) => `${entry.label} x${entry.count}`).join(', ')}</p>
+                    {activeLayer.supportedBy.length > 0 && <p>{t.supportedBy}: {activeLayer.supportedBy.join(', ')}</p>}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeResultTab === 'details' && (
+              <div className="mt-3 max-h-[240px] overflow-auto border border-[#c6c6c6] bg-white">
+                <table className="w-full text-left text-xs">
+                  <thead className="sticky top-0 bg-[#eeeeee]">
+                    <tr>
+                      <th className="p-2">{t.label}</th>
+                      <th className="p-2">{t.name}</th>
+                      <th className="p-2">{t.planned}</th>
+                      <th className="p-2">{t.placed}</th>
+                      <th className="p-2">{t.unplacedCount}</th>
+                      <th className="p-2">{t.layers}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.labelStats.map((item) => (
+                      <tr className="border-t border-[#dddddd]" key={`${item.label}-${item.name}`}>
+                        <td className="p-2 font-bold">{item.label}</td>
+                        <td className="p-2">{item.name}</td>
+                        <td className="p-2">{item.planned}</td>
+                        <td className="p-2">{item.placed}</td>
+                        <td className="p-2">{item.unplaced}</td>
+                        <td className="p-2">{item.layers.join(', ') || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {activeResultTab === 'diagnostics' && (
+              <div className="mt-3 space-y-2 text-xs">
+                {result.diagnostics.map((diagnostic) => (
+                  <div className="border border-[#c6c6c6] bg-white p-2" key={diagnostic.id}>
+                    <strong className="uppercase">{diagnostic.severity}</strong>
+                    <p>{diagnostic.message}</p>
+                  </div>
+                ))}
+                {result.unplaced.map((item) => (
+                  <div className="border border-[#d7b7b7] bg-white p-2" key={item.cargoId}>
+                    <strong>{item.label} {item.name}</strong>
+                    <p>{t.failureReason}: {item.reason || t.noFailure}</p>
+                  </div>
+                ))}
               </div>
             )}
           </div>
