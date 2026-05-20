@@ -103,3 +103,8 @@
 - Added the second review section to `REVIEW.md`, covering collapsible container parameters, collapsible loading rules, moving Excel import/export to the report area, moving import warnings into a dedicated import-log tab, changing the layout to two columns with the report panel under 3D/2D, cargo deletion, drag ordering, and an independent five-item history page.
 - Broke the next work into layout reorganization, left-panel interaction, import/export migration, independent history page, and E2E hardening phases with explicit acceptance criteria.
 - Verification: documentation-only change; code verification not rerun.
+- Completed subtask: implement the second review refactor plan.
+- Changed the workbench default language to Chinese, converted the main workspace to a two-column layout, moved the result tabs below the 3D/2D visual workspace, and removed history from the report tabs into an independent history page.
+- Added collapsible container parameters and loading rules with visible summaries, cargo deletion, native drag/drop cargo reordering, report-area Excel import/export controls, and a dedicated import log tab for import summaries, warnings, and errors.
+- Expanded E2E coverage for default Chinese startup, report panel placement, collapsible sections, cargo deletion/export synchronization, input-order drag sorting, import log behavior, independent history restore, and five-plan local retention.
+- Verification: `npm run lint` passed; `npm test` passed 32 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 26 tests.

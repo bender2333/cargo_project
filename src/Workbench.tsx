@@ -18,7 +18,7 @@ const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6'
 
 const copy = {
   en: {
-    nav: ['EasyCargo', 'Shipments & Reports', 'Cargo items', 'Cargo spaces'],
+    nav: ['EasyCargo', 'Shipments & Reports', 'Cargo items', 'Cargo spaces', 'History'],
     title: 'Cargo loading workspace',
     subtitle: 'Container packing, visual review, import/export, and local plan history',
     shipment: 'Enter shipment name',
@@ -44,6 +44,15 @@ const copy = {
     cargoItems: 'Cargo items',
     unitParameters: 'Pallet / cargo unit parameters',
     ruleSummary: 'Loading rules',
+    collapse: 'Collapse',
+    expand: 'Expand',
+    importLog: 'Import log',
+    noImportLog: 'No import activity yet',
+    deleteCargo: 'Delete cargo',
+    dragCargo: 'Drag to reorder cargo',
+    dropCargo: 'Drop cargo here',
+    historyPage: 'History plans',
+    backToWorkbench: 'Back to workbench',
     boundaryRule: 'Effective container boundary',
     payloadRule: 'Max payload',
     supportRule: 'Support and stackability',
@@ -118,7 +127,7 @@ const copy = {
     language: '中文',
   },
   zh: {
-    nav: ['EasyCargo', '装箱报告', '货物项目', '货柜空间'],
+    nav: ['EasyCargo', '装箱报告', '货物项目', '货柜空间', '历史方案'],
     title: '货柜排箱装柜工作台',
     subtitle: '装箱计算、可视化复核、导入导出和本地历史方案',
     shipment: '输入装运名称',
@@ -144,6 +153,15 @@ const copy = {
     cargoItems: '货物项目',
     unitParameters: '托盘 / 货物单元参数',
     ruleSummary: '装载规则',
+    collapse: '折叠',
+    expand: '展开',
+    importLog: '导入日志',
+    noImportLog: '暂无导入记录',
+    deleteCargo: '删除货物',
+    dragCargo: '拖拽调整货物顺序',
+    dropCargo: '拖放到这里',
+    historyPage: '历史方案',
+    backToWorkbench: '返回工作台',
     boundaryRule: '有效货柜边界',
     payloadRule: '最大载重',
     supportRule: '支撑与堆叠限制',
@@ -250,8 +268,8 @@ const customContainerDefaults = {
 
 type CargoForm = Omit<CargoItem, 'id'>
 type WorkspaceView = '3d' | '2d'
-type ResultTab = 'layers' | 'details' | 'diagnostics' | 'history'
-type NavTarget = 'overview' | 'report' | 'cargo' | 'container'
+type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog'
+type NavTarget = 'overview' | 'report' | 'cargo' | 'container' | 'history'
 
 const emptyForm: CargoForm = {
   name: 'Carton B',
@@ -276,6 +294,17 @@ function layerName(layer: PackingLayer, locale: Locale) {
 
 function formatDimensions(length: number | '', width: number | '', height: number | '') {
   return length === '' || width === '' || height === '' ? '-' : `${length} x ${width} x ${height}`
+}
+
+function moveItem<T>(items: T[], fromIndex: number, toIndex: number) {
+  if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) {
+    return items
+  }
+
+  const next = [...items]
+  const [item] = next.splice(fromIndex, 1)
+  next.splice(toIndex, 0, item)
+  return next
 }
 
 function diagnosticMessage(diagnostic: PackingDiagnostic, locale: Locale) {
@@ -349,7 +378,7 @@ function filenameSlug(value: string) {
 }
 
 function Workbench() {
-  const [locale, setLocale] = useState<Locale>('en')
+  const [locale, setLocale] = useState<Locale>('zh')
   const t = copy[locale]
   const [shipmentName, setShipmentName] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
@@ -371,6 +400,9 @@ function Workbench() {
   const [historyPlans, setHistoryPlans] = useState<HistoryPlan[]>(() => readHistoryPlans(localStorage))
   const [importMessages, setImportMessages] = useState<string[]>([])
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null)
+  const [containerCollapsed, setContainerCollapsed] = useState(false)
+  const [rulesCollapsed, setRulesCollapsed] = useState(false)
+  const [draggedCargoId, setDraggedCargoId] = useState<string | null>(null)
   const workspaceRef = useRef<HTMLElement | null>(null)
   const reportRef = useRef<HTMLElement | null>(null)
   const cargoRef = useRef<HTMLFormElement | null>(null)
@@ -389,6 +421,13 @@ function Workbench() {
     : []
   const labelOptions = [...new Set(result.labelStats.map((item) => item.label))]
   const activeLayerIndex = result.layers.findIndex((layer) => layer.id === activeLayerId)
+  const loadingModeLabels: Record<LoadingMode, string> = {
+    volume: t.volumeMode,
+    weight: t.weightMode,
+    quantity: t.quantityMode,
+    input: t.inputMode,
+  }
+  const containerSummary = `${selectedContainer.label} · ${renderingContainer.length.toLocaleString()} x ${renderingContainer.width.toLocaleString()} x ${renderingContainer.height.toLocaleString()} mm`
 
   const updateNumber = (field: keyof Pick<CargoForm, 'length' | 'width' | 'height' | 'weight' | 'quantity'>, value: string) => {
     setForm((current) => ({ ...current, [field]: Number(value) || 0 }))
@@ -437,11 +476,15 @@ function Workbench() {
       rows = sheet ? XLSX.utils.sheet_to_json<Record<string, string | number>>(sheet) : []
     } catch (error) {
       setImportMessages([`${t.importParseFailed}: ${error instanceof Error ? error.message : String(error)}`])
+      setActiveResultTab('importLog')
+      setActiveNav('report')
       return
     }
 
     if (rows.length === 0) {
       setImportMessages([`${t.importIssue}: ${t.importNoData}`])
+      setActiveResultTab('importLog')
+      setActiveNav('report')
       return
     }
 
@@ -455,8 +498,11 @@ function Workbench() {
     ])
     if (imported.items.length > 0) {
       setCargoItems(imported.items)
+      setSelectedBoxId(null)
       setHasCalculated(false)
     }
+    setActiveResultTab('importLog')
+    setActiveNav('report')
   }
 
   const exportExcel = () => {
@@ -504,8 +550,7 @@ function Workbench() {
   const saveCurrentPlan = () => {
     const next = createHistoryPlan(selectedContainer, displayCargoItems, result, { shipmentName })
     setHistoryPlans(saveHistoryPlan(localStorage, next))
-    setActiveResultTab('history')
-    setActiveNav('report')
+    setActiveNav('history')
   }
 
   const restorePlan = (plan: HistoryPlan) => {
@@ -521,8 +566,33 @@ function Workbench() {
     setActiveLabelId('all')
     setSelectedBoxId(null)
     setHasCalculated(true)
-    setActiveResultTab('history')
-    setActiveNav('report')
+    setActiveResultTab('layers')
+    setActiveNav('overview')
+  }
+
+  const deleteCargo = (cargoId: string) => {
+    setCargoItems((items) => items.filter((item) => item.id !== cargoId))
+    setHasCalculated(false)
+    setSelectedBoxId((current) => {
+      const selectedBox = result.placed.find((box) => box.id === current)
+      return selectedBox?.cargoId === cargoId ? null : current
+    })
+  }
+
+  const reorderCargo = (targetCargoId: string) => {
+    if (!draggedCargoId || draggedCargoId === targetCargoId) {
+      setDraggedCargoId(null)
+      return
+    }
+
+    setCargoItems((items) => moveItem(
+      items,
+      items.findIndex((item) => item.id === draggedCargoId),
+      items.findIndex((item) => item.id === targetCargoId),
+    ))
+    setSelectedBoxId(null)
+    setHasCalculated(false)
+    setDraggedCargoId(null)
   }
 
   const selectLayerByOffset = (offset: -1 | 1) => {
@@ -567,7 +637,7 @@ function Workbench() {
     setFreeViewEnabled(true)
   }
 
-  const navTargets: NavTarget[] = ['overview', 'report', 'cargo', 'container']
+  const navTargets: NavTarget[] = ['overview', 'report', 'cargo', 'container', 'history']
 
   return (
     <main className="min-h-screen bg-[#f4f7fb] text-[#1f2937]">
@@ -596,7 +666,42 @@ function Workbench() {
           </div>
         </header>
 
-        <section className="grid grid-cols-[460px_1fr_320px] gap-5 max-2xl:grid-cols-[420px_1fr] max-lg:grid-cols-1">
+        {activeNav === 'history' ? (
+          <section className="archive-card overflow-hidden p-[18px]" data-testid="history-page">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold">{t.historyPage}</h2>
+                <p className="text-sm text-[#64748b]">{t.noHistory}</p>
+              </div>
+              <div className="flex gap-2">
+                <button className="archive-button success" type="button" onClick={() => {
+                  const next = createHistoryPlan(selectedContainer, displayCargoItems, result, { shipmentName })
+                  setHistoryPlans(saveHistoryPlan(localStorage, next))
+                }}>{t.savePlan}</button>
+                <button className="archive-button secondary" type="button" onClick={() => activateNav('overview')}>{t.backToWorkbench}</button>
+              </div>
+            </div>
+            {historyPlans.length === 0 ? (
+              <p className="border border-[#c6c6c6] bg-white p-3">{t.noHistory}</p>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {historyPlans.map((plan) => (
+                  <article className="border border-[#c6c6c6] bg-white p-3 text-sm" key={plan.id}>
+                    <strong>{plan.shipmentName}</strong>
+                    <p>{t.shipmentName}: {plan.shipmentName}</p>
+                    <p>{new Date(plan.createdAt).toLocaleString()}</p>
+                    <p>{plan.placedCount}/{plan.totalCargoCount} · {plan.layerCount} {t.layers}</p>
+                    <p>{plan.labelSummary}</p>
+                    <button className="mt-3 border border-[#9b9b9b] bg-[#eeeeee] px-3 py-2" type="button" onClick={() => restorePlan(plan)}>
+                      {t.restore}
+                    </button>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : (
+        <section className="grid grid-cols-[minmax(340px,25%)_minmax(0,1fr)] gap-5 max-lg:grid-cols-1" data-testid="workbench-layout">
           <aside className="space-y-4">
           <div className="archive-card overflow-hidden">
           <div className="flex min-h-14 items-center gap-4 bg-[#111827] px-4 py-3 text-white">
@@ -622,6 +727,7 @@ function Workbench() {
               <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('report')}>{t.nav[1]}</button>
               <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('cargo')}>{t.nav[2]}</button>
               <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('container')}>{t.nav[3]}</button>
+              <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('history')}>{t.nav[4]}</button>
             </div>
           )}
           <div className="flex items-center justify-between bg-[#b0b4b7] pl-4">
@@ -629,34 +735,52 @@ function Workbench() {
             <span className="flex-1 px-4 text-sm italic text-white">{t.note}</span>
           </div>
           <section className="border-b border-[#e5e7eb] p-[18px]" ref={containerRef} data-testid="container-panel">
-            <h2 className="mb-3 text-lg font-bold">{t.containerConfig}</h2>
-            <label className="field-label">{t.containerType}
-              <select className="field-input mt-1" value={selectedContainerId} onChange={(event) => setSelectedContainerId(event.target.value)}>
-                {containers.map((container) => <option key={container.id} value={container.id}>{container.label}</option>)}
-                <option value="custom">{t.customContainer}</option>
-              </select>
-            </label>
-            <label className="field-label mt-3">{t.loadingMode}
-              <select className="field-input mt-1" value={loadingMode} onChange={(event) => setLoadingMode(event.target.value as LoadingMode)}>
-                <option value="volume">{t.volumeMode}</option>
-                <option value="weight">{t.weightMode}</option>
-                <option value="quantity">{t.quantityMode}</option>
-                <option value="input">{t.inputMode}</option>
-              </select>
-            </label>
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              <label className="field-label">{t.length}<input className="field-input mt-1" type="number" value={selectedContainer.length} onChange={(event) => updateContainerNumber('length', event.target.value)} /></label>
-              <label className="field-label">{t.width}<input className="field-input mt-1" type="number" value={selectedContainer.width} onChange={(event) => updateContainerNumber('width', event.target.value)} /></label>
-              <label className="field-label">{t.height}<input className="field-input mt-1" type="number" value={selectedContainer.height} onChange={(event) => updateContainerNumber('height', event.target.value)} /></label>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold">{t.containerConfig}</h2>
+                <p className="mt-1 text-xs text-[#64748b]">{containerSummary}</p>
+              </div>
+              <button
+                className="border border-[#b8b8b8] bg-white px-3 py-2 text-xs font-semibold"
+                type="button"
+                aria-expanded={!containerCollapsed}
+                onClick={() => setContainerCollapsed((collapsed) => !collapsed)}
+              >
+                {containerCollapsed ? t.expand : t.collapse}
+              </button>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <label className="field-label">{t.maxWeight}<input className="field-input mt-1" type="number" value={selectedContainer.maxWeight} onChange={(event) => updateContainerNumber('maxWeight', event.target.value)} /></label>
-              <label className="field-label">{t.doorGap}<input className="field-input mt-1" type="number" value={selectedContainer.doorGap} onChange={(event) => updateContainerNumber('doorGap', event.target.value)} /></label>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <label className="field-label">{t.topGap}<input className="field-input mt-1" type="number" value={selectedContainer.topGap} onChange={(event) => updateContainerNumber('topGap', event.target.value)} /></label>
-              <label className="field-label">{t.sideGap}<input className="field-input mt-1" type="number" value={selectedContainer.sideGap} onChange={(event) => updateContainerNumber('sideGap', event.target.value)} /></label>
-            </div>
+            {!containerCollapsed && (
+              <>
+                <label className="field-label">{t.containerType}
+                  <select className="field-input mt-1" value={selectedContainerId} onChange={(event) => setSelectedContainerId(event.target.value)}>
+                    {containers.map((container) => <option key={container.id} value={container.id}>{container.label}</option>)}
+                    <option value="custom">{t.customContainer}</option>
+                  </select>
+                </label>
+                <div className="mt-3 max-h-[220px] overflow-auto border border-[#d1d1d1]">
+                  {[...containers, customContainer].map((container) => (
+                    <button className={`block w-full border-b border-[#d1d1d1] px-3 py-3 text-left hover:bg-white ${container.id === selectedContainer.id ? 'bg-white' : 'bg-[#f8fafc]'}`} key={container.id} type="button" onClick={() => setSelectedContainerId(container.id)}>
+                      <div className="mb-2 ml-auto h-5 w-24 bg-[#5f5f5f]" />
+                      <strong>{container.label}</strong>
+                      <p className="text-xs">{container.length.toLocaleString()} x {container.width.toLocaleString()} x {container.height.toLocaleString()} mm {container.maxWeight.toLocaleString()} kg</p>
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <label className="field-label">{t.length}<input className="field-input mt-1" type="number" value={selectedContainer.length} onChange={(event) => updateContainerNumber('length', event.target.value)} /></label>
+                  <label className="field-label">{t.width}<input className="field-input mt-1" type="number" value={selectedContainer.width} onChange={(event) => updateContainerNumber('width', event.target.value)} /></label>
+                  <label className="field-label">{t.height}<input className="field-input mt-1" type="number" value={selectedContainer.height} onChange={(event) => updateContainerNumber('height', event.target.value)} /></label>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <label className="field-label">{t.maxWeight}<input className="field-input mt-1" type="number" value={selectedContainer.maxWeight} onChange={(event) => updateContainerNumber('maxWeight', event.target.value)} /></label>
+                  <label className="field-label">{t.doorGap}<input className="field-input mt-1" type="number" value={selectedContainer.doorGap} onChange={(event) => updateContainerNumber('doorGap', event.target.value)} /></label>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <label className="field-label">{t.topGap}<input className="field-input mt-1" type="number" value={selectedContainer.topGap} onChange={(event) => updateContainerNumber('topGap', event.target.value)} /></label>
+                  <label className="field-label">{t.sideGap}<input className="field-input mt-1" type="number" value={selectedContainer.sideGap} onChange={(event) => updateContainerNumber('sideGap', event.target.value)} /></label>
+                </div>
+              </>
+            )}
           </section>
           <form className="space-y-3 p-[18px]" onSubmit={addCargo} ref={cargoRef} data-testid="cargo-panel">
             <h2 className="text-lg font-bold">{t.unitParameters}</h2>
@@ -680,43 +804,68 @@ function Workbench() {
             </div>
             <button className="archive-button w-full text-left" type="submit">{t.add}</button>
           </form>
-          <section className="border-t border-[#e5e7eb] p-[18px] text-xs">
-            <h2 className="mb-3 text-lg font-bold">{t.ruleSummary}</h2>
-            <label className="field-label">{t.selectableRules}
-              <select aria-label={t.ruleSummary} className="field-input mt-1" value={loadingMode} onChange={(event) => setLoadingMode(event.target.value as LoadingMode)}>
-                <option value="volume">{t.volumeMode}</option>
-                <option value="weight">{t.weightMode}</option>
-                <option value="quantity">{t.quantityMode}</option>
-                <option value="input">{t.inputMode}</option>
-              </select>
-            </label>
-            <div className="mt-3 grid gap-2">
-              <div className="rounded-xl border border-[#e5e7eb] bg-[#f8fafc] px-3 py-2"><strong>{t.hardRules}</strong>: {t.boundaryRule}</div>
-              <div className="rounded-xl border border-[#e5e7eb] bg-[#f8fafc] px-3 py-2"><strong>{t.hardRules}</strong>: {t.payloadRule}</div>
-              <div className="rounded-xl border border-[#e5e7eb] bg-[#f8fafc] px-3 py-2"><strong>{t.hardRules}</strong>: {t.supportRule}</div>
+          <section className="border-t border-[#e5e7eb] p-[18px] text-xs" data-testid="loading-rules-panel">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold">{t.ruleSummary}</h2>
+                <p className="mt-1 text-xs text-[#64748b]">{loadingModeLabels[loadingMode]}</p>
+              </div>
+              <button
+                className="border border-[#b8b8b8] bg-white px-3 py-2 text-xs font-semibold"
+                type="button"
+                aria-expanded={!rulesCollapsed}
+                onClick={() => setRulesCollapsed((collapsed) => !collapsed)}
+              >
+                {rulesCollapsed ? t.expand : t.collapse}
+              </button>
             </div>
+            {!rulesCollapsed && (
+              <>
+                <label className="field-label">{t.selectableRules}
+                  <select aria-label={t.ruleSummary} className="field-input mt-1" value={loadingMode} onChange={(event) => setLoadingMode(event.target.value as LoadingMode)}>
+                    <option value="volume">{t.volumeMode}</option>
+                    <option value="weight">{t.weightMode}</option>
+                    <option value="quantity">{t.quantityMode}</option>
+                    <option value="input">{t.inputMode}</option>
+                  </select>
+                </label>
+                <div className="mt-3 grid gap-2">
+                  <div className="rounded-xl border border-[#e5e7eb] bg-[#f8fafc] px-3 py-2"><strong>{t.hardRules}</strong>: {t.boundaryRule}</div>
+                  <div className="rounded-xl border border-[#e5e7eb] bg-[#f8fafc] px-3 py-2"><strong>{t.hardRules}</strong>: {t.payloadRule}</div>
+                  <div className="rounded-xl border border-[#e5e7eb] bg-[#f8fafc] px-3 py-2"><strong>{t.hardRules}</strong>: {t.supportRule}</div>
+                </div>
+              </>
+            )}
           </section>
           <div className="border-t border-[#e5e7eb] p-[18px]">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h2 className="text-sm font-bold">{t.cargoItems}</h2>
-              <div className="flex gap-2 text-xs">
-                <label className="cursor-pointer border border-[#b8b8b8] bg-white px-2 py-1">{t.importExcel}<input className="hidden" accept=".xlsx,.xls,.csv" type="file" onChange={(event) => void importExcel(event.target.files?.[0] ?? null)} /></label>
-                <button className="border border-[#b8b8b8] bg-white px-2 py-1" type="button" onClick={exportExcel}>{t.exportExcel}</button>
-              </div>
+              <span className="text-xs text-[#64748b]">{displayCargoItems.length}</span>
             </div>
-            {importMessages.length > 0 && (
-              <div className="mb-2 space-y-1 border border-[#d7b7b7] bg-white p-2 text-xs">
-                {importMessages.map((message) => <p key={message}>{message}</p>)}
-              </div>
-            )}
             <div className="space-y-2">
               {displayCargoItems.map((item) => (
-                <button className={`w-full border p-3 text-left text-sm ${result.placed.some((box) => box.cargoId === item.id && box.id === selectedBoxId) ? 'border-[#f3b21a] bg-[#fff7df]' : 'border-[#c9c9c9] bg-white'}`} key={item.id} type="button" onClick={() => setSelectedBoxId(result.placed.find((box) => box.cargoId === item.id)?.id ?? null)}>
+                <div
+                  className={`w-full border p-3 text-left text-sm ${result.placed.some((box) => box.cargoId === item.id && box.id === selectedBoxId) ? 'border-[#f3b21a] bg-[#fff7df]' : 'border-[#c9c9c9] bg-white'}`}
+                  key={item.id}
+                  draggable
+                  data-testid="cargo-list-item"
+                  onDragStart={() => setDraggedCargoId(item.id)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => reorderCargo(item.id)}
+                >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-2 font-semibold"><span className="grid h-6 w-6 place-items-center rounded bg-[#222] text-xs text-white">{item.label}</span><span className="h-3 w-3" style={{ backgroundColor: item.color }} />{item.name}</span>
+                    <button className="flex min-w-0 flex-1 items-center gap-2 text-left font-semibold" type="button" onClick={() => setSelectedBoxId(result.placed.find((box) => box.cargoId === item.id)?.id ?? null)}>
+                      <span aria-label={t.dragCargo} className="cursor-grab text-[#64748b]">☰</span>
+                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-[#222] text-xs text-white">{item.label}</span>
+                      <span className="h-3 w-3 shrink-0" style={{ backgroundColor: item.color }} />
+                      <span className="truncate">{item.name}</span>
+                    </button>
+                    <button className="border border-[#b8b8b8] bg-white px-2 py-1 text-xs" type="button" aria-label={`${t.deleteCargo}: ${item.name}`} onClick={() => deleteCargo(item.id)}>
+                      ×
+                    </button>
                   </div>
                   <p className="mt-1 text-xs text-[#666]">{item.length} x {item.width} x {item.height} mm, {item.weight} kg, {t.qty} {item.quantity}</p>
-                </button>
+                </div>
               ))}
             </div>
           </div>
@@ -732,7 +881,7 @@ function Workbench() {
             <div className="archive-stat"><div className="archive-stat-value">{result.labelStats.length}</div><div className="archive-stat-key">{t.cargoTypes}</div></div>
           </div>
 
-          <section className="archive-card overflow-hidden" ref={reportRef} data-testid="report-panel">
+          <section className="archive-card overflow-hidden" data-testid="visual-workspace">
             <div className="flex flex-wrap gap-2 border-b border-[#e5e7eb] p-[18px]">
               <button className={`archive-tab ${workspaceView === '2d' ? 'active' : ''}`} type="button" onClick={() => setWorkspaceView('2d')}>
                 {t.view2d}
@@ -793,16 +942,23 @@ function Workbench() {
               <button className="archive-button success absolute bottom-6 right-6" type="button" onClick={() => setHasCalculated(true)}>{t.load}</button>
             </div>
           </section>
-        </section>
 
-        <aside className="archive-card overflow-hidden max-2xl:col-span-2 max-lg:col-span-1">
+          <section className="archive-card overflow-hidden" ref={reportRef} data-testid="report-panel">
           <div className="border-b border-[#e5e7eb] p-[18px]">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3" data-testid="import-export-toolbar">
+              <h2 className="text-lg font-bold">{t.results}</h2>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <label className="cursor-pointer border border-[#b8b8b8] bg-white px-3 py-2 font-semibold">{t.importExcel}<input className="hidden" accept=".xlsx,.xls,.csv" type="file" onChange={(event) => void importExcel(event.target.files?.[0] ?? null)} /></label>
+                <button className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold" type="button" onClick={exportExcel}>{t.exportExcel}</button>
+                <button className="border border-[#9b9b9b] bg-white px-3 py-2 font-semibold" type="button" onClick={saveCurrentPlan}>{t.savePlan}</button>
+              </div>
+            </div>
             <div className="flex flex-wrap gap-2 text-sm font-bold">
               {[
                 { id: 'layers' as const, label: t.layers },
                 { id: 'details' as const, label: t.details },
                 { id: 'diagnostics' as const, label: t.diagnostics },
-                { id: 'history' as const, label: t.history },
+                { id: 'importLog' as const, label: t.importLog },
               ].map((tab) => (
                 <button className={`archive-tab ${activeResultTab === tab.id ? 'active' : ''}`} key={tab.id} type="button" onClick={() => setActiveResultTab(tab.id)}>
                   {tab.label}
@@ -925,35 +1081,15 @@ function Workbench() {
               </div>
             )}
 
-            {activeResultTab === 'history' && (
-              <div className="mt-3 space-y-2 text-xs">
-                <button className="w-full border border-[#9b9b9b] bg-white px-3 py-2 text-left font-semibold" type="button" onClick={saveCurrentPlan}>
-                  {t.savePlan}
-                </button>
-                {historyPlans.length === 0 && <p className="border border-[#c6c6c6] bg-white p-2">{t.noHistory}</p>}
-                {historyPlans.map((plan) => (
-                  <div className="border border-[#c6c6c6] bg-white p-2" key={plan.id}>
-                    <strong>{plan.shipmentName}</strong>
-                    <p>{t.shipmentName}: {plan.shipmentName}</p>
-                    <p>{new Date(plan.createdAt).toLocaleString()}</p>
-                    <p>{plan.placedCount}/{plan.totalCargoCount} · {plan.layerCount} {t.layers}</p>
-                    <p>{plan.labelSummary}</p>
-                    <button className="mt-2 border border-[#9b9b9b] bg-[#eeeeee] px-2 py-1" type="button" onClick={() => restorePlan(plan)}>
-                      {t.restore}
-                    </button>
-                  </div>
-                ))}
+            {activeResultTab === 'importLog' && (
+              <div className="mt-3 space-y-2 text-xs" data-testid="import-log-panel">
+                {importMessages.length === 0 ? (
+                  <p className="border border-[#c6c6c6] bg-white p-2">{t.noImportLog}</p>
+                ) : (
+                  importMessages.map((message) => <p className="border border-[#c6c6c6] bg-white p-2" key={message}>{message}</p>)
+                )}
               </div>
             )}
-          </div>
-          <div className="max-h-[320px] overflow-auto">
-            {[...containers, customContainer].map((container) => (
-              <button className={`block w-full border-b border-[#d1d1d1] px-3 py-4 text-left hover:bg-white ${container.id === selectedContainer.id ? 'bg-white' : ''}`} key={container.id} type="button" onClick={() => setSelectedContainerId(container.id)}>
-                <div className="mb-2 ml-auto h-6 w-28 bg-[#5f5f5f]" />
-                <strong>{container.label}</strong>
-                <p className="text-xs">{container.length.toLocaleString()} x {container.width.toLocaleString()} x {container.height.toLocaleString()} mm {container.maxWeight.toLocaleString()} kg</p>
-              </button>
-            ))}
           </div>
           <div className="m-3 border border-[#c9c9c9] bg-white p-3 text-sm">
             <h2 className="font-bold">{t.results}</h2>
@@ -978,8 +1114,10 @@ function Workbench() {
               </div>
             )}
           </div>
-        </aside>
+          </section>
+        </section>
       </section>
+        )}
       </div>
     </main>
   )

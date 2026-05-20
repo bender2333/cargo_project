@@ -78,6 +78,11 @@ async function createEmptyWorkbookFile() {
   return filePath
 }
 
+async function openEnglish(page: Page) {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'English' }).click()
+}
+
 async function expectCanvasHasRenderedPixels(page: Page) {
   const canvas = page.locator('canvas').first()
   await expect(canvas).toBeVisible()
@@ -117,6 +122,15 @@ async function expectCanvasHasRenderedPixels(page: Page) {
 
 test('loads the container calculator workspace', async ({ page }) => {
   await page.goto('/')
+  await expect(page.getByRole('button', { name: '装箱报告' })).toBeVisible()
+  await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+  await expect(page.getByText('货柜参数')).toBeVisible()
+  await expect(page.getByText('装载规则')).toBeVisible()
+  await expect(page.getByTestId('report-panel')).toBeVisible()
+  await expect(page.getByTestId('visual-workspace')).toBeVisible()
+  await expect(page.getByTestId('container-scene')).toBeVisible()
+
+  await page.getByRole('button', { name: 'English' }).click()
   await expect(page.getByText('Shipments & Reports')).toBeVisible()
   await expect(page.getByText('Pallet / cargo unit parameters')).toBeVisible()
   await expect(page.getByText('Loading rules')).toBeVisible()
@@ -128,7 +142,7 @@ test('loads the container calculator workspace', async ({ page }) => {
 })
 
 test('uses real archive-style navigation, menu, and shipment-name history behavior', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
   await page.getByLabel('Shipment name').fill('Review regression plan')
 
   await page.getByRole('button', { name: 'Workspace menu' }).click()
@@ -146,16 +160,19 @@ test('uses real archive-style navigation, menu, and shipment-name history behavi
   await expect(page.getByTestId('report-panel')).toBeVisible()
 
   await page.getByRole('button', { name: 'History', exact: true }).click()
+  await expect(page.getByTestId('history-page')).toBeVisible()
   await page.getByRole('button', { name: 'Save plan' }).click()
   await expect(page.getByText('Shipment: Review regression plan')).toBeVisible()
 
+  await page.getByRole('button', { name: 'Back to workbench' }).click()
   await page.getByLabel('Shipment name').fill('Changed plan')
+  await page.getByRole('button', { name: 'History', exact: true }).click()
   await page.getByRole('button', { name: 'Restore' }).first().click()
   await expect(page.getByLabel('Shipment name')).toHaveValue('Review regression plan')
 })
 
 test('exports shipment-prefixed workbook data from the named plan', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
   await page.getByLabel('Shipment name').fill('Prefix Plan')
 
   const downloadPromise = page.waitForEvent('download')
@@ -176,14 +193,14 @@ test('exports shipment-prefixed workbook data from the named plan', async ({ pag
 })
 
 test('updates parameters when selecting another container', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
   const target = page.getByRole('button', { name: /Container 45' HC/ }).first()
   await target.click()
   await expect(target).toHaveClass(/bg-white/)
 })
 
 test('shows custom container fields and effective dimensions', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
   await page.getByLabel('Container type').selectOption('custom')
   await page.getByLabel('Length mm').first().fill('15000')
   await page.getByLabel('Width mm').first().fill('2400')
@@ -193,11 +210,11 @@ test('shows custom container fields and effective dimensions', async ({ page }) 
   await page.getByLabel('Top gap mm').fill('100')
   await page.getByLabel('Side gap mm').fill('50')
 
-  await expect(page.getByText('14,700 x 2,300 x 2,500 mm')).toBeVisible()
+  await expect(page.getByTestId('visual-workspace').getByText('14,700 x 2,300 x 2,500 mm')).toBeVisible()
 })
 
 test('adds cargo and recalculates utilization', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
   const cargoForm = page.locator('form')
   await cargoForm.getByLabel('Name', { exact: true }).fill('Tall crate')
   await cargoForm.getByLabel('Length mm').fill('1200')
@@ -215,8 +232,39 @@ test('adds cargo and recalculates utilization', async ({ page }) => {
   await expect(page.getByText('Layer-by-layer placement')).toBeVisible()
 })
 
+test('deletes cargo and updates downstream details and export', async ({ page }) => {
+  await openEnglish(page)
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('Name', { exact: true }).fill('Delete me')
+  await cargoForm.getByLabel('Label', { exact: true }).fill('D')
+  await cargoForm.getByLabel('Length mm').fill('900')
+  await cargoForm.getByLabel('Width mm').fill('700')
+  await cargoForm.getByLabel('Height mm').fill('500')
+  await cargoForm.getByLabel('Weight kg').fill('30')
+  await cargoForm.getByLabel('Quantity').fill('1')
+  await page.getByRole('button', { name: '+ Add cargo item' }).click()
+  await page.getByRole('button', { name: 'Load' }).click()
+  await expect(page.getByText('Cargo types: 2')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Delete cargo: Delete me' }).click()
+  await page.getByRole('button', { name: 'Load' }).click()
+  await expect(page.getByRole('button', { name: /Delete me/ })).toHaveCount(0)
+  await expect(page.getByText('Cargo types: 1')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Details' }).click()
+  await expect(page.getByRole('cell', { name: 'Delete me' })).toHaveCount(0)
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export XLSX' }).click()
+  const download = await downloadPromise
+  const exportPath = path.join(os.tmpdir(), `cargo-export-delete-${Date.now()}.xlsx`)
+  await download.saveAs(exportPath)
+  const exported = XLSX.read(await fs.readFile(exportPath), { type: 'buffer' })
+  const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(exported.Sheets['Packing Plan'])
+  expect(rows.some((row) => row.name === 'Delete me')).toBe(false)
+})
+
 test('supports input-order loading mode for work-step planning', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
   await page.getByLabel('Loading rules').selectOption('input')
   const cargoForm = page.locator('form')
   await cargoForm.getByLabel('Name', { exact: true }).fill('Mode crate')
@@ -232,8 +280,30 @@ test('supports input-order loading mode for work-step planning', async ({ page }
   await expect(page.getByRole('button', { name: /^1 A/ }).first()).toBeVisible()
 })
 
+test('drags cargo order and changes input-order work steps', async ({ page }) => {
+  await openEnglish(page)
+  await page.getByLabel('Loading rules').selectOption('input')
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('Name', { exact: true }).fill('Order crate')
+  await cargoForm.getByLabel('Label', { exact: true }).fill('O')
+  await cargoForm.getByLabel('Length mm').fill('900')
+  await cargoForm.getByLabel('Width mm').fill('700')
+  await cargoForm.getByLabel('Height mm').fill('500')
+  await cargoForm.getByLabel('Weight kg').fill('30')
+  await cargoForm.getByLabel('Quantity').fill('1')
+  await page.getByRole('button', { name: '+ Add cargo item' }).click()
+
+  const firstBefore = page.getByTestId('cargo-list-item').first()
+  await expect(firstBefore).toContainText('Carton A')
+  await page.getByTestId('cargo-list-item').last().dragTo(firstBefore)
+  await expect(page.getByTestId('cargo-list-item').first()).toContainText('Order crate')
+
+  await page.getByRole('button', { name: 'Load' }).click()
+  await expect(page.getByRole('button', { name: /^1 O/ }).first()).toBeVisible()
+})
+
 test('selectable loading rules change work-step ordering', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
   const cargoForm = page.locator('form')
   await cargoForm.getByLabel('Name', { exact: true }).fill('Heavy rule crate')
   await cargoForm.getByLabel('Label', { exact: true }).fill('W')
@@ -249,8 +319,49 @@ test('selectable loading rules change work-step ordering', async ({ page }) => {
   await expect(page.getByRole('button', { name: /^1 W/ }).first()).toBeVisible()
 })
 
+test('collapses container parameters and loading rules without losing summaries', async ({ page }) => {
+  await openEnglish(page)
+
+  const containerPanel = page.getByTestId('container-panel')
+  await expect(containerPanel.getByLabel('Container type')).toBeVisible()
+  const collapseContainer = containerPanel.getByRole('button', { name: 'Collapse' })
+  await collapseContainer.click()
+  await expect(containerPanel.getByRole('button', { name: 'Expand' })).toHaveAttribute('aria-expanded', 'false')
+  await expect(containerPanel.getByText("Container 20'")).toBeVisible()
+  await expect(containerPanel.getByLabel('Container type')).toHaveCount(0)
+  await containerPanel.getByRole('button', { name: 'Expand' }).click()
+  await expect(containerPanel.getByLabel('Container type')).toBeVisible()
+
+  const rulesPanel = page.getByTestId('loading-rules-panel')
+  await rulesPanel.getByLabel('Loading rules').selectOption('input')
+  const collapseRules = rulesPanel.getByRole('button', { name: 'Collapse' })
+  await collapseRules.click()
+  await expect(rulesPanel.getByRole('button', { name: 'Expand' })).toHaveAttribute('aria-expanded', 'false')
+  await expect(rulesPanel.getByText('Input order')).toBeVisible()
+  await expect(rulesPanel.getByLabel('Loading rules')).toHaveCount(0)
+  await rulesPanel.getByRole('button', { name: 'Expand' }).click()
+  await expect(rulesPanel.getByLabel('Loading rules')).toHaveValue('input')
+})
+
+test('places report panel below the visual workspace in the two-column layout', async ({ page }) => {
+  await openEnglish(page)
+
+  const leftBox = await page.locator('aside').first().boundingBox()
+  const visualBox = await page.getByTestId('visual-workspace').boundingBox()
+  const reportBox = await page.getByTestId('report-panel').boundingBox()
+  const canvasBox = await page.locator('canvas').first().boundingBox()
+
+  expect(leftBox).not.toBeNull()
+  expect(visualBox).not.toBeNull()
+  expect(reportBox).not.toBeNull()
+  expect(canvasBox).not.toBeNull()
+  expect(reportBox!.y).toBeGreaterThan(visualBox!.y + visualBox!.height - 5)
+  expect(canvasBox!.width).toBeGreaterThan(leftBox!.width * 1.4)
+  await expect(page.getByTestId('report-panel').getByRole('button', { name: 'History' })).toHaveCount(0)
+})
+
 test('shows label detail and diagnostic result tabs', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
 
   await page.getByRole('button', { name: 'Details' }).click()
   await expect(page.getByRole('columnheader', { name: 'Label' })).toBeVisible()
@@ -275,7 +386,7 @@ test('shows label detail and diagnostic result tabs', async ({ page }) => {
 })
 
 test('shows failure reason in the detail table for unplaced cargo', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
   await page.getByLabel('Max payload kg').fill('36')
   await page.getByRole('button', { name: 'Load' }).click()
 
@@ -285,7 +396,7 @@ test('shows failure reason in the detail table for unplaced cargo', async ({ pag
 })
 
 test('switches to 2D plan views and keeps labels visible', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
 
   await page.getByRole('button', { name: '2D' }).click()
   const plan = page.getByTestId('container-plan-2d')
@@ -312,7 +423,7 @@ test('switches to 2D plan views and keeps labels visible', async ({ page }) => {
 })
 
 test('filters the plan view by cargo label', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
   const cargoForm = page.locator('form')
   await cargoForm.getByLabel('Name', { exact: true }).fill('Label filtered crate')
   await cargoForm.getByLabel('Label', { exact: true }).fill('B')
@@ -335,7 +446,7 @@ test('filters the plan view by cargo label', async ({ page }) => {
 })
 
 test('renders an interactive 3D canvas', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
   await page.getByRole('button', { name: 'Free view' }).click()
   await expect(page.getByRole('button', { name: 'Free view' })).toHaveClass(/active/)
   const canvas = page.locator('canvas').first()
@@ -357,7 +468,7 @@ test('renders an interactive 3D canvas', async ({ page }) => {
 })
 
 test('switches 3D camera views and keeps layer filtering visible', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
 
   for (const viewName of ['Top', 'Front', 'Side', 'Iso']) {
     await page.getByRole('button', { name: viewName, exact: true }).click()
@@ -392,13 +503,14 @@ test('switches 3D camera views and keeps layer filtering visible', async ({ page
 })
 
 test('supports Excel import/export affordance and Chinese mode', async ({ page }) => {
-  await page.goto('/')
-  await expect(page.getByText('Import XLSX')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Export XLSX' })).toBeVisible()
+  await openEnglish(page)
+  await expect(page.getByTestId('import-export-toolbar').getByText('Import XLSX')).toBeVisible()
+  await expect(page.getByTestId('import-export-toolbar').getByRole('button', { name: 'Export XLSX' })).toBeVisible()
   const filePath = await createWorkbookFile()
   await page.locator('input[type="file"]').setInputFiles(filePath)
-  await expect(page.getByText('Import success: 1')).toBeVisible()
-  await expect(page.getByText(/Mapped fields: .*label/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Import log' })).toHaveClass(/active/)
+  await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
+  await expect(page.getByTestId('import-log-panel').getByText(/Mapped fields: .*label/)).toBeVisible()
   await expect(page.getByRole('button', { name: /Imported crate/ }).first()).toBeVisible()
 
   const downloadPromise = page.waitForEvent('download')
@@ -435,7 +547,7 @@ test('supports Excel import/export affordance and Chinese mode', async ({ page }
 })
 
 test('shows localized failure reasons in Chinese mode', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
   await page.getByLabel('Max payload kg').fill('36')
   await page.getByRole('button', { name: 'Load' }).click()
   await page.getByRole('button', { name: '中文' }).click()
@@ -448,13 +560,14 @@ test('shows localized failure reasons in Chinese mode', async ({ page }) => {
 })
 
 test('imports Chinese centimeter Excel fields with visible conversion warning', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
   const filePath = await createChineseWorkbookFile()
   await page.locator('input[type="file"]').setInputFiles(filePath)
 
-  await expect(page.getByText('Import success: 1')).toBeVisible()
-  await expect(page.getByText('Rows converted from cm: 1')).toBeVisible()
-  await expect(page.getByText(/Import warning row 2/)).toBeVisible()
+  await expect(page.getByTestId('cargo-panel')).not.toContainText('Import warning row 2')
+  await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
+  await expect(page.getByTestId('import-log-panel').getByText('Rows converted from cm: 1')).toBeVisible()
+  await expect(page.getByTestId('import-log-panel').getByText(/Import warning row 2/)).toBeVisible()
   await expect(page.getByRole('button', { name: /整托货物/ }).first()).toBeVisible()
   await expect(page.getByText(/900 x 700 x 500 mm/)).toBeVisible()
 
@@ -477,11 +590,11 @@ test('imports Chinese centimeter Excel fields with visible conversion warning', 
 })
 
 test('imports the real business workbook fixture into the cargo dataset', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
   await page.locator('input[type="file"]').setInputFiles(realWorkbookPath())
 
-  await expect(page.getByText('Import success: 31')).toBeVisible()
-  await expect(page.getByText(/Rows converted from cm: 31/)).toBeVisible()
+  await expect(page.getByTestId('import-log-panel').getByText('Import success: 31')).toBeVisible()
+  await expect(page.getByTestId('import-log-panel').getByText(/Rows converted from cm: 31/)).toBeVisible()
   await expect(page.getByRole('button', { name: /1 Cargo 1/ }).first()).toBeVisible()
   await page.getByRole('button', { name: 'Load' }).click()
 
@@ -491,11 +604,11 @@ test('imports the real business workbook fixture into the cargo dataset', async 
 })
 
 test('imports CSV cargo rows into the same packing flow', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
   const filePath = await createCsvFile()
   await page.locator('input[type="file"]').setInputFiles(filePath)
 
-  await expect(page.getByText('Import success: 1')).toBeVisible()
+  await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
   await expect(page.getByRole('button', { name: /CSV crate/ }).first()).toBeVisible()
   await page.getByRole('button', { name: 'Load' }).click()
 
@@ -506,15 +619,15 @@ test('imports CSV cargo rows into the same packing flow', async ({ page }) => {
 })
 
 test('shows a clear import issue for workbooks without usable rows', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
   const filePath = await createEmptyWorkbookFile()
   await page.locator('input[type="file"]').setInputFiles(filePath)
 
-  await expect(page.getByText('Import issue: No usable data found')).toBeVisible()
+  await expect(page.getByTestId('import-log-panel').getByText('Import issue: No usable data found')).toBeVisible()
 })
 
 test('saves and restores history plans with labels and layers intact', async ({ page }) => {
-  await page.goto('/')
+  await openEnglish(page)
   const cargoForm = page.locator('form')
   await cargoForm.getByLabel('Name', { exact: true }).fill('History crate')
   await cargoForm.getByLabel('Label', { exact: true }).fill('H')
@@ -530,9 +643,10 @@ test('saves and restores history plans with labels and layers intact', async ({ 
   await page.getByRole('button', { name: 'Save plan' }).click()
   await expect(page.getByText(/H:3\/3/)).toBeVisible()
 
+  await page.getByRole('button', { name: 'Back to workbench' }).click()
   const filePath = await createWorkbookFile()
   await page.locator('input[type="file"]').setInputFiles(filePath)
-  await expect(page.getByRole('button', { name: /Imported crate/ })).toBeVisible()
+  await expect(page.getByTestId('cargo-list-item').filter({ hasText: 'Imported crate' })).toBeVisible()
 
   await page.getByRole('button', { name: 'History', exact: true }).click()
   await page.getByRole('button', { name: 'Restore' }).first().click()
@@ -543,3 +657,28 @@ test('saves and restores history plans with labels and layers intact', async ({ 
   await expect(page.getByRole('cell', { name: 'History crate' })).toBeVisible()
   await expect(page.getByRole('cell', { name: '1' }).first()).toBeVisible()
 })
+
+test('keeps history on an independent page with the latest five local plans', async ({ page }) => {
+  await openEnglish(page)
+
+  for (let index = 1; index <= 6; index += 1) {
+    await page.getByLabel('Shipment name').fill(`History ${index}`)
+    await page.getByRole('button', { name: 'History', exact: true }).click()
+    await expect(page.getByTestId('history-page')).toBeVisible()
+    await page.getByRole('button', { name: 'Save plan' }).click()
+    await expect(page.getByText(`Shipment: History ${index}`)).toBeVisible()
+    if (index < 6) {
+      await page.getByRole('button', { name: 'Back to workbench' }).click()
+    }
+  }
+
+  await expect(page.getByText('Shipment: History 1')).toHaveCount(0)
+  for (let index = 2; index <= 6; index += 1) {
+    await expect(page.getByText(`Shipment: History ${index}`)).toBeVisible()
+  }
+
+  await page.getByRole('button', { name: 'Restore' }).first().click()
+  await expect(page.getByLabel('Shipment name')).toHaveValue('History 6')
+  await expect(page.getByTestId('history-page')).toHaveCount(0)
+})
+
