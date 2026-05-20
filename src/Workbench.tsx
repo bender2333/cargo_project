@@ -243,9 +243,9 @@ const initialCargo: CargoItem[] = [
     id: 'sample-1',
     name: 'Carton A',
     label: 'A',
-    length: 600,
-    width: 400,
-    height: 350,
+    length: 400,
+    width: 500,
+    height: 600,
     weight: 18,
     quantity: 18,
     color: '#f59e0b',
@@ -275,9 +275,9 @@ type NavTarget = 'overview' | 'report' | 'cargo' | 'container' | 'history'
 const emptyForm: CargoForm = {
   name: 'Carton B',
   label: 'B',
-  length: 800,
+  length: 400,
   width: 500,
-  height: 450,
+  height: 600,
   weight: 24,
   quantity: 10,
   color: '#0ea5e9',
@@ -403,6 +403,7 @@ function Workbench() {
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null)
   const [containerCollapsed, setContainerCollapsed] = useState(false)
   const [rulesCollapsed, setRulesCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [draggedCargoId, setDraggedCargoId] = useState<string | null>(null)
   const workspaceRef = useRef<HTMLElement | null>(null)
   const reportRef = useRef<HTMLElement | null>(null)
@@ -702,27 +703,49 @@ function Workbench() {
             )}
           </section>
         ) : (
-        <section className="grid grid-cols-[minmax(340px,25%)_minmax(0,1fr)] gap-5 max-lg:grid-cols-1" data-testid="workbench-layout">
-          <aside className="space-y-4">
-          <div className="archive-card overflow-hidden">
-          <div className="flex min-h-14 items-center gap-4 bg-[#111827] px-4 py-3 text-white">
-            <button
-              className="grid h-10 w-10 place-items-center rounded-[10px] bg-[#64748b] text-2xl font-bold"
-              type="button"
-              aria-expanded={menuOpen}
-              aria-label={menuOpen ? t.closeMenu : t.menu}
-              onClick={() => setMenuOpen((open) => !open)}
-            >
-              ≡
-            </button>
-            <input
-              className="w-full rounded-[10px] border border-white/30 bg-white/10 px-3 py-2 text-sm outline-none placeholder:text-white/70"
-              placeholder={t.shipment}
-              aria-label="Shipment name"
-              value={shipmentName}
-              onChange={(event) => setShipmentName(event.target.value)}
-            />
-          </div>
+        <section className={sidebarCollapsed ? "grid grid-cols-[32px_1fr] gap-5" : "grid grid-cols-[minmax(340px,25%)_minmax(0,1fr)] gap-5 max-lg:grid-cols-1"} data-testid="workbench-layout">
+          <aside className={sidebarCollapsed ? "w-[32px] overflow-hidden flex flex-col items-center" : "space-y-4"}>
+            {sidebarCollapsed ? (
+              <button
+                className="mt-4 flex h-8 w-8 items-center justify-center rounded bg-[#111827] text-white hover:bg-slate-700 font-bold"
+                type="button"
+                title="展开参数栏"
+                aria-label="Expand parameters"
+                data-testid="expand-sidebar"
+                onClick={() => setSidebarCollapsed(false)}
+              >
+                ▶
+              </button>
+            ) : (
+              <div className="archive-card overflow-hidden">
+              <div className="flex min-h-14 items-center gap-4 bg-[#111827] px-4 py-3 text-white">
+                <button
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] bg-[#64748b] text-2xl font-bold"
+                  type="button"
+                  aria-expanded={menuOpen}
+                  aria-label={menuOpen ? t.closeMenu : t.menu}
+                  onClick={() => setMenuOpen((open) => !open)}
+                >
+                  ≡
+                </button>
+                <input
+                  className="w-full rounded-[10px] border border-white/30 bg-white/10 px-3 py-2 text-sm outline-none placeholder:text-white/70"
+                  placeholder={t.shipment}
+                  aria-label="Shipment name"
+                  value={shipmentName}
+                  onChange={(event) => setShipmentName(event.target.value)}
+                />
+                <button
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] bg-[#64748b] text-xl font-bold hover:bg-[#475569]"
+                  type="button"
+                  title="折叠参数栏"
+                  aria-label="Collapse parameters"
+                  data-testid="collapse-sidebar"
+                  onClick={() => setSidebarCollapsed(true)}
+                >
+                  ◀
+                </button>
+              </div>
           {menuOpen && (
             <div className="grid gap-2 border-b border-[#e5e7eb] bg-[#f8fafc] p-3 text-sm" data-testid="workspace-menu">
               <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('report')}>{t.nav[1]}</button>
@@ -871,6 +894,7 @@ function Workbench() {
             </div>
           </div>
           </div>
+          )}
         </aside>
 
         <section className="space-y-4 max-2xl:col-span-1" ref={workspaceRef}>

@@ -2,6 +2,11 @@
 
 ## 2026-05-20
 
+- Completed subtask: implement left-side parameter panel collapsing and 3D view auto-stretching.
+- Added `sidebarCollapsed` state and collapsible CSS grid layout in `src/Workbench.tsx`.
+- Integrated a sleek header collapse button `◀` and an expand button `▶` for the thin 32px sidebar mode.
+- Ensured that the 3D Canvas resizes perfectly using Three.js container's `ResizeObserver`.
+- Verification: verified build `npm run build` succeeded and `npm test` successfully passed.
 - Completed subtask: standardize default cargo parameters and implement from-innermost-outward depth layering.
 - Standardized default cargo initial and empty form parameters to `400 * 500 * 600 mm`.
 - Completed horizontal/depth-based physical layering algorithm in layers.ts and packing.ts.
