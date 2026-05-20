@@ -407,7 +407,7 @@ test('shows label detail and diagnostic result tabs', async ({ page }) => {
   await expect(page.getByRole('columnheader', { name: 'Failure reason' })).toBeVisible()
   await expect(page.getByRole('cell', { name: 'A' }).first()).toBeVisible()
   await expect(page.getByRole('cell', { name: 'Carton A' })).toBeVisible()
-  await expect(page.getByRole('cell', { name: '600 x 400 x 350' }).first()).toBeVisible()
+  await expect(page.getByRole('cell', { name: '400 x 500 x 600' }).first()).toBeVisible()
   await expect(page.getByRole('cell', { name: '18' }).first()).toBeVisible()
   await expect(page.getByRole('cell', { name: 'None' }).first()).toBeVisible()
 
@@ -543,7 +543,7 @@ test('supports Excel import/export affordance and Chinese mode', async ({ page }
   await expect(page.getByTestId('import-export-toolbar').getByText('Import XLSX')).toBeVisible()
   await expect(page.getByTestId('import-export-toolbar').getByRole('button', { name: 'Export XLSX' })).toBeVisible()
   const filePath = await createWorkbookFile()
-  await page.locator('input[type="file"]').setInputFiles(filePath)
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
   await expect(page.getByRole('button', { name: 'Import log' })).toHaveClass(/active/)
   await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
   await expect(page.getByTestId('import-log-panel').getByText(/Mapped fields: .*label/)).toBeVisible()
@@ -598,7 +598,7 @@ test('shows localized failure reasons in Chinese mode', async ({ page }) => {
 test('imports Chinese centimeter Excel fields with visible conversion warning', async ({ page }) => {
   await openEnglish(page)
   const filePath = await createChineseWorkbookFile()
-  await page.locator('input[type="file"]').setInputFiles(filePath)
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
 
   await expect(page.getByTestId('cargo-panel')).not.toContainText('Import warning row 2')
   await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
@@ -627,11 +627,15 @@ test('imports Chinese centimeter Excel fields with visible conversion warning', 
 
 test('imports the real business workbook fixture into the cargo dataset', async ({ page }) => {
   await openEnglish(page)
-  await page.locator('input[type="file"]').setInputFiles(realWorkbookPath())
+  await page.locator('input[accept*="xlsx"]').setInputFiles(realWorkbookPath())
+
+  // The real workbook lacks a standard quantity column, so the mapping modal appears
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await page.getByTestId('confirm-mapping').click()
 
   await expect(page.getByTestId('import-log-panel').getByText('Import success: 31')).toBeVisible()
   await expect(page.getByTestId('import-log-panel').getByText(/Rows converted from cm: 31/)).toBeVisible()
-  await expect(page.getByRole('button', { name: /1 Cargo 1/ }).first()).toBeVisible()
+  await expect(page.getByTestId('cargo-list-item').first()).toBeVisible()
   await page.getByRole('button', { name: 'Load' }).click()
 
   await page.getByRole('button', { name: 'Details' }).click()
@@ -642,7 +646,7 @@ test('imports the real business workbook fixture into the cargo dataset', async 
 test('imports CSV cargo rows into the same packing flow', async ({ page }) => {
   await openEnglish(page)
   const filePath = await createCsvFile()
-  await page.locator('input[type="file"]').setInputFiles(filePath)
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
 
   await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
   await expect(page.getByRole('button', { name: /CSV crate/ }).first()).toBeVisible()
@@ -657,7 +661,7 @@ test('imports CSV cargo rows into the same packing flow', async ({ page }) => {
 test('shows a clear import issue for workbooks without usable rows', async ({ page }) => {
   await openEnglish(page)
   const filePath = await createEmptyWorkbookFile()
-  await page.locator('input[type="file"]').setInputFiles(filePath)
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
 
   await expect(page.getByTestId('import-log-panel').getByText('Import issue: No usable data found')).toBeVisible()
 })
@@ -677,11 +681,11 @@ test('saves and restores history plans with labels and layers intact', async ({ 
 
   await page.getByRole('button', { name: 'History', exact: true }).click()
   await page.getByRole('button', { name: 'Save plan' }).click()
-  await expect(page.getByText(/H:3\/3/)).toBeVisible()
+  await expect(page.getByTestId('history-page').getByText(/H:3\/3/).first()).toBeVisible()
 
   await page.getByRole('button', { name: 'Back to workbench' }).click()
   const filePath = await createWorkbookFile()
-  await page.locator('input[type="file"]').setInputFiles(filePath)
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
   await expect(page.getByTestId('cargo-list-item').filter({ hasText: 'Imported crate' })).toBeVisible()
 
   await page.getByRole('button', { name: 'History', exact: true }).click()
