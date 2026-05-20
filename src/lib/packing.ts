@@ -1,4 +1,4 @@
-import type { CargoItem, ContainerSpec, PackingResult, PlacedBox } from '../types'
+import type { CargoItem, ContainerSpec, PackingDiagnostic, PackingLayer, PackingResult, PlacedBox } from '../types'
 import { getContainerVolume } from '../data/containers'
 
 type BoxSize = {
@@ -67,33 +67,51 @@ function overlaps(a: PlacedBox, point: Point, box: BoxSize) {
   )
 }
 
-function hasGravitySupport(point: Point, box: BoxSize, placed: PlacedBox[]) {
+function supportOverlap(candidate: PlacedBox, point: Point, box: BoxSize) {
+  if (!candidate.stackable || Math.abs(candidate.z + candidate.height - point.z) > EPSILON) {
+    return 0
+  }
+
+  const overlapX = Math.max(
+    0,
+    Math.min(point.x + box.length, candidate.x + candidate.length) - Math.max(point.x, candidate.x),
+  )
+  const overlapY = Math.max(
+    0,
+    Math.min(point.y + box.width, candidate.y + candidate.width) - Math.max(point.y, candidate.y),
+  )
+  return overlapX * overlapY
+}
+
+function supportDetails(point: Point, box: BoxSize, placed: PlacedBox[]) {
   if (point.z <= EPSILON) {
-    return true
+    return {
+      supportedArea: box.length * box.width,
+      supportRatio: 1,
+      supportedBy: [] as PlacedBox[],
+      supportType: 'floor' as const,
+      physicalLayer: 1,
+    }
   }
 
   const baseArea = box.length * box.width
-  const supportedArea = placed
-    .filter((candidate) => candidate.stackable && Math.abs(candidate.z + candidate.height - point.z) <= EPSILON)
-    .reduce((area, candidate) => {
-      const overlapX = Math.max(
-        0,
-        Math.min(point.x + box.length, candidate.x + candidate.length) - Math.max(point.x, candidate.x),
-      )
-      const overlapY = Math.max(
-        0,
-        Math.min(point.y + box.width, candidate.y + candidate.width) - Math.max(point.y, candidate.y),
-      )
-      return area + overlapX * overlapY
-    }, 0)
+  const supportedBy = placed.filter((candidate) => supportOverlap(candidate, point, box) > 0)
+  const supportedArea = supportedBy.reduce((area, candidate) => area + supportOverlap(candidate, point, box), 0)
+  const supportRatio = baseArea ? supportedArea / baseArea : 0
 
-  return supportedArea / baseArea >= 0.8
+  return {
+    supportedArea,
+    supportRatio,
+    supportedBy,
+    supportType: supportRatio >= 1 - EPSILON ? ('fully-supported' as const) : ('partially-supported' as const),
+    physicalLayer: Math.max(...supportedBy.map((candidate) => candidate.physicalLayer), 0) + 1,
+  }
 }
 
 function canPlace(point: Point, box: BoxSize, container: ContainerSpec, placed: PlacedBox[]) {
   return (
     fitsInsideContainer(point, box, container) &&
-    hasGravitySupport(point, box, placed) &&
+    supportDetails(point, box, placed).supportRatio >= 0.8 &&
     placed.every((candidate) => !overlaps(candidate, point, box))
   )
 }
@@ -141,17 +159,81 @@ function bestPlacement(item: CargoItem, container: ContainerSpec, placed: Placed
     .sort((a, b) => a.score - b.score || b.box.length * b.box.width - a.box.length * a.box.width)[0]
 }
 
+function buildLayers(placed: PlacedBox[]): PackingLayer[] {
+  const groups = new Map<number, PlacedBox[]>()
+  placed.forEach((box) => {
+    groups.set(box.physicalLayer, [...(groups.get(box.physicalLayer) ?? []), box])
+  })
+
+  return [...groups.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([physicalLayer, boxes]) => {
+      const labelCounts = new Map<string, { label: string; color: string; count: number }>()
+      boxes.forEach((box) => {
+        const current = labelCounts.get(box.label)
+        labelCounts.set(box.label, {
+          label: box.label,
+          color: box.color,
+          count: (current?.count ?? 0) + 1,
+        })
+      })
+
+      return {
+        id: String(physicalLayer),
+        physicalLayer,
+        minZ: Math.min(...boxes.map((box) => box.z)),
+        maxZ: Math.max(...boxes.map((box) => box.z + box.height)),
+        count: boxes.length,
+        weight: boxes.reduce((sum, box) => sum + box.weight, 0),
+        volume: boxes.reduce((sum, box) => sum + box.length * box.width * box.height, 0),
+        labels: [...labelCounts.values()].sort((a, b) => a.label.localeCompare(b.label)),
+        supportedBy: [...new Set(boxes.flatMap((box) => box.supportedBy))].sort(),
+      }
+    })
+}
+
+function buildDiagnostics(placed: PlacedBox[], unplaced: PackingResult['unplaced']): PackingDiagnostic[] {
+  const diagnostics: PackingDiagnostic[] = []
+
+  if (placed.some((box) => box.supportType === 'partially-supported')) {
+    diagnostics.push({
+      id: 'partial-support',
+      severity: 'warning',
+      message: 'Some boxes are only partially supported.',
+    })
+  }
+
+  unplaced.forEach((item) => {
+    diagnostics.push({
+      id: `unplaced-${item.cargoId}`,
+      severity: 'warning',
+      message: `${item.label} ${item.name}: ${item.quantity} unplaced because ${item.reason}.`,
+    })
+  })
+
+  if (diagnostics.length === 0) {
+    diagnostics.push({
+      id: 'packing-valid',
+      severity: 'info',
+      message: 'Calculated packing satisfies boundary, weight, overlap, and stacking checks.',
+    })
+  }
+
+  return diagnostics
+}
+
 export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[]): PackingResult {
   const placed: PlacedBox[] = []
   let extremePoints: Point[] = [{ x: 0, y: 0, z: 0 }]
-  const unplacedMap = new Map<string, { cargoId: string; name: string; quantity: number; reason: string }>()
+  const unplacedMap = new Map<string, { cargoId: string; name: string; label: string; quantity: number; reason: string }>()
   let usedWeight = 0
   let totalCargoCount = 0
 
   const expanded = cargoItems
-    .flatMap((item) => {
+    .flatMap((item, itemIndex) => {
       totalCargoCount += item.quantity
-      return Array.from({ length: item.quantity }, (_, index) => ({ item, index: index + 1 }))
+      const label = (item.label || labelForIndex(itemIndex)).toUpperCase().slice(0, 2)
+      return Array.from({ length: item.quantity }, (_, index) => ({ item, label, index: index + 1 }))
     })
     .sort((a, b) => b.item.length * b.item.width * b.item.height - a.item.length * a.item.width * a.item.height)
 
@@ -162,6 +244,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       unplacedMap.set(item.id, {
         cargoId: item.id,
         name: item.name,
+        label: entry.label,
         quantity: (current?.quantity ?? 0) + 1,
         reason,
       })
@@ -183,12 +266,13 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       continue
     }
     const { box, point } = placement
+    const support = supportDetails(point, box, placed)
 
     placed.push({
       id: `${item.id}-${entry.index}`,
       cargoId: item.id,
       name: item.name,
-      label: item.label || labelForIndex(placed.length),
+      label: entry.label,
       index: entry.index,
       x: point.x,
       y: point.y,
@@ -199,6 +283,10 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       weight: item.weight,
       color: item.color,
       stackable: item.stackable,
+      physicalLayer: support.physicalLayer,
+      workStep: placed.length + 1,
+      supportType: support.supportType,
+      supportedBy: support.supportedBy.map((candidate) => candidate.id),
     })
 
     extremePoints = normalizePoints(
@@ -215,10 +303,37 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
 
   const usedVolume = placed.reduce((sum, box) => sum + box.length * box.width * box.height, 0)
   const containerVolume = getContainerVolume(container)
+  const unplaced = [...unplacedMap.values()]
+  const layers = buildLayers(placed)
+  const labelStats = cargoItems.map((item, itemIndex) => {
+    const label = (item.label || labelForIndex(itemIndex)).toUpperCase().slice(0, 2)
+    const placedBoxes = placed.filter((box) => box.cargoId === item.id)
+    const unplacedQuantity = unplaced.find((entry) => entry.cargoId === item.id)?.quantity ?? 0
+    return {
+      label,
+      name: item.name,
+      color: item.color,
+      planned: item.quantity,
+      placed: placedBoxes.length,
+      unplaced: unplacedQuantity,
+      layers: [...new Set(placedBoxes.map((box) => box.physicalLayer))].sort((a, b) => a - b),
+    }
+  })
 
   return {
     placed,
-    unplaced: [...unplacedMap.values()],
+    unplaced,
+    layers,
+    workSteps: placed.map((box) => ({
+      step: box.workStep,
+      boxId: box.id,
+      cargoId: box.cargoId,
+      label: box.label,
+      physicalLayer: box.physicalLayer,
+      supportType: box.supportType,
+    })),
+    labelStats,
+    diagnostics: buildDiagnostics(placed, unplaced),
     totalCargoCount,
     placedCount: placed.length,
     usedVolume,

@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx'
 import { ContainerScene } from './components/ContainerScene'
 import { containers, formatCubicMeters, getContainerVolume } from './data/containers'
 import { calculatePacking } from './lib/packing'
-import type { CargoItem, LayerSpec, Locale } from './types'
+import type { CargoItem, Locale, PackingLayer } from './types'
 
 const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
 
@@ -40,6 +40,8 @@ const copy = {
     allLayers: 'All layers',
     currentLayer: 'Current layer',
     showLayer: 'Show layer',
+    layerStats: 'Layer stats',
+    supportedBy: 'Supported by',
     label: 'Label',
     buy: 'Buy',
     signOut: 'Sign out',
@@ -76,6 +78,8 @@ const copy = {
     allLayers: '全部层',
     currentLayer: '当前层',
     showLayer: '显示层',
+    layerStats: '当前层统计',
+    supportedBy: '支撑来源',
     label: '标识',
     buy: '购买',
     signOut: '退出',
@@ -118,22 +122,8 @@ function nextLabel(index: number) {
   return String.fromCharCode(65 + (index % 26))
 }
 
-function buildLayers(boxes: ReturnType<typeof calculatePacking>['placed'], locale: Locale): LayerSpec[] {
-  const groups = new Map<number, typeof boxes>()
-  boxes.forEach((box) => {
-    const key = Math.round(box.z)
-    groups.set(key, [...(groups.get(key) ?? []), box])
-  })
-  return [...groups.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([z, layerBoxes], index) => ({
-      id: String(z),
-      name: locale === 'zh' ? `第${index + 1}层` : `Layer ${index + 1}`,
-      z,
-      minZ: Math.min(...layerBoxes.map((box) => box.z)),
-      maxZ: Math.max(...layerBoxes.map((box) => box.z + box.height)),
-      count: layerBoxes.length,
-    }))
+function layerName(layer: PackingLayer, locale: Locale) {
+  return locale === 'zh' ? `第${layer.physicalLayer}层` : `Layer ${layer.physicalLayer}`
 }
 
 function Workbench() {
@@ -148,9 +138,9 @@ function Workbench() {
 
   const selectedContainer = containers.find((container) => container.id === selectedContainerId) ?? containers[0]
   const result = useMemo(() => calculatePacking(selectedContainer, cargoItems), [cargoItems, selectedContainer])
-  const layers = useMemo(() => buildLayers(result.placed, locale), [locale, result.placed])
+  const activeLayer = result.layers.find((layer) => layer.id === activeLayerId)
   const visibleBoxes = hasCalculated
-    ? result.placed.filter((box) => activeLayerId === 'all' || Math.round(box.z).toString() === activeLayerId)
+    ? result.placed.filter((box) => activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId)
     : []
 
   const updateNumber = (field: keyof Pick<CargoForm, 'length' | 'width' | 'height' | 'weight' | 'quantity'>, value: string) => {
@@ -307,15 +297,24 @@ function Workbench() {
             <h2 className="font-bold">{t.layers}</h2>
             <select className="mt-2 w-full border border-[#aaa] bg-white p-2" value={activeLayerId} onChange={(event) => setActiveLayerId(event.target.value)}>
               <option value="all">{t.allLayers}</option>
-              {layers.map((layer) => <option key={layer.id} value={layer.id}>{layer.name}: {layer.count}</option>)}
+              {result.layers.map((layer) => <option key={layer.id} value={layer.id}>{layerName(layer, locale)}: {layer.count}</option>)}
             </select>
             <div className="mt-2 grid grid-cols-2 gap-2">
-              {layers.map((layer) => (
+              {result.layers.map((layer) => (
                 <button className={`border px-2 py-1 text-left text-xs ${activeLayerId === layer.id ? 'border-[#f3b21a] bg-white' : 'border-[#bbb] bg-[#eee]'}`} key={layer.id} type="button" onClick={() => setActiveLayerId(layer.id)}>
-                  {layer.name}<br />{Math.round(layer.minZ)}-{Math.round(layer.maxZ)} mm
+                  {layerName(layer, locale)}<br />{Math.round(layer.minZ)}-{Math.round(layer.maxZ)} mm<br />
+                  {layer.labels.map((entry) => `${entry.label} x${entry.count}`).join(', ')}
                 </button>
               ))}
             </div>
+            {activeLayer && (
+              <div className="mt-3 border-t border-[#bebebe] pt-2 text-xs">
+                <strong>{t.layerStats}</strong>
+                <p>{activeLayer.count} {t.qty}, {activeLayer.weight.toLocaleString()} kg, {formatCubicMeters(activeLayer.volume)}</p>
+                <p>{activeLayer.labels.map((entry) => `${entry.label} x${entry.count}`).join(', ')}</p>
+                {activeLayer.supportedBy.length > 0 && <p>{t.supportedBy}: {activeLayer.supportedBy.join(', ')}</p>}
+              </div>
+            )}
           </div>
           <div className="max-h-[320px] overflow-auto">
             {containers.map((container) => (
@@ -337,6 +336,7 @@ function Workbench() {
               {visibleBoxes.slice(0, 10).map((box) => (
                 <button className={`mt-1 block w-full rounded px-2 py-1 text-left text-xs ${selectedBoxId === box.id ? 'bg-[#fff0bd]' : 'bg-[#f6f6f6]'}`} key={box.id} type="button" onClick={() => setSelectedBoxId(box.id)}>
                   <b>{box.label}</b> {box.name} #{box.index} x:{Math.round(box.x)} y:{Math.round(box.y)} z:{Math.round(box.z)}
+                  <br />{layerName(result.layers.find((layer) => layer.physicalLayer === box.physicalLayer) ?? result.layers[0], locale)} · {box.supportType}
                 </button>
               ))}
             </div>

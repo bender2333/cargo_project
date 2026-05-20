@@ -1,0 +1,9 @@
+# Changelog
+
+## 2026-05-20
+
+- Started PRD-driven refactor tracking.
+- Completed subtask: move layer data into `PackingResult` and derive physical layers from support relationships instead of `z` height grouping.
+- Added label stats, loading steps, diagnostics, support metadata, and layer aggregates to packing results.
+- Updated the layer selector to use `physicalLayer` data from the calculation result.
+- Verification: `npm test` passed 18 tests; `npm run lint` passed; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 5 tests after installing Chromium with `npx playwright install chromium`.

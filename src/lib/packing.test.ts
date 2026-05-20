@@ -61,6 +61,19 @@ function expectValidPacking(container: ContainerSpec, result: PackingResult) {
   expect(result.usedVolume).toBe(usedVolume)
   expect(result.usedWeight).toBe(usedWeight)
   expect(result.usedWeight).toBeLessThanOrEqual(container.maxWeight)
+
+  const placedIds = new Set(result.placed.map((box) => box.id))
+  for (const box of result.placed) {
+    expect(box.physicalLayer).toBeGreaterThanOrEqual(1)
+    expect(box.workStep).toBeGreaterThanOrEqual(1)
+    expect(box.supportedBy.every((id) => placedIds.has(id))).toBe(true)
+    if (box.z === 0) {
+      expect(box.supportType).toBe('floor')
+      expect(box.supportedBy).toEqual([])
+    } else {
+      expect(box.supportedBy.length).toBeGreaterThan(0)
+    }
+  }
 }
 
 describe('container specs', () => {
@@ -173,8 +186,43 @@ describe('calculatePacking', () => {
     expectValidPacking(container, result)
     expect(result.placedCount).toBe(2)
     expect(result.unplaced).toEqual([
-      { cargoId: 'fits-two', name: 'Fits two', quantity: 2, reason: 'No remaining loading space' },
+      { cargoId: 'fits-two', name: 'Fits two', label: 'F', quantity: 2, reason: 'No remaining loading space' },
     ])
+  })
+
+  it('derives physical layers from support depth instead of z height buckets', () => {
+    const container = testContainer({ length: 2000, width: 1000, height: 1500 })
+    const result = calculatePacking(container, [
+      cargo({ id: 'tall-base', label: 'T', length: 1000, width: 1000, height: 1000, quantity: 1, canRotate: false }),
+      cargo({ id: 'half', label: 'H', length: 1000, width: 1000, height: 500, quantity: 3, canRotate: false }),
+    ])
+
+    expectValidPacking(container, result)
+    expect(result.layers.map((layer) => ({ layer: layer.physicalLayer, count: layer.count }))).toEqual([
+      { layer: 1, count: 2 },
+      { layer: 2, count: 2 },
+    ])
+
+    const secondLayerBoxes = result.placed.filter((box) => box.physicalLayer === 2)
+    expect(new Set(secondLayerBoxes.map((box) => box.z))).toEqual(new Set([500, 1000]))
+    expect(result.layers[1].minZ).toBe(500)
+    expect(result.layers[1].maxZ).toBe(1500)
+    expect(secondLayerBoxes.every((box) => box.supportType === 'fully-supported')).toBe(true)
+  })
+
+  it('reports label stats across planned, placed, unplaced, and physical layers', () => {
+    const container = testContainer({ length: 1000, width: 1000, height: 1000, maxWeight: 150 })
+    const result = calculatePacking(container, [
+      cargo({ id: 'a', name: 'Alpha', label: 'A', length: 1000, width: 1000, height: 500, weight: 100, quantity: 2, canRotate: false }),
+      cargo({ id: 'b', name: 'Beta', label: 'B', length: 500, width: 500, height: 500, weight: 25, quantity: 1, canRotate: false }),
+    ])
+
+    expectValidPacking(container, result)
+    expect(result.labelStats).toEqual([
+      { label: 'A', name: 'Alpha', color: '#f59e0b', planned: 2, placed: 1, unplaced: 1, layers: [1] },
+      { label: 'B', name: 'Beta', color: '#f59e0b', planned: 1, placed: 1, unplaced: 0, layers: [2] },
+    ])
+    expect(result.unplaced[0]).toMatchObject({ cargoId: 'a', label: 'A', quantity: 1, reason: 'Exceeds maximum payload' })
   })
 
   it('supports gravity-stable stacking on top of fully supported boxes', () => {
