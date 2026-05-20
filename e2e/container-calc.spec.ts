@@ -71,6 +71,24 @@ test('shows label detail and diagnostic result tabs', async ({ page }) => {
   await expect(page.getByText('Calculated packing satisfies boundary, weight, overlap, and stacking checks.')).toBeVisible()
 })
 
+test('switches to 2D plan views and keeps labels visible', async ({ page }) => {
+  await page.goto('/')
+
+  await page.getByRole('button', { name: '2D' }).click()
+  const plan = page.getByTestId('container-plan-2d')
+  await expect(plan).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Top', exact: true })).toBeVisible()
+  await expect(plan.locator('text').filter({ hasText: 'A' }).first()).toBeVisible()
+
+  await page.getByRole('button', { name: 'Front', exact: true }).click()
+  await expect(page.getByTestId('container-plan-2d')).toBeVisible()
+  await page.getByRole('button', { name: 'Side', exact: true }).click()
+  await expect(page.getByTestId('container-plan-2d')).toBeVisible()
+
+  await page.getByRole('button', { name: '3D' }).click()
+  await expect(page.getByTestId('container-scene')).toBeVisible()
+})
+
 test('renders an interactive 3D canvas', async ({ page }) => {
   await page.goto('/')
   const canvas = page.locator('canvas').first()

@@ -13,3 +13,6 @@
 - Completed subtask: surface label details and diagnostics in the result workspace.
 - Added right-side result tabs for layer view, label detail table, and compliance diagnostics using `PackingResult.labelStats`, `PackingResult.unplaced`, and `PackingResult.diagnostics`.
 - Verification: `npm test` passed 19 tests; `npm run lint` passed; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 6 tests.
+- Completed subtask: add a 2D plan workspace view.
+- Added a SVG-based 2D container view with top, front, and side projections, visible cargo labels, current-layer highlighting, and non-current-layer dimming from the same `PlacedBox.physicalLayer` data used by 3D and details.
+- Verification: `npm test` passed 19 tests; `npm run lint` passed; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 7 tests.

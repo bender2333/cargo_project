@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import * as XLSX from 'xlsx'
 import { ContainerScene } from './components/ContainerScene'
+import { ContainerPlan2D } from './components/ContainerPlan2D'
+import type { PlanViewMode } from './components/ContainerPlan2D'
 import { containers, formatCubicMeters, getContainerVolume } from './data/containers'
 import { buildExportPlanRows } from './lib/exportPlan'
 import { calculatePacking } from './lib/packing'
@@ -29,6 +31,11 @@ const copy = {
     importExcel: 'Import XLSX',
     exportExcel: 'Export XLSX',
     load: 'Load',
+    view2d: '2D',
+    view3d: '3D',
+    topView: 'Top',
+    frontView: 'Front',
+    sideView: 'Side',
     results: 'Results',
     loaded: 'Loaded',
     volumeUse: 'Volume utilization',
@@ -74,6 +81,11 @@ const copy = {
     importExcel: '导入 XLSX',
     exportExcel: '导出 XLSX',
     load: '装箱',
+    view2d: '2D',
+    view3d: '3D',
+    topView: '俯视',
+    frontView: '正视',
+    sideView: '侧视',
     results: '结果',
     loaded: '已装入',
     volumeUse: '体积利用率',
@@ -119,6 +131,7 @@ const initialCargo: CargoItem[] = [
 ]
 
 type CargoForm = Omit<CargoItem, 'id'>
+type WorkspaceView = '3d' | '2d'
 type ResultTab = 'layers' | 'details' | 'diagnostics'
 
 const emptyForm: CargoForm = {
@@ -150,6 +163,8 @@ function Workbench() {
   const [form, setForm] = useState<CargoForm>(emptyForm)
   const [hasCalculated, setHasCalculated] = useState(true)
   const [activeLayerId, setActiveLayerId] = useState('all')
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
+  const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
   const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null)
 
@@ -285,6 +300,27 @@ function Workbench() {
         </aside>
 
         <section className="relative min-h-[650px] bg-[#d8d8d8]">
+          <div className="absolute left-5 top-24 z-10 flex gap-2 rounded bg-white/75 p-2 text-sm shadow">
+            <button className={`border px-3 py-1 ${workspaceView === '3d' ? 'border-[#f3b21a] bg-white font-bold' : 'border-[#bbbbbb] bg-[#eeeeee]'}`} type="button" onClick={() => setWorkspaceView('3d')}>
+              {t.view3d}
+            </button>
+            <button className={`border px-3 py-1 ${workspaceView === '2d' ? 'border-[#f3b21a] bg-white font-bold' : 'border-[#bbbbbb] bg-[#eeeeee]'}`} type="button" onClick={() => setWorkspaceView('2d')}>
+              {t.view2d}
+            </button>
+            {workspaceView === '2d' && (
+              <>
+                {[
+                  { id: 'top' as const, label: t.topView },
+                  { id: 'front' as const, label: t.frontView },
+                  { id: 'side' as const, label: t.sideView },
+                ].map((view) => (
+                  <button className={`border px-3 py-1 ${planViewMode === view.id ? 'border-[#f3b21a] bg-white font-bold' : 'border-[#bbbbbb] bg-[#eeeeee]'}`} key={view.id} type="button" onClick={() => setPlanViewMode(view.id)}>
+                    {view.label}
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
           <div className="absolute left-5 top-5 z-10 rounded bg-white/75 px-4 py-3 text-sm shadow">
             <strong>{selectedContainer.label}</strong>
             <div>{selectedContainer.length.toLocaleString()} x {selectedContainer.width.toLocaleString()} x {selectedContainer.height.toLocaleString()} mm</div>
@@ -294,7 +330,11 @@ function Workbench() {
             <div><strong>{t.volume}</strong><div>{formatCubicMeters(result.usedVolume)}</div></div>
             <div><strong>{t.loaded}</strong><div>{result.placedCount}/{result.totalCargoCount}</div></div>
           </div>
-          <ContainerScene boxes={visibleBoxes} container={selectedContainer} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
+          {workspaceView === '3d' ? (
+            <ContainerScene boxes={visibleBoxes} container={selectedContainer} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
+          ) : (
+            <ContainerPlan2D activeLayerId={activeLayerId} boxes={result.placed} container={selectedContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
+          )}
           <button className="absolute bottom-10 right-10 grid h-32 w-32 place-items-center rounded-full border-8 border-white bg-[#686868] text-3xl font-semibold text-white shadow-xl hover:bg-[#4c4c4c]" type="button" onClick={() => setHasCalculated(true)}>{t.load}</button>
         </section>
 
