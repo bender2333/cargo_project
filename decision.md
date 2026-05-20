@@ -46,10 +46,18 @@
 - 影响：UI 不再出现“可点但不生效”的装载规则；E2E 和单元测试可以证明规则选择会改变装柜作业顺序。
 - 后续：archive 中的托盘模式、前后配重偏差、软承载规则、层透明度输入等暂不展示为可用控件，待算法/视图模型明确后再接入。
 
-## 2026-05-20 远端添加货物回归复现
+## 2026-05-20 远端添加货物回归根因
 
 - 背景：生产地址 `http://101.33.232.150/` 上默认中文界面点击 `+ 添加货物` 后，新增货物没有出现在货物列表。
-- 选项：直接修改本地事件处理；先用同一条 E2E 比较远端和本地当前源码；只重新部署当前构建。
-- 决策：先增加可切换 `PLAYWRIGHT_BASE_URL` 的 Playwright 配置和默认中文添加货物回归用例。该用例在远端部署版本失败，在本地当前源码通过，因此本次根因按远端部署版本落后处理，部署当前构建后再用同一条远端 E2E 复核。
-- 影响：后续线上回归可以用同一套 E2E 测试直接验证生产地址，不需要复制临时脚本。
-- 后续：部署后必须重跑 `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ npx playwright test e2e/container-calc.spec.ts -g "adds cargo from the default Chinese workspace" --project=chromium`。
+- 选项：只重新部署当前构建；改用 HTTPS；让客户端 ID 生成兼容没有 `crypto.randomUUID()` 的普通 HTTP 环境。
+- 决策：保留当前 HTTP 部署方式，先修客户端 ID 生成。生产公网 HTTP 不是安全上下文，浏览器里 `crypto.randomUUID` 为 `undefined`，点击添加货物时直接调用会抛错并中断提交。新增 `createClientId`，可用时使用 `crypto.randomUUID()`，不可用时退到时间戳和随机数。
+- 影响：手动添加货物、Excel/CSV 导入和历史方案保存不再依赖安全上下文；后续如果迁移 HTTPS，仍会自动使用原生 UUID。
+- 后续：部署后必须重跑 `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ npx playwright test e2e/container-calc.spec.ts -g "adds cargo from the default Chinese workspace|adds cargo when browser randomUUID is unavailable" --project=chromium`。
+
+## 2026-05-20 Playwright 不复用本地服务
+
+- 背景：本地 5174 端口已有另一个 checkout 的 Vite 服务，`reuseExistingServer: true` 导致本仓库 E2E 误跑旧服务。
+- 选项：保留复用并人工清理端口；改用专用端口但继续复用；改用专用端口并关闭复用。
+- 决策：默认使用 5176，并关闭本地 `reuseExistingServer`。如果端口被占用，测试应直接失败而不是静默跑错应用；远端测试继续通过 `PLAYWRIGHT_BASE_URL` 跳过本地 webServer。
+- 影响：本地 E2E 会稍慢，但结果能证明当前仓库代码；避免线上修复验证被旧服务污染。
+- 后续：如需并行测试，可通过 `PLAYWRIGHT_PORT` 显式分配端口。

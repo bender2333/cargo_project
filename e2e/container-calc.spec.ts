@@ -247,6 +247,27 @@ test('adds cargo from the default Chinese workspace', async ({ page }) => {
   await expect(page.getByRole('button', { name: /中文新增货物/ }).first()).toBeVisible()
 })
 
+test('adds cargo when browser randomUUID is unavailable', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Crypto.prototype, 'randomUUID', {
+      configurable: true,
+      value: undefined,
+    })
+  })
+  await page.goto('/')
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('名称', { exact: true }).fill('HTTP 环境货物')
+  await cargoForm.getByLabel('标识', { exact: true }).fill('H')
+  await cargoForm.getByLabel('长 mm').fill('1200')
+  await cargoForm.getByLabel('宽 mm').fill('800')
+  await cargoForm.getByLabel('高 mm').fill('600')
+  await cargoForm.getByLabel('重量 kg').fill('42')
+  await cargoForm.getByLabel('数量').fill('3')
+  await page.getByRole('button', { name: '+ 添加货物' }).click()
+
+  await expect(page.getByRole('button', { name: /HTTP 环境货物/ }).first()).toBeVisible()
+})
+
 test('deletes cargo and updates downstream details and export', async ({ page }) => {
   await openEnglish(page)
   const cargoForm = page.locator('form')

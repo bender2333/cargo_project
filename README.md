@@ -122,11 +122,11 @@ server {
 
 ### 当前远端服务器
 
-当前生产静态站点部署在 `cargo-server`：
+当前生产静态站点部署在 `tencent-container-layout`：
 
 | 项目 | 值 |
 | --- | --- |
-| SSH 主机别名 | `cargo-server` |
+| SSH 主机别名 | `tencent-container-layout` |
 | 服务器 | `VM-0-12-opencloudos` |
 | 部署用户 | `root` |
 | 访问地址 | `http://101.33.232.150/` |
@@ -139,11 +139,11 @@ server {
 ```bash
 npm run build
 
-ssh cargo-server 'set -e; ts=$(date +%Y%m%d-%H%M%S); backup=/root/cargo_project-backup-$ts; mkdir -p "$backup"; cp -a /usr/share/nginx/html/. "$backup"/; echo "$backup"'
-ssh cargo-server 'rm -rf /tmp/cargo-dist && mkdir -p /tmp/cargo-dist'
-scp -r dist/* cargo-server:/tmp/cargo-dist/
-ssh cargo-server 'rsync -a --delete /tmp/cargo-dist/ /usr/share/nginx/html/ && chown -R root:root /usr/share/nginx/html && chmod -R a+rX /usr/share/nginx/html'
-ssh cargo-server 'curl -fsS http://127.0.0.1/ >/dev/null && echo deployed'
+ssh tencent-container-layout 'set -e; ts=$(date +%Y%m%d-%H%M%S); backup=/root/cargo_project-backup-$ts; mkdir -p "$backup"; cp -a /usr/share/nginx/html/. "$backup"/; echo "$backup"'
+ssh tencent-container-layout 'rm -rf /tmp/cargo-dist && mkdir -p /tmp/cargo-dist'
+scp -r dist/* tencent-container-layout:/tmp/cargo-dist/
+ssh tencent-container-layout 'rsync -a --delete /tmp/cargo-dist/ /usr/share/nginx/html/ && chown -R root:root /usr/share/nginx/html && chmod -R a+rX /usr/share/nginx/html'
+ssh tencent-container-layout 'curl -fsS http://127.0.0.1/ >/dev/null && echo deployed'
 ```
 
 部署后从本机验证公网访问：

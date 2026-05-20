@@ -1,4 +1,5 @@
 import type { CargoItem } from '../types'
+import { createClientId } from './clientId'
 
 type RowValue = string | number | boolean | null | undefined
 export type ImportCargoRow = Record<string, RowValue>
@@ -96,7 +97,7 @@ function fallbackLabel(index: number) {
 
 export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {}): ImportCargoResult {
   const colors = options.colors ?? defaultColors
-  const createId = options.createId ?? (() => crypto.randomUUID())
+  const createId = options.createId ?? createClientId
   const errors: ImportCargoIssue[] = []
   const warnings: ImportCargoIssue[] = []
   const items: CargoItem[] = []

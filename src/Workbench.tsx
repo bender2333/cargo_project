@@ -9,6 +9,7 @@ import { containers, effectiveContainer, formatCubicMeters, getContainerVolume }
 import { buildExportPlanRows } from './lib/exportPlan'
 import { createHistoryPlan, readHistoryPlans, saveHistoryPlan } from './lib/historyPlans'
 import type { HistoryPlan } from './lib/historyPlans'
+import { createClientId } from './lib/clientId'
 import { parseCargoRows } from './lib/importCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
@@ -452,7 +453,7 @@ function Workbench() {
     event.preventDefault()
     const next: CargoItem = {
       ...form,
-      id: crypto.randomUUID(),
+      id: createClientId(),
       name: form.name.trim() || `Cargo ${cargoItems.length + 1}`,
       label: (form.label || nextLabel(cargoItems.length)).toUpperCase().slice(0, 2),
       quantity: Math.max(1, Math.floor(form.quantity)),

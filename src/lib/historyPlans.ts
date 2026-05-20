@@ -1,4 +1,5 @@
 import type { CargoItem, ContainerSpec, PackingResult } from '../types'
+import { createClientId } from './clientId'
 
 export type HistoryPlan = {
   id: string
@@ -23,7 +24,7 @@ export function createHistoryPlan(
   result: PackingResult,
   options: { createId?: () => string; now?: () => Date; shipmentName?: string } = {},
 ): HistoryPlan {
-  const createId = options.createId ?? (() => crypto.randomUUID())
+  const createId = options.createId ?? createClientId
   const now = options.now ?? (() => new Date())
 
   return {
