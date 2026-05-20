@@ -1,4 +1,4 @@
-import type { CargoItem, ContainerSpec, PackingDiagnostic, PackingResult, PlacedBox } from '../types'
+import type { CargoItem, ContainerSpec, LoadingMode, PackingDiagnostic, PackingResult, PlacedBox } from '../types'
 import { effectiveContainer, getContainerVolume } from '../data/containers'
 import { buildPackingLayers } from './layers'
 
@@ -270,7 +270,7 @@ function buildDiagnostics(
   return diagnostics
 }
 
-export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[]): PackingResult {
+export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[], options: { loadingMode?: LoadingMode } = {}): PackingResult {
   const effective = effectiveContainer(container)
   const placed: PlacedBox[] = []
   let extremePoints: Point[] = [{ x: 0, y: 0, z: 0 }]
@@ -278,13 +278,19 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   let usedWeight = 0
   let totalCargoCount = 0
 
+  const loadingMode = options.loadingMode ?? 'volume'
   const expanded = cargoItems
     .flatMap((item, itemIndex) => {
       totalCargoCount += item.quantity
       const label = (item.label || labelForIndex(itemIndex)).toUpperCase().slice(0, 2)
-      return Array.from({ length: item.quantity }, (_, index) => ({ item, label, index: index + 1 }))
+      return Array.from({ length: item.quantity }, (_, index) => ({ item, itemIndex, label, index: index + 1 }))
     })
-    .sort((a, b) => b.item.length * b.item.width * b.item.height - a.item.length * a.item.width * a.item.height)
+    .sort((a, b) => {
+      if (loadingMode === 'input') {
+        return a.itemIndex - b.itemIndex || a.index - b.index
+      }
+      return b.item.length * b.item.width * b.item.height - a.item.length * a.item.width * a.item.height
+    })
 
   for (const entry of expanded) {
     const item = entry.item

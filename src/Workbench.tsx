@@ -12,7 +12,7 @@ import type { HistoryPlan } from './lib/historyPlans'
 import { parseCargoRows } from './lib/importCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
-import type { CargoItem, Locale, PackingLayer } from './types'
+import type { CargoItem, LoadingMode, Locale, PackingLayer } from './types'
 
 const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
 
@@ -35,6 +35,9 @@ const copy = {
     cargoItems: 'Cargo items',
     containerConfig: 'Container parameters',
     containerType: 'Container type',
+    loadingMode: 'Loading mode',
+    volumeMode: 'Volume priority',
+    inputMode: 'Input order',
     customContainer: 'Custom container',
     maxWeight: 'Max payload kg',
     doorGap: 'Door gap mm',
@@ -111,6 +114,9 @@ const copy = {
     cargoItems: '货物项目',
     containerConfig: '货柜参数',
     containerType: '货柜类型',
+    loadingMode: '装载模式',
+    volumeMode: '体积优先',
+    inputMode: '录入顺序',
     customContainer: '自定义柜型',
     maxWeight: '最大载重 kg',
     doorGap: '柜门预留 mm',
@@ -242,6 +248,7 @@ function Workbench() {
   const [locale, setLocale] = useState<Locale>('en')
   const t = copy[locale]
   const [selectedContainerId, setSelectedContainerId] = useState(containers[0].id)
+  const [loadingMode, setLoadingMode] = useState<LoadingMode>('volume')
   const [containerOverrides, setContainerOverrides] = useState(() => Object.fromEntries(containers.map((container) => [container.id, container])))
   const [customContainer, setCustomContainer] = useState(customContainerDefaults)
   const [cargoItems, setCargoItems] = useState<CargoItem[]>(initialCargo)
@@ -263,7 +270,7 @@ function Workbench() {
     : containerOverrides[selectedContainerId] ?? containers[0]
   const renderingContainer = effectiveContainer(selectedContainer)
   const displayCargoItems = useMemo(() => normalizeCargoLabelColors(cargoItems), [cargoItems])
-  const result = useMemo(() => calculatePacking(selectedContainer, displayCargoItems), [displayCargoItems, selectedContainer])
+  const result = useMemo(() => calculatePacking(selectedContainer, displayCargoItems, { loadingMode }), [displayCargoItems, loadingMode, selectedContainer])
   const detailRows = useMemo(() => buildExportPlanRows(displayCargoItems, result), [displayCargoItems, result])
   const activeLayer = result.layers.find((layer) => layer.id === activeLayerId)
   const visibleBoxes = hasCalculated
@@ -442,6 +449,12 @@ function Workbench() {
               <select className="field-input mt-1" value={selectedContainerId} onChange={(event) => setSelectedContainerId(event.target.value)}>
                 {containers.map((container) => <option key={container.id} value={container.id}>{container.label}</option>)}
                 <option value="custom">{t.customContainer}</option>
+              </select>
+            </label>
+            <label className="field-label mt-3">{t.loadingMode}
+              <select className="field-input mt-1" value={loadingMode} onChange={(event) => setLoadingMode(event.target.value as LoadingMode)}>
+                <option value="volume">{t.volumeMode}</option>
+                <option value="input">{t.inputMode}</option>
               </select>
             </label>
             <div className="mt-3 grid grid-cols-3 gap-2">

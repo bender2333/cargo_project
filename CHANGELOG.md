@@ -61,6 +61,9 @@
 - Completed subtask: verify CSV import compatibility.
 - Added browser coverage proving CSV rows import through the same cargo dataset, load action, details table, and downstream export-capable packing flow.
 - Verification: `npm run lint` passed; `npm test` passed 28 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 15 tests.
+- Completed subtask: implement real loading mode behavior.
+- Added `volume` and `input` loading modes where the UI control changes the deterministic cargo ordering before packing while preserving the same legality, support, and layer rules.
+- Verification: `npm run lint` passed; `npm test` passed 29 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 16 tests.
 - Completed subtask: record import mapping decision.
 - Documented that this milestone uses deterministic Excel field mapping and unit conversion while leaving runtime AI mapping as a future extension point.
 - Verification: documentation-only change; code verification not rerun.

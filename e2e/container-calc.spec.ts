@@ -158,6 +158,23 @@ test('adds cargo and recalculates utilization', async ({ page }) => {
   await expect(page.getByText('Layer-by-layer placement')).toBeVisible()
 })
 
+test('supports input-order loading mode for work-step planning', async ({ page }) => {
+  await page.goto('/')
+  await page.getByLabel('Loading mode').selectOption('input')
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('Name', { exact: true }).fill('Mode crate')
+  await cargoForm.getByLabel('Label', { exact: true }).fill('M')
+  await cargoForm.getByLabel('Length mm').fill('1200')
+  await cargoForm.getByLabel('Width mm').fill('800')
+  await cargoForm.getByLabel('Height mm').fill('600')
+  await cargoForm.getByLabel('Weight kg').fill('42')
+  await cargoForm.getByLabel('Quantity').fill('1')
+  await page.getByRole('button', { name: '+ Add cargo item' }).click()
+  await page.getByRole('button', { name: 'Load' }).click()
+
+  await expect(page.getByRole('button', { name: /^1 A/ }).first()).toBeVisible()
+})
+
 test('shows label detail and diagnostic result tabs', async ({ page }) => {
   await page.goto('/')
 

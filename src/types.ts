@@ -97,6 +97,8 @@ export type PackingDiagnostic = {
   message: string
 }
 
+export type LoadingMode = 'volume' | 'input'
+
 export type PackingResult = {
   placed: PlacedBox[]
   unplaced: UnplacedCargo[]

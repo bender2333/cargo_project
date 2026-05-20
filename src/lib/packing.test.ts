@@ -126,6 +126,17 @@ describe('calculatePacking', () => {
     expect(result.placed[4].x).toBe(1000)
   })
 
+  it('can preserve input order as a loading mode instead of volume-priority order', () => {
+    const container = testContainer({ length: 3000, width: 1000, height: 1000 })
+    const items = [
+      cargo({ id: 'small', label: 'S', length: 500, width: 1000, height: 1000, quantity: 1, canRotate: false }),
+      cargo({ id: 'large', label: 'L', length: 1000, width: 1000, height: 1000, quantity: 1, canRotate: false }),
+    ]
+
+    expect(calculatePacking(container, items).workSteps.map((step) => step.label)).toEqual(['L', 'S'])
+    expect(calculatePacking(container, items, { loadingMode: 'input' }).workSteps.map((step) => step.label)).toEqual(['S', 'L'])
+  })
+
   it('continues filling inner height before moving outward when width is already full', () => {
     const container = testContainer({ length: 3000, width: 1000, height: 3000 })
     const result = calculatePacking(container, [
