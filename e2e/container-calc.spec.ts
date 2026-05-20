@@ -195,3 +195,33 @@ test('imports Chinese centimeter Excel fields with visible conversion warning', 
     plannedQuantity: 2,
   })
 })
+
+test('saves and restores history plans with labels and layers intact', async ({ page }) => {
+  await page.goto('/')
+  await page.getByLabel('Name', { exact: true }).fill('History crate')
+  await page.getByLabel('Label', { exact: true }).fill('H')
+  await page.getByLabel('Length mm').fill('1200')
+  await page.getByLabel('Width mm').fill('800')
+  await page.getByLabel('Height mm').fill('600')
+  await page.getByLabel('Weight kg').fill('42')
+  await page.getByLabel('Quantity').fill('3')
+  await page.getByRole('button', { name: '+ Add cargo item' }).click()
+  await page.getByRole('button', { name: 'Load' }).click()
+
+  await page.getByRole('button', { name: 'History', exact: true }).click()
+  await page.getByRole('button', { name: 'Save plan' }).click()
+  await expect(page.getByText(/H:3\/3/)).toBeVisible()
+
+  const filePath = await createWorkbookFile()
+  await page.locator('input[type="file"]').setInputFiles(filePath)
+  await expect(page.getByRole('button', { name: /Imported crate/ })).toBeVisible()
+
+  await page.getByRole('button', { name: 'History', exact: true }).click()
+  await page.getByRole('button', { name: 'Restore' }).first().click()
+  await expect(page.getByText('1200 x 800 x 600 mm, 42 kg, qty 3')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Details' }).click()
+  await expect(page.getByRole('cell', { name: 'H', exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'History crate' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: '1' }).first()).toBeVisible()
+})

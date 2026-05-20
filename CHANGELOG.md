@@ -19,3 +19,6 @@
 - Completed subtask: modularize cargo import parsing and support Chinese Excel field mapping.
 - Added `parseCargoRows` with label/name/dimension/weight/quantity/color/rotation/stackable mapping, centimeter-to-millimeter conversion, and explicit row-level errors/warnings surfaced in the UI.
 - Verification: `npm test` passed 21 tests; `npm run lint` passed; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 8 tests.
+- Completed subtask: add local history plan save and restore.
+- Added `historyPlans` helpers to snapshot container, cargo items, labels, layers, and result summary; added a History result tab for saving and restoring plans without introducing accounts or backend services.
+- Verification: `npm test` passed 23 tests; `npm run lint` passed; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 9 tests.

@@ -6,6 +6,8 @@ import { ContainerPlan2D } from './components/ContainerPlan2D'
 import type { PlanViewMode } from './components/ContainerPlan2D'
 import { containers, formatCubicMeters, getContainerVolume } from './data/containers'
 import { buildExportPlanRows } from './lib/exportPlan'
+import { createHistoryPlan, readHistoryPlans, saveHistoryPlan } from './lib/historyPlans'
+import type { HistoryPlan } from './lib/historyPlans'
 import { parseCargoRows } from './lib/importCargo'
 import { calculatePacking } from './lib/packing'
 import type { CargoItem, Locale, PackingLayer } from './types'
@@ -50,6 +52,10 @@ const copy = {
     layers: 'Layer-by-layer placement',
     details: 'Details',
     diagnostics: 'Diagnostics',
+    history: 'History',
+    savePlan: 'Save plan',
+    restore: 'Restore',
+    noHistory: 'No saved plans',
     allLayers: 'All layers',
     currentLayer: 'Current layer',
     showLayer: 'Show layer',
@@ -102,6 +108,10 @@ const copy = {
     layers: '逐层添加货物',
     details: '明细表',
     diagnostics: '合规与诊断',
+    history: '历史方案',
+    savePlan: '保存方案',
+    restore: '恢复',
+    noHistory: '暂无历史方案',
     allLayers: '全部层',
     currentLayer: '当前层',
     showLayer: '显示层',
@@ -137,7 +147,7 @@ const initialCargo: CargoItem[] = [
 
 type CargoForm = Omit<CargoItem, 'id'>
 type WorkspaceView = '3d' | '2d'
-type ResultTab = 'layers' | 'details' | 'diagnostics'
+type ResultTab = 'layers' | 'details' | 'diagnostics' | 'history'
 
 const emptyForm: CargoForm = {
   name: 'Carton B',
@@ -171,6 +181,7 @@ function Workbench() {
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
   const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
   const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
+  const [historyPlans, setHistoryPlans] = useState<HistoryPlan[]>(() => readHistoryPlans(localStorage))
   const [importMessages, setImportMessages] = useState<string[]>([])
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null)
 
@@ -226,6 +237,20 @@ function Workbench() {
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, sheet, 'Packing Plan')
     XLSX.writeFile(workbook, 'packing-plan.xlsx')
+  }
+
+  const saveCurrentPlan = () => {
+    const next = createHistoryPlan(selectedContainer.id, cargoItems, result)
+    setHistoryPlans(saveHistoryPlan(localStorage, next))
+    setActiveResultTab('history')
+  }
+
+  const restorePlan = (plan: HistoryPlan) => {
+    setSelectedContainerId(plan.containerId)
+    setCargoItems(plan.cargoItems)
+    setActiveLayerId('all')
+    setSelectedBoxId(null)
+    setHasCalculated(true)
   }
 
   return (
@@ -350,6 +375,7 @@ function Workbench() {
                 { id: 'layers' as const, label: t.layers },
                 { id: 'details' as const, label: t.details },
                 { id: 'diagnostics' as const, label: t.diagnostics },
+                { id: 'history' as const, label: t.history },
               ].map((tab) => (
                 <button className={`border px-2 py-2 ${activeResultTab === tab.id ? 'border-[#f3b21a] bg-white' : 'border-[#b8b8b8] bg-[#eeeeee]'}`} key={tab.id} type="button" onClick={() => setActiveResultTab(tab.id)}>
                   {tab.label}
@@ -423,6 +449,25 @@ function Workbench() {
                   <div className="border border-[#d7b7b7] bg-white p-2" key={item.cargoId}>
                     <strong>{item.label} {item.name}</strong>
                     <p>{t.failureReason}: {item.reason || t.noFailure}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeResultTab === 'history' && (
+              <div className="mt-3 space-y-2 text-xs">
+                <button className="w-full border border-[#9b9b9b] bg-white px-3 py-2 text-left font-semibold" type="button" onClick={saveCurrentPlan}>
+                  {t.savePlan}
+                </button>
+                {historyPlans.length === 0 && <p className="border border-[#c6c6c6] bg-white p-2">{t.noHistory}</p>}
+                {historyPlans.map((plan) => (
+                  <div className="border border-[#c6c6c6] bg-white p-2" key={plan.id}>
+                    <strong>{new Date(plan.createdAt).toLocaleString()}</strong>
+                    <p>{plan.placedCount}/{plan.totalCargoCount} · {plan.layerCount} {t.layers}</p>
+                    <p>{plan.labelSummary}</p>
+                    <button className="mt-2 border border-[#9b9b9b] bg-[#eeeeee] px-2 py-1" type="button" onClick={() => restorePlan(plan)}>
+                      {t.restore}
+                    </button>
                   </div>
                 ))}
               </div>
