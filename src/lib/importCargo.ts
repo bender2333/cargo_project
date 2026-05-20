@@ -181,3 +181,36 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
     },
   }
 }
+
+export function parseCargoRowsWithMapping(
+  rows: ImportCargoRow[],
+  mapping: Record<string, string>,
+  options: ParseOptions = {}
+): ImportCargoResult {
+  const virtualRows = rows.map((row) => {
+    const virtualRow: ImportCargoRow = {}
+    
+    Object.entries(mapping).forEach(([fieldKey, colName]) => {
+      if (!colName) return
+      const value = row[colName]
+      if (value === undefined || value === null) return
+
+      if (fieldKey === 'length') {
+        const isCm = colName.toLowerCase().includes('cm') || colName.includes('厘米')
+        virtualRow[isCm ? 'Length cm' : 'length'] = value
+      } else if (fieldKey === 'width') {
+        const isCm = colName.toLowerCase().includes('cm') || colName.includes('厘米')
+        virtualRow[isCm ? 'Width cm' : 'width'] = value
+      } else if (fieldKey === 'height') {
+        const isCm = colName.toLowerCase().includes('cm') || colName.includes('厘米')
+        virtualRow[isCm ? 'Height cm' : 'height'] = value
+      } else {
+        virtualRow[fieldKey] = value
+      }
+    })
+    
+    return virtualRow
+  })
+
+  return parseCargoRows(virtualRows, options)
+}

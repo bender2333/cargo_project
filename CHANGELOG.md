@@ -2,6 +2,12 @@
 
 ## 2026-05-20
 
+- Completed subtask: implement Excel dynamic field mapping pop-up modal and parser logic.
+- Exported `parseCargoRowsWithMapping` in `importCargo.ts` to map user-configured custom headers into standard virtual columns.
+- Implemented smart pre-selection based on column name lowercase substring candidates.
+- Added states `showMappingModal`, `importRows`, and `customMapping` and created a premium mapping modal component with dropdown selectors.
+- Auto-triggers centimeter-to-millimeter conversions if a custom mapped column header contains "cm" or "厘米".
+- Verification: added focused vitest unit coverage in `importCargo.test.ts` and successfully built the project.
 - Completed subtask: implement left-side parameter panel collapsing and 3D view auto-stretching.
 - Added `sidebarCollapsed` state and collapsible CSS grid layout in `src/Workbench.tsx`.
 - Integrated a sleek header collapse button `◀` and an expand button `▶` for the thin 32px sidebar mode.

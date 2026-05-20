@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseCargoRows } from './importCargo'
+import { parseCargoRows, parseCargoRowsWithMapping } from './importCargo'
 
 describe('parseCargoRows', () => {
   it('maps Chinese headers and converts centimeter dimensions to millimeters', () => {
@@ -86,5 +86,49 @@ describe('parseCargoRows', () => {
       expect.objectContaining({ label: '1', name: 'Pallet item', quantity: 1, length: 1000, width: 800, height: 600 }),
     ])
     expect(result.warnings).toContainEqual({ row: 2, message: 'Quantity was missing and defaulted to 1.' })
+  })
+})
+
+describe('parseCargoRowsWithMapping', () => {
+  it('correctly maps custom user columns and converts cm to mm', () => {
+    const result = parseCargoRowsWithMapping(
+      [
+        {
+          品名: '箱子',
+          代码: 'X1',
+          箱长cm: 80,
+          箱宽cm: 60,
+          箱高: 400,
+          毛重: 15,
+          装载箱数: 10,
+        },
+      ],
+      {
+        name: '品名',
+        label: '代码',
+        length: '箱长cm',
+        width: '箱宽cm',
+        height: '箱高',
+        weight: '毛重',
+        quantity: '装载箱数',
+      },
+      { createId: () => 'mapping-1' }
+    )
+
+    expect(result.items).toEqual([
+      {
+        id: 'mapping-1',
+        label: 'X1',
+        name: '箱子',
+        length: 800, // converted from cm
+        width: 600,  // converted from cm
+        height: 400, // kept in mm
+        weight: 15,
+        quantity: 10,
+        color: '#f59e0b',
+        canRotate: true,
+        stackable: true,
+      },
+    ])
   })
 })

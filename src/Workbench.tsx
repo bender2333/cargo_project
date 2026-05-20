@@ -10,7 +10,7 @@ import { buildExportPlanRows } from './lib/exportPlan'
 import { createHistoryPlan, readHistoryPlans, saveHistoryPlan } from './lib/historyPlans'
 import type { HistoryPlan } from './lib/historyPlans'
 import { createClientId } from './lib/clientId'
-import { parseCargoRows } from './lib/importCargo'
+import { parseCargoRows, parseCargoRowsWithMapping } from './lib/importCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
 import type { CargoItem, LoadingMode, Locale, PackingDiagnostic, PackingLayer } from './types'
@@ -405,6 +405,17 @@ function Workbench() {
   const [rulesCollapsed, setRulesCollapsed] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [draggedCargoId, setDraggedCargoId] = useState<string | null>(null)
+  const [showMappingModal, setShowMappingModal] = useState(false)
+  const [importRows, setImportRows] = useState<Record<string, any>[]>([])
+  const [customMapping, setCustomMapping] = useState<Record<string, string>>({
+    label: '',
+    name: '',
+    length: '',
+    width: '',
+    height: '',
+    weight: '',
+    quantity: '',
+  })
   const workspaceRef = useRef<HTMLElement | null>(null)
   const reportRef = useRef<HTMLElement | null>(null)
   const cargoRef = useRef<HTMLFormElement | null>(null)
@@ -469,9 +480,55 @@ function Workbench() {
     setHasCalculated(false)
   }
 
+  const confirmMappingImport = () => {
+    const imported = parseCargoRowsWithMapping(importRows, customMapping, { colors })
+    setImportMessages([
+      `${t.importSuccess}: ${imported.summary.importedRows}`,
+      `${t.importMappedFields}: ${imported.summary.mappedFields.join(', ') || '-'}`,
+      `${t.importConvertedRows}: ${imported.summary.convertedCentimeterRows}`,
+      ...imported.errors.map((issue) => `${t.importIssue} row ${issue.row}: ${issue.message}`),
+      ...imported.warnings.map((issue) => `${t.importWarning} row ${issue.row}: ${issue.message}`),
+    ])
+    if (imported.items.length > 0) {
+      setCargoItems(imported.items)
+      setSelectedBoxId(null)
+      setHasCalculated(false)
+    }
+    setShowMappingModal(false)
+    setActiveResultTab('importLog')
+    setActiveNav('report')
+  }
+
+  const canAutoMap = (row: Record<string, any>): boolean => {
+    const keys = Object.keys(row).map(k => k.toLowerCase())
+    const fieldsToCheck = {
+      length: ['length', '长', '長', '长度', '長度', 'outer_length_mm', '厘米'],
+      width: ['width', '宽', '寬', '宽度', '寬度', 'outer_width_mm', '厘米'],
+      height: ['height', '高', '高度', 'outer_height_mm', '厘米'],
+      weight: ['weight', '重量', '毛重', 'gross_weight_kg'],
+      quantity: ['quantity', '数量', '數量', '箱数', '箱數', '托数', '托數', 'carton_count'],
+    }
+    return Object.values(fieldsToCheck).every(candidates =>
+      keys.some(key => candidates.some(cand => key.includes(cand)))
+    )
+  }
+
+  const preSelectCol = (fieldKey: string, columns: string[]): string => {
+    const candidates = {
+      length: ['length', '长', '長', '长度', '長度', 'outer_length_mm'],
+      width: ['width', '宽', '寬', '宽度', '寬度', 'outer_width_mm'],
+      height: ['height', '高', '高度', 'outer_height_mm'],
+      weight: ['weight', '重量', '毛重', 'gross_weight_kg'],
+      quantity: ['quantity', '数量', '數量', '箱数', '箱數', '托数', '托數', 'carton_count'],
+      name: ['name', '名称', '品名', '名称', '货物名称', 'description'],
+      label: ['label', '标签', '代码', '代号', '托盘'],
+    }[fieldKey] || []
+    return columns.find(col => candidates.some(cand => col.toLowerCase().includes(cand.toLowerCase()))) || columns[0] || ''
+  }
+
   const importExcel = async (file: File | null) => {
     if (!file) return
-    let rows: Record<string, string | number>[]
+    let rows: Record<string, string | number>[] = []
     try {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
@@ -490,21 +547,35 @@ function Workbench() {
       return
     }
 
-    const imported = parseCargoRows(rows, { colors })
-    setImportMessages([
-      `${t.importSuccess}: ${imported.summary.importedRows}`,
-      `${t.importMappedFields}: ${imported.summary.mappedFields.join(', ') || '-'}`,
-      `${t.importConvertedRows}: ${imported.summary.convertedCentimeterRows}`,
-      ...imported.errors.map((issue) => `${t.importIssue} row ${issue.row}: ${issue.message}`),
-      ...imported.warnings.map((issue) => `${t.importWarning} row ${issue.row}: ${issue.message}`),
-    ])
-    if (imported.items.length > 0) {
-      setCargoItems(imported.items)
-      setSelectedBoxId(null)
-      setHasCalculated(false)
+    const rowKeys = Object.keys(rows[0] ?? {})
+    const autoMappable = canAutoMap(rows[0] ?? {})
+
+    if (autoMappable) {
+      const imported = parseCargoRows(rows, { colors })
+      setImportMessages([
+        `${t.importSuccess}: ${imported.summary.importedRows}`,
+        `${t.importMappedFields}: ${imported.summary.mappedFields.join(', ') || '-'}`,
+        `${t.importConvertedRows}: ${imported.summary.convertedCentimeterRows}`,
+        ...imported.errors.map((issue) => `${t.importIssue} row ${issue.row}: ${issue.message}`),
+        ...imported.warnings.map((issue) => `${t.importWarning} row ${issue.row}: ${issue.message}`),
+      ])
+      if (imported.items.length > 0) {
+        setCargoItems(imported.items)
+        setSelectedBoxId(null)
+        setHasCalculated(false)
+      }
+      setActiveResultTab('importLog')
+      setActiveNav('report')
+    } else {
+      setImportRows(rows)
+      const initialMap: Record<string, string> = {}
+      const requiredFields = ['label', 'name', 'length', 'width', 'height', 'weight', 'quantity']
+      requiredFields.forEach((fieldKey) => {
+        initialMap[fieldKey] = preSelectCol(fieldKey, rowKeys)
+      })
+      setCustomMapping(initialMap)
+      setShowMappingModal(true)
     }
-    setActiveResultTab('importLog')
-    setActiveNav('report')
   }
 
   const exportExcel = () => {
@@ -1142,6 +1213,63 @@ function Workbench() {
           </section>
         </section>
       </section>
+        )}
+        {showMappingModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" data-testid="mapping-modal">
+            <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
+              <div className="mb-4">
+                <h3 className="text-xl font-bold text-slate-800">智能字段映射</h3>
+                <p className="mt-1 text-sm text-slate-500">上传的 Excel 包含非标准列名，请手动关联关键字段以开始导入。</p>
+              </div>
+              <div className="space-y-4">
+                {Object.keys(customMapping).map((fieldKey) => {
+                  const labelMap: Record<string, string> = {
+                    label: '货物标识 / 托盘代码 (Label)',
+                    name: '货物名称 / 品名 (Name)',
+                    length: '长度 (Length)',
+                    width: '宽度 (Width)',
+                    height: '高度 (Height)',
+                    weight: '单件重量 (Weight)',
+                    quantity: '数量 / 箱数 (Quantity)',
+                  }
+                  const excelColumns = Object.keys(importRows[0] ?? {})
+                  return (
+                    <label key={fieldKey} className="block text-sm font-semibold text-slate-700">
+                      {labelMap[fieldKey] || fieldKey}
+                      <select
+                        className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        value={customMapping[fieldKey]}
+                        onChange={(e) => setCustomMapping(prev => ({ ...prev, [fieldKey]: e.target.value }))}
+                        data-testid={`map-select-${fieldKey}`}
+                      >
+                        <option value="">-- 请选择数据列 --</option>
+                        {excelColumns.map(col => (
+                          <option key={col} value={col}>{col}</option>
+                        ))}
+                      </select>
+                    </label>
+                  )
+                })}
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none"
+                  type="button"
+                  onClick={() => setShowMappingModal(false)}
+                >
+                  取消
+                </button>
+                <button
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                  type="button"
+                  data-testid="confirm-mapping"
+                  onClick={confirmMappingImport}
+                >
+                  确认导入
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </main>
