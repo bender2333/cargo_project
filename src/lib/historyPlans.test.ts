@@ -60,7 +60,7 @@ describe('history plans', () => {
       container,
       placedCount: 2,
       totalCargoCount: 2,
-      layerCount: 2,
+      layerCount: 1,
       labelSummary: 'H:2/2',
     })
     expect(plan.cargoItems[0]).toMatchObject({ label: 'H', name: 'History crate' })

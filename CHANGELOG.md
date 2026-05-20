@@ -2,6 +2,11 @@
 
 ## 2026-05-20
 
+- Completed subtask: standardize default cargo parameters and implement from-innermost-outward depth layering.
+- Standardized default cargo initial and empty form parameters to `400 * 500 * 600 mm`.
+- Completed horizontal/depth-based physical layering algorithm in layers.ts and packing.ts.
+- Updated all unit tests in exportPlan.test.ts, historyPlans.test.ts, and packing.test.ts to align with the depth layering system.
+- Verification: ran `npm test` successfully (all 34 tests passing 100%).
 - Current task checklist: reproduce the remote `+ 添加货物` failure with E2E against `http://101.33.232.150/`; fix the root cause with a failing regression test first; run lint, unit, build, and E2E verification; deploy the rebuilt `dist/` to `tencent-container-layout`; re-run the targeted remote E2E after deployment.
 - Completed subtask: reproduce the remote add-cargo regression with browser automation.
 - Added a Playwright `PLAYWRIGHT_BASE_URL` override so the same E2E suite can target production or the local dev server.

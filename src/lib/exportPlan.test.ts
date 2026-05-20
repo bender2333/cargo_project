@@ -72,7 +72,7 @@ describe('buildExportPlanRows', () => {
         plannedQuantity: 1,
         placedQuantity: 1,
         unplacedQuantity: 0,
-        layer: '2',
+        layer: '1',
         workStep: '2',
         failureReason: '',
       },

@@ -70,7 +70,7 @@ function expectValidPacking(container: ContainerSpec, result: PackingResult) {
     expect(box.physicalLayer).toBeGreaterThanOrEqual(1)
     expect(box.workStep).toBeGreaterThanOrEqual(1)
     expect(box.supportedBy.every((id) => placedIds.has(id))).toBe(true)
-    if (box.z === 0) {
+    if (box.x === 0) {
       expect(box.supportType).toBe('floor')
       expect(box.supportedBy).toEqual([])
     } else {
@@ -237,9 +237,9 @@ describe('calculatePacking', () => {
     ])
 
     const secondLayerBoxes = result.placed.filter((box) => box.physicalLayer === 2)
-    expect(new Set(secondLayerBoxes.map((box) => box.z))).toEqual(new Set([500, 1000]))
-    expect(result.layers[1].minZ).toBe(500)
-    expect(result.layers[1].maxZ).toBe(1500)
+    expect(new Set(secondLayerBoxes.map((box) => box.z))).toEqual(new Set([0, 500]))
+    expect(result.layers[1].minZ).toBe(0)
+    expect(result.layers[1].maxZ).toBe(1000)
     expect(secondLayerBoxes.every((box) => box.supportType === 'fully-supported')).toBe(true)
   })
 
@@ -253,7 +253,7 @@ describe('calculatePacking', () => {
     expectValidPacking(container, result)
     expect(result.labelStats).toEqual([
       { label: 'A', name: 'Alpha', color: '#f59e0b', planned: 2, placed: 1, unplaced: 1, layers: [1] },
-      { label: 'B', name: 'Beta', color: '#f59e0b', planned: 1, placed: 1, unplaced: 0, layers: [2] },
+      { label: 'B', name: 'Beta', color: '#f59e0b', planned: 1, placed: 1, unplaced: 0, layers: [1] },
     ])
     expect(result.unplaced[0]).toMatchObject({ cargoId: 'a', label: 'A', quantity: 1, reason: 'Exceeds maximum payload' })
   })
