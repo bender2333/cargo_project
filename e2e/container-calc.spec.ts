@@ -86,14 +86,24 @@ test('supports Excel import/export affordance and Chinese mode', async ({ page }
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Export XLSX' }).click()
   const download = await downloadPromise
-  expect(download.suggestedFilename()).toBe('cargo-items.xlsx')
+  expect(download.suggestedFilename()).toBe('packing-plan.xlsx')
 
   const exportPath = path.join(os.tmpdir(), `cargo-export-${Date.now()}.xlsx`)
   await download.saveAs(exportPath)
   const exported = XLSX.read(await fs.readFile(exportPath), { type: 'buffer' })
   const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(exported.Sheets[exported.SheetNames[0]])
   expect(rows).toHaveLength(1)
-  expect(rows[0]).toMatchObject({ label: 'D', name: 'Imported crate', length: 900, quantity: 2 })
+  expect(rows[0]).toMatchObject({
+    label: 'D',
+    name: 'Imported crate',
+    originalLength: 900,
+    plannedQuantity: 2,
+    placedQuantity: 2,
+    unplacedQuantity: 0,
+    layer: '1',
+    workStep: '1, 2',
+  })
+  expect(rows[0]).toHaveProperty('failureReason')
 
   await page.getByRole('button', { name: '中文' }).click()
   await expect(page.getByRole('button', { name: '货物项目' })).toBeVisible()

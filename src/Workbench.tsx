@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import * as XLSX from 'xlsx'
 import { ContainerScene } from './components/ContainerScene'
 import { containers, formatCubicMeters, getContainerVolume } from './data/containers'
+import { buildExportPlanRows } from './lib/exportPlan'
 import { calculatePacking } from './lib/packing'
 import type { CargoItem, Locale, PackingLayer } from './types'
 
@@ -189,22 +190,11 @@ function Workbench() {
   }
 
   const exportExcel = () => {
-    const rows = cargoItems.map((item) => ({
-      label: item.label,
-      name: item.name,
-      length: item.length,
-      width: item.width,
-      height: item.height,
-      weight: item.weight,
-      quantity: item.quantity,
-      color: item.color,
-      canRotate: item.canRotate,
-      stackable: item.stackable,
-    }))
+    const rows = buildExportPlanRows(cargoItems, result)
     const sheet = XLSX.utils.json_to_sheet(rows)
     const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, sheet, 'Cargo Items')
-    XLSX.writeFile(workbook, 'cargo-items.xlsx')
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Packing Plan')
+    XLSX.writeFile(workbook, 'packing-plan.xlsx')
   }
 
   return (
