@@ -364,6 +364,19 @@ test('supports Excel import/export affordance and Chinese mode', async ({ page }
   await expect(page.getByText('边界检查通过：所有已装箱体都在有效货柜内。')).toBeVisible()
 })
 
+test('shows localized failure reasons in Chinese mode', async ({ page }) => {
+  await page.goto('/')
+  await page.getByLabel('Max payload kg').fill('36')
+  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: '中文' }).click()
+
+  await page.getByRole('button', { name: '明细表' }).click()
+  await expect(page.getByRole('cell', { name: '超过最大载重' })).toBeVisible()
+
+  await page.getByRole('button', { name: '合规与诊断' }).click()
+  await expect(page.getByText('失败原因: 超过最大载重')).toBeVisible()
+})
+
 test('imports Chinese centimeter Excel fields with visible conversion warning', async ({ page }) => {
   await page.goto('/')
   const filePath = await createChineseWorkbookFile()

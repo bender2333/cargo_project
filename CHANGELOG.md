@@ -76,6 +76,9 @@
 - Completed subtask: import the real business workbook fixture.
 - Defaulted missing quantities to one with a warning for row-per-pallet workbooks and added e2e coverage for `test-data/excel/俄罗斯整托装柜尺寸.xlsx`.
 - Verification: `npm run lint` passed; `npm test` passed 30 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 17 tests.
+- Completed subtask: localize standard failure reasons in the UI.
+- Added Chinese display mapping for standard unplaced reasons in details, diagnostics, and result summaries while keeping export data stable.
+- Verification: `npm run lint` passed; `npm test` passed 30 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 18 tests.
 - Completed subtask: record import mapping decision.
 - Documented that this milestone uses deterministic Excel field mapping and unit conversion while leaving runtime AI mapping as a future extension point.
 - Verification: documentation-only change; code verification not rerun.

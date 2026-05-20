@@ -286,6 +286,20 @@ function diagnosticMessage(diagnostic: PackingDiagnostic, locale: Locale) {
   return diagnostic.message
 }
 
+function failureReason(reason: string, locale: Locale) {
+  if (locale === 'en') {
+    return reason
+  }
+
+  const mapping: Record<string, string> = {
+    'Exceeds container dimensions': '超出货柜尺寸',
+    'Exceeds maximum payload': '超过最大载重',
+    'No remaining loading space': '没有剩余装载空间',
+  }
+
+  return mapping[reason] ?? reason
+}
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -740,7 +754,7 @@ function Workbench() {
                         <td className="p-2">{item.unplacedQuantity}</td>
                         <td className="p-2">{item.layer || '-'}</td>
                         <td className="p-2">{item.workStep || '-'}</td>
-                        <td className="p-2">{item.failureReason || t.noFailure}</td>
+                        <td className="p-2">{item.failureReason ? failureReason(item.failureReason, locale) : t.noFailure}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -759,7 +773,7 @@ function Workbench() {
                 {result.unplaced.map((item) => (
                   <div className="border border-[#d7b7b7] bg-white p-2" key={item.cargoId}>
                     <strong>{item.label} {item.name}</strong>
-                    <p>{t.failureReason}: {item.reason || t.noFailure}</p>
+                    <p>{t.failureReason}: {failureReason(item.reason || t.noFailure, locale)}</p>
                   </div>
                 ))}
               </div>
@@ -812,7 +826,7 @@ function Workbench() {
             {result.unplaced.length > 0 && (
               <div className="mt-3 border-t pt-2">
                 <strong>{t.unloaded}</strong>
-                {result.unplaced.map((item) => <p className="text-xs" key={item.cargoId}>{item.name} x {item.quantity}: {item.reason}</p>)}
+                {result.unplaced.map((item) => <p className="text-xs" key={item.cargoId}>{item.name} x {item.quantity}: {failureReason(item.reason, locale)}</p>)}
               </div>
             )}
           </div>
