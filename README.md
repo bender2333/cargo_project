@@ -1,73 +1,216 @@
-# React + TypeScript + Vite
+# 货柜装箱计算系统
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+这是一个基于 Vite + React + TypeScript 的货柜装箱工作台，用于录入或导入货物数据，计算装柜方案，并通过 2D、3D、分层、明细、诊断和导出能力支持装柜作业复核。
 
-Currently, two official plugins are available:
+当前项目是按 `PRD.md` 进行的前端重构版本。系统保留浏览器端单页应用形态，暂不包含账号、多用户、权限、许可证或在线协作等管理能力。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 功能概览
 
-## React Compiler
+- 货柜参数：支持预设柜型、自定义柜型、最大载重、柜门预留、顶部余量和左右预留。
+- 货物录入：支持名称、标签、尺寸、重量、数量、颜色、旋转和堆叠限制。
+- 标签贯穿：标签用于录入、导入、计算、2D、3D、分层、明细、导出和历史方案。
+- 装箱计算：根据有效货柜空间、载重、旋转、堆叠和支撑关系生成 `PackingResult`。
+- 分层查看：按真实支撑关系生成物理层级，而不是单纯按 `z` 高度过滤。
+- 可视化：提供 3D 轴测/俯视/正视/侧视视角，以及 2D 俯视/正视/侧视投影。
+- 导入导出：支持 XLSX/XLS/CSV 导入，导出包含装箱结果的 Excel 明细，支持导出当前 2D/3D 视图。
+- 诊断与历史：提供边界、载重、重叠、支撑、堆叠和未装入诊断；历史方案保存在浏览器 `localStorage`。
+- 中英文界面：工作台内置中文和英文文案切换。
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 技术栈
 
-## Expanding the ESLint configuration
+- React 18
+- TypeScript 6
+- Vite 8
+- Tailwind CSS 4
+- Three.js
+- XLSX
+- Vitest
+- Playwright
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 快速开始
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+环境要求：
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- Node.js：建议使用当前 LTS 版本或与 `package-lock.json` 兼容的版本。
+- npm：随 Node.js 安装。
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+安装依赖：
+
+```bash
+npm ci
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+启动开发服务器：
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run dev
 ```
+
+Vite 会在终端输出本地访问地址，通常是 `http://localhost:5173/`。
+
+## 常用脚本
+
+| 命令 | 用途 |
+| --- | --- |
+| `npm run dev` | 启动 Vite 开发服务器 |
+| `npm run build` | 执行 TypeScript 项目构建并输出生产包 |
+| `npm run preview` | 本地预览 `dist/` 生产构建结果 |
+| `npm run lint` | 运行 ESLint |
+| `npm test` | 运行 Vitest 单元测试 |
+| `npm run test:e2e` | 运行 Playwright 浏览器自动化测试 |
+
+## 构建
+
+生产构建：
+
+```bash
+npm run build
+```
+
+构建产物输出到 `dist/`。构建命令包含两步：
+
+1. `tsc -b`：检查 TypeScript 项目引用和类型。
+2. `vite build`：打包前端静态资源。
+
+本地预览生产包：
+
+```bash
+npm run preview
+```
+
+当前构建可能出现 Vite 的 chunk-size 提醒，原因是 Three.js 和 XLSX 会进入前端 bundle。只要命令退出码为 0，构建即成功；后续如需优化首屏体积，可以考虑动态导入 XLSX、拆分 Three.js 视图或增加 vendor chunk 策略。
+
+## 部署
+
+本项目目前是纯前端静态站点，不依赖后端服务。部署步骤：
+
+```bash
+npm ci
+npm run build
+```
+
+然后将 `dist/` 目录部署到任意静态资源服务，例如：
+
+- Nginx
+- GitHub Pages
+- Netlify
+- Vercel 静态输出
+- 对象存储 + CDN
+
+Nginx 示例：
+
+```nginx
+server {
+  listen 80;
+  server_name example.com;
+
+  root /var/www/container-calc/dist;
+  index index.html;
+
+  location / {
+    try_files $uri $uri/ /index.html;
+  }
+}
+```
+
+部署注意事项：
+
+- 当前应用没有后端 API，历史方案保存在用户浏览器的 `localStorage` 中。
+- 如果未来增加前端路由，静态服务器需要把未知路径回退到 `index.html`。
+- 如果部署到非站点根路径，需要同步配置 Vite `base`，否则静态资源路径可能不正确。
+- 导入导出在浏览器端完成，用户文件不会上传到服务器。
+
+## 架构设计
+
+项目采用“UI 组合层 + 可测试业务逻辑 + 可视化组件”的结构，避免把核心装箱逻辑写死在 React 组件中。
+
+```text
+src/
+  Workbench.tsx                 # 主工作台：状态、交互、导入导出、历史方案和中英文文案
+  types.ts                      # 核心类型契约，包括 PackingResult
+  data/
+    containers.ts               # 柜型预设、有效尺寸和体积计算
+  lib/
+    packing.ts                  # 装箱算法、支撑关系、诊断和 PackingResult 生成
+    layers.ts                   # 基于支撑关系聚合物理层
+    labels.ts                   # 标签颜色归一化
+    importCargo.ts              # Excel/CSV 行解析、字段映射和单位换算
+    exportPlan.ts               # 结果明细导出数据
+    historyPlans.ts             # localStorage 历史方案
+  components/
+    ContainerScene.tsx          # Three.js 3D 货柜视图
+    ContainerPlan2D.tsx         # SVG 2D 投影视图
+e2e/
+  container-calc.spec.ts        # 浏览器工作流测试
+test-data/
+  excel/                        # 真实业务 Excel 夹具
+archive/                        # 旧版样式和功能参考，不作为运行时依赖
+```
+
+### 核心数据流
+
+1. 用户在 `Workbench` 中录入货物，或通过 XLSX/XLS/CSV 导入货物。
+2. `parseCargoRows` 将表格行转换为 `CargoItem[]`，并返回映射摘要、警告和错误。
+3. `normalizeCargoLabelColors` 保证同一业务标签使用一致颜色。
+4. `calculatePacking` 根据柜型、货物和装载模式生成 `PackingResult`。
+5. `PackingResult` 作为统一数据源驱动 2D、3D、分层、明细、诊断、导出和历史方案。
+
+核心契约是 `PackingResult`，包含：
+
+- `placed`：已装入箱体的位置、尺寸、标签、物理层、作业步骤和支撑来源。
+- `unplaced`：未装入货物及失败原因。
+- `layers`：基于支撑关系聚合的物理层统计。
+- `workSteps`：装柜作业顺序。
+- `labelStats`：按标签汇总的计划、已装、未装和层级信息。
+- `diagnostics`：边界、载重、重叠、支撑、堆叠和优化诊断。
+- 利用率数据：体积、载重、总数和已装数量。
+
+### 装箱与分层原则
+
+- 算法使用有效货柜尺寸，预留间隙会先从柜型尺寸中扣除。
+- 货物可按体积优先或录入顺序装载。
+- 可旋转货物会尝试合法朝向；不可旋转货物只使用原始朝向。
+- 堆叠货物必须满足支撑面积阈值，且不能压在不可堆叠货物上。
+- 物理层级来自支撑链：底层为第 1 层，被第 1 层支撑的箱体进入第 2 层，以此类推。
+- 2D、3D、明细和导出不各自重新计算层级，统一消费 `PackingResult`。
+
+## 导入导出
+
+导入支持 `.xlsx`、`.xls` 和 `.csv`。解析逻辑在 `src/lib/importCargo.ts` 中，采用确定性字段映射：
+
+- 识别名称、标签、长、宽、高、重量、数量、颜色、旋转和堆叠字段。
+- 支持中文业务表头。
+- 对厘米尺寸做毫米换算，并在导入摘要中提示换算行数。
+- 行级错误和警告会显示在工作台，不会静默吞掉。
+
+导出逻辑在 `src/lib/exportPlan.ts` 中，导出的 Excel 明细包含标签、原始尺寸、实际朝向、重量、计划数量、已装数量、未装数量、层级、作业步骤和失败原因。
+
+## 测试与质量门禁
+
+核心算法和功能需要有单元测试覆盖。提交功能变更前至少运行：
+
+```bash
+npm run lint
+npm test
+npm run build
+```
+
+涉及 UI、3D、2D、分层、导入导出或用户流程时，还需要运行：
+
+```bash
+npm run test:e2e
+```
+
+测试分布：
+
+- `src/lib/*.test.ts`：装箱、分层、标签、导入、导出和历史方案等可测试业务逻辑。
+- `e2e/container-calc.spec.ts`：浏览器端用户流程，包括导入、装箱、视图、明细、历史和导出。
+- `test-data/excel/俄罗斯整托装柜尺寸.xlsx`：真实业务工作簿夹具。
+
+## 开发约束
+
+- `archive/` 只作为旧版产品和视觉参考，不能把旧版静态产物作为新架构依赖。
+- 标签是核心业务能力，新增功能应优先确认标签是否贯穿录入、计算、展示和导出。
+- 装箱、标签统计、分层和导入解析优先放在 `src/lib/`，便于单元测试。
+- 需要做业务取舍、降级、暂缓或架构调整时，记录到 `decision.md`。
+- 每次提交前检查 `git status --short`，只提交本次任务相关文件。
