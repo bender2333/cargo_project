@@ -114,6 +114,8 @@ async function expectCanvasHasRenderedPixels(page: Page) {
 test('loads the container calculator workspace', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByText('Shipments & Reports')).toBeVisible()
+  await expect(page.getByText('Pallet / cargo unit parameters')).toBeVisible()
+  await expect(page.getByText('Loading rules')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Users' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Licenses' })).toHaveCount(0)
   await expect(page.getByTestId('container-scene')).toBeVisible()

@@ -33,6 +33,11 @@ const copy = {
     stackable: 'Stackable',
     add: '+ Add cargo item',
     cargoItems: 'Cargo items',
+    unitParameters: 'Pallet / cargo unit parameters',
+    ruleSummary: 'Loading rules',
+    boundaryRule: 'Effective container boundary',
+    payloadRule: 'Max payload',
+    supportRule: 'Support and stackability',
     containerConfig: 'Container parameters',
     containerType: 'Container type',
     loadingMode: 'Loading mode',
@@ -113,6 +118,11 @@ const copy = {
     stackable: '允许堆叠',
     add: '+ 添加货物',
     cargoItems: '货物项目',
+    unitParameters: '托盘 / 货物单元参数',
+    ruleSummary: '装载规则',
+    boundaryRule: '有效货柜边界',
+    payloadRule: '最大载重',
+    supportRule: '支撑与堆叠限制',
     containerConfig: '货柜参数',
     containerType: '货柜类型',
     loadingMode: '装载模式',
@@ -474,6 +484,7 @@ function Workbench() {
             </div>
           </section>
           <form className="space-y-3 p-4" onSubmit={addCargo}>
+            <h2 className="text-sm font-bold">{t.unitParameters}</h2>
             <div className="grid grid-cols-[1fr_56px] gap-2">
               <label className="field-label">{t.name}<input className="field-input mt-1" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></label>
               <label className="field-label">{t.label}<input className="field-input mt-1 text-center font-bold" maxLength={2} value={form.label ?? ''} onChange={(event) => setForm((current) => ({ ...current, label: event.target.value.toUpperCase() }))} /></label>
@@ -494,6 +505,14 @@ function Workbench() {
             </div>
             <button className="w-full border border-[#9b9b9b] bg-white px-3 py-2 text-left font-semibold hover:bg-[#fafafa]" type="submit">{t.add}</button>
           </form>
+          <section className="border-t border-[#c8c8c8] p-4 text-xs">
+            <h2 className="mb-2 text-sm font-bold">{t.ruleSummary}</h2>
+            <div className="grid gap-2">
+              {[t.boundaryRule, t.payloadRule, t.supportRule].map((rule) => (
+                <div className="border border-[#c9c9c9] bg-white px-3 py-2" key={rule}>{rule}</div>
+              ))}
+            </div>
+          </section>
           <div className="border-t border-[#c8c8c8] p-4">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h2 className="text-sm font-bold">{t.cargoItems}</h2>
