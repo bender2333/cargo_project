@@ -60,6 +60,9 @@ const copy = {
     unloaded: 'Unloaded cargo',
     layers: 'Layer-by-layer placement',
     details: 'Details',
+    originalSize: 'Original size',
+    actualSize: 'Actual size',
+    workStep: 'Step',
     diagnostics: 'Diagnostics',
     history: 'History',
     savePlan: 'Save plan',
@@ -127,6 +130,9 @@ const copy = {
     unloaded: '未装入货物',
     layers: '逐层添加货物',
     details: '明细表',
+    originalSize: '原始尺寸',
+    actualSize: '实际朝向',
+    workStep: '步骤',
     diagnostics: '合规与诊断',
     history: '历史方案',
     savePlan: '保存方案',
@@ -206,6 +212,10 @@ function layerName(layer: PackingLayer, locale: Locale) {
   return locale === 'zh' ? `第${layer.physicalLayer}层` : `Layer ${layer.physicalLayer}`
 }
 
+function formatDimensions(length: number | '', width: number | '', height: number | '') {
+  return length === '' || width === '' || height === '' ? '-' : `${length} x ${width} x ${height}`
+}
+
 function Workbench() {
   const [locale, setLocale] = useState<Locale>('en')
   const t = copy[locale]
@@ -229,6 +239,7 @@ function Workbench() {
     : containerOverrides[selectedContainerId] ?? containers[0]
   const renderingContainer = effectiveContainer(selectedContainer)
   const result = useMemo(() => calculatePacking(selectedContainer, cargoItems), [cargoItems, selectedContainer])
+  const detailRows = useMemo(() => buildExportPlanRows(cargoItems, result), [cargoItems, result])
   const activeLayer = result.layers.find((layer) => layer.id === activeLayerId)
   const visibleBoxes = hasCalculated
     ? result.placed.filter((box) => activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId)
@@ -290,8 +301,7 @@ function Workbench() {
   }
 
   const exportExcel = () => {
-    const rows = buildExportPlanRows(cargoItems, result)
-    const sheet = XLSX.utils.json_to_sheet(rows)
+    const sheet = XLSX.utils.json_to_sheet(detailRows)
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, sheet, 'Packing Plan')
     XLSX.writeFile(workbook, 'packing-plan.xlsx')
@@ -556,26 +566,36 @@ function Workbench() {
 
             {activeResultTab === 'details' && (
               <div className="mt-3 max-h-[240px] overflow-auto border border-[#c6c6c6] bg-white">
-                <table className="w-full text-left text-xs">
+                <table className="min-w-[760px] text-left text-xs">
                   <thead className="sticky top-0 bg-[#eeeeee]">
                     <tr>
                       <th className="p-2">{t.label}</th>
                       <th className="p-2">{t.name}</th>
+                      <th className="p-2">{t.originalSize}</th>
+                      <th className="p-2">{t.actualSize}</th>
+                      <th className="p-2">{t.weight}</th>
                       <th className="p-2">{t.planned}</th>
                       <th className="p-2">{t.placed}</th>
                       <th className="p-2">{t.unplacedCount}</th>
                       <th className="p-2">{t.layers}</th>
+                      <th className="p-2">{t.workStep}</th>
+                      <th className="p-2">{t.failureReason}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {result.labelStats.map((item) => (
+                    {detailRows.map((item) => (
                       <tr className="border-t border-[#dddddd]" key={`${item.label}-${item.name}`}>
                         <td className="p-2 font-bold">{item.label}</td>
                         <td className="p-2">{item.name}</td>
-                        <td className="p-2">{item.planned}</td>
-                        <td className="p-2">{item.placed}</td>
-                        <td className="p-2">{item.unplaced}</td>
-                        <td className="p-2">{item.layers.join(', ') || '-'}</td>
+                        <td className="p-2">{formatDimensions(item.originalLength, item.originalWidth, item.originalHeight)}</td>
+                        <td className="p-2">{formatDimensions(item.actualLength, item.actualWidth, item.actualHeight)}</td>
+                        <td className="p-2">{item.weight}</td>
+                        <td className="p-2">{item.plannedQuantity}</td>
+                        <td className="p-2">{item.placedQuantity}</td>
+                        <td className="p-2">{item.unplacedQuantity}</td>
+                        <td className="p-2">{item.layer || '-'}</td>
+                        <td className="p-2">{item.workStep || '-'}</td>
+                        <td className="p-2">{item.failureReason || t.noFailure}</td>
                       </tr>
                     ))}
                   </tbody>

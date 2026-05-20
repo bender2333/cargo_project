@@ -138,13 +138,29 @@ test('shows label detail and diagnostic result tabs', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Details' }).click()
   await expect(page.getByRole('columnheader', { name: 'Label' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Original size' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Actual size' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Step' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Failure reason' })).toBeVisible()
   await expect(page.getByRole('cell', { name: 'A' }).first()).toBeVisible()
   await expect(page.getByRole('cell', { name: 'Carton A' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: '600 x 400 x 350' }).first()).toBeVisible()
   await expect(page.getByRole('cell', { name: '18' }).first()).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'None' }).first()).toBeVisible()
 
   await page.getByRole('button', { name: 'Diagnostics' }).click()
   await expect(page.getByText('INFO')).toBeVisible()
   await expect(page.getByText('Calculated packing satisfies boundary, weight, overlap, and stacking checks.')).toBeVisible()
+})
+
+test('shows failure reason in the detail table for unplaced cargo', async ({ page }) => {
+  await page.goto('/')
+  await page.getByLabel('Max payload kg').fill('36')
+  await page.getByRole('button', { name: 'Load' }).click()
+
+  await page.getByRole('button', { name: 'Details' }).click()
+  await expect(page.getByRole('cell', { name: 'Exceeds maximum payload' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: '16' })).toBeVisible()
 })
 
 test('switches to 2D plan views and keeps labels visible', async ({ page }) => {

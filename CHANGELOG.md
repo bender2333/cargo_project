@@ -31,3 +31,6 @@
 - Completed subtask: add layer navigation and loading-step selection.
 - Added previous/next layer controls and a loading-step list that selects the box and switches to its physical layer using `PackingResult.workSteps`.
 - Verification: `npm run lint` passed; `npm test` passed 25 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 11 tests.
+- Completed subtask: expand the details table to PRD fields.
+- Reused `buildExportPlanRows` for the details tab so UI details and Excel export share label, dimensions, orientation, weight, quantity, layer, work-step, and failure-reason data.
+- Verification: `npm run lint` passed; `npm test` passed 25 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 12 tests.
