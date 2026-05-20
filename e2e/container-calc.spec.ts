@@ -275,6 +275,8 @@ test('supports Excel import/export affordance and Chinese mode', async ({ page }
   await expect(page.getByRole('button', { name: 'Export XLSX' })).toBeVisible()
   const filePath = await createWorkbookFile()
   await page.locator('input[type="file"]').setInputFiles(filePath)
+  await expect(page.getByText('Import success: 1')).toBeVisible()
+  await expect(page.getByText(/Mapped fields: .*label/)).toBeVisible()
   await expect(page.getByRole('button', { name: /Imported crate/ }).first()).toBeVisible()
 
   const downloadPromise = page.waitForEvent('download')
@@ -313,6 +315,8 @@ test('imports Chinese centimeter Excel fields with visible conversion warning', 
   const filePath = await createChineseWorkbookFile()
   await page.locator('input[type="file"]').setInputFiles(filePath)
 
+  await expect(page.getByText('Import success: 1')).toBeVisible()
+  await expect(page.getByText('Rows converted from cm: 1')).toBeVisible()
   await expect(page.getByText(/Import warning row 2/)).toBeVisible()
   await expect(page.getByRole('button', { name: /整托货物/ }).first()).toBeVisible()
   await expect(page.getByText(/900 x 700 x 500 mm/)).toBeVisible()

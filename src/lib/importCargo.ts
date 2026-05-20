@@ -12,6 +12,11 @@ export type ImportCargoResult = {
   items: CargoItem[]
   errors: ImportCargoIssue[]
   warnings: ImportCargoIssue[]
+  summary: {
+    importedRows: number
+    mappedFields: string[]
+    convertedCentimeterRows: number
+  }
 }
 
 type ParseOptions = {
@@ -45,6 +50,10 @@ function valueFor(row: ImportCargoRow, candidates: string[]) {
     }
   }
   return undefined
+}
+
+function hasValueFor(row: ImportCargoRow, candidates: string[]) {
+  return valueFor(row, candidates) !== undefined
 }
 
 function numberValue(value: RowValue) {
@@ -91,6 +100,8 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
   const errors: ImportCargoIssue[] = []
   const warnings: ImportCargoIssue[] = []
   const items: CargoItem[] = []
+  const mappedFields = new Set<string>()
+  let convertedCentimeterRows = 0
 
   rows.forEach((row, index) => {
     const rowNumber = index + 2
@@ -112,7 +123,27 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
 
     if (convertedFromCm) {
       warnings.push({ row: rowNumber, message: 'Centimeter dimensions were converted to millimeters.' })
+      convertedCentimeterRows += 1
     }
+
+    const fieldMappings: Array<{ field: string; candidates: string[] }> = [
+      { field: 'label', candidates: fields.label },
+      { field: 'name', candidates: fields.name },
+      { field: 'length', candidates: [...fields.lengthMm, ...fields.lengthCm] },
+      { field: 'width', candidates: [...fields.widthMm, ...fields.widthCm] },
+      { field: 'height', candidates: [...fields.heightMm, ...fields.heightCm] },
+      { field: 'weight', candidates: fields.weight },
+      { field: 'quantity', candidates: fields.quantity },
+      { field: 'color', candidates: fields.color },
+      { field: 'canRotate', candidates: fields.canRotate },
+      { field: 'stackable', candidates: fields.stackable },
+    ]
+
+    fieldMappings.forEach(({ field, candidates }) => {
+      if (hasValueFor(row, candidates)) {
+        mappedFields.add(field)
+      }
+    })
 
     const label = String(valueFor(row, fields.label) ?? fallbackLabel(index)).toUpperCase().slice(0, 2)
     const name = String(valueFor(row, fields.name) ?? `Cargo ${index + 1}`)
@@ -133,5 +164,14 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
     })
   })
 
-  return { items, errors, warnings }
+  return {
+    items,
+    errors,
+    warnings,
+    summary: {
+      importedRows: items.length,
+      mappedFields: [...mappedFields].sort(),
+      convertedCentimeterRows,
+    },
+  }
 }

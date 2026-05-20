@@ -40,6 +40,11 @@ describe('parseCargoRows', () => {
     expect(result.warnings).toEqual([
       { row: 2, message: 'Centimeter dimensions were converted to millimeters.' },
     ])
+    expect(result.summary).toEqual({
+      importedRows: 1,
+      mappedFields: ['canRotate', 'color', 'height', 'label', 'name', 'quantity', 'stackable', 'weight', 'width', 'length'].sort(),
+      convertedCentimeterRows: 1,
+    })
   })
 
   it('keeps valid rows and reports invalid required fields without silent failure', () => {
@@ -58,5 +63,6 @@ describe('parseCargoRows', () => {
       { row: 3, message: 'Missing or invalid length, width, or height.' },
       { row: 4, message: 'Missing or invalid quantity.' },
     ])
+    expect(result.summary.importedRows).toBe(1)
   })
 })

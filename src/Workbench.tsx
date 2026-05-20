@@ -45,6 +45,9 @@ const copy = {
     exportView: 'Export view',
     importIssue: 'Import issue',
     importWarning: 'Import warning',
+    importSuccess: 'Import success',
+    importMappedFields: 'Mapped fields',
+    importConvertedRows: 'Rows converted from cm',
     load: 'Load',
     view2d: '2D',
     view3d: '3D',
@@ -116,6 +119,9 @@ const copy = {
     exportView: '导出视图',
     importIssue: '导入问题',
     importWarning: '导入提醒',
+    importSuccess: '导入成功',
+    importMappedFields: '识别字段',
+    importConvertedRows: '厘米换算行数',
     load: '装箱',
     view2d: '2D',
     view3d: '3D',
@@ -307,6 +313,9 @@ function Workbench() {
     const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(sheet)
     const imported = parseCargoRows(rows, { colors })
     setImportMessages([
+      `${t.importSuccess}: ${imported.summary.importedRows}`,
+      `${t.importMappedFields}: ${imported.summary.mappedFields.join(', ') || '-'}`,
+      `${t.importConvertedRows}: ${imported.summary.convertedCentimeterRows}`,
       ...imported.errors.map((issue) => `${t.importIssue} row ${issue.row}: ${issue.message}`),
       ...imported.warnings.map((issue) => `${t.importWarning} row ${issue.row}: ${issue.message}`),
     ])

@@ -46,3 +46,6 @@
 - Completed subtask: remove out-of-scope management entries.
 - Removed user/license/buy/sign-out header entries so the refactored workbench does not present multi-user, account, or license management as active scope.
 - Verification: `npm run lint` passed; `npm test` passed 26 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 13 tests.
+- Completed subtask: surface import success and mapping status.
+- Extended `parseCargoRows` with import summary metadata and displayed imported row count, mapped fields, and centimeter conversion count alongside row-level warnings/errors.
+- Verification: `npm run lint` passed; `npm test` passed 26 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 13 tests.
