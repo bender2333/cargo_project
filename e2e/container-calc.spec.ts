@@ -51,6 +51,15 @@ async function createChineseWorkbookFile() {
   return filePath
 }
 
+async function createEmptyWorkbookFile() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cargo-calc-empty-'))
+  const filePath = path.join(dir, 'cargo-import-empty.xlsx')
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['label', 'name', 'length']]), 'Empty')
+  XLSX.writeFile(workbook, filePath)
+  return filePath
+}
+
 async function expectCanvasHasRenderedPixels(page: Page) {
   const canvas = page.locator('canvas').first()
   await expect(canvas).toBeVisible()
@@ -342,6 +351,14 @@ test('imports Chinese centimeter Excel fields with visible conversion warning', 
     originalHeight: 500,
     plannedQuantity: 2,
   })
+})
+
+test('shows a clear import issue for workbooks without usable rows', async ({ page }) => {
+  await page.goto('/')
+  const filePath = await createEmptyWorkbookFile()
+  await page.locator('input[type="file"]').setInputFiles(filePath)
+
+  await expect(page.getByText('Import issue: No usable data found')).toBeVisible()
 })
 
 test('saves and restores history plans with labels and layers intact', async ({ page }) => {

@@ -45,6 +45,8 @@ const copy = {
     exportView: 'Export view',
     importIssue: 'Import issue',
     importWarning: 'Import warning',
+    importParseFailed: 'Import parse failed',
+    importNoData: 'No usable data found',
     importSuccess: 'Import success',
     importMappedFields: 'Mapped fields',
     importConvertedRows: 'Rows converted from cm',
@@ -119,6 +121,8 @@ const copy = {
     exportView: '导出视图',
     importIssue: '导入问题',
     importWarning: '导入提醒',
+    importParseFailed: '导入解析失败',
+    importNoData: '未找到可用数据',
     importSuccess: '导入成功',
     importMappedFields: '识别字段',
     importConvertedRows: '厘米换算行数',
@@ -308,9 +312,21 @@ function Workbench() {
 
   const importExcel = async (file: File | null) => {
     if (!file) return
-    const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
-    const sheet = workbook.Sheets[workbook.SheetNames[0]]
-    const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(sheet)
+    let rows: Record<string, string | number>[]
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      rows = sheet ? XLSX.utils.sheet_to_json<Record<string, string | number>>(sheet) : []
+    } catch (error) {
+      setImportMessages([`${t.importParseFailed}: ${error instanceof Error ? error.message : String(error)}`])
+      return
+    }
+
+    if (rows.length === 0) {
+      setImportMessages([`${t.importIssue}: ${t.importNoData}`])
+      return
+    }
+
     const imported = parseCargoRows(rows, { colors })
     setImportMessages([
       `${t.importSuccess}: ${imported.summary.importedRows}`,
