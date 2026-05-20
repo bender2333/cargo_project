@@ -51,6 +51,20 @@ async function createChineseWorkbookFile() {
   return filePath
 }
 
+async function createCsvFile() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cargo-calc-csv-'))
+  const filePath = path.join(dir, 'cargo-import.csv')
+  await fs.writeFile(
+    filePath,
+    [
+      'label,name,length,width,height,weight,quantity,color,canRotate,stackable',
+      'C,CSV crate,1100,750,550,40,2,#654321,true,false',
+    ].join('\n'),
+    'utf8',
+  )
+  return filePath
+}
+
 async function createEmptyWorkbookFile() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cargo-calc-empty-'))
   const filePath = path.join(dir, 'cargo-import-empty.xlsx')
@@ -351,6 +365,21 @@ test('imports Chinese centimeter Excel fields with visible conversion warning', 
     originalHeight: 500,
     plannedQuantity: 2,
   })
+})
+
+test('imports CSV cargo rows into the same packing flow', async ({ page }) => {
+  await page.goto('/')
+  const filePath = await createCsvFile()
+  await page.locator('input[type="file"]').setInputFiles(filePath)
+
+  await expect(page.getByText('Import success: 1')).toBeVisible()
+  await expect(page.getByRole('button', { name: /CSV crate/ }).first()).toBeVisible()
+  await page.getByRole('button', { name: 'Load' }).click()
+
+  await page.getByRole('button', { name: 'Details' }).click()
+  await expect(page.getByRole('cell', { name: 'C', exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'CSV crate' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: '1100 x 750 x 550' }).first()).toBeVisible()
 })
 
 test('shows a clear import issue for workbooks without usable rows', async ({ page }) => {
