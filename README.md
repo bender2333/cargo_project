@@ -152,7 +152,7 @@ ssh tencent-container-layout 'curl -fsS http://127.0.0.1/ >/dev/null && echo dep
 curl -I http://101.33.232.150/
 ```
 
-最近一次部署备份目录：`/root/cargo_project-backup-20260520-170534`。
+最近一次部署备份目录：`/root/cargo_project-backup-20260520-192916`。
 
 ## 架构设计
 

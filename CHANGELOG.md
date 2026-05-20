@@ -11,6 +11,9 @@
 - Added `createClientId` so browser-only actions use `crypto.randomUUID()` when available and a timestamp/random fallback when the page is served from plain HTTP.
 - Replaced direct `crypto.randomUUID()` usage in manual cargo creation, import parsing, and history-plan creation.
 - Verification: `npm test -- src/lib/clientId.test.ts` passed 2 tests; targeted E2E `adds cargo when browser randomUUID is unavailable` passed against this repository's dev server.
+- Completed subtask: deploy the HTTP ID-generation fix to production.
+- Deployment: built `dist/`, backed up the previous Nginx site to `/root/cargo_project-backup-20260520-192916`, uploaded the new static assets to `tencent-container-layout`, and verified public `http://101.33.232.150/` returns HTTP 200.
+- Verification: `npm run lint` passed; `npm test` passed 34 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 28 tests; remote targeted E2E passed 2 tests against `http://101.33.232.150/`.
 - Started PRD-driven refactor tracking.
 - Completed subtask: expand project README documentation.
 - Documented project purpose, feature scope, quick start, scripts, build flow, static deployment, architecture, data flow, import/export behavior, test gates, and development constraints.
