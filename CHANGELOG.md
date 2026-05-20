@@ -99,3 +99,7 @@
 - Extended browser coverage so named-plan export verifies the workbook metadata and 3D free view exercises drag plus mouse-wheel zoom before checking the canvas remains rendered.
 - Replaced the unused legacy `App.tsx` gray EasyCargo prototype with a compatibility export of the current `Workbench`, removing stale Users/Licenses UI from source-level maintenance paths.
 - Verification: `npm run lint` passed; `npm test` passed 32 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 21 tests.
+- Completed subtask: record second review findings and next-stage refactor plan.
+- Added the second review section to `REVIEW.md`, covering collapsible container parameters, collapsible loading rules, moving Excel import/export to the report area, moving import warnings into a dedicated import-log tab, changing the layout to two columns with the report panel under 3D/2D, cargo deletion, drag ordering, and an independent five-item history page.
+- Broke the next work into layout reorganization, left-panel interaction, import/export migration, independent history page, and E2E hardening phases with explicit acceptance criteria.
+- Verification: documentation-only change; code verification not rerun.
