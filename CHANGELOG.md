@@ -49,6 +49,9 @@
 - Completed subtask: surface import success and mapping status.
 - Extended `parseCargoRows` with import summary metadata and displayed imported row count, mapped fields, and centimeter conversion count alongside row-level warnings/errors.
 - Verification: `npm run lint` passed; `npm test` passed 26 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 13 tests.
+- Completed subtask: expand compliance diagnostics.
+- Added explicit boundary, payload, overlap, support, stackability, unplaced-cargo, and optimization diagnostics generated from `PackingResult` data.
+- Verification: `npm run lint` passed; `npm test` passed 27 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 13 tests.
 - Completed subtask: record import mapping decision.
 - Documented that this milestone uses deterministic Excel field mapping and unit conversion while leaving runtime AI mapping as a future extension point.
 - Verification: documentation-only change; code verification not rerun.

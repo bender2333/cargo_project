@@ -151,8 +151,13 @@ test('shows label detail and diagnostic result tabs', async ({ page }) => {
   await expect(page.getByRole('cell', { name: 'None' }).first()).toBeVisible()
 
   await page.getByRole('button', { name: 'Diagnostics' }).click()
-  await expect(page.getByText('INFO')).toBeVisible()
-  await expect(page.getByText('Calculated packing satisfies boundary, weight, overlap, and stacking checks.')).toBeVisible()
+  await expect(page.getByText('INFO').first()).toBeVisible()
+  await expect(page.getByText('Boundary check passed: all placed boxes are inside the effective container.')).toBeVisible()
+  await expect(page.getByText('Weight check passed: placed cargo is within the maximum payload.')).toBeVisible()
+  await expect(page.getByText('Overlap check passed: placed boxes do not overlap.')).toBeVisible()
+  await expect(page.getByText('Support check passed: stacked boxes have explicit support relationships.')).toBeVisible()
+  await expect(page.getByText('Stacking check passed: non-stackable items are not used as supports.')).toBeVisible()
+  await expect(page.getByText(/Optimization suggestion:/)).toBeVisible()
 })
 
 test('shows failure reason in the detail table for unplaced cargo', async ({ page }) => {

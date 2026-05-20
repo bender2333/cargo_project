@@ -236,6 +236,29 @@ describe('calculatePacking', () => {
     expect(result.unplaced[0]).toMatchObject({ cargoId: 'a', label: 'A', quantity: 1, reason: 'Exceeds maximum payload' })
   })
 
+  it('reports explicit compliance diagnostics and optimization guidance', () => {
+    const result = calculatePacking(testContainer({ length: 1000, width: 1000, height: 1000, maxWeight: 150 }), [
+      cargo({ id: 'a', name: 'Alpha', label: 'A', length: 1000, width: 1000, height: 500, weight: 100, quantity: 2, canRotate: false }),
+      cargo({ id: 'b', name: 'Beta', label: 'B', length: 500, width: 500, height: 500, weight: 25, quantity: 1, canRotate: false }),
+    ])
+
+    expect(result.diagnostics.map((item) => item.id)).toEqual([
+      'boundary-check',
+      'weight-check',
+      'overlap-check',
+      'support-check',
+      'stacking-check',
+      'unplaced-a',
+      'optimization-suggestion',
+    ])
+    expect(result.diagnostics.find((item) => item.id === 'boundary-check')).toMatchObject({ severity: 'info' })
+    expect(result.diagnostics.find((item) => item.id === 'weight-check')).toMatchObject({ severity: 'info' })
+    expect(result.diagnostics.find((item) => item.id === 'overlap-check')).toMatchObject({ severity: 'info' })
+    expect(result.diagnostics.find((item) => item.id === 'support-check')).toMatchObject({ severity: 'info' })
+    expect(result.diagnostics.find((item) => item.id === 'stacking-check')).toMatchObject({ severity: 'info' })
+    expect(result.diagnostics.find((item) => item.id === 'optimization-suggestion')?.message).toContain('review unplaced cargo')
+  })
+
   it('supports gravity-stable stacking on top of fully supported boxes', () => {
     const result = calculatePacking(containers[0], [
       cargo({ id: 'base-a', label: 'A', length: containers[0].length, width: containers[0].width, height: 500, quantity: 1, canRotate: false }),

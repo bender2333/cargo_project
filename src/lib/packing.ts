@@ -192,16 +192,94 @@ function buildLayers(placed: PlacedBox[]): PackingLayer[] {
     })
 }
 
-function buildDiagnostics(placed: PlacedBox[], unplaced: PackingResult['unplaced']): PackingDiagnostic[] {
-  const diagnostics: PackingDiagnostic[] = []
+function placedBoxesOverlap(a: PlacedBox, b: PlacedBox) {
+  return !(
+    a.x + a.length <= b.x + EPSILON ||
+    b.x + b.length <= a.x + EPSILON ||
+    a.y + a.width <= b.y + EPSILON ||
+    b.y + b.width <= a.y + EPSILON ||
+    a.z + a.height <= b.z + EPSILON ||
+    b.z + b.height <= a.z + EPSILON
+  )
+}
 
-  if (placed.some((box) => box.supportType === 'partially-supported')) {
-    diagnostics.push({
-      id: 'partial-support',
-      severity: 'warning',
-      message: 'Some boxes are only partially supported.',
-    })
-  }
+function hasOverlapViolation(placed: PlacedBox[]) {
+  return placed.some((box, index) => placed.slice(index + 1).some((other) => placedBoxesOverlap(box, other)))
+}
+
+function hasBoundaryViolation(placed: PlacedBox[], container: ContainerSpec) {
+  return placed.some(
+    (box) =>
+      box.x < -EPSILON ||
+      box.y < -EPSILON ||
+      box.z < -EPSILON ||
+      box.x + box.length > container.length + EPSILON ||
+      box.y + box.width > container.width + EPSILON ||
+      box.z + box.height > container.height + EPSILON,
+  )
+}
+
+function hasStackingViolation(placed: PlacedBox[]) {
+  const placedById = new Map(placed.map((box) => [box.id, box]))
+  return placed.some((box) => box.supportedBy.some((supportId) => placedById.get(supportId)?.stackable === false))
+}
+
+function buildDiagnostics(
+  placed: PlacedBox[],
+  unplaced: PackingResult['unplaced'],
+  container: ContainerSpec,
+  usedWeight: number,
+  volumeUtilization: number,
+): PackingDiagnostic[] {
+  const diagnostics: PackingDiagnostic[] = []
+  const boundaryViolation = hasBoundaryViolation(placed, container)
+  const weightViolation = usedWeight > container.maxWeight + EPSILON
+  const overlapViolation = hasOverlapViolation(placed)
+  const partialSupport = placed.some((box) => box.supportType === 'partially-supported')
+  const missingSupport = placed.some((box) => box.z > EPSILON && box.supportedBy.length === 0)
+  const stackingViolation = hasStackingViolation(placed)
+
+  diagnostics.push({
+    id: 'boundary-check',
+    severity: boundaryViolation ? 'error' : 'info',
+    message: boundaryViolation
+      ? 'Boundary check failed: at least one placed box exceeds the effective container.'
+      : 'Boundary check passed: all placed boxes are inside the effective container.',
+  })
+
+  diagnostics.push({
+    id: 'weight-check',
+    severity: weightViolation ? 'error' : 'info',
+    message: weightViolation
+      ? 'Weight check failed: placed cargo exceeds the maximum payload.'
+      : 'Weight check passed: placed cargo is within the maximum payload.',
+  })
+
+  diagnostics.push({
+    id: 'overlap-check',
+    severity: overlapViolation ? 'error' : 'info',
+    message: overlapViolation
+      ? 'Overlap check failed: at least one pair of placed boxes overlaps.'
+      : 'Overlap check passed: placed boxes do not overlap.',
+  })
+
+  diagnostics.push({
+    id: 'support-check',
+    severity: missingSupport ? 'error' : partialSupport ? 'warning' : 'info',
+    message: missingSupport
+      ? 'Support check failed: stacked cargo is missing explicit support.'
+      : partialSupport
+        ? 'Support check warning: some boxes are only partially supported.'
+        : 'Support check passed: stacked boxes have explicit support relationships.',
+  })
+
+  diagnostics.push({
+    id: 'stacking-check',
+    severity: stackingViolation ? 'error' : 'info',
+    message: stackingViolation
+      ? 'Stacking check failed: cargo was placed on a non-stackable item.'
+      : 'Stacking check passed: non-stackable items are not used as supports.',
+  })
 
   unplaced.forEach((item) => {
     diagnostics.push({
@@ -211,13 +289,15 @@ function buildDiagnostics(placed: PlacedBox[], unplaced: PackingResult['unplaced
     })
   })
 
-  if (diagnostics.length === 0) {
-    diagnostics.push({
-      id: 'packing-valid',
-      severity: 'info',
-      message: 'Calculated packing satisfies boundary, weight, overlap, and stacking checks.',
-    })
-  }
+  diagnostics.push({
+    id: 'optimization-suggestion',
+    severity: unplaced.length > 0 || volumeUtilization < 70 ? 'warning' : 'info',
+    message: unplaced.length > 0
+      ? 'Optimization suggestion: review unplaced cargo, container size, reserved gaps, weight limit, or stackability rules.'
+      : volumeUtilization < 70
+        ? 'Optimization suggestion: utilization is below 70%; consider a smaller container or revised cargo grouping.'
+        : 'Optimization suggestion: current packing has no obvious compliance blockers.',
+  })
 
   return diagnostics
 }
@@ -321,6 +401,9 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     }
   })
 
+  const volumeUtilization = containerVolume ? (usedVolume / containerVolume) * 100 : 0
+  const weightUtilization = effective.maxWeight ? (usedWeight / effective.maxWeight) * 100 : 0
+
   return {
     placed,
     unplaced,
@@ -334,13 +417,13 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       supportType: box.supportType,
     })),
     labelStats,
-    diagnostics: buildDiagnostics(placed, unplaced),
+    diagnostics: buildDiagnostics(placed, unplaced, effective, usedWeight, volumeUtilization),
     totalCargoCount,
     placedCount: placed.length,
     usedVolume,
     containerVolume,
-    volumeUtilization: containerVolume ? (usedVolume / containerVolume) * 100 : 0,
+    volumeUtilization,
     usedWeight,
-    weightUtilization: effective.maxWeight ? (usedWeight / effective.maxWeight) * 100 : 0,
+    weightUtilization,
   }
 }
