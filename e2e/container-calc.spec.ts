@@ -155,6 +155,7 @@ test('adds cargo and recalculates utilization', async ({ page }) => {
   await expect(page.getByRole('button', { name: /Tall crate/ }).first()).toBeVisible()
   await expect(page.getByText(/Volume utilization: \d+\.\d%/)).toBeVisible()
   await expect(page.getByText(/Weight utilization: \d+\.\d%/)).toBeVisible()
+  await expect(page.getByText('Cargo types: 2')).toBeVisible()
   await expect(page.getByText('Layer-by-layer placement')).toBeVisible()
 })
 

@@ -62,6 +62,7 @@ const copy = {
     sideView: 'Side',
     results: 'Results',
     loaded: 'Loaded',
+    cargoTypes: 'Cargo types',
     volumeUse: 'Volume utilization',
     weightUse: 'Weight utilization',
     containerVolume: 'Container volume',
@@ -141,6 +142,7 @@ const copy = {
     sideView: '侧视',
     results: '结果',
     loaded: '已装入',
+    cargoTypes: '参与箱型',
     volumeUse: '体积利用率',
     weightUse: '重量利用率',
     containerVolume: '货柜体积',
@@ -561,10 +563,11 @@ function Workbench() {
             <strong>{selectedContainer.label}</strong>
             <div>{renderingContainer.length.toLocaleString()} x {renderingContainer.width.toLocaleString()} x {renderingContainer.height.toLocaleString()} mm</div>
           </div>
-          <div className="absolute right-6 top-5 z-10 grid grid-cols-3 gap-5 rounded bg-white/70 px-5 py-3 text-center text-sm shadow">
+          <div className="absolute right-6 top-5 z-10 grid grid-cols-4 gap-4 rounded bg-white/70 px-5 py-3 text-center text-sm shadow">
             <div><strong>{t.weight}</strong><div>{result.usedWeight.toLocaleString()} kg</div></div>
             <div><strong>{t.volume}</strong><div>{formatCubicMeters(result.usedVolume)}</div></div>
             <div><strong>{t.loaded}</strong><div>{result.placedCount}/{result.totalCargoCount}</div></div>
+            <div><strong>{t.cargoTypes}</strong><div>{result.labelStats.length}</div></div>
           </div>
           {workspaceView === '3d' ? (
             <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={hasCalculated ? result.placed : []} container={renderingContainer} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onSelectBox={setSelectedBoxId} />
@@ -735,6 +738,7 @@ function Workbench() {
           <div className="m-3 border border-[#c9c9c9] bg-white p-3 text-sm">
             <h2 className="font-bold">{t.results}</h2>
             <p>{t.loaded}: {result.placedCount} / {result.totalCargoCount}</p>
+            <p>{t.cargoTypes}: {result.labelStats.length}</p>
             <p>{t.volumeUse}: {result.volumeUtilization.toFixed(1)}%</p>
             <p>{t.weightUse}: {result.weightUtilization.toFixed(1)}%</p>
             <p>{t.containerVolume}: {formatCubicMeters(getContainerVolume(selectedContainer))}</p>
