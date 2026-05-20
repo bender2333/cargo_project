@@ -18,7 +18,7 @@ const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6'
 
 const copy = {
   en: {
-    nav: ['EasyCargo', 'Shipments & Reports', 'Cargo items', 'Cargo spaces', 'Users', 'Licenses'],
+    nav: ['EasyCargo', 'Shipments & Reports', 'Cargo items', 'Cargo spaces'],
     shipment: 'Enter shipment name',
     group: 'Group 1',
     note: '- click to edit note',
@@ -86,12 +86,10 @@ const copy = {
     failureReason: 'Failure reason',
     noFailure: 'None',
     label: 'Label',
-    buy: 'Buy',
-    signOut: 'Sign out',
     language: '中文',
   },
   zh: {
-    nav: ['EasyCargo', '装箱报告', '货物项目', '货柜空间', '用户', '许可证'],
+    nav: ['EasyCargo', '装箱报告', '货物项目', '货柜空间'],
     shipment: '输入装运名称',
     group: '分组 1',
     note: '- 点击编辑备注',
@@ -159,8 +157,6 @@ const copy = {
     failureReason: '失败原因',
     noFailure: '无',
     label: '标识',
-    buy: '购买',
-    signOut: '退出',
     language: 'English',
   },
 }
@@ -402,9 +398,6 @@ function Workbench() {
             {t.language}
           </button>
           <span className="rounded-full bg-[#ffb020] px-2 py-1 text-white">?</span>
-          <span>yvonne</span>
-          <button className="bg-[#f3b21a] px-5 py-2 font-semibold text-white" type="button">{t.buy}</button>
-          <button className="text-[#2f2f2f]" type="button">{t.signOut}</button>
         </div>
       </header>
 

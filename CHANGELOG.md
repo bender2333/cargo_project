@@ -43,3 +43,6 @@
 - Completed subtask: enforce one color per cargo label.
 - Added `normalizeCargoLabelColors` and routed Workbench display, packing, details, export, and history saves through normalized label colors so one business label cannot split into multiple visual colors.
 - Verification: `npm run lint` passed; `npm test` passed 26 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 13 tests.
+- Completed subtask: remove out-of-scope management entries.
+- Removed user/license/buy/sign-out header entries so the refactored workbench does not present multi-user, account, or license management as active scope.
+- Verification: `npm run lint` passed; `npm test` passed 26 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 13 tests.
