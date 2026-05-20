@@ -28,3 +28,6 @@
 - Completed subtask: add 3D view controls and layer dimming.
 - Added 3D iso/top/front/side camera shortcuts and changed the 3D scene to render all placed boxes while dimming non-current layers from `PlacedBox.physicalLayer`.
 - Verification: `npm run lint` passed; `npm test` passed 25 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 11 tests.
+- Completed subtask: add layer navigation and loading-step selection.
+- Added previous/next layer controls and a loading-step list that selects the box and switches to its physical layer using `PackingResult.workSteps`.
+- Verification: `npm run lint` passed; `npm test` passed 25 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 11 tests.

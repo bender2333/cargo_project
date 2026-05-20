@@ -67,8 +67,11 @@ const copy = {
     noHistory: 'No saved plans',
     allLayers: 'All layers',
     currentLayer: 'Current layer',
+    previousLayer: 'Prev',
+    nextLayer: 'Next',
     showLayer: 'Show layer',
     layerStats: 'Layer stats',
+    loadingSteps: 'Loading steps',
     supportedBy: 'Supported by',
     planned: 'Planned',
     placed: 'Placed',
@@ -131,8 +134,11 @@ const copy = {
     noHistory: '暂无历史方案',
     allLayers: '全部层',
     currentLayer: '当前层',
+    previousLayer: '上层',
+    nextLayer: '下层',
     showLayer: '显示层',
     layerStats: '当前层统计',
+    loadingSteps: '装柜作业步骤',
     supportedBy: '支撑来源',
     planned: '计划',
     placed: '已装',
@@ -227,6 +233,7 @@ function Workbench() {
   const visibleBoxes = hasCalculated
     ? result.placed.filter((box) => activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId)
     : []
+  const activeLayerIndex = result.layers.findIndex((layer) => layer.id === activeLayerId)
 
   const updateNumber = (field: keyof Pick<CargoForm, 'length' | 'width' | 'height' | 'weight' | 'quantity'>, value: string) => {
     setForm((current) => ({ ...current, [field]: Number(value) || 0 }))
@@ -307,6 +314,25 @@ function Workbench() {
     setActiveLayerId('all')
     setSelectedBoxId(null)
     setHasCalculated(true)
+  }
+
+  const selectLayerByOffset = (offset: -1 | 1) => {
+    if (!result.layers.length) {
+      return
+    }
+
+    if (activeLayerId === 'all') {
+      setActiveLayerId(result.layers[0].id)
+      return
+    }
+
+    const nextIndex = Math.min(result.layers.length - 1, Math.max(0, activeLayerIndex + offset))
+    setActiveLayerId(result.layers[nextIndex]?.id ?? 'all')
+  }
+
+  const selectStepBox = (boxId: string, layerId: string) => {
+    setSelectedBoxId(boxId)
+    setActiveLayerId(layerId)
   }
 
   return (
@@ -477,10 +503,18 @@ function Workbench() {
 
             {activeResultTab === 'layers' && (
               <div className="mt-3">
-                <select className="w-full border border-[#aaa] bg-white p-2" value={activeLayerId} onChange={(event) => setActiveLayerId(event.target.value)}>
-                  <option value="all">{t.allLayers}</option>
-                  {result.layers.map((layer) => <option key={layer.id} value={layer.id}>{layerName(layer, locale)}: {layer.count}</option>)}
-                </select>
+                <div className="flex gap-2">
+                  <select className="w-full border border-[#aaa] bg-white p-2" value={activeLayerId} onChange={(event) => setActiveLayerId(event.target.value)}>
+                    <option value="all">{t.allLayers}</option>
+                    {result.layers.map((layer) => <option key={layer.id} value={layer.id}>{layerName(layer, locale)}: {layer.count}</option>)}
+                  </select>
+                  <button className="border border-[#b8b8b8] bg-white px-3 py-2 text-xs" type="button" onClick={() => selectLayerByOffset(-1)}>
+                    {t.previousLayer}
+                  </button>
+                  <button className="border border-[#b8b8b8] bg-white px-3 py-2 text-xs" type="button" onClick={() => selectLayerByOffset(1)}>
+                    {t.nextLayer}
+                  </button>
+                </div>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   {result.layers.map((layer) => (
                     <button className={`border px-2 py-1 text-left text-xs ${activeLayerId === layer.id ? 'border-[#f3b21a] bg-white' : 'border-[#bbb] bg-[#eee]'}`} key={layer.id} type="button" onClick={() => setActiveLayerId(layer.id)}>
@@ -497,6 +531,26 @@ function Workbench() {
                     {activeLayer.supportedBy.length > 0 && <p>{t.supportedBy}: {activeLayer.supportedBy.join(', ')}</p>}
                   </div>
                 )}
+                <div className="mt-3 border-t border-[#bebebe] pt-2 text-xs">
+                  <strong>{t.loadingSteps}</strong>
+                  <div className="mt-2 max-h-[180px] space-y-1 overflow-auto">
+                    {result.workSteps.map((step) => {
+                      const isSelected = step.boxId === selectedBoxId
+                      const box = result.placed.find((entry) => entry.id === step.boxId)
+                      return (
+                        <button
+                          className={`block w-full border px-2 py-1 text-left ${isSelected ? 'border-[#f3b21a] bg-white' : 'border-[#bbb] bg-[#eee]'}`}
+                          key={step.boxId}
+                          type="button"
+                          onClick={() => selectStepBox(step.boxId, String(step.physicalLayer))}
+                        >
+                          <strong>{step.step}</strong> {step.label} · {step.supportType}
+                          {box && <div>{box.name} · {layerName(result.layers.find((layer) => layer.physicalLayer === box.physicalLayer) ?? result.layers[0], locale)}</div>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -583,7 +637,7 @@ function Workbench() {
             <div className="mt-3 border-t pt-2">
               <strong>{t.showLayer}</strong>
               {visibleBoxes.slice(0, 10).map((box) => (
-                <button className={`mt-1 block w-full rounded px-2 py-1 text-left text-xs ${selectedBoxId === box.id ? 'bg-[#fff0bd]' : 'bg-[#f6f6f6]'}`} key={box.id} type="button" onClick={() => setSelectedBoxId(box.id)}>
+                <button className={`mt-1 block w-full rounded px-2 py-1 text-left text-xs ${selectedBoxId === box.id ? 'bg-[#fff0bd]' : 'bg-[#f6f6f6]'}`} key={box.id} type="button" onClick={() => selectStepBox(box.id, String(box.physicalLayer))}>
                   <b>{box.label}</b> {box.name} #{box.index} x:{Math.round(box.x)} y:{Math.round(box.y)} z:{Math.round(box.z)}
                   <br />{layerName(result.layers.find((layer) => layer.physicalLayer === box.physicalLayer) ?? result.layers[0], locale)} · {box.supportType}
                 </button>

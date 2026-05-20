@@ -204,6 +204,16 @@ test('switches 3D camera views and keeps layer filtering visible', async ({ page
   await page.getByRole('button', { name: '+ Add cargo item' }).click()
   await page.getByRole('button', { name: 'Load' }).click()
 
+  await expect(page.getByText('Loading steps')).toBeVisible()
+  await page.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect(page.getByRole('button', { name: /^Layer 1/ }).first()).toHaveClass(/bg-white/)
+  await page.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect(page.getByRole('button', { name: /^Layer 2/ }).first()).toHaveClass(/bg-white/)
+  await page.getByRole('button', { name: 'Prev', exact: true }).click()
+  await expect(page.getByRole('button', { name: /^Layer 1/ }).first()).toHaveClass(/bg-white/)
+  await page.getByRole('button', { name: /^1 L/ }).first().click()
+  await expect(page.getByRole('button', { name: /^1 L/ }).first()).toHaveClass(/bg-white/)
+
   await page.getByRole('button', { name: /Layer 2/ }).first().click()
   await expect(page.getByTestId('container-scene')).toBeVisible()
   await expectCanvasHasRenderedPixels(page)
@@ -215,7 +225,7 @@ test('supports Excel import/export affordance and Chinese mode', async ({ page }
   await expect(page.getByRole('button', { name: 'Export XLSX' })).toBeVisible()
   const filePath = await createWorkbookFile()
   await page.locator('input[type="file"]').setInputFiles(filePath)
-  await expect(page.getByRole('button', { name: /Imported crate/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Imported crate/ }).first()).toBeVisible()
 
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Export XLSX' }).click()
@@ -244,7 +254,7 @@ test('supports Excel import/export affordance and Chinese mode', async ({ page }
   await expect(page.getByRole('button', { name: '装箱', exact: true })).toBeVisible()
   await expect(page.getByText('逐层添加货物')).toBeVisible()
   await expect(page.getByText(/体积利用率: \d+\.\d%/)).toBeVisible()
-  await expect(page.getByText('Imported crate')).toBeVisible()
+  await expect(page.getByText('Imported crate').first()).toBeVisible()
   await expect(page.getByText(/数量 2/)).toBeVisible()
 })
 
@@ -254,7 +264,7 @@ test('imports Chinese centimeter Excel fields with visible conversion warning', 
   await page.locator('input[type="file"]').setInputFiles(filePath)
 
   await expect(page.getByText(/Import warning row 2/)).toBeVisible()
-  await expect(page.getByRole('button', { name: /整托货物/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /整托货物/ }).first()).toBeVisible()
   await expect(page.getByText(/900 x 700 x 500 mm/)).toBeVisible()
 
   const downloadPromise = page.waitForEvent('download')
