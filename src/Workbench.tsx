@@ -12,7 +12,7 @@ import type { HistoryPlan } from './lib/historyPlans'
 import { parseCargoRows } from './lib/importCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
-import type { CargoItem, LoadingMode, Locale, PackingLayer } from './types'
+import type { CargoItem, LoadingMode, Locale, PackingDiagnostic, PackingLayer } from './types'
 
 const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
 
@@ -245,6 +245,45 @@ function layerName(layer: PackingLayer, locale: Locale) {
 
 function formatDimensions(length: number | '', width: number | '', height: number | '') {
   return length === '' || width === '' || height === '' ? '-' : `${length} x ${width} x ${height}`
+}
+
+function diagnosticMessage(diagnostic: PackingDiagnostic, locale: Locale) {
+  if (locale === 'en') {
+    return diagnostic.message
+  }
+
+  const zhMessages: Record<string, string> = {
+    'boundary-check': diagnostic.severity === 'error'
+      ? '边界检查失败：至少一个已装箱体超出有效货柜。'
+      : '边界检查通过：所有已装箱体都在有效货柜内。',
+    'weight-check': diagnostic.severity === 'error'
+      ? '载重检查失败：已装货物超过最大载重。'
+      : '载重检查通过：已装货物未超过最大载重。',
+    'overlap-check': diagnostic.severity === 'error'
+      ? '重叠检查失败：至少一组已装箱体发生重叠。'
+      : '重叠检查通过：已装箱体没有互相重叠。',
+    'support-check': diagnostic.severity === 'error'
+      ? '支撑检查失败：堆叠货物缺少明确支撑。'
+      : diagnostic.severity === 'warning'
+        ? '支撑检查提醒：部分箱体只有部分支撑。'
+        : '支撑检查通过：堆叠箱体都有明确支撑关系。',
+    'stacking-check': diagnostic.severity === 'error'
+      ? '堆叠检查失败：货物被放在不可堆叠项目上。'
+      : '堆叠检查通过：不可堆叠项目未作为支撑使用。',
+    'optimization-suggestion': diagnostic.severity === 'warning'
+      ? '优化建议：检查未装入货物、柜型、预留间隙、载重限制或堆叠规则。'
+      : '优化建议：当前方案没有明显合规阻塞。',
+  }
+
+  if (zhMessages[diagnostic.id]) {
+    return zhMessages[diagnostic.id]
+  }
+
+  if (diagnostic.id.startsWith('unplaced-')) {
+    return diagnostic.message.replace('unplaced because', '未装入，原因：')
+  }
+
+  return diagnostic.message
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -714,7 +753,7 @@ function Workbench() {
                 {result.diagnostics.map((diagnostic) => (
                   <div className="border border-[#c6c6c6] bg-white p-2" key={diagnostic.id}>
                     <strong className="uppercase">{diagnostic.severity}</strong>
-                    <p>{diagnostic.message}</p>
+                    <p>{diagnosticMessage(diagnostic, locale)}</p>
                   </div>
                 ))}
                 {result.unplaced.map((item) => (

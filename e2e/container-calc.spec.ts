@@ -356,6 +356,8 @@ test('supports Excel import/export affordance and Chinese mode', async ({ page }
   await expect(page.getByText(/体积利用率: \d+\.\d%/)).toBeVisible()
   await expect(page.getByText('Imported crate').first()).toBeVisible()
   await expect(page.getByText(/数量 2/)).toBeVisible()
+  await page.getByRole('button', { name: '合规与诊断' }).click()
+  await expect(page.getByText('边界检查通过：所有已装箱体都在有效货柜内。')).toBeVisible()
 })
 
 test('imports Chinese centimeter Excel fields with visible conversion warning', async ({ page }) => {

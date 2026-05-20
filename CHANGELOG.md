@@ -70,6 +70,9 @@
 - Completed subtask: add left-side unit parameter and rule sections.
 - Added explicit pallet/cargo unit and loading rule sections to the left workbench so the operational constraints are visible instead of implied only by form fields.
 - Verification: `npm run lint` passed; `npm test` passed 29 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 16 tests.
+- Completed subtask: localize diagnostic messages.
+- Added Chinese display text for standard compliance diagnostics while keeping stable diagnostic IDs and default English messages in `PackingResult`.
+- Verification: `npm run lint` passed; `npm test` passed 29 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 16 tests.
 - Completed subtask: record import mapping decision.
 - Documented that this milestone uses deterministic Excel field mapping and unit conversion while leaving runtime AI mapping as a future extension point.
 - Verification: documentation-only change; code verification not rerun.
