@@ -27,6 +27,29 @@ async function createWorkbookFile() {
   return filePath
 }
 
+async function createChineseWorkbookFile() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cargo-calc-zh-'))
+  const filePath = path.join(dir, 'cargo-import-zh.xlsx')
+  const sheet = XLSX.utils.json_to_sheet([
+    {
+      托盘: 'p1',
+      货物名称: '整托货物',
+      长cm: 90,
+      宽cm: 70,
+      高cm: 50,
+      整托重量kg: 33,
+      数量: 2,
+      颜色: '#123456',
+      允许旋转: '是',
+      允许堆叠: '否',
+    },
+  ])
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Cargo Items')
+  XLSX.writeFile(workbook, filePath)
+  return filePath
+}
+
 test('loads the container calculator workspace', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByText('Shipments & Reports')).toBeVisible()
@@ -144,4 +167,31 @@ test('supports Excel import/export affordance and Chinese mode', async ({ page }
   await expect(page.getByText(/体积利用率: \d+\.\d%/)).toBeVisible()
   await expect(page.getByText('Imported crate')).toBeVisible()
   await expect(page.getByText(/数量 2/)).toBeVisible()
+})
+
+test('imports Chinese centimeter Excel fields with visible conversion warning', async ({ page }) => {
+  await page.goto('/')
+  const filePath = await createChineseWorkbookFile()
+  await page.locator('input[type="file"]').setInputFiles(filePath)
+
+  await expect(page.getByText(/Import warning row 2/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /整托货物/ })).toBeVisible()
+  await expect(page.getByText(/900 x 700 x 500 mm/)).toBeVisible()
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export XLSX' }).click()
+  const download = await downloadPromise
+  const exportPath = path.join(os.tmpdir(), `cargo-export-zh-${Date.now()}.xlsx`)
+  await download.saveAs(exportPath)
+  const exported = XLSX.read(await fs.readFile(exportPath), { type: 'buffer' })
+  const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(exported.Sheets[exported.SheetNames[0]])
+
+  expect(rows[0]).toMatchObject({
+    label: 'P1',
+    name: '整托货物',
+    originalLength: 900,
+    originalWidth: 700,
+    originalHeight: 500,
+    plannedQuantity: 2,
+  })
 })

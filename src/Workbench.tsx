@@ -6,6 +6,7 @@ import { ContainerPlan2D } from './components/ContainerPlan2D'
 import type { PlanViewMode } from './components/ContainerPlan2D'
 import { containers, formatCubicMeters, getContainerVolume } from './data/containers'
 import { buildExportPlanRows } from './lib/exportPlan'
+import { parseCargoRows } from './lib/importCargo'
 import { calculatePacking } from './lib/packing'
 import type { CargoItem, Locale, PackingLayer } from './types'
 
@@ -30,6 +31,8 @@ const copy = {
     cargoItems: 'Cargo items',
     importExcel: 'Import XLSX',
     exportExcel: 'Export XLSX',
+    importIssue: 'Import issue',
+    importWarning: 'Import warning',
     load: 'Load',
     view2d: '2D',
     view3d: '3D',
@@ -80,6 +83,8 @@ const copy = {
     cargoItems: '货物项目',
     importExcel: '导入 XLSX',
     exportExcel: '导出 XLSX',
+    importIssue: '导入问题',
+    importWarning: '导入提醒',
     load: '装箱',
     view2d: '2D',
     view3d: '3D',
@@ -166,6 +171,7 @@ function Workbench() {
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
   const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
   const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
+  const [importMessages, setImportMessages] = useState<string[]>([])
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null)
 
   const selectedContainer = containers.find((container) => container.id === selectedContainerId) ?? containers[0]
@@ -203,21 +209,15 @@ function Workbench() {
     const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
     const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(sheet)
-    const imported = rows.map((row, index): CargoItem => ({
-      id: crypto.randomUUID(),
-      label: String(row.label ?? row.Label ?? nextLabel(index)).toUpperCase().slice(0, 2),
-      name: String(row.name ?? row.Name ?? row.description ?? row.Description ?? `Cargo ${index + 1}`),
-      length: Number(row.length ?? row.Length ?? row['Length mm'] ?? 0),
-      width: Number(row.width ?? row.Width ?? row['Width mm'] ?? 0),
-      height: Number(row.height ?? row.Height ?? row['Height mm'] ?? 0),
-      weight: Number(row.weight ?? row.Weight ?? row['Weight kg'] ?? 0),
-      quantity: Math.max(1, Number(row.quantity ?? row.Quantity ?? 1)),
-      color: String(row.color ?? row.Color ?? colors[index % colors.length]),
-      canRotate: String(row.canRotate ?? row.Rotate ?? 'true') !== 'false',
-      stackable: String(row.stackable ?? row.Stackable ?? 'true') !== 'false',
-    })).filter((item) => item.length > 0 && item.width > 0 && item.height > 0)
-    setCargoItems(imported)
-    setHasCalculated(false)
+    const imported = parseCargoRows(rows, { colors })
+    setImportMessages([
+      ...imported.errors.map((issue) => `${t.importIssue} row ${issue.row}: ${issue.message}`),
+      ...imported.warnings.map((issue) => `${t.importWarning} row ${issue.row}: ${issue.message}`),
+    ])
+    if (imported.items.length > 0) {
+      setCargoItems(imported.items)
+      setHasCalculated(false)
+    }
   }
 
   const exportExcel = () => {
@@ -282,10 +282,15 @@ function Workbench() {
             <div className="mb-2 flex items-center justify-between gap-2">
               <h2 className="text-sm font-bold">{t.cargoItems}</h2>
               <div className="flex gap-2 text-xs">
-                <label className="cursor-pointer border border-[#b8b8b8] bg-white px-2 py-1">{t.importExcel}<input className="hidden" accept=".xlsx,.xls" type="file" onChange={(event) => void importExcel(event.target.files?.[0] ?? null)} /></label>
+                <label className="cursor-pointer border border-[#b8b8b8] bg-white px-2 py-1">{t.importExcel}<input className="hidden" accept=".xlsx,.xls,.csv" type="file" onChange={(event) => void importExcel(event.target.files?.[0] ?? null)} /></label>
                 <button className="border border-[#b8b8b8] bg-white px-2 py-1" type="button" onClick={exportExcel}>{t.exportExcel}</button>
               </div>
             </div>
+            {importMessages.length > 0 && (
+              <div className="mb-2 space-y-1 border border-[#d7b7b7] bg-white p-2 text-xs">
+                {importMessages.map((message) => <p key={message}>{message}</p>)}
+              </div>
+            )}
             <div className="space-y-2">
               {cargoItems.map((item) => (
                 <button className={`w-full border p-3 text-left text-sm ${result.placed.some((box) => box.cargoId === item.id && box.id === selectedBoxId) ? 'border-[#f3b21a] bg-[#fff7df]' : 'border-[#c9c9c9] bg-white'}`} key={item.id} type="button" onClick={() => setSelectedBoxId(result.placed.find((box) => box.cargoId === item.id)?.id ?? null)}>
