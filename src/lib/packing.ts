@@ -1,6 +1,6 @@
 import type { CargoItem, ContainerSpec, LoadingMode, PackingDiagnostic, PackingResult, PlacedBox } from '../types'
 import { effectiveContainer, getContainerVolume } from '../data/containers'
-import { buildPackingLayers } from './layers'
+import { assignDepthLayers, buildPackingLayers } from './layers'
 
 type BoxSize = {
   length: number
@@ -365,7 +365,16 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   const usedVolume = placed.reduce((sum, box) => sum + box.length * box.width * box.height, 0)
   const containerVolume = getContainerVolume(container)
   const unplaced = [...unplacedMap.values()]
+  const volumeUtilization = containerVolume ? (usedVolume / containerVolume) * 100 : 0
+  const weightUtilization = effective.maxWeight ? (usedWeight / effective.maxWeight) * 100 : 0
+
+  // 1. Generate compliance diagnostics under original Z-gravity physical support relations
+  const diagnostics = buildDiagnostics(placed, unplaced, effective, usedWeight, volumeUtilization)
+
+  // 2. Perform inward physical layer mapping and pusher updates (depth layers)
+  assignDepthLayers(placed)
   const layers = buildPackingLayers(placed)
+
   const labelStats = cargoItems.map((item, itemIndex) => {
     const label = (item.label || labelForIndex(itemIndex)).toUpperCase().slice(0, 2)
     const placedBoxes = placed.filter((box) => box.cargoId === item.id)
@@ -381,9 +390,6 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     }
   })
 
-  const volumeUtilization = containerVolume ? (usedVolume / containerVolume) * 100 : 0
-  const weightUtilization = effective.maxWeight ? (usedWeight / effective.maxWeight) * 100 : 0
-
   return {
     placed,
     unplaced,
@@ -397,7 +403,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       supportType: box.supportType,
     })),
     labelStats,
-    diagnostics: buildDiagnostics(placed, unplaced, effective, usedWeight, volumeUtilization),
+    diagnostics,
     totalCargoCount,
     placedCount: placed.length,
     usedVolume,
