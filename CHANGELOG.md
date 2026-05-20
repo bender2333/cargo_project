@@ -52,6 +52,9 @@
 - Completed subtask: expand compliance diagnostics.
 - Added explicit boundary, payload, overlap, support, stackability, unplaced-cargo, and optimization diagnostics generated from `PackingResult` data.
 - Verification: `npm run lint` passed; `npm test` passed 27 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 13 tests.
+- Completed subtask: extract layer aggregation into a tested module.
+- Moved physical layer aggregation into `src/lib/layers.ts` and added focused tests for support-derived mixed-height layer grouping.
+- Verification: `npm run lint` passed; `npm test` passed 28 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 13 tests.
 - Completed subtask: record import mapping decision.
 - Documented that this milestone uses deterministic Excel field mapping and unit conversion while leaving runtime AI mapping as a future extension point.
 - Verification: documentation-only change; code verification not rerun.
