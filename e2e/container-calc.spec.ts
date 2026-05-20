@@ -232,6 +232,21 @@ test('adds cargo and recalculates utilization', async ({ page }) => {
   await expect(page.getByText('Layer-by-layer placement')).toBeVisible()
 })
 
+test('adds cargo from the default Chinese workspace', async ({ page }) => {
+  await page.goto('/')
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('名称', { exact: true }).fill('中文新增货物')
+  await cargoForm.getByLabel('标识', { exact: true }).fill('Z')
+  await cargoForm.getByLabel('长 mm').fill('1200')
+  await cargoForm.getByLabel('宽 mm').fill('800')
+  await cargoForm.getByLabel('高 mm').fill('600')
+  await cargoForm.getByLabel('重量 kg').fill('42')
+  await cargoForm.getByLabel('数量').fill('3')
+  await page.getByRole('button', { name: '+ 添加货物' }).click()
+
+  await expect(page.getByRole('button', { name: /中文新增货物/ }).first()).toBeVisible()
+})
+
 test('deletes cargo and updates downstream details and export', async ({ page }) => {
   await openEnglish(page)
   const cargoForm = page.locator('form')
@@ -681,4 +696,3 @@ test('keeps history on an independent page with the latest five local plans', as
   await expect(page.getByLabel('Shipment name')).toHaveValue('History 6')
   await expect(page.getByTestId('history-page')).toHaveCount(0)
 })
-

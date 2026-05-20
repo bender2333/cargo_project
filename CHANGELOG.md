@@ -2,6 +2,11 @@
 
 ## 2026-05-20
 
+- Current task checklist: reproduce the remote `+ 添加货物` failure with E2E against `http://101.33.232.150/`; fix the root cause with a failing regression test first; run lint, unit, build, and E2E verification; deploy the rebuilt `dist/` to `cargo-server`; re-run the targeted remote E2E after deployment.
+- Completed subtask: reproduce the remote add-cargo regression with browser automation.
+- Added a Playwright `PLAYWRIGHT_BASE_URL` override so the same E2E suite can target production or the local dev server.
+- Added default-Chinese add-cargo regression coverage for the current startup language.
+- Verification: targeted remote E2E failed before deployment because the newly added cargo did not appear after clicking `+ 添加货物`; the same targeted E2E passed against the local current source, indicating the deployed bundle is behind the current implementation.
 - Started PRD-driven refactor tracking.
 - Completed subtask: expand project README documentation.
 - Documented project purpose, feature scope, quick start, scripts, build flow, static deployment, architecture, data flow, import/export behavior, test gates, and development constraints.
