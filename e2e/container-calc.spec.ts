@@ -120,9 +120,38 @@ test('loads the container calculator workspace', async ({ page }) => {
   await expect(page.getByText('Shipments & Reports')).toBeVisible()
   await expect(page.getByText('Pallet / cargo unit parameters')).toBeVisible()
   await expect(page.getByText('Loading rules')).toBeVisible()
+  await expect(page.getByText('Cargo loading workspace')).toBeVisible()
+  await expect(page.getByTestId('archive-stat-grid')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Users' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Licenses' })).toHaveCount(0)
   await expect(page.getByTestId('container-scene')).toBeVisible()
+})
+
+test('uses real archive-style navigation, menu, and shipment-name history behavior', async ({ page }) => {
+  await page.goto('/')
+  await page.getByLabel('Shipment name').fill('Review regression plan')
+
+  await page.getByRole('button', { name: 'Workspace menu' }).click()
+  await expect(page.getByTestId('workspace-menu')).toBeVisible()
+  await page.getByTestId('workspace-menu').getByRole('button', { name: 'Cargo items' }).click()
+  await expect(page.locator('header').getByRole('button', { name: 'Cargo items' })).toHaveClass(/bg-white/)
+  await expect(page.getByTestId('cargo-panel')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Cargo spaces' }).click()
+  await expect(page.locator('header').getByRole('button', { name: 'Cargo spaces' })).toHaveClass(/bg-white/)
+  await expect(page.getByTestId('container-panel')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Shipments & Reports' }).click()
+  await expect(page.locator('header').getByRole('button', { name: 'Shipments & Reports' })).toHaveClass(/bg-white/)
+  await expect(page.getByTestId('report-panel')).toBeVisible()
+
+  await page.getByRole('button', { name: 'History', exact: true }).click()
+  await page.getByRole('button', { name: 'Save plan' }).click()
+  await expect(page.getByText('Shipment: Review regression plan')).toBeVisible()
+
+  await page.getByLabel('Shipment name').fill('Changed plan')
+  await page.getByRole('button', { name: 'Restore' }).first().click()
+  await expect(page.getByLabel('Shipment name')).toHaveValue('Review regression plan')
 })
 
 test('updates parameters when selecting another container', async ({ page }) => {
@@ -167,7 +196,7 @@ test('adds cargo and recalculates utilization', async ({ page }) => {
 
 test('supports input-order loading mode for work-step planning', async ({ page }) => {
   await page.goto('/')
-  await page.getByLabel('Loading mode').selectOption('input')
+  await page.getByLabel('Loading rules').selectOption('input')
   const cargoForm = page.locator('form')
   await cargoForm.getByLabel('Name', { exact: true }).fill('Mode crate')
   await cargoForm.getByLabel('Label', { exact: true }).fill('M')
@@ -180,6 +209,23 @@ test('supports input-order loading mode for work-step planning', async ({ page }
   await page.getByRole('button', { name: 'Load' }).click()
 
   await expect(page.getByRole('button', { name: /^1 A/ }).first()).toBeVisible()
+})
+
+test('selectable loading rules change work-step ordering', async ({ page }) => {
+  await page.goto('/')
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('Name', { exact: true }).fill('Heavy rule crate')
+  await cargoForm.getByLabel('Label', { exact: true }).fill('W')
+  await cargoForm.getByLabel('Length mm').fill('400')
+  await cargoForm.getByLabel('Width mm').fill('400')
+  await cargoForm.getByLabel('Height mm').fill('400')
+  await cargoForm.getByLabel('Weight kg').fill('500')
+  await cargoForm.getByLabel('Quantity').fill('1')
+  await page.getByRole('button', { name: '+ Add cargo item' }).click()
+  await page.getByLabel('Loading rules').selectOption('weight')
+  await page.getByRole('button', { name: 'Load' }).click()
+
+  await expect(page.getByRole('button', { name: /^1 W/ }).first()).toBeVisible()
 })
 
 test('shows label detail and diagnostic result tabs', async ({ page }) => {
@@ -269,6 +315,8 @@ test('filters the plan view by cargo label', async ({ page }) => {
 
 test('renders an interactive 3D canvas', async ({ page }) => {
   await page.goto('/')
+  await page.getByRole('button', { name: 'Free view' }).click()
+  await expect(page.getByRole('button', { name: 'Free view' })).toHaveClass(/active/)
   const canvas = page.locator('canvas').first()
   await expect(canvas).toBeVisible()
   const box = await canvas.boundingBox()
@@ -291,7 +339,7 @@ test('switches 3D camera views and keeps layer filtering visible', async ({ page
 
   for (const viewName of ['Top', 'Front', 'Side', 'Iso']) {
     await page.getByRole('button', { name: viewName, exact: true }).click()
-    await expect(page.getByRole('button', { name: viewName, exact: true })).toHaveClass(/bg-white/)
+    await expect(page.getByRole('button', { name: viewName, exact: true })).toHaveClass(/active/)
     await expectCanvasHasRenderedPixels(page)
   }
 

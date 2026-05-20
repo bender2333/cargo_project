@@ -289,6 +289,12 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       if (loadingMode === 'input') {
         return a.itemIndex - b.itemIndex || a.index - b.index
       }
+      if (loadingMode === 'weight') {
+        return b.item.weight - a.item.weight || b.item.length * b.item.width * b.item.height - a.item.length * a.item.width * a.item.height
+      }
+      if (loadingMode === 'quantity') {
+        return b.item.quantity - a.item.quantity || b.item.length * b.item.width * b.item.height - a.item.length * a.item.width * a.item.height
+      }
       return b.item.length * b.item.width * b.item.height - a.item.length * a.item.width * a.item.height
     })
 

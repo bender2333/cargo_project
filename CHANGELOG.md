@@ -88,3 +88,9 @@
 - Completed subtask: record import mapping decision.
 - Documented that this milestone uses deterministic Excel field mapping and unit conversion while leaving runtime AI mapping as a future extension point.
 - Verification: documentation-only change; code verification not rerun.
+- Completed subtask: implement first review-driven archive UI and behavior pass.
+- Reworked the main workspace toward the archive page's visual language with gradient header, white cards, stat tiles, archive-style tabs/buttons, and two-column operating layout while keeping the current React/TypeScript packing, 2D, 3D, import/export, and history logic.
+- Added real behavior for `≡`, top navigation, shipment names, 3D free-view hand control, and selectable loading rules; shipment names are saved/restored with history plans, navigation focuses the relevant panels, and loading rules now support volume, weight, quantity, and input-order strategies in `calculatePacking`.
+- Recorded the first selectable-rule boundary in `decision.md`, including which archive rules remain deferred rather than shown as fake controls.
+- Expanded tests to prove behavior rather than element presence, including menu/navigation state, shipment-name persistence, free-view interaction, archive-style layout markers, and loading-rule ordering.
+- Verification: `npm run lint` passed; `npm test` passed 32 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 20 tests.

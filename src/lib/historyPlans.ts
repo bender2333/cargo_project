@@ -3,6 +3,7 @@ import type { CargoItem, ContainerSpec, PackingResult } from '../types'
 export type HistoryPlan = {
   id: string
   createdAt: string
+  shipmentName: string
   containerId: string
   container: ContainerSpec
   cargoItems: CargoItem[]
@@ -20,7 +21,7 @@ export function createHistoryPlan(
   container: ContainerSpec,
   cargoItems: CargoItem[],
   result: PackingResult,
-  options: { createId?: () => string; now?: () => Date } = {},
+  options: { createId?: () => string; now?: () => Date; shipmentName?: string } = {},
 ): HistoryPlan {
   const createId = options.createId ?? (() => crypto.randomUUID())
   const now = options.now ?? (() => new Date())
@@ -28,6 +29,7 @@ export function createHistoryPlan(
   return {
     id: createId(),
     createdAt: now().toISOString(),
+    shipmentName: options.shipmentName?.trim() || 'Untitled shipment',
     containerId: container.id,
     container: { ...container },
     cargoItems: cargoItems.map((item) => ({ ...item })),
@@ -49,7 +51,9 @@ export function readHistoryPlans(storage: StorageLike): HistoryPlan[] {
     if (!Array.isArray(parsed)) {
       return []
     }
-    return parsed.filter((item): item is HistoryPlan => Boolean(item?.id && item?.containerId && item?.container && Array.isArray(item?.cargoItems)))
+    return parsed
+      .filter((item): item is HistoryPlan => Boolean(item?.id && item?.containerId && item?.container && Array.isArray(item?.cargoItems)))
+      .map((item) => ({ ...item, shipmentName: item.shipmentName || 'Untitled shipment' }))
   } catch {
     return []
   }

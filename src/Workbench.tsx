@@ -19,7 +19,16 @@ const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6'
 const copy = {
   en: {
     nav: ['EasyCargo', 'Shipments & Reports', 'Cargo items', 'Cargo spaces'],
+    title: 'Cargo loading workspace',
+    subtitle: 'Container packing, visual review, import/export, and local plan history',
     shipment: 'Enter shipment name',
+    savedShipment: 'Shipment name is saved with history plans',
+    menu: 'Workspace menu',
+    closeMenu: 'Close menu',
+    overview: 'Overview',
+    reportNavHint: 'Report tab is active',
+    cargoNavHint: 'Cargo item panel focused',
+    containerNavHint: 'Cargo space panel focused',
     group: 'Group 1',
     note: '- click to edit note',
     name: 'Name',
@@ -42,7 +51,11 @@ const copy = {
     containerType: 'Container type',
     loadingMode: 'Loading mode',
     volumeMode: 'Volume priority',
+    weightMode: 'Weight priority',
+    quantityMode: 'Quantity priority',
     inputMode: 'Input order',
+    hardRules: 'Hard rules',
+    selectableRules: 'Selectable rules',
     customContainer: 'Custom container',
     maxWeight: 'Max payload kg',
     doorGap: 'Door gap mm',
@@ -62,6 +75,7 @@ const copy = {
     view2d: '2D',
     view3d: '3D',
     isoView: 'Iso',
+    freeView: 'Free view',
     topView: 'Top',
     frontView: 'Front',
     sideView: 'Side',
@@ -82,6 +96,7 @@ const copy = {
     diagnostics: 'Diagnostics',
     history: 'History',
     savePlan: 'Save plan',
+    shipmentName: 'Shipment',
     restore: 'Restore',
     noHistory: 'No saved plans',
     allLayers: 'All layers',
@@ -104,7 +119,16 @@ const copy = {
   },
   zh: {
     nav: ['EasyCargo', '装箱报告', '货物项目', '货柜空间'],
+    title: '货柜排箱装柜工作台',
+    subtitle: '装箱计算、可视化复核、导入导出和本地历史方案',
     shipment: '输入装运名称',
+    savedShipment: '装运名称会随历史方案保存',
+    menu: '工作台菜单',
+    closeMenu: '关闭菜单',
+    overview: '总览',
+    reportNavHint: '已切换到装箱报告',
+    cargoNavHint: '已聚焦货物项目',
+    containerNavHint: '已聚焦货柜空间',
     group: '分组 1',
     note: '- 点击编辑备注',
     name: '名称',
@@ -127,7 +151,11 @@ const copy = {
     containerType: '货柜类型',
     loadingMode: '装载模式',
     volumeMode: '体积优先',
+    weightMode: '重量优先',
+    quantityMode: '数量优先',
     inputMode: '录入顺序',
+    hardRules: '硬约束',
+    selectableRules: '可选规则',
     customContainer: '自定义柜型',
     maxWeight: '最大载重 kg',
     doorGap: '柜门预留 mm',
@@ -147,6 +175,7 @@ const copy = {
     view2d: '2D',
     view3d: '3D',
     isoView: '轴测',
+    freeView: '自由视角',
     topView: '俯视',
     frontView: '正视',
     sideView: '侧视',
@@ -167,6 +196,7 @@ const copy = {
     diagnostics: '合规与诊断',
     history: '历史方案',
     savePlan: '保存方案',
+    shipmentName: '装运名称',
     restore: '恢复',
     noHistory: '暂无历史方案',
     allLayers: '全部层',
@@ -221,6 +251,7 @@ const customContainerDefaults = {
 type CargoForm = Omit<CargoItem, 'id'>
 type WorkspaceView = '3d' | '2d'
 type ResultTab = 'layers' | 'details' | 'diagnostics' | 'history'
+type NavTarget = 'overview' | 'report' | 'cargo' | 'container'
 
 const emptyForm: CargoForm = {
   name: 'Carton B',
@@ -312,6 +343,9 @@ function downloadBlob(blob: Blob, filename: string) {
 function Workbench() {
   const [locale, setLocale] = useState<Locale>('en')
   const t = copy[locale]
+  const [shipmentName, setShipmentName] = useState('')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [activeNav, setActiveNav] = useState<NavTarget>('overview')
   const [selectedContainerId, setSelectedContainerId] = useState(containers[0].id)
   const [loadingMode, setLoadingMode] = useState<LoadingMode>('volume')
   const [containerOverrides, setContainerOverrides] = useState(() => Object.fromEntries(containers.map((container) => [container.id, container])))
@@ -323,12 +357,16 @@ function Workbench() {
   const [activeLabelId, setActiveLabelId] = useState('all')
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
   const [sceneViewMode, setSceneViewMode] = useState<SceneViewMode>('iso')
+  const [freeViewEnabled, setFreeViewEnabled] = useState(false)
   const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
   const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
   const [historyPlans, setHistoryPlans] = useState<HistoryPlan[]>(() => readHistoryPlans(localStorage))
   const [importMessages, setImportMessages] = useState<string[]>([])
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null)
   const workspaceRef = useRef<HTMLElement | null>(null)
+  const reportRef = useRef<HTMLElement | null>(null)
+  const cargoRef = useRef<HTMLFormElement | null>(null)
+  const containerRef = useRef<HTMLElement | null>(null)
 
   const selectedContainer = selectedContainerId === 'custom'
     ? customContainer
@@ -444,12 +482,14 @@ function Workbench() {
   }
 
   const saveCurrentPlan = () => {
-    const next = createHistoryPlan(selectedContainer, displayCargoItems, result)
+    const next = createHistoryPlan(selectedContainer, displayCargoItems, result, { shipmentName })
     setHistoryPlans(saveHistoryPlan(localStorage, next))
     setActiveResultTab('history')
+    setActiveNav('report')
   }
 
   const restorePlan = (plan: HistoryPlan) => {
+    setShipmentName(plan.shipmentName)
     setSelectedContainerId(plan.containerId)
     if (plan.containerId === 'custom') {
       setCustomContainer(plan.container)
@@ -461,6 +501,8 @@ function Workbench() {
     setActiveLabelId('all')
     setSelectedBoxId(null)
     setHasCalculated(true)
+    setActiveResultTab('history')
+    setActiveNav('report')
   }
 
   const selectLayerByOffset = (offset: -1 | 1) => {
@@ -482,34 +524,92 @@ function Workbench() {
     setActiveLayerId(layerId)
   }
 
-  return (
-    <main className="min-h-screen bg-[#e6e6e6] text-[#3f3f3f]">
-      <header className="flex h-10 items-stretch border-b border-[#a9a9a9] bg-[#d0d0d0] text-sm">
-        {t.nav.map((item, index) => (
-          <button className={`border-r border-[#b7b7b7] px-4 text-left ${index === 0 ? 'bg-[#eeeeee] font-semibold text-[#6b6b6b]' : 'hover:bg-[#eeeeee]'}`} key={item} type="button">
-            {item}
-          </button>
-        ))}
-        <div className="ml-auto flex items-center gap-3 px-4">
-          <button className="rounded border border-[#999] bg-white px-2 py-1" type="button" onClick={() => setLocale(locale === 'en' ? 'zh' : 'en')}>
-            {t.language}
-          </button>
-          <span className="rounded-full bg-[#ffb020] px-2 py-1 text-white">?</span>
-        </div>
-      </header>
+  const activateNav = (target: NavTarget) => {
+    setActiveNav(target)
+    setMenuOpen(false)
+    if (target === 'report') {
+      setActiveResultTab('layers')
+      reportRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    } else if (target === 'cargo') {
+      cargoRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    } else if (target === 'container') {
+      containerRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }
 
-      <section className="grid min-h-[calc(100vh-40px)] grid-cols-[390px_1fr_280px] max-xl:grid-cols-[340px_1fr] max-lg:grid-cols-1">
-        <aside className="border-r border-[#bcbcbc] bg-[#f2f2f2]">
-          <div className="flex h-14 items-center gap-4 bg-[#686868] px-4 text-white">
-            <button className="text-3xl leading-none" type="button" aria-label="Open menu">≡</button>
-            <input className="w-full bg-transparent text-sm italic outline-none placeholder:text-white" placeholder={t.shipment} aria-label="Shipment name" />
+  const selectSceneView = (view: SceneViewMode) => {
+    setSceneViewMode(view)
+    setFreeViewEnabled(false)
+  }
+
+  const enableFreeView = () => {
+    setWorkspaceView('3d')
+    setFreeViewEnabled(true)
+  }
+
+  const navTargets: NavTarget[] = ['overview', 'report', 'cargo', 'container']
+
+  return (
+    <main className="min-h-screen bg-[#f4f7fb] text-[#1f2937]">
+      <div className="mx-auto max-w-[1500px] p-5">
+        <header className="mb-5 rounded-2xl bg-gradient-to-br from-[#2563eb] to-[#7c3aed] p-6 text-white">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="m-0 text-[30px] font-bold">{t.title}</h1>
+              <p className="m-0 mt-2 opacity-95">{t.subtitle}</p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-sm">
+              {t.nav.map((item, index) => (
+                <button
+                  className={`rounded-[10px] px-4 py-2 font-bold ${activeNav === navTargets[index] ? 'bg-white text-[#1d4ed8]' : 'bg-white/20 text-white hover:bg-white/30'}`}
+                  key={item}
+                  type="button"
+                  onClick={() => activateNav(navTargets[index])}
+                >
+                  {item}
+                </button>
+              ))}
+              <button className="rounded-[10px] bg-white px-4 py-2 font-bold text-[#1d4ed8]" type="button" onClick={() => setLocale(locale === 'en' ? 'zh' : 'en')}>
+                {t.language}
+              </button>
+            </div>
           </div>
+        </header>
+
+        <section className="grid grid-cols-[460px_1fr_320px] gap-5 max-2xl:grid-cols-[420px_1fr] max-lg:grid-cols-1">
+          <aside className="space-y-4">
+          <div className="archive-card overflow-hidden">
+          <div className="flex min-h-14 items-center gap-4 bg-[#111827] px-4 py-3 text-white">
+            <button
+              className="grid h-10 w-10 place-items-center rounded-[10px] bg-[#64748b] text-2xl font-bold"
+              type="button"
+              aria-expanded={menuOpen}
+              aria-label={menuOpen ? t.closeMenu : t.menu}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              ≡
+            </button>
+            <input
+              className="w-full rounded-[10px] border border-white/30 bg-white/10 px-3 py-2 text-sm outline-none placeholder:text-white/70"
+              placeholder={t.shipment}
+              aria-label="Shipment name"
+              value={shipmentName}
+              onChange={(event) => setShipmentName(event.target.value)}
+            />
+          </div>
+          {menuOpen && (
+            <div className="grid gap-2 border-b border-[#e5e7eb] bg-[#f8fafc] p-3 text-sm" data-testid="workspace-menu">
+              <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('report')}>{t.nav[1]}</button>
+              <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('cargo')}>{t.nav[2]}</button>
+              <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('container')}>{t.nav[3]}</button>
+            </div>
+          )}
           <div className="flex items-center justify-between bg-[#b0b4b7] pl-4">
             <strong className="bg-[#f29ca8] px-4 py-3 text-sm">{t.group}</strong>
             <span className="flex-1 px-4 text-sm italic text-white">{t.note}</span>
           </div>
-          <section className="border-b border-[#c8c8c8] p-4">
-            <h2 className="mb-2 text-sm font-bold">{t.containerConfig}</h2>
+          <section className="border-b border-[#e5e7eb] p-[18px]" ref={containerRef} data-testid="container-panel">
+            <h2 className="mb-3 text-lg font-bold">{t.containerConfig}</h2>
             <label className="field-label">{t.containerType}
               <select className="field-input mt-1" value={selectedContainerId} onChange={(event) => setSelectedContainerId(event.target.value)}>
                 {containers.map((container) => <option key={container.id} value={container.id}>{container.label}</option>)}
@@ -519,6 +619,8 @@ function Workbench() {
             <label className="field-label mt-3">{t.loadingMode}
               <select className="field-input mt-1" value={loadingMode} onChange={(event) => setLoadingMode(event.target.value as LoadingMode)}>
                 <option value="volume">{t.volumeMode}</option>
+                <option value="weight">{t.weightMode}</option>
+                <option value="quantity">{t.quantityMode}</option>
                 <option value="input">{t.inputMode}</option>
               </select>
             </label>
@@ -536,8 +638,8 @@ function Workbench() {
               <label className="field-label">{t.sideGap}<input className="field-input mt-1" type="number" value={selectedContainer.sideGap} onChange={(event) => updateContainerNumber('sideGap', event.target.value)} /></label>
             </div>
           </section>
-          <form className="space-y-3 p-4" onSubmit={addCargo}>
-            <h2 className="text-sm font-bold">{t.unitParameters}</h2>
+          <form className="space-y-3 p-[18px]" onSubmit={addCargo} ref={cargoRef} data-testid="cargo-panel">
+            <h2 className="text-lg font-bold">{t.unitParameters}</h2>
             <div className="grid grid-cols-[1fr_56px] gap-2">
               <label className="field-label">{t.name}<input className="field-input mt-1" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></label>
               <label className="field-label">{t.label}<input className="field-input mt-1 text-center font-bold" maxLength={2} value={form.label ?? ''} onChange={(event) => setForm((current) => ({ ...current, label: event.target.value.toUpperCase() }))} /></label>
@@ -556,17 +658,25 @@ function Workbench() {
               <label className="flex items-center gap-2"><input checked={form.canRotate} type="checkbox" onChange={(event) => setForm((current) => ({ ...current, canRotate: event.target.checked }))} />{t.rotate}</label>
               <label className="flex items-center gap-2"><input checked={form.stackable} type="checkbox" onChange={(event) => setForm((current) => ({ ...current, stackable: event.target.checked }))} />{t.stackable}</label>
             </div>
-            <button className="w-full border border-[#9b9b9b] bg-white px-3 py-2 text-left font-semibold hover:bg-[#fafafa]" type="submit">{t.add}</button>
+            <button className="archive-button w-full text-left" type="submit">{t.add}</button>
           </form>
-          <section className="border-t border-[#c8c8c8] p-4 text-xs">
-            <h2 className="mb-2 text-sm font-bold">{t.ruleSummary}</h2>
-            <div className="grid gap-2">
-              {[t.boundaryRule, t.payloadRule, t.supportRule].map((rule) => (
-                <div className="border border-[#c9c9c9] bg-white px-3 py-2" key={rule}>{rule}</div>
-              ))}
+          <section className="border-t border-[#e5e7eb] p-[18px] text-xs">
+            <h2 className="mb-3 text-lg font-bold">{t.ruleSummary}</h2>
+            <label className="field-label">{t.selectableRules}
+              <select aria-label={t.ruleSummary} className="field-input mt-1" value={loadingMode} onChange={(event) => setLoadingMode(event.target.value as LoadingMode)}>
+                <option value="volume">{t.volumeMode}</option>
+                <option value="weight">{t.weightMode}</option>
+                <option value="quantity">{t.quantityMode}</option>
+                <option value="input">{t.inputMode}</option>
+              </select>
+            </label>
+            <div className="mt-3 grid gap-2">
+              <div className="rounded-xl border border-[#e5e7eb] bg-[#f8fafc] px-3 py-2"><strong>{t.hardRules}</strong>: {t.boundaryRule}</div>
+              <div className="rounded-xl border border-[#e5e7eb] bg-[#f8fafc] px-3 py-2"><strong>{t.hardRules}</strong>: {t.payloadRule}</div>
+              <div className="rounded-xl border border-[#e5e7eb] bg-[#f8fafc] px-3 py-2"><strong>{t.hardRules}</strong>: {t.supportRule}</div>
             </div>
           </section>
-          <div className="border-t border-[#c8c8c8] p-4">
+          <div className="border-t border-[#e5e7eb] p-[18px]">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h2 className="text-sm font-bold">{t.cargoItems}</h2>
               <div className="flex gap-2 text-xs">
@@ -590,15 +700,25 @@ function Workbench() {
               ))}
             </div>
           </div>
+          </div>
         </aside>
 
-        <section className="relative min-h-[650px] bg-[#d8d8d8]" ref={workspaceRef}>
-          <div className="absolute left-5 top-24 z-10 flex gap-2 rounded bg-white/75 p-2 text-sm shadow">
-            <button className={`border px-3 py-1 ${workspaceView === '3d' ? 'border-[#f3b21a] bg-white font-bold' : 'border-[#bbbbbb] bg-[#eeeeee]'}`} type="button" onClick={() => setWorkspaceView('3d')}>
+        <section className="space-y-4 max-2xl:col-span-1" ref={workspaceRef}>
+          <div className="grid grid-cols-5 gap-3 max-xl:grid-cols-2" data-testid="archive-stat-grid">
+            <div className="archive-stat"><div className="archive-stat-value">{result.placedCount}</div><div className="archive-stat-key">{t.loaded}</div></div>
+            <div className="archive-stat"><div className="archive-stat-value">{Math.round(result.usedWeight)}</div><div className="archive-stat-key">{t.weight}</div></div>
+            <div className="archive-stat"><div className="archive-stat-value">{result.volumeUtilization.toFixed(1)}%</div><div className="archive-stat-key">{t.volumeUse}</div></div>
+            <div className="archive-stat"><div className="archive-stat-value">{result.weightUtilization.toFixed(1)}%</div><div className="archive-stat-key">{t.weightUse}</div></div>
+            <div className="archive-stat"><div className="archive-stat-value">{result.labelStats.length}</div><div className="archive-stat-key">{t.cargoTypes}</div></div>
+          </div>
+
+          <section className="archive-card overflow-hidden" ref={reportRef} data-testid="report-panel">
+            <div className="flex flex-wrap gap-2 border-b border-[#e5e7eb] p-[18px]">
+              <button className={`archive-tab ${workspaceView === '2d' ? 'active' : ''}`} type="button" onClick={() => setWorkspaceView('2d')}>
+                {t.view2d}
+              </button>
+              <button className={`archive-tab ${workspaceView === '3d' ? 'active' : ''}`} type="button" onClick={() => setWorkspaceView('3d')}>
               {t.view3d}
-            </button>
-            <button className={`border px-3 py-1 ${workspaceView === '2d' ? 'border-[#f3b21a] bg-white font-bold' : 'border-[#bbbbbb] bg-[#eeeeee]'}`} type="button" onClick={() => setWorkspaceView('2d')}>
-              {t.view2d}
             </button>
             {workspaceView === '2d' && (
               <>
@@ -607,7 +727,7 @@ function Workbench() {
                   { id: 'front' as const, label: t.frontView },
                   { id: 'side' as const, label: t.sideView },
                 ].map((view) => (
-                  <button className={`border px-3 py-1 ${planViewMode === view.id ? 'border-[#f3b21a] bg-white font-bold' : 'border-[#bbbbbb] bg-[#eeeeee]'}`} key={view.id} type="button" onClick={() => setPlanViewMode(view.id)}>
+                  <button className={`archive-tab ${planViewMode === view.id ? 'active' : ''}`} key={view.id} type="button" onClick={() => setPlanViewMode(view.id)}>
                     {view.label}
                   </button>
                 ))}
@@ -621,44 +741,50 @@ function Workbench() {
                   { id: 'front' as const, label: t.frontView },
                   { id: 'side' as const, label: t.sideView },
                 ].map((view) => (
-                  <button className={`border px-3 py-1 ${sceneViewMode === view.id ? 'border-[#f3b21a] bg-white font-bold' : 'border-[#bbbbbb] bg-[#eeeeee]'}`} key={view.id} type="button" onClick={() => setSceneViewMode(view.id)}>
+                  <button className={`archive-tab ${sceneViewMode === view.id && !freeViewEnabled ? 'active' : ''}`} key={view.id} type="button" onClick={() => selectSceneView(view.id)}>
                     {view.label}
                   </button>
                 ))}
+                <button className={`archive-tab inline-flex items-center gap-2 ${freeViewEnabled ? 'active' : ''}`} type="button" aria-pressed={freeViewEnabled} aria-label={t.freeView} onClick={enableFreeView}>
+                  <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
+                    <path d="M8 11V6a2 2 0 0 1 4 0v5" />
+                    <path d="M12 11V5a2 2 0 0 1 4 0v7" />
+                    <path d="M16 12V8a2 2 0 0 1 4 0v7a7 7 0 0 1-7 7h-1.5a7 7 0 0 1-5.6-2.8L3.2 15.6a2 2 0 0 1 3.1-2.5L8 15" />
+                    <path d="M8 11V8a2 2 0 0 0-4 0v6" />
+                  </svg>
+                  {t.freeView}
+                </button>
               </>
             )}
-            <button className="border border-[#bbbbbb] bg-[#eeeeee] px-3 py-1" type="button" onClick={exportCurrentView}>
+            <button className="archive-button success" type="button" onClick={exportCurrentView}>
               {t.exportView}
             </button>
-          </div>
-          <div className="absolute left-5 top-5 z-10 rounded bg-white/75 px-4 py-3 text-sm shadow">
-            <strong>{selectedContainer.label}</strong>
-            <div>{renderingContainer.length.toLocaleString()} x {renderingContainer.width.toLocaleString()} x {renderingContainer.height.toLocaleString()} mm</div>
-          </div>
-          <div className="absolute right-6 top-5 z-10 grid grid-cols-4 gap-4 rounded bg-white/70 px-5 py-3 text-center text-sm shadow">
-            <div><strong>{t.weight}</strong><div>{result.usedWeight.toLocaleString()} kg</div></div>
-            <div><strong>{t.volume}</strong><div>{formatCubicMeters(result.usedVolume)}</div></div>
-            <div><strong>{t.loaded}</strong><div>{result.placedCount}/{result.totalCargoCount}</div></div>
-            <div><strong>{t.cargoTypes}</strong><div>{result.labelStats.length}</div></div>
-          </div>
-          {workspaceView === '3d' ? (
-            <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={hasCalculated ? result.placed : []} container={renderingContainer} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onSelectBox={setSelectedBoxId} />
-          ) : (
-            <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={result.placed} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
-          )}
-          <button className="absolute bottom-10 right-10 grid h-32 w-32 place-items-center rounded-full border-8 border-white bg-[#686868] text-3xl font-semibold text-white shadow-xl hover:bg-[#4c4c4c]" type="button" onClick={() => setHasCalculated(true)}>{t.load}</button>
+            </div>
+            <div className="relative h-[560px] bg-gradient-to-b from-[#eef6ff] to-[#f8fafc]">
+              <div className="absolute left-5 top-5 z-10 rounded-xl bg-white/85 px-4 py-3 text-sm shadow">
+                <strong>{selectedContainer.label}</strong>
+                <div>{renderingContainer.length.toLocaleString()} x {renderingContainer.width.toLocaleString()} x {renderingContainer.height.toLocaleString()} mm</div>
+              </div>
+              {workspaceView === '3d' ? (
+                <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={hasCalculated ? result.placed : []} container={renderingContainer} freeView={freeViewEnabled} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onSelectBox={setSelectedBoxId} />
+              ) : (
+                <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={result.placed} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
+              )}
+              <button className="archive-button success absolute bottom-6 right-6" type="button" onClick={() => setHasCalculated(true)}>{t.load}</button>
+            </div>
+          </section>
         </section>
 
-        <aside className="border-l border-[#bcbcbc] bg-[#ececec] max-xl:col-span-2 max-lg:col-span-1">
-          <div className="border-b border-[#bebebe] bg-[#d0d0d0] p-3">
-            <div className="grid grid-cols-3 gap-1 text-xs font-bold">
+        <aside className="archive-card overflow-hidden max-2xl:col-span-2 max-lg:col-span-1">
+          <div className="border-b border-[#e5e7eb] p-[18px]">
+            <div className="flex flex-wrap gap-2 text-sm font-bold">
               {[
                 { id: 'layers' as const, label: t.layers },
                 { id: 'details' as const, label: t.details },
                 { id: 'diagnostics' as const, label: t.diagnostics },
                 { id: 'history' as const, label: t.history },
               ].map((tab) => (
-                <button className={`border px-2 py-2 ${activeResultTab === tab.id ? 'border-[#f3b21a] bg-white' : 'border-[#b8b8b8] bg-[#eeeeee]'}`} key={tab.id} type="button" onClick={() => setActiveResultTab(tab.id)}>
+                <button className={`archive-tab ${activeResultTab === tab.id ? 'active' : ''}`} key={tab.id} type="button" onClick={() => setActiveResultTab(tab.id)}>
                   {tab.label}
                 </button>
               ))}
@@ -787,7 +913,9 @@ function Workbench() {
                 {historyPlans.length === 0 && <p className="border border-[#c6c6c6] bg-white p-2">{t.noHistory}</p>}
                 {historyPlans.map((plan) => (
                   <div className="border border-[#c6c6c6] bg-white p-2" key={plan.id}>
-                    <strong>{new Date(plan.createdAt).toLocaleString()}</strong>
+                    <strong>{plan.shipmentName}</strong>
+                    <p>{t.shipmentName}: {plan.shipmentName}</p>
+                    <p>{new Date(plan.createdAt).toLocaleString()}</p>
                     <p>{plan.placedCount}/{plan.totalCargoCount} · {plan.layerCount} {t.layers}</p>
                     <p>{plan.labelSummary}</p>
                     <button className="mt-2 border border-[#9b9b9b] bg-[#eeeeee] px-2 py-1" type="button" onClick={() => restorePlan(plan)}>
@@ -832,6 +960,7 @@ function Workbench() {
           </div>
         </aside>
       </section>
+      </div>
     </main>
   )
 }

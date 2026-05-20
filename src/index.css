@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 :root {
-  font-family: Verdana, Geneva, Tahoma, sans-serif;
-  color: #3f3f3f;
-  background: #e6e6e6;
+  font-family: "Microsoft YaHei", Arial, sans-serif;
+  color: #1f2937;
+  background: #f4f7fb;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -21,21 +21,76 @@ input {
 
 .field-label {
   display: block;
-  font-size: 12px;
-  font-weight: 700;
-  color: #555;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4b5563;
 }
 
 .field-input {
   width: 100%;
-  border: 1px solid #a8a8a8;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
   background: white;
-  padding: 8px 9px;
+  padding: 10px 12px;
   font-size: 14px;
   outline: none;
 }
 
 .field-input:focus {
-  border-color: #f2a900;
-  box-shadow: 0 0 0 2px rgba(242, 169, 0, 0.25);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.archive-card {
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.archive-button {
+  border-radius: 10px;
+  background: #2563eb;
+  padding: 10px 14px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.archive-button.secondary {
+  background: #64748b;
+}
+
+.archive-button.success {
+  background: #059669;
+}
+
+.archive-tab {
+  border-radius: 10px;
+  background: #e5e7eb;
+  padding: 10px 14px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.archive-tab.active {
+  background: #2563eb;
+  color: #fff;
+}
+
+.archive-stat {
+  border: 1px solid #bfdbfe;
+  border-radius: 14px;
+  background: #eff6ff;
+  padding: 14px;
+}
+
+.archive-stat-value {
+  color: #1d4ed8;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.archive-stat-key {
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 12px;
 }

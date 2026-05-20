@@ -49,11 +49,13 @@ describe('history plans', () => {
     const plan = createHistoryPlan(container, [cargoItem], result(), {
       createId: () => 'plan-1',
       now: () => new Date('2026-05-20T00:00:00.000Z'),
+      shipmentName: 'Review shipment',
     })
 
     expect(plan).toMatchObject({
       id: 'plan-1',
       createdAt: '2026-05-20T00:00:00.000Z',
+      shipmentName: 'Review shipment',
       containerId: 'container',
       container,
       placedCount: 2,
@@ -62,6 +64,14 @@ describe('history plans', () => {
       labelSummary: 'H:2/2',
     })
     expect(plan.cargoItems[0]).toMatchObject({ label: 'H', name: 'History crate' })
+  })
+
+  it('migrates old stored plans without a shipment name to a visible fallback', () => {
+    const oldPlan = createHistoryPlan(container, [cargoItem], result(), { createId: () => 'old' })
+    const storedPlan = { ...oldPlan, shipmentName: undefined }
+    const store = storage(JSON.stringify([storedPlan]))
+
+    expect(readHistoryPlans(store)[0].shipmentName).toBe('Untitled shipment')
   })
 
   it('stores newest plans first and ignores invalid stored data', () => {

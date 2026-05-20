@@ -11,6 +11,7 @@ type ContainerSceneProps = {
   activeLayerId: string
   activeLabelId: string
   viewMode: SceneViewMode
+  freeView?: boolean
   selectedBoxId?: string | null
   onSelectBox?: (boxId: string) => void
 }
@@ -74,7 +75,7 @@ function cameraPositionForMode(mode: SceneViewMode, length: number, width: numbe
   return new THREE.Vector3(distance * 0.72, distance * 0.48, distance * 0.82)
 }
 
-export function ContainerScene({ container, boxes, activeLayerId, activeLabelId, viewMode, selectedBoxId, onSelectBox }: ContainerSceneProps) {
+export function ContainerScene({ container, boxes, activeLayerId, activeLabelId, viewMode, freeView, selectedBoxId, onSelectBox }: ContainerSceneProps) {
   const mountRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -106,6 +107,7 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
     controls.enableDamping = true
     controls.target.copy(target)
     controls.maxDistance = 45
+    controls.enabled = freeView ?? false
 
     const ambient = new THREE.HemisphereLight(0xffffff, 0x8d8d8d, 2.4)
     scene.add(ambient)
@@ -219,7 +221,7 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       mount.removeChild(renderer.domElement)
     }
-  }, [container, boxes, activeLayerId, activeLabelId, viewMode, selectedBoxId, onSelectBox])
+  }, [container, boxes, activeLayerId, activeLabelId, viewMode, freeView, selectedBoxId, onSelectBox])
 
   return <div ref={mountRef} className="h-full min-h-[420px] w-full" data-testid="container-scene" />
 }

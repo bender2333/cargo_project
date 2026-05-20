@@ -137,6 +137,17 @@ describe('calculatePacking', () => {
     expect(calculatePacking(container, items, { loadingMode: 'input' }).workSteps.map((step) => step.label)).toEqual(['S', 'L'])
   })
 
+  it('supports selectable weight and quantity loading rules', () => {
+    const container = testContainer({ length: 5000, width: 1000, height: 1000 })
+    const items = [
+      cargo({ id: 'small-many', label: 'Q', length: 400, width: 1000, height: 1000, weight: 5, quantity: 3, canRotate: false }),
+      cargo({ id: 'heavy-one', label: 'W', length: 500, width: 1000, height: 1000, weight: 80, quantity: 1, canRotate: false }),
+    ]
+
+    expect(calculatePacking(container, items, { loadingMode: 'weight' }).workSteps.map((step) => step.label).slice(0, 2)).toEqual(['W', 'Q'])
+    expect(calculatePacking(container, items, { loadingMode: 'quantity' }).workSteps.map((step) => step.label).slice(0, 2)).toEqual(['Q', 'Q'])
+  })
+
   it('continues filling inner height before moving outward when width is already full', () => {
     const container = testContainer({ length: 3000, width: 1000, height: 3000 })
     const result = calculatePacking(container, [
