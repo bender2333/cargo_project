@@ -154,6 +154,27 @@ test('uses real archive-style navigation, menu, and shipment-name history behavi
   await expect(page.getByLabel('Shipment name')).toHaveValue('Review regression plan')
 })
 
+test('exports shipment-prefixed workbook data from the named plan', async ({ page }) => {
+  await page.goto('/')
+  await page.getByLabel('Shipment name').fill('Prefix Plan')
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export XLSX' }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toBe('prefix-plan-packing-plan.xlsx')
+
+  const exportPath = path.join(os.tmpdir(), `cargo-export-prefix-${Date.now()}.xlsx`)
+  await download.saveAs(exportPath)
+  const exported = XLSX.read(await fs.readFile(exportPath), { type: 'buffer' })
+  expect(exported.SheetNames[0]).toBe('Shipment')
+  const shipmentRows = XLSX.utils.sheet_to_json<Record<string, string | number>>(exported.Sheets.Shipment)
+  expect(shipmentRows[0]).toMatchObject({
+    shipmentName: 'Prefix Plan',
+    container: "Container 20'",
+    loadingMode: 'volume',
+  })
+})
+
 test('updates parameters when selecting another container', async ({ page }) => {
   await page.goto('/')
   const target = page.getByRole('button', { name: /Container 45' HC/ }).first()
@@ -331,6 +352,7 @@ test('renders an interactive 3D canvas', async ({ page }) => {
   await page.mouse.down()
   await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2 + 40)
   await page.mouse.up()
+  await page.mouse.wheel(0, -500)
   await expectCanvasHasRenderedPixels(page)
 })
 
@@ -387,7 +409,7 @@ test('supports Excel import/export affordance and Chinese mode', async ({ page }
   const exportPath = path.join(os.tmpdir(), `cargo-export-${Date.now()}.xlsx`)
   await download.saveAs(exportPath)
   const exported = XLSX.read(await fs.readFile(exportPath), { type: 'buffer' })
-  const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(exported.Sheets[exported.SheetNames[0]])
+  const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(exported.Sheets['Packing Plan'])
   expect(rows).toHaveLength(1)
   expect(rows[0]).toMatchObject({
     label: 'D',
@@ -442,7 +464,7 @@ test('imports Chinese centimeter Excel fields with visible conversion warning', 
   const exportPath = path.join(os.tmpdir(), `cargo-export-zh-${Date.now()}.xlsx`)
   await download.saveAs(exportPath)
   const exported = XLSX.read(await fs.readFile(exportPath), { type: 'buffer' })
-  const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(exported.Sheets[exported.SheetNames[0]])
+  const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(exported.Sheets['Packing Plan'])
 
   expect(rows[0]).toMatchObject({
     label: 'P1',

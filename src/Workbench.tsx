@@ -340,6 +340,14 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+function filenameSlug(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
 function Workbench() {
   const [locale, setLocale] = useState<Locale>('en')
   const t = copy[locale]
@@ -453,9 +461,19 @@ function Workbench() {
 
   const exportExcel = () => {
     const sheet = XLSX.utils.json_to_sheet(detailRows)
+    const shipmentSheet = XLSX.utils.json_to_sheet([
+      {
+        shipmentName: shipmentName.trim() || 'Untitled shipment',
+        container: selectedContainer.label,
+        loadingMode,
+        generatedAt: new Date().toISOString(),
+      },
+    ])
     const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, shipmentSheet, 'Shipment')
     XLSX.utils.book_append_sheet(workbook, sheet, 'Packing Plan')
-    XLSX.writeFile(workbook, 'packing-plan.xlsx')
+    const prefix = filenameSlug(shipmentName)
+    XLSX.writeFile(workbook, `${prefix ? `${prefix}-` : ''}packing-plan.xlsx`)
   }
 
   const exportCurrentView = () => {
@@ -465,7 +483,8 @@ function Workbench() {
         throw new Error('2D plan is not available for export')
       }
       const source = new XMLSerializer().serializeToString(svg)
-      downloadBlob(new Blob([source], { type: 'image/svg+xml;charset=utf-8' }), `packing-plan-${planViewMode}.svg`)
+      const prefix = filenameSlug(shipmentName)
+      downloadBlob(new Blob([source], { type: 'image/svg+xml;charset=utf-8' }), `${prefix ? `${prefix}-` : ''}packing-plan-${planViewMode}.svg`)
       return
     }
 
@@ -477,7 +496,8 @@ function Workbench() {
       if (!blob) {
         throw new Error('3D canvas export failed')
       }
-      downloadBlob(blob, `packing-plan-${sceneViewMode}.png`)
+      const prefix = filenameSlug(shipmentName)
+      downloadBlob(blob, `${prefix ? `${prefix}-` : ''}packing-plan-${sceneViewMode}.png`)
     }, 'image/png')
   }
 

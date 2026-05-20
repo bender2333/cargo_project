@@ -94,3 +94,7 @@
 - Recorded the first selectable-rule boundary in `decision.md`, including which archive rules remain deferred rather than shown as fake controls.
 - Expanded tests to prove behavior rather than element presence, including menu/navigation state, shipment-name persistence, free-view interaction, archive-style layout markers, and loading-rule ordering.
 - Verification: `npm run lint` passed; `npm test` passed 32 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 20 tests.
+- Completed subtask: strengthen review completion evidence for shipment export and 3D free view.
+- Exported XLSX workbooks now include a `Shipment` metadata sheet and use a sanitized shipment-name filename prefix when a plan is named, while preserving the default `packing-plan.xlsx` name for unnamed plans.
+- Extended browser coverage so named-plan export verifies the workbook metadata and 3D free view exercises drag plus mouse-wheel zoom before checking the canvas remains rendered.
+- Verification: `npm run lint` passed; `npm test` passed 32 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 21 tests.
