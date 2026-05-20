@@ -97,4 +97,5 @@
 - Completed subtask: strengthen review completion evidence for shipment export and 3D free view.
 - Exported XLSX workbooks now include a `Shipment` metadata sheet and use a sanitized shipment-name filename prefix when a plan is named, while preserving the default `packing-plan.xlsx` name for unnamed plans.
 - Extended browser coverage so named-plan export verifies the workbook metadata and 3D free view exercises drag plus mouse-wheel zoom before checking the canvas remains rendered.
+- Replaced the unused legacy `App.tsx` gray EasyCargo prototype with a compatibility export of the current `Workbench`, removing stale Users/Licenses UI from source-level maintenance paths.
 - Verification: `npm run lint` passed; `npm test` passed 32 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 21 tests.
