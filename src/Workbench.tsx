@@ -11,6 +11,7 @@ import { createHistoryPlan, readHistoryPlans, saveHistoryPlan } from './lib/hist
 import type { HistoryPlan } from './lib/historyPlans'
 import { createClientId } from './lib/clientId'
 import { parseCargoRows, parseCargoRowsWithMapping } from './lib/importCargo'
+import type { ImportCargoRow } from './lib/importCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
 import type { CargoItem, LoadingMode, Locale, PackingDiagnostic, PackingLayer } from './types'
@@ -126,6 +127,11 @@ const copy = {
     noFailure: 'None',
     label: 'Label',
     language: '中文',
+    newProjectName: 'New Project',
+    projectNameText: 'Project Name',
+    newProject: 'New Project',
+    saveProject: 'Save Project',
+    uploadProject: 'Upload Project',
   },
   zh: {
     nav: ['EasyCargo', '装箱报告', '货物项目', '货柜空间', '历史方案'],
@@ -235,6 +241,11 @@ const copy = {
     noFailure: '无',
     label: '标识',
     language: 'English',
+    newProjectName: '新装箱项目',
+    projectNameText: '项目名称',
+    newProject: '新建项目',
+    saveProject: '保存项目',
+    uploadProject: '上传项目',
   },
 }
 
@@ -381,6 +392,7 @@ function filenameSlug(value: string) {
 function Workbench() {
   const [locale, setLocale] = useState<Locale>('zh')
   const t = copy[locale]
+  const [projectName, setProjectName] = useState(() => locale === 'zh' ? '新装箱项目' : 'New Project')
   const [shipmentName, setShipmentName] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeNav, setActiveNav] = useState<NavTarget>('overview')
@@ -406,7 +418,7 @@ function Workbench() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [draggedCargoId, setDraggedCargoId] = useState<string | null>(null)
   const [showMappingModal, setShowMappingModal] = useState(false)
-  const [importRows, setImportRows] = useState<Record<string, any>[]>([])
+  const [importRows, setImportRows] = useState<ImportCargoRow[]>([])
   const [customMapping, setCustomMapping] = useState<Record<string, string>>({
     label: '',
     name: '',
@@ -499,7 +511,7 @@ function Workbench() {
     setActiveNav('report')
   }
 
-  const canAutoMap = (row: Record<string, any>): boolean => {
+  const canAutoMap = (row: ImportCargoRow): boolean => {
     const keys = Object.keys(row).map(k => k.toLowerCase())
     const fieldsToCheck = {
       length: ['length', '长', '長', '长度', '長度', 'outer_length_mm', '厘米'],
@@ -528,7 +540,7 @@ function Workbench() {
 
   const importExcel = async (file: File | null) => {
     if (!file) return
-    let rows: Record<string, string | number>[] = []
+    let rows: Record<string, string | number>[]
     try {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
@@ -621,12 +633,17 @@ function Workbench() {
   }
 
   const saveCurrentPlan = () => {
-    const next = createHistoryPlan(selectedContainer, displayCargoItems, result, { shipmentName })
+    const next = createHistoryPlan(selectedContainer, displayCargoItems, result, {
+      projectName,
+      shipmentName,
+      loadingMode,
+    })
     setHistoryPlans(saveHistoryPlan(localStorage, next))
     setActiveNav('history')
   }
 
   const restorePlan = (plan: HistoryPlan) => {
+    setProjectName(plan.projectName || '新装箱项目')
     setShipmentName(plan.shipmentName)
     setSelectedContainerId(plan.containerId)
     if (plan.containerId === 'custom') {
@@ -635,12 +652,84 @@ function Workbench() {
       setContainerOverrides((current) => ({ ...current, [plan.containerId]: plan.container }))
     }
     setCargoItems(plan.cargoItems)
+    setLoadingMode(plan.loadingMode || 'volume')
     setActiveLayerId('all')
     setActiveLabelId('all')
     setSelectedBoxId(null)
     setHasCalculated(true)
     setActiveResultTab('layers')
     setActiveNav('overview')
+  }
+
+  const handleNewProject = () => {
+    setProjectName(locale === 'zh' ? '新装箱项目' : 'New Project')
+    setShipmentName('')
+    setCargoItems(initialCargo)
+    setSelectedContainerId(containers[0].id)
+    setCustomContainer(customContainerDefaults)
+    setLoadingMode('volume')
+    setActiveLayerId('all')
+    setActiveLabelId('all')
+    setSelectedBoxId(null)
+    setHasCalculated(true)
+    setActiveResultTab('layers')
+  }
+
+  const handleSaveProject = () => {
+    const config = {
+      projectName,
+      shipmentName,
+      selectedContainerId,
+      loadingMode,
+      cargoItems,
+      customContainer,
+    }
+    const jsonString = JSON.stringify(config, null, 2)
+    const blob = new Blob([jsonString], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${filenameSlug(projectName || 'project')}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+
+    // Save to local history list (up to 5 items)
+    const nextPlan = createHistoryPlan(selectedContainer, displayCargoItems, result, {
+      projectName,
+      shipmentName,
+      loadingMode,
+    })
+    setHistoryPlans(saveHistoryPlan(localStorage, nextPlan))
+  }
+
+  const handleUploadProject = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      try {
+        const raw = event.target?.result as string
+        const config = JSON.parse(raw)
+        
+        if (config.projectName !== undefined) setProjectName(String(config.projectName))
+        if (config.shipmentName !== undefined) setShipmentName(String(config.shipmentName))
+        if (config.selectedContainerId !== undefined) setSelectedContainerId(String(config.selectedContainerId))
+        if (config.loadingMode !== undefined) setLoadingMode(config.loadingMode)
+        if (Array.isArray(config.cargoItems)) setCargoItems(config.cargoItems)
+        if (config.customContainer !== undefined) setCustomContainer(config.customContainer)
+        
+        setActiveLayerId('all')
+        setActiveLabelId('all')
+        setSelectedBoxId(null)
+        setHasCalculated(true)
+        setActiveResultTab('layers')
+      } catch (err) {
+        console.error('Failed to parse uploaded project file', err)
+        alert(locale === 'zh' ? '上传项目文件解析失败！' : 'Failed to parse uploaded project file!')
+      }
+    }
+    reader.readAsText(file)
+    e.target.value = ''
   }
 
   const deleteCargo = (cargoId: string) => {
@@ -721,7 +810,47 @@ function Workbench() {
               <h1 className="m-0 text-[30px] font-bold">{t.title}</h1>
               <p className="m-0 mt-2 opacity-95">{t.subtitle}</p>
             </div>
-            <div className="flex flex-wrap gap-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <div className="flex items-center gap-2 rounded-[10px] bg-white/10 px-3 py-1.5 border border-white/20 mr-2">
+                <span className="opacity-90">{t.projectNameText}:</span>
+                <input
+                  type="text"
+                  className="bg-transparent text-white font-bold outline-none border-b border-transparent focus:border-white/50 w-32 text-sm placeholder-white/50"
+                  value={projectName}
+                  placeholder={t.projectNameText}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  data-testid="project-name-input"
+                />
+              </div>
+              <button
+                className="rounded-[10px] bg-white/20 px-3 py-2 font-bold text-white hover:bg-white/30 border border-white/10 transition-colors mr-1"
+                type="button"
+                onClick={handleNewProject}
+                data-testid="new-project-button"
+              >
+                {t.newProject}
+              </button>
+              <button
+                className="rounded-[10px] bg-white/20 px-3 py-2 font-bold text-white hover:bg-white/30 border border-white/10 transition-colors mr-1"
+                type="button"
+                onClick={handleSaveProject}
+                data-testid="save-project-button"
+              >
+                {t.saveProject}
+              </button>
+              <label className="rounded-[10px] bg-white/20 px-3 py-2 font-bold text-white hover:bg-white/30 border border-white/10 transition-colors cursor-pointer mr-2 text-center">
+                {t.uploadProject}
+                <input
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={handleUploadProject}
+                  data-testid="upload-project-input"
+                />
+              </label>
+
+              <div className="hidden md:block w-[1px] h-6 bg-white/20 mx-2"></div>
+
               {t.nav.map((item, index) => (
                 <button
                   className={`rounded-[10px] px-4 py-2 font-bold ${activeNav === navTargets[index] ? 'bg-white text-[#1d4ed8]' : 'bg-white/20 text-white hover:bg-white/30'}`}
@@ -1035,7 +1164,21 @@ function Workbench() {
               ) : (
                 <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={result.placed} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
               )}
-              <button className="archive-button success absolute bottom-6 right-6" type="button" onClick={() => setHasCalculated(true)}>{t.load}</button>
+              <button
+                className="archive-button success absolute bottom-6 right-6"
+                type="button"
+                onClick={() => {
+                  setHasCalculated(true)
+                  const nextPlan = createHistoryPlan(selectedContainer, displayCargoItems, result, {
+                    projectName,
+                    shipmentName,
+                    loadingMode,
+                  })
+                  setHistoryPlans(saveHistoryPlan(localStorage, nextPlan))
+                }}
+              >
+                {t.load}
+              </button>
             </div>
           </section>
 

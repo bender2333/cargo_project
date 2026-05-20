@@ -2,6 +2,12 @@
 
 ## 2026-05-20
 
+- Completed subtask: implement project management (input name, new, save, upload JSON, and local 5 recent projects).
+  - Added double-bound `projectName` state and bilingual controls in the header navigation bar.
+  - Added "New Project", "Save Project" (JSON download), and "Upload Project" (JSON restoration) capabilities with full validation and default fallbacks.
+  - Extended the `HistoryPlan` model to preserve and restore `projectName` and `loadingMode`, with complete backward-compatibility for legacy records.
+  - Integrated auto-saving to the 5-item local project history list upon clicking "Load" or downloading/saving a project.
+  - Verification: `npm run lint` passed; `npm test` passed 35 tests; `npm run build` completed successfully.
 - Completed subtask: implement Excel dynamic field mapping pop-up modal and parser logic.
 - Exported `parseCargoRowsWithMapping` in `importCargo.ts` to map user-configured custom headers into standard virtual columns.
 - Implemented smart pre-selection based on column name lowercase substring candidates.

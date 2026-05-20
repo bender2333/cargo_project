@@ -1,9 +1,10 @@
-import type { CargoItem, ContainerSpec, PackingResult } from '../types'
+import type { CargoItem, ContainerSpec, LoadingMode, PackingResult } from '../types'
 import { createClientId } from './clientId'
 
 export type HistoryPlan = {
   id: string
   createdAt: string
+  projectName: string
   shipmentName: string
   containerId: string
   container: ContainerSpec
@@ -12,6 +13,7 @@ export type HistoryPlan = {
   totalCargoCount: number
   layerCount: number
   labelSummary: string
+  loadingMode: LoadingMode
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
@@ -22,7 +24,7 @@ export function createHistoryPlan(
   container: ContainerSpec,
   cargoItems: CargoItem[],
   result: PackingResult,
-  options: { createId?: () => string; now?: () => Date; shipmentName?: string } = {},
+  options: { createId?: () => string; now?: () => Date; shipmentName?: string; projectName?: string; loadingMode?: LoadingMode } = {},
 ): HistoryPlan {
   const createId = options.createId ?? createClientId
   const now = options.now ?? (() => new Date())
@@ -30,6 +32,7 @@ export function createHistoryPlan(
   return {
     id: createId(),
     createdAt: now().toISOString(),
+    projectName: options.projectName?.trim() || '新装箱项目',
     shipmentName: options.shipmentName?.trim() || 'Untitled shipment',
     containerId: container.id,
     container: { ...container },
@@ -38,6 +41,7 @@ export function createHistoryPlan(
     totalCargoCount: result.totalCargoCount,
     layerCount: result.layers.length,
     labelSummary: result.labelStats.map((item) => `${item.label}:${item.placed}/${item.planned}`).join(', '),
+    loadingMode: options.loadingMode || 'volume',
   }
 }
 
@@ -54,7 +58,12 @@ export function readHistoryPlans(storage: StorageLike): HistoryPlan[] {
     }
     return parsed
       .filter((item): item is HistoryPlan => Boolean(item?.id && item?.containerId && item?.container && Array.isArray(item?.cargoItems)))
-      .map((item) => ({ ...item, shipmentName: item.shipmentName || 'Untitled shipment' }))
+      .map((item) => ({
+        ...item,
+        projectName: item.projectName || '新装箱项目',
+        shipmentName: item.shipmentName || 'Untitled shipment',
+        loadingMode: item.loadingMode || 'volume',
+      }))
   } catch {
     return []
   }
@@ -65,3 +74,4 @@ export function saveHistoryPlan(storage: StorageLike, plan: HistoryPlan, limit =
   storage.setItem(storageKey, JSON.stringify(next))
   return next
 }
+

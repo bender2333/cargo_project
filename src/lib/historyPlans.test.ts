@@ -50,11 +50,14 @@ describe('history plans', () => {
       createId: () => 'plan-1',
       now: () => new Date('2026-05-20T00:00:00.000Z'),
       shipmentName: 'Review shipment',
+      projectName: 'Test Project',
+      loadingMode: 'weight',
     })
 
     expect(plan).toMatchObject({
       id: 'plan-1',
       createdAt: '2026-05-20T00:00:00.000Z',
+      projectName: 'Test Project',
       shipmentName: 'Review shipment',
       containerId: 'container',
       container,
@@ -62,6 +65,7 @@ describe('history plans', () => {
       totalCargoCount: 2,
       layerCount: 1,
       labelSummary: 'H:2/2',
+      loadingMode: 'weight',
     })
     expect(plan.cargoItems[0]).toMatchObject({ label: 'H', name: 'History crate' })
   })
