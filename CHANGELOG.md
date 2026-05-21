@@ -146,7 +146,7 @@
 - Added the `cargo-server` access address, SSH alias, Nginx site root, backup path convention, deploy commands, and post-deploy public URL verification to `README.md`.
 - Verification: documentation-only change; code verification not rerun.
 
-## 2026-05-21 (Fourth Round Review Phase 0 & 1)
+## 2026-05-21 (Fourth Round Review Completion)
 
 - Completed subtask: fix orientations and optimize tilting/side-placement algorithm.
   - Updated `orientations()` in `src/lib/packing.ts` to generate 6-axis rotations for a box.
@@ -155,4 +155,15 @@
   - Verification: `npm test` successfully passed all 39 tests.
 - Completed subtask: implement 3D aspect ratio persistence on sidebar collapse.
   - Modified the visual 3D/2D container wrapper in `src/Workbench.tsx` to use responsive classes `w-full aspect-[16/9] min-h-[400px] max-h-[70vh]` instead of fixed `h-[560px]`.
-  - Verification: `npm run build` completed successfully.
+- Completed subtask: build Express auth backend with JWT, SQLite persistent isolation, custom container CRUD, and admin user panels.
+  - Implemented `/api/auth/register`, `/api/auth/login`, and Admin User accounts (`/api/users`) REST endpoints.
+  - Initialized automatic SQLite DB migrations and seeded the default `admin` root account.
+  - Implemented personal Custom Container CRUD (`/api/containers/custom`) and strict user history-plan isolation.
+  - Created Login, Registration, and Admin Management dashboard panels in React, replacing legacy localStorage stores.
+  - Localized all auth-gated user error flows (e.g. account disabled notifications in Chinese).
+- Verification and E2E Hardening:
+  - `npm run lint` passed cleanly with 0 warnings.
+  - `npm test` passed 39 unit tests (100% green).
+  - `npm run build` completed successfully with the correct production bundle output.
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3333 npm run test:e2e` passed all 32 Playwright E2E tests cleanly (100% green).
+
