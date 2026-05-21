@@ -2,6 +2,9 @@
 
 ## 2026-05-22
 
+- Completed subtask: append Fifth Review and next-stage performance/UX optimization plan to `REVIEW.md`.
+  - Recorded label rotation visualization, admin audit fields, custom-container performance triage, and whole-site performance optimization priorities.
+  - Formulated the staged implementation plan and verification targets for the next round of refactor work.
 - Completed subtask: append Sixth Review and implementation plan for remote synchronous deployment, E2E, and performance testing to `REVIEW.md`.
   - Defined explicit requirements for automated ssh/rsync-based remote synchronous deployment, PM2 config, and SQLite migrations.
   - Specified comprehensive remote E2E testing scenarios via Playwright against the production URL, covering authentication, custom containers, custom mappings, calculations, 3D scenes, and audit logs.
@@ -174,4 +177,3 @@
   - `npm test` passed 39 unit tests (100% green).
   - `npm run build` completed successfully with the correct production bundle output.
   - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3333 npm run test:e2e` passed all 32 Playwright E2E tests cleanly (100% green).
-
