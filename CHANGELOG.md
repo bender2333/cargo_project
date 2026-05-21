@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-05-22
+
+- Completed subtask: append Sixth Review and implementation plan for remote synchronous deployment, E2E, and performance testing to `REVIEW.md`.
+  - Defined explicit requirements for automated ssh/rsync-based remote synchronous deployment, PM2 config, and SQLite migrations.
+  - Specified comprehensive remote E2E testing scenarios via Playwright against the production URL, covering authentication, custom containers, custom mappings, calculations, 3D scenes, and audit logs.
+  - Addressed multi-dimensional performance testing targets: cargo packing calculation benchmark suite, API concurrency load testing, and WebGL rendering stability.
+  - Formulated a 3-phase implementation roadmap and execution constraints in `REVIEW.md`.
+
 ## 2026-05-20
 
 - Completed subtask: implement project management (input name, new, save, upload JSON, and local 5 recent projects).
