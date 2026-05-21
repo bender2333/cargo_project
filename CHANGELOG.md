@@ -145,3 +145,11 @@
 - Completed subtask: document current remote deployment workflow.
 - Added the `cargo-server` access address, SSH alias, Nginx site root, backup path convention, deploy commands, and post-deploy public URL verification to `README.md`.
 - Verification: documentation-only change; code verification not rerun.
+
+## 2026-05-21 (Fourth Round Review Phase 0)
+
+- Completed subtask: fix orientations and optimize tilting/side-placement algorithm.
+  - Updated `orientations()` in `src/lib/packing.ts` to generate 6-axis rotations for a box.
+  - Added unit tests in `src/lib/packing.test.ts` to test 6 unique orientations under `canRotate = true` and distinct dimensions.
+  - Added tilting optimization test of 80 pieces of `400 * 500 * 600` boxes in 40HQ container, ensuring that allowed rotation leads to packing at least 5 layers.
+  - Verification: `npm test` successfully passed all 39 tests.

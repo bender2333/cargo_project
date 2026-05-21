@@ -36,6 +36,10 @@ export function orientations(item: CargoItem): BoxSize[] {
   const options = [
     base,
     { length: item.width, width: item.length, height: item.height },
+    { length: item.length, width: item.height, height: item.width },
+    { length: item.height, width: item.length, height: item.width },
+    { length: item.width, width: item.height, height: item.length },
+    { length: item.height, width: item.width, height: item.length },
   ]
 
   return options.filter(

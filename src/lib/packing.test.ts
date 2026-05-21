@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from '../data/containers'
 import type { CargoItem, ContainerSpec, PackingResult, PlacedBox } from '../types'
-import { calculatePacking } from './packing'
+import { calculatePacking, orientations } from './packing'
 
 const cargo = (overrides: Partial<CargoItem> = {}): CargoItem => ({
   id: 'cargo-1',
@@ -358,7 +358,71 @@ describe('calculatePacking', () => {
     expect(result.totalCargoCount).toBe(50)
     expect(result.placedCount).toBe(50)
     expect(result.unplaced).toEqual([])
-    expect(result.placed.filter((box) => box.label === 'A').every((box) => box.height === 350)).toBe(true)
-    expect(result.placed.filter((box) => box.label !== 'A').every((box) => box.height === 450)).toBe(true)
+    expect(result.placed.filter((box) => box.label === 'A').every((box) => [350, 400, 600].includes(box.height))).toBe(true)
+    expect(result.placed.filter((box) => box.label !== 'A').every((box) => [450, 500, 800].includes(box.height))).toBe(true)
+  })
+
+  describe('orientations 6-axis support', () => {
+    it('returns all 6 unique orientations when all 3 dimensions are distinct and canRotate is true', () => {
+      const item = cargo({ length: 400, width: 500, height: 600, canRotate: true })
+      const res = orientations(item)
+      expect(res).toHaveLength(6)
+      
+      const expected = [
+        { length: 400, width: 500, height: 600 },
+        { length: 500, width: 400, height: 600 },
+        { length: 400, width: 600, height: 500 },
+        { length: 600, width: 400, height: 500 },
+        { length: 500, width: 600, height: 400 },
+        { length: 600, width: 500, height: 400 },
+      ]
+      
+      for (const opt of expected) {
+        expect(res.some(o => o.length === opt.length && o.width === opt.width && o.height === opt.height)).toBe(true)
+      }
+    })
+
+    it('returns 3 unique orientations when 2 dimensions are identical and canRotate is true', () => {
+      const item = cargo({ length: 400, width: 400, height: 600, canRotate: true })
+      const res = orientations(item)
+      expect(res).toHaveLength(3)
+    })
+
+    it('returns 1 orientation when all dimensions are identical or canRotate is false', () => {
+      const cube = cargo({ length: 400, width: 400, height: 400, canRotate: true })
+      expect(orientations(cube)).toHaveLength(1)
+
+      const nonRotatable = cargo({ length: 400, width: 500, height: 600, canRotate: false })
+      expect(orientations(nonRotatable)).toHaveLength(1)
+    })
+  })
+
+  describe('tilting and side-placement algorithm optimization', () => {
+    it('places 80 items of 400x500x600 in 40HQ container, ensuring higher stack layers via tilting', () => {
+      // 40HQ has height 2694. With 600mm height, we can stack 4 layers (2400mm). 
+      // With tilting, we can use 400mm or 500mm height, e.g., 5 layers of 500mm (2500mm) or 6 layers of 400mm (2400mm).
+      const containerhq = containers[2] // "Container 40' HC" (12117 x 2388 x 2694)
+      const cargoItem = cargo({
+        id: 'box-tilt',
+        name: 'Tiltable Box',
+        label: 'T',
+        length: 400,
+        width: 500,
+        height: 600,
+        weight: 10,
+        quantity: 80,
+        canRotate: true,
+      })
+
+      const result = calculatePacking(containerhq, [cargoItem])
+      
+      // Let's verify we placed many of them
+      expectValidPacking(containerhq, result)
+      expect(result.placedCount).toBeGreaterThanOrEqual(50)
+      
+      // Let's check the maximum physical layers. With tilting, it should reach at least 5 layers
+      const maxLayer = Math.max(...result.placed.map((box) => box.physicalLayer), 0)
+      expect(maxLayer).toBeGreaterThanOrEqual(5)
+    })
   })
 })
