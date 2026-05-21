@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
 import * as XLSX from 'xlsx'
 import { ContainerScene } from './components/ContainerScene'
@@ -7,14 +7,19 @@ import { ContainerPlan2D } from './components/ContainerPlan2D'
 import type { PlanViewMode } from './components/ContainerPlan2D'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from './data/containers'
 import { buildExportPlanRows } from './lib/exportPlan'
-import { createHistoryPlan, readHistoryPlans, saveHistoryPlan } from './lib/historyPlans'
 import type { HistoryPlan } from './lib/historyPlans'
 import { createClientId } from './lib/clientId'
 import { parseCargoRows, parseCargoRowsWithMapping } from './lib/importCargo'
 import type { ImportCargoRow } from './lib/importCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
-import type { CargoItem, LoadingMode, Locale, PackingDiagnostic, PackingLayer } from './types'
+import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, CustomDbContainer, DbHistoryPlan } from './types'
+import { isLoggedIn, getCurrentUser, fetchWithAuth, removeToken } from './lib/auth'
+import type { User } from './lib/auth'
+import { LoginPage } from './components/LoginPage'
+import { RegisterPage } from './components/RegisterPage'
+import { UserManagement } from './components/UserManagement'
+import { CustomContainerDialog } from './components/CustomContainerDialog'
 
 const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
 
@@ -410,7 +415,16 @@ function Workbench() {
   const [freeViewEnabled, setFreeViewEnabled] = useState(false)
   const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
   const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
-  const [historyPlans, setHistoryPlans] = useState<HistoryPlan[]>(() => readHistoryPlans(localStorage))
+  
+  // Backend integrated states
+  const [loggedIn, setLoggedIn] = useState(() => isLoggedIn())
+  const [showRegister, setShowRegister] = useState(false)
+  const [currentUser, setCurrentUser] = useState<User | null>(() => getCurrentUser())
+  const [showUserManagement, setShowUserManagement] = useState(false)
+  const [customContainers, setCustomContainers] = useState<ContainerSpec[]>([])
+  const [showCustomContainerDialog, setShowCustomContainerDialog] = useState(false)
+  const [historyPlans, setHistoryPlans] = useState<HistoryPlan[]>([])
+
   const [importMessages, setImportMessages] = useState<string[]>([])
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null)
   const [containerCollapsed, setContainerCollapsed] = useState(false)
@@ -433,9 +447,89 @@ function Workbench() {
   const cargoRef = useRef<HTMLFormElement | null>(null)
   const containerRef = useRef<HTMLElement | null>(null)
 
-  const selectedContainer = selectedContainerId === 'custom'
-    ? customContainer
-    : containerOverrides[selectedContainerId] ?? containers[0]
+  const selectedContainer = useMemo(() => {
+    const standard = containerOverrides[selectedContainerId] ?? containers.find(c => c.id === selectedContainerId)
+    if (standard) return standard
+
+    const custom = customContainers.find(c => c.id === selectedContainerId)
+    if (custom) return custom
+
+    return customContainer
+  }, [selectedContainerId, containerOverrides, customContainers, customContainer])
+
+  const fetchCustomContainers = async () => {
+    if (!isLoggedIn()) return
+    try {
+      const res = await fetchWithAuth('/api/containers/custom')
+      if (!res.ok) throw new Error('获取自定义柜型失败')
+      const data = await res.json()
+      const mapped: ContainerSpec[] = data.map((item: CustomDbContainer) => ({
+        id: item.id,
+        label: item.name,
+        description: `自定义柜型: ${item.name} (${item.length}x${item.width}x${item.height}mm)`,
+        length: item.length,
+        width: item.width,
+        height: item.height,
+        maxWeight: item.max_weight,
+        doorGap: item.door_gap,
+        topGap: item.top_gap,
+        sideGap: item.side_gap,
+      }))
+      setCustomContainers(mapped)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const fetchHistory = async () => {
+    if (!isLoggedIn()) return
+    try {
+      const res = await fetchWithAuth('/api/history')
+      if (!res.ok) throw new Error('获取历史方案失败')
+      const data = await res.json()
+      const mapped = data.map((item: DbHistoryPlan) => ({
+        id: item.id,
+        createdAt: item.created_at,
+        projectName: item.project_name,
+        shipmentName: item.shipment_name,
+        loadingMode: item.loading_mode,
+        containerId: item.data.containerId,
+        container: item.data.container,
+        cargoItems: item.data.cargoItems,
+        placedCount: item.data.placedCount,
+        totalCargoCount: item.data.totalCargoCount,
+        layerCount: item.data.layerCount,
+        labelSummary: item.data.labelSummary,
+      }))
+      setHistoryPlans(mapped)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const deleteHistoryPlan = async (id: string) => {
+    if (!confirm(locale === 'zh' ? '确认删除该历史方案吗？' : 'Are you sure you want to delete this plan?')) {
+      return
+    }
+    try {
+      const res = await fetchWithAuth(`/api/history/${id}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) throw new Error('删除失败')
+      await fetchHistory()
+    } catch (err) {
+      console.error(err)
+      alert(locale === 'zh' ? '删除失败' : 'Failed to delete')
+    }
+  }
+
+  useEffect(() => {
+    if (loggedIn) {
+      fetchHistory()
+      fetchCustomContainers()
+    }
+  }, [loggedIn])
+
   const renderingContainer = effectiveContainer(selectedContainer)
   const displayCargoItems = useMemo(() => normalizeCargoLabelColors(cargoItems), [cargoItems])
   const result = useMemo(() => calculatePacking(selectedContainer, displayCargoItems, { loadingMode }), [displayCargoItems, loadingMode, selectedContainer])
@@ -632,14 +726,36 @@ function Workbench() {
     }, 'image/png')
   }
 
-  const saveCurrentPlan = () => {
-    const next = createHistoryPlan(selectedContainer, displayCargoItems, result, {
-      projectName,
-      shipmentName,
-      loadingMode,
-    })
-    setHistoryPlans(saveHistoryPlan(localStorage, next))
-    setActiveNav('history')
+  const saveCurrentPlan = async () => {
+    const planData = {
+      containerId: selectedContainer.id,
+      container: selectedContainer,
+      cargoItems: displayCargoItems,
+      placedCount: result.placedCount,
+      totalCargoCount: result.totalCargoCount,
+      layerCount: result.layers.length,
+      labelSummary: result.labelStats.map((item) => `${item.label}:${item.placed}/${item.planned}`).join(', '),
+    }
+
+    try {
+      const res = await fetchWithAuth('/api/history', {
+        method: 'POST',
+        body: JSON.stringify({
+          projectName,
+          shipmentName,
+          loadingMode,
+          data: planData,
+        }),
+      })
+      if (!res.ok) {
+        throw new Error('保存历史方案失败')
+      }
+      await fetchHistory()
+      setActiveNav('history')
+    } catch (err) {
+      console.error(err)
+      alert(locale === 'zh' ? '保存历史方案失败' : 'Failed to save plan')
+    }
   }
 
   const restorePlan = (plan: HistoryPlan) => {
@@ -648,8 +764,12 @@ function Workbench() {
     setSelectedContainerId(plan.containerId)
     if (plan.containerId === 'custom') {
       setCustomContainer(plan.container)
-    } else {
+    } else if (containers.some((c) => c.id === plan.containerId)) {
       setContainerOverrides((current) => ({ ...current, [plan.containerId]: plan.container }))
+    } else {
+      if (!customContainers.some((c) => c.id === plan.containerId)) {
+        setCustomContainers((current) => [...current, plan.container])
+      }
     }
     setCargoItems(plan.cargoItems)
     setLoadingMode(plan.loadingMode || 'volume')
@@ -693,13 +813,25 @@ function Workbench() {
     link.click()
     URL.revokeObjectURL(url)
 
-    // Save to local history list (up to 5 items)
-    const nextPlan = createHistoryPlan(selectedContainer, displayCargoItems, result, {
-      projectName,
-      shipmentName,
-      loadingMode,
-    })
-    setHistoryPlans(saveHistoryPlan(localStorage, nextPlan))
+    // Save to backend history
+    const planData = {
+      containerId: selectedContainer.id,
+      container: selectedContainer,
+      cargoItems: displayCargoItems,
+      placedCount: result.placedCount,
+      totalCargoCount: result.totalCargoCount,
+      layerCount: result.layers.length,
+      labelSummary: result.labelStats.map((item) => `${item.label}:${item.placed}/${item.planned}`).join(', '),
+    }
+    fetchWithAuth('/api/history', {
+      method: 'POST',
+      body: JSON.stringify({
+        projectName,
+        shipmentName,
+        loadingMode,
+        data: planData,
+      }),
+    }).then(() => fetchHistory()).catch(err => console.error('Auto-save history failed:', err))
   }
 
   const handleUploadProject = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -801,6 +933,37 @@ function Workbench() {
 
   const navTargets: NavTarget[] = ['overview', 'report', 'cargo', 'container', 'history']
 
+  if (!loggedIn) {
+    if (showRegister) {
+      return (
+        <RegisterPage
+          onRegisterSuccess={() => {
+            setLoggedIn(true)
+            setCurrentUser(getCurrentUser())
+            fetchHistory()
+            fetchCustomContainers()
+          }}
+          onToggleLogin={() => setShowRegister(false)}
+        />
+      )
+    }
+    return (
+      <LoginPage
+        onLoginSuccess={() => {
+          setLoggedIn(true)
+          setCurrentUser(getCurrentUser())
+          fetchHistory()
+          fetchCustomContainers()
+        }}
+        onToggleRegister={() => setShowRegister(true)}
+      />
+    )
+  }
+
+  if (showUserManagement && currentUser?.role === 'admin') {
+    return <UserManagement onBack={() => setShowUserManagement(false)} />
+  }
+
   return (
     <main className="min-h-screen bg-[#f4f7fb] text-[#1f2937]">
       <div className="mx-auto max-w-[1500px] p-5">
@@ -861,6 +1024,33 @@ function Workbench() {
                   {item}
                 </button>
               ))}
+              {currentUser && (
+                <div className="flex items-center gap-2 rounded-[10px] bg-white/10 px-3 py-1.5 border border-white/20 ml-2">
+                  <span className="opacity-80 text-xs">{locale === 'zh' ? '用户' : 'User'}:</span>
+                  <span className="font-bold text-xs">{currentUser.username}</span>
+                  {currentUser.role === 'admin' && (
+                    <button
+                      onClick={() => setShowUserManagement(true)}
+                      className="rounded-[6px] bg-indigo-600 hover:bg-indigo-700 px-2 py-1 text-[11px] font-bold text-white transition-colors cursor-pointer animate-pulse"
+                      type="button"
+                    >
+                      {locale === 'zh' ? '用户管理' : 'Users'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      removeToken()
+                      setLoggedIn(false)
+                      setCurrentUser(null)
+                      window.location.href = '/'
+                    }}
+                    className="rounded-[6px] bg-red-600 hover:bg-red-700 px-2 py-1 text-[11px] font-bold text-white transition-colors cursor-pointer"
+                    type="button"
+                  >
+                    {locale === 'zh' ? '退出' : 'Logout'}
+                  </button>
+                </div>
+              )}
               <button className="rounded-[10px] bg-white px-4 py-2 font-bold text-[#1d4ed8]" type="button" onClick={() => setLocale(locale === 'en' ? 'zh' : 'en')}>
                 {t.language}
               </button>
@@ -876,10 +1066,7 @@ function Workbench() {
                 <p className="text-sm text-[#64748b]">{t.noHistory}</p>
               </div>
               <div className="flex gap-2">
-                <button className="archive-button success" type="button" onClick={() => {
-                  const next = createHistoryPlan(selectedContainer, displayCargoItems, result, { shipmentName })
-                  setHistoryPlans(saveHistoryPlan(localStorage, next))
-                }}>{t.savePlan}</button>
+                <button className="archive-button success" type="button" onClick={saveCurrentPlan}>{t.savePlan}</button>
                 <button className="archive-button secondary" type="button" onClick={() => activateNav('overview')}>{t.backToWorkbench}</button>
               </div>
             </div>
@@ -888,15 +1075,22 @@ function Workbench() {
             ) : (
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {historyPlans.map((plan) => (
-                  <article className="border border-[#c6c6c6] bg-white p-3 text-sm" key={plan.id}>
-                    <strong>{plan.shipmentName}</strong>
-                    <p>{t.shipmentName}: {plan.shipmentName}</p>
-                    <p>{new Date(plan.createdAt).toLocaleString()}</p>
-                    <p>{plan.placedCount}/{plan.totalCargoCount} · {plan.layerCount} {t.layers}</p>
-                    <p>{plan.labelSummary}</p>
-                    <button className="mt-3 border border-[#9b9b9b] bg-[#eeeeee] px-3 py-2" type="button" onClick={() => restorePlan(plan)}>
-                      {t.restore}
-                    </button>
+                  <article className="border border-[#c6c6c6] bg-white p-3 text-sm flex flex-col justify-between" key={plan.id}>
+                    <div>
+                      <strong>{plan.projectName}</strong>
+                      <p>{t.shipmentName}: {plan.shipmentName || '-'}</p>
+                      <p>{new Date(plan.createdAt).toLocaleString()}</p>
+                      <p>{plan.placedCount}/{plan.totalCargoCount} · {plan.layerCount} {t.layers}</p>
+                      <p className="text-xs text-slate-500 mt-1 line-clamp-2">{plan.labelSummary}</p>
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <button className="border border-[#9b9b9b] bg-[#eeeeee] px-3 py-1.5 text-xs font-semibold hover:bg-slate-200 transition" type="button" onClick={() => restorePlan(plan)}>
+                        {t.restore}
+                      </button>
+                      <button className="border border-red-300 bg-red-50 text-red-700 px-3 py-1.5 text-xs font-semibold hover:bg-red-100 transition" type="button" onClick={() => deleteHistoryPlan(plan.id)}>
+                        {locale === 'zh' ? '删除' : 'Delete'}
+                      </button>
+                    </div>
                   </article>
                 ))}
               </div>
@@ -978,12 +1172,21 @@ function Workbench() {
                 <label className="field-label">{t.containerType}
                   <select className="field-input mt-1" value={selectedContainerId} onChange={(event) => setSelectedContainerId(event.target.value)}>
                     {containers.map((container) => <option key={container.id} value={container.id}>{container.label}</option>)}
+                    {customContainers.map((container) => <option key={container.id} value={container.id}>{container.label}</option>)}
                     <option value="custom">{t.customContainer}</option>
                   </select>
                 </label>
+                <button
+                  type="button"
+                  onClick={() => setShowCustomContainerDialog(true)}
+                  className="mt-2 text-xs font-semibold text-purple-600 hover:text-purple-800 focus:outline-none flex items-center gap-1 cursor-pointer"
+                  data-testid="manage-custom-containers"
+                >
+                  ⚙️ {locale === 'zh' ? '管理自定义柜型' : 'Manage Custom Containers'}
+                </button>
                 <div className="mt-3 max-h-[220px] overflow-auto border border-[#d1d1d1]">
-                  {[...containers, customContainer].map((container) => (
-                    <button className={`block w-full border-b border-[#d1d1d1] px-3 py-3 text-left hover:bg-white ${container.id === selectedContainer.id ? 'bg-white' : 'bg-[#f8fafc]'}`} key={container.id} type="button" onClick={() => setSelectedContainerId(container.id)}>
+                  {[...containers, ...customContainers, customContainer].map((container) => (
+                    <button className={`block w-full border-b border-[#d1d1d1] px-3 py-3 text-left hover:bg-white cursor-pointer ${container.id === selectedContainer.id ? 'bg-white' : 'bg-[#f8fafc]'}`} key={container.id} type="button" onClick={() => setSelectedContainerId(container.id)}>
                       <div className="mb-2 ml-auto h-5 w-24 bg-[#5f5f5f]" />
                       <strong>{container.label}</strong>
                       <p className="text-xs">{container.length.toLocaleString()} x {container.width.toLocaleString()} x {container.height.toLocaleString()} mm {container.maxWeight.toLocaleString()} kg</p>
@@ -1169,12 +1372,24 @@ function Workbench() {
                 type="button"
                 onClick={() => {
                   setHasCalculated(true)
-                  const nextPlan = createHistoryPlan(selectedContainer, displayCargoItems, result, {
-                    projectName,
-                    shipmentName,
-                    loadingMode,
-                  })
-                  setHistoryPlans(saveHistoryPlan(localStorage, nextPlan))
+                  const planData = {
+                    containerId: selectedContainer.id,
+                    container: selectedContainer,
+                    cargoItems: displayCargoItems,
+                    placedCount: result.placedCount,
+                    totalCargoCount: result.totalCargoCount,
+                    layerCount: result.layers.length,
+                    labelSummary: result.labelStats.map((item) => `${item.label}:${item.placed}/${item.planned}`).join(', '),
+                  }
+                  fetchWithAuth('/api/history', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      projectName,
+                      shipmentName,
+                      loadingMode,
+                      data: planData,
+                    }),
+                  }).then(() => fetchHistory()).catch(err => console.error('Auto-save history failed:', err))
                 }}
               >
                 {t.load}
@@ -1415,6 +1630,20 @@ function Workbench() {
           </div>
         )}
       </div>
+      {showCustomContainerDialog && (
+        <CustomContainerDialog
+          currentSelectedId={selectedContainerId}
+          onClose={() => {
+            setShowCustomContainerDialog(false)
+            fetchCustomContainers()
+          }}
+          onSelect={(container) => {
+            setSelectedContainerId(container.id)
+            setShowCustomContainerDialog(false)
+            fetchCustomContainers()
+          }}
+        />
+      )}
     </main>
   )
 }

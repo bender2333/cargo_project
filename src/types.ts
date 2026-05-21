@@ -116,3 +116,33 @@ export type PackingResult = {
 }
 
 export type Locale = 'en' | 'zh'
+
+export interface CustomDbContainer {
+  id: string
+  name: string
+  length: number
+  width: number
+  height: number
+  max_weight: number
+  door_gap: number
+  top_gap: number
+  side_gap: number
+}
+
+export interface DbHistoryPlan {
+  id: string
+  created_at: string
+  project_name: string
+  shipment_name: string | null
+  loading_mode: LoadingMode
+  data: {
+    containerId: string
+    container: ContainerSpec
+    cargoItems: CargoItem[]
+    placedCount: number
+    totalCargoCount: number
+    layerCount: number
+    labelSummary: string
+  }
+}
+
