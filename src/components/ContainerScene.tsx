@@ -16,7 +16,16 @@ type ContainerSceneProps = {
   onSelectBox?: (boxId: string) => void
 }
 
-function makeFaceLabelTexture(label: string, color: string, selected: boolean) {
+type MeshEntry = {
+  box: PlacedBox
+  mesh: THREE.Mesh
+  edges: THREE.LineSegments
+}
+
+const textureCache = new Map<string, THREE.Texture>()
+const materialCache = new Map<string, THREE.Material>()
+
+function makeFaceLabelTexture(label: string, color: string, selected: boolean, rotationDeg: number) {
   const canvas = document.createElement('canvas')
   canvas.width = 256
   canvas.height = 256
@@ -38,27 +47,73 @@ function makeFaceLabelTexture(label: string, color: string, selected: boolean) {
   context.font = 'bold 104px Verdana, sans-serif'
   context.textAlign = 'center'
   context.textBaseline = 'middle'
-  context.fillText(label, 128, 134, 142)
+  context.save()
+  context.translate(128, 134)
+  context.rotate((rotationDeg * Math.PI) / 180)
+  context.fillText(label, 0, 0, 142)
+  context.restore()
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
   return texture
 }
 
-function makeBoxMaterials(box: PlacedBox, selected: boolean, opacity: number) {
-  const texture = makeFaceLabelTexture(box.label, box.color, selected)
-  return Array.from(
-    { length: 6 },
-    () =>
-      new THREE.MeshStandardMaterial({
-        map: texture,
-        roughness: 0.58,
-        metalness: 0.04,
-        emissive: selected ? new THREE.Color(0x332100) : new THREE.Color(0x000000),
-        transparent: opacity < 1,
-        opacity,
-      }),
-  )
+function makeBoxMaterial(texture: THREE.Texture, selected: boolean, opacity: number) {
+  return new THREE.MeshStandardMaterial({
+    map: texture,
+    roughness: 0.58,
+    metalness: 0.04,
+    emissive: selected ? new THREE.Color(0x332100) : new THREE.Color(0x000000),
+    transparent: opacity < 1,
+    opacity,
+    depthWrite: opacity >= 0.99,
+    side: THREE.DoubleSide,
+  })
+}
+
+function getCachedBoxMaterial(box: PlacedBox, selected: boolean, opacity: number) {
+  const textureKey = `${box.label}:${box.color}:${selected}:${box.labelRotationDeg}`
+  let texture = textureCache.get(textureKey)
+  if (!texture) {
+    texture = makeFaceLabelTexture(box.label, box.color, selected, box.labelRotationDeg)
+    textureCache.set(textureKey, texture)
+  }
+
+  const materialKey = `${textureKey}:${opacity}`
+  const cached = materialCache.get(materialKey)
+  if (cached) {
+    return cached
+  }
+
+  const material = makeBoxMaterial(texture, selected, opacity)
+  materialCache.set(materialKey, material)
+  return material
+}
+
+function boxVisualState(box: PlacedBox, activeLayerId: string, activeLabelId: string, selectedBoxId?: string | null) {
+  const selected = box.id === selectedBoxId
+  const currentLayer = activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId
+  const currentLabel = activeLabelId === 'all' || box.label === activeLabelId
+  const active = selected || (currentLayer && currentLabel)
+  return {
+    selected,
+    active,
+    opacity: active ? 1 : 0.22,
+    edgeColor: selected ? 0xf3b21a : active ? 0x252525 : 0x777777,
+    edgeOpacity: active ? 0.72 : 0.14,
+  }
+}
+
+function applyBoxVisualState(entry: MeshEntry, activeLayerId: string, activeLabelId: string, selectedBoxId?: string | null) {
+  const state = boxVisualState(entry.box, activeLayerId, activeLabelId, selectedBoxId)
+  entry.mesh.material = getCachedBoxMaterial(entry.box, state.selected, state.opacity)
+  const material = entry.edges.material
+  if (material instanceof THREE.LineBasicMaterial) {
+    material.color.setHex(state.edgeColor)
+    material.opacity = state.edgeOpacity
+    material.transparent = state.edgeOpacity < 1
+    material.needsUpdate = true
+  }
 }
 
 function cameraPositionForMode(mode: SceneViewMode, length: number, width: number, height: number) {
@@ -77,6 +132,7 @@ function cameraPositionForMode(mode: SceneViewMode, length: number, width: numbe
 
 export function ContainerScene({ container, boxes, activeLayerId, activeLabelId, viewMode, freeView, selectedBoxId, onSelectBox }: ContainerSceneProps) {
   const mountRef = useRef<HTMLDivElement | null>(null)
+  const meshEntriesRef = useRef<Map<string, MeshEntry>>(new Map())
 
   useEffect(() => {
     const mount = mountRef.current
@@ -98,7 +154,8 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
     camera.lookAt(target)
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
-    renderer.setPixelRatio(window.devicePixelRatio)
+    renderer.sortObjects = true
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(mount.clientWidth, mount.clientHeight)
     renderer.shadowMap.enabled = true
     mount.appendChild(renderer.domElement)
@@ -139,14 +196,13 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
 
     const pickables: THREE.Mesh[] = []
     const boxByUuid = new Map<string, string>()
+    const meshEntries = new Map<string, MeshEntry>()
+    meshEntriesRef.current = meshEntries
 
     boxes.forEach((box) => {
       const geometry = new THREE.BoxGeometry(box.length * scale, box.height * scale, box.width * scale)
-      const selected = box.id === selectedBoxId
-      const currentLayer = activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId
-      const currentLabel = activeLabelId === 'all' || box.label === activeLabelId
-      const opacity = selected || (currentLayer && currentLabel) ? 0.94 : 0.18
-      const material = makeBoxMaterials(box, selected, opacity)
+      const visualState = boxVisualState(box, 'all', 'all', null)
+      const material = getCachedBoxMaterial(box, visualState.selected, visualState.opacity)
       const mesh = new THREE.Mesh(geometry, material)
       mesh.position.set(
         -length / 2 + (box.x + box.length / 2) * scale,
@@ -162,13 +218,14 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(geometry),
         new THREE.LineBasicMaterial({
-          color: selected ? 0xf3b21a : currentLayer && currentLabel ? 0x252525 : 0x777777,
+          color: visualState.edgeColor,
           transparent: true,
-          opacity: selected || (currentLayer && currentLabel) ? 0.72 : 0.14,
+          opacity: visualState.edgeOpacity,
         }),
       )
       edges.position.copy(mesh.position)
       scene.add(edges)
+      meshEntries.set(box.id, { box, mesh, edges })
     })
 
     const grid = new THREE.GridHelper(Math.max(length, width), 16, 0x8b8b8b, 0xbdbdbd)
@@ -217,11 +274,28 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
       cancelAnimationFrame(frame)
       observer.disconnect()
       controls.dispose()
+      const geometries = new Set<THREE.BufferGeometry>()
+      scene.traverse((object) => {
+        if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments) {
+          geometries.add(object.geometry)
+        }
+      })
+      geometries.forEach((geometry) => geometry.dispose())
+      meshEntries.clear()
+      if (meshEntriesRef.current === meshEntries) {
+        meshEntriesRef.current = new Map()
+      }
       renderer.dispose()
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       mount.removeChild(renderer.domElement)
     }
-  }, [container, boxes, activeLayerId, activeLabelId, viewMode, freeView, selectedBoxId, onSelectBox])
+  }, [container, boxes, viewMode, freeView, onSelectBox])
+
+  useEffect(() => {
+    meshEntriesRef.current.forEach((entry) => {
+      applyBoxVisualState(entry, activeLayerId, activeLabelId, selectedBoxId)
+    })
+  }, [activeLayerId, activeLabelId, selectedBoxId])
 
   return <div ref={mountRef} className="h-full min-h-[420px] w-full" data-testid="container-scene" />
 }

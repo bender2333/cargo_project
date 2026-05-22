@@ -15,6 +15,8 @@ function box(overrides: Partial<PlacedBox>): PlacedBox {
     length: 1000,
     width: 1000,
     height: 500,
+    orientationKey: 'LWH',
+    labelRotationDeg: 0,
     weight: 10,
     color: '#f59e0b',
     stackable: true,

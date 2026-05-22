@@ -37,6 +37,8 @@ export type PlacedBox = {
   length: number
   width: number
   height: number
+  orientationKey: 'LWH' | 'WLH' | 'LHW' | 'HLW' | 'WHL' | 'HWL'
+  labelRotationDeg: 0 | 90 | 180 | 270
   weight: number
   color: string
   stackable: boolean
@@ -145,4 +147,3 @@ export interface DbHistoryPlan {
     labelSummary: string
   }
 }
-

@@ -62,9 +62,12 @@ export function ContainerPlan2D({ container, boxes, activeLayerId, activeLabelId
         const isCurrentLabel = activeLabelId === 'all' || box.label === activeLabelId
         const isSelected = box.id === selectedBoxId
         const opacity = isCurrentLayer && isCurrentLabel ? 0.88 : 0.18
+        const textX = padding + projected.x + projected.width / 2
+        const textY = padding + size.height - projected.y - projected.height / 2
+        const rotation = box.labelRotationDeg
 
         return (
-          <g key={box.id} opacity={opacity}>
+          <g data-orientation={box.orientationKey} data-label-rotation={rotation} key={box.id} opacity={opacity}>
             <rect
               aria-label={`${box.label} ${box.name} ${mode} layer ${box.physicalLayer}`}
               fill={box.color}
@@ -85,8 +88,9 @@ export function ContainerPlan2D({ container, boxes, activeLayerId, activeLabelId
               fontWeight="700"
               pointerEvents="none"
               textAnchor="middle"
-              x={padding + projected.x + projected.width / 2}
-              y={padding + size.height - projected.y - projected.height / 2}
+              transform={`rotate(${rotation} ${textX} ${textY})`}
+              x={textX}
+              y={textY}
             >
               {box.label}
             </text>

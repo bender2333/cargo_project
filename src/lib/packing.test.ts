@@ -69,6 +69,8 @@ function expectValidPacking(container: ContainerSpec, result: PackingResult) {
   for (const box of result.placed) {
     expect(box.physicalLayer).toBeGreaterThanOrEqual(1)
     expect(box.workStep).toBeGreaterThanOrEqual(1)
+    expect(['LWH', 'WLH', 'LHW', 'HLW', 'WHL', 'HWL']).toContain(box.orientationKey)
+    expect([0, 90, 180, 270]).toContain(box.labelRotationDeg)
     expect(box.supportedBy.every((id) => placedIds.has(id))).toBe(true)
     if (box.x === 0) {
       expect(box.supportType).toBe('floor')
@@ -184,7 +186,7 @@ describe('calculatePacking', () => {
 
     expectValidPacking(container, result)
     expect(result.placedCount).toBe(1)
-    expect(result.placed[0]).toMatchObject({ length: 3000, width: 1000, height: 1000 })
+    expect(result.placed[0]).toMatchObject({ length: 3000, width: 1000, height: 1000, orientationKey: 'WLH', labelRotationDeg: 90 })
   })
 
   it('does not rotate cargo when rotation is disabled', () => {
@@ -369,16 +371,16 @@ describe('calculatePacking', () => {
       expect(res).toHaveLength(6)
       
       const expected = [
-        { length: 400, width: 500, height: 600 },
-        { length: 500, width: 400, height: 600 },
-        { length: 400, width: 600, height: 500 },
-        { length: 600, width: 400, height: 500 },
-        { length: 500, width: 600, height: 400 },
-        { length: 600, width: 500, height: 400 },
+        { length: 400, width: 500, height: 600, orientationKey: 'LWH', labelRotationDeg: 0 },
+        { length: 500, width: 400, height: 600, orientationKey: 'WLH', labelRotationDeg: 90 },
+        { length: 400, width: 600, height: 500, orientationKey: 'LHW', labelRotationDeg: 90 },
+        { length: 600, width: 400, height: 500, orientationKey: 'HLW', labelRotationDeg: 180 },
+        { length: 500, width: 600, height: 400, orientationKey: 'WHL', labelRotationDeg: 270 },
+        { length: 600, width: 500, height: 400, orientationKey: 'HWL', labelRotationDeg: 180 },
       ]
       
       for (const opt of expected) {
-        expect(res.some(o => o.length === opt.length && o.width === opt.width && o.height === opt.height)).toBe(true)
+        expect(res.find(o => o.length === opt.length && o.width === opt.width && o.height === opt.height)).toMatchObject(opt)
       }
     })
 

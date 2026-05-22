@@ -2,6 +2,13 @@
 
 ## 2026-05-22
 
+- Completed subtask: add seventh review, update PRD, and implement first 3D/label-orientation refactor.
+  - Updated `PRD.md` with responsive 3D sizing, free-view rendering stability, label orientation metadata, Excel mapping-workbench requirements, and acceptance/test criteria.
+  - Added the Seventh Review section to `REVIEW.md`, covering browser-maximized 3D scaling, free-view missing faces, rotating labels, Excel mapping preview/unit design, and code re-estimation.
+  - Recorded decisions for `PlacedBox` orientation metadata, Excel mapping confirmation workflow, responsive 3D sizing, and single-worker Playwright execution against shared SQLite state.
+  - Added `orientationKey` and `labelRotationDeg` to `PlacedBox`, propagated the metadata from `orientations()`/`calculatePacking()`, and rendered 2D/3D labels from that shared data.
+  - Improved 3D workspace sizing, stabilized transparent/free-view rendering with double-sided shared materials, and avoided full scene rebuilds for layer/label/selection updates.
+  - Verification: `npm run lint` passed; `npm test` passed 39 tests; `npm run build` passed with the existing Vite chunk-size warning; `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3333 npm run test:e2e` passed 34 tests.
 - Completed subtask: append Fifth Review and next-stage performance/UX optimization plan to `REVIEW.md`.
   - Recorded label rotation visualization, admin audit fields, custom-container performance triage, and whole-site performance optimization priorities.
   - Formulated the staged implementation plan and verification targets for the next round of refactor work.

@@ -468,6 +468,31 @@ test('switches to 2D plan views and keeps labels visible', async ({ page }) => {
   expect(pngDownload.suggestedFilename()).toBe('packing-plan-iso.png')
 })
 
+test('rotates 2D labels using packing orientation metadata', async ({ page }) => {
+  await openEnglish(page)
+  await page.getByLabel('Container type').selectOption('custom')
+  await page.getByLabel('Length mm').first().fill('3000')
+  await page.getByLabel('Width mm').first().fill('1000')
+  await page.getByLabel('Height mm').first().fill('1000')
+  await page.getByLabel('Max payload kg').fill('10000')
+
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('Name', { exact: true }).fill('Rotated label crate')
+  await cargoForm.getByLabel('Label', { exact: true }).fill('R')
+  await cargoForm.getByLabel('Length mm').fill('1000')
+  await cargoForm.getByLabel('Width mm').fill('3000')
+  await cargoForm.getByLabel('Height mm').fill('1000')
+  await cargoForm.getByLabel('Weight kg').fill('10')
+  await cargoForm.getByLabel('Quantity').fill('1')
+  await page.getByRole('button', { name: '+ Add cargo item' }).click()
+  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: '2D' }).click()
+
+  const rotatedLabel = page.locator('g[data-orientation="WLH"][data-label-rotation="90"] text').filter({ hasText: 'R' }).first()
+  await expect(rotatedLabel).toBeVisible()
+  await expect(rotatedLabel).toHaveAttribute('transform', /rotate\(90/)
+})
+
 test('filters the plan view by cargo label', async ({ page }) => {
   await openEnglish(page)
   const cargoForm = page.locator('form')
@@ -511,6 +536,31 @@ test('renders an interactive 3D canvas', async ({ page }) => {
   await page.mouse.up()
   await page.mouse.wheel(0, -500)
   await expectCanvasHasRenderedPixels(page)
+})
+
+test('resizes the 3D canvas with a larger browser viewport', async ({ page }) => {
+  await openEnglish(page)
+  const canvas = page.locator('canvas').first()
+  await expect(canvas).toBeVisible()
+
+  await page.setViewportSize({ width: 1280, height: 760 })
+  await page.waitForTimeout(150)
+  const compactBox = await canvas.boundingBox()
+
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.waitForTimeout(200)
+  const largeBox = await canvas.boundingBox()
+  const backingSize = await canvas.evaluate((node) => ({
+    width: (node as HTMLCanvasElement).width,
+    height: (node as HTMLCanvasElement).height,
+  }))
+
+  expect(compactBox).not.toBeNull()
+  expect(largeBox).not.toBeNull()
+  expect(largeBox!.width).toBeGreaterThan(compactBox!.width)
+  expect(largeBox!.height).toBeGreaterThanOrEqual(compactBox!.height)
+  expect(backingSize.width).toBeGreaterThanOrEqual(Math.floor(largeBox!.width))
+  expect(backingSize.height).toBeGreaterThanOrEqual(Math.floor(largeBox!.height))
 })
 
 test('switches 3D camera views and keeps layer filtering visible', async ({ page }) => {

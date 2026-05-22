@@ -8,6 +8,14 @@ type BoxSize = {
   height: number
 }
 
+type OrientationKey = PlacedBox['orientationKey']
+type LabelRotationDeg = PlacedBox['labelRotationDeg']
+
+type BoxOrientation = BoxSize & {
+  orientationKey: OrientationKey
+  labelRotationDeg: LabelRotationDeg
+}
+
 type Point = {
   x: number
   y: number
@@ -27,19 +35,41 @@ function labelForIndex(index: number) {
   return label
 }
 
-export function orientations(item: CargoItem): BoxSize[] {
-  const base = { length: item.length, width: item.width, height: item.height }
+function labelRotationForOrientation(orientationKey: OrientationKey): LabelRotationDeg {
+  const rotations: Record<OrientationKey, LabelRotationDeg> = {
+    LWH: 0,
+    WLH: 90,
+    LHW: 90,
+    HLW: 180,
+    WHL: 270,
+    HWL: 180,
+  }
+  return rotations[orientationKey]
+}
+
+function makeOrientation(length: number, width: number, height: number, orientationKey: OrientationKey): BoxOrientation {
+  return {
+    length,
+    width,
+    height,
+    orientationKey,
+    labelRotationDeg: labelRotationForOrientation(orientationKey),
+  }
+}
+
+export function orientations(item: CargoItem): BoxOrientation[] {
+  const base = makeOrientation(item.length, item.width, item.height, 'LWH')
   if (!item.canRotate) {
     return [base]
   }
 
   const options = [
     base,
-    { length: item.width, width: item.length, height: item.height },
-    { length: item.length, width: item.height, height: item.width },
-    { length: item.height, width: item.length, height: item.width },
-    { length: item.width, width: item.height, height: item.length },
-    { length: item.height, width: item.width, height: item.length },
+    makeOrientation(item.width, item.length, item.height, 'WLH'),
+    makeOrientation(item.length, item.height, item.width, 'LHW'),
+    makeOrientation(item.height, item.length, item.width, 'HLW'),
+    makeOrientation(item.width, item.height, item.length, 'WHL'),
+    makeOrientation(item.height, item.width, item.length, 'HWL'),
   ]
 
   return options.filter(
@@ -345,6 +375,8 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       length: box.length,
       width: box.width,
       height: box.height,
+      orientationKey: box.orientationKey,
+      labelRotationDeg: box.labelRotationDeg,
       weight: item.weight,
       color: item.color,
       stackable: item.stackable,

@@ -1357,7 +1357,7 @@ function Workbench() {
               {t.exportView}
             </button>
             </div>
-            <div className="relative w-full aspect-[16/9] min-h-[400px] max-h-[70vh] bg-gradient-to-b from-[#eef6ff] to-[#f8fafc]">
+            <div className="relative w-full aspect-[16/9] min-h-[420px] max-h-[85vh] xl:min-h-[560px] bg-gradient-to-b from-[#eef6ff] to-[#f8fafc]">
               <div className="absolute left-5 top-5 z-10 rounded-xl bg-white/85 px-4 py-3 text-sm shadow">
                 <strong>{selectedContainer.label}</strong>
                 <div>{renderingContainer.length.toLocaleString()} x {renderingContainer.width.toLocaleString()} x {renderingContainer.height.toLocaleString()} mm</div>
