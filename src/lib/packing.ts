@@ -170,6 +170,56 @@ function normalizePoints(points: Point[], container: ContainerSpec) {
     .sort((a, b) => a.x - b.x || a.y - b.y || a.z - b.z)
 }
 
+function placementScore(
+  item: CargoItem,
+  box: BoxOrientation,
+  point: Point,
+  placed: PlacedBox[],
+  container: ContainerSpec,
+) {
+  // Discourage tilting (orientations where original height is no longer along z),
+  // so realistic upright placement wins when both orientations fit comparably.
+  const tiltPenalty = box.height === item.height ? 0 : container.length * container.width * container.height
+
+  // Edge-snap bonuses: prefer placements that snap to container or neighbor boundaries.
+  let snapBonus = 0
+  if (Math.abs(point.y + box.width - container.width) <= EPSILON) {
+    snapBonus -= container.width * container.height
+  }
+  if (Math.abs(point.x + box.length - container.length) <= EPSILON) {
+    snapBonus -= container.height
+  }
+  for (const candidate of placed) {
+    if (
+      Math.abs(point.y + box.width - candidate.y) <= EPSILON &&
+      Math.abs(point.x - candidate.x) <= EPSILON &&
+      Math.abs(point.z - candidate.z) <= EPSILON
+    ) {
+      snapBonus -= container.height
+    }
+    if (
+      Math.abs(candidate.y + candidate.width - point.y) <= EPSILON &&
+      Math.abs(candidate.x - point.x) <= EPSILON &&
+      Math.abs(candidate.z - point.z) <= EPSILON
+    ) {
+      snapBonus -= container.height
+    }
+  }
+
+  // Primary ordering: prefer placements deeper into the container (low x), then closer
+  // to the side (low y), then lower (low z). Tiebreakers prefer taller and wider boxes
+  // so that pinwheel arrangements emerge naturally for tightly packed pallet loads.
+  return (
+    tiltPenalty +
+    point.x * container.width * container.height +
+    point.y * container.height +
+    point.z +
+    (container.height - box.height) / 100000 +
+    snapBonus -
+    box.width * 0.01
+  )
+}
+
 function bestPlacement(item: CargoItem, container: ContainerSpec, placed: PlacedBox[], points: Point[]) {
   return orientations(item)
     .filter(
@@ -184,14 +234,10 @@ function bestPlacement(item: CargoItem, container: ContainerSpec, placed: Placed
         .map((point) => ({
           box,
           point,
-          score:
-            point.x * container.width * container.height +
-            point.y * container.height +
-            point.z +
-            (container.height - box.height) / 100000,
+          score: placementScore(item, box, point, placed, container),
         })),
     )
-    .sort((a, b) => a.score - b.score || b.box.length * b.box.width - a.box.length * a.box.width)[0]
+    .sort((a, b) => a.score - b.score || b.box.width - a.box.width || b.box.length * b.box.width - a.box.length * a.box.width)[0]
 }
 
 function placedBoxesOverlap(a: PlacedBox, b: PlacedBox) {
@@ -332,41 +378,27 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       return b.item.length * b.item.width * b.item.height - a.item.length * a.item.width * a.item.height
     })
 
-  for (const entry of expanded) {
-    const item = entry.item
-    const markUnplaced = (reason: string) => {
-      const current = unplacedMap.get(item.id)
-      unplacedMap.set(item.id, {
-        cargoId: item.id,
-        name: item.name,
-        label: entry.label,
-        quantity: (current?.quantity ?? 0) + 1,
-        reason,
-      })
-    }
-
-    if (orientations(item).every((box) => !fitsInsideContainer({ x: 0, y: 0, z: 0 }, box, effective))) {
-      markUnplaced('Exceeds container dimensions')
-      continue
-    }
-
-    if (usedWeight + item.weight > effective.maxWeight) {
-      markUnplaced('Exceeds maximum payload')
-      continue
-    }
-
-    const placement = bestPlacement(item, effective, placed, extremePoints)
-    if (!placement) {
-      markUnplaced('No remaining loading space')
-      continue
-    }
-    const { box, point } = placement
-    const support = supportDetails(point, box, placed)
-
-    placed.push({
-      id: `${item.id}-${entry.index}`,
+  const markUnplaced = (item: CargoItem, label: string, reason: string) => {
+    const current = unplacedMap.get(item.id)
+    unplacedMap.set(item.id, {
       cargoId: item.id,
       name: item.name,
+      label,
+      quantity: (current?.quantity ?? 0) + 1,
+      reason,
+    })
+  }
+
+  const placeEntry = (
+    entry: { item: CargoItem; itemIndex: number; label: string; index: number },
+    placement: { box: BoxOrientation; point: Point },
+  ) => {
+    const { box, point } = placement
+    const support = supportDetails(point, box, placed)
+    placed.push({
+      id: `${entry.item.id}-${entry.index}`,
+      cargoId: entry.item.id,
+      name: entry.item.name,
       label: entry.label,
       index: entry.index,
       x: point.x,
@@ -377,9 +409,9 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       height: box.height,
       orientationKey: box.orientationKey,
       labelRotationDeg: box.labelRotationDeg,
-      weight: item.weight,
-      color: item.color,
-      stackable: item.stackable,
+      weight: entry.item.weight,
+      color: entry.item.color,
+      stackable: entry.item.stackable,
       physicalLayer: support.physicalLayer,
       workStep: placed.length + 1,
       supportType: support.supportType,
@@ -395,7 +427,95 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       ],
       effective,
     )
-    usedWeight += item.weight
+    usedWeight += entry.item.weight
+  }
+
+  if (loadingMode === 'volume') {
+    // Best-fit decreasing: at each step pick the best (entry, orientation, point) combo
+    // across all remaining entries, so the algorithm naturally interleaves complementary
+    // shapes (e.g., pinwheel packing for mixed pallet widths).
+    const remaining = [...expanded]
+    while (remaining.length > 0) {
+      let best:
+        | {
+            score: number
+            box: BoxOrientation
+            point: Point
+            idx: number
+          }
+        | null = null
+
+      for (let idx = 0; idx < remaining.length; idx += 1) {
+        const entry = remaining[idx]
+        const item = entry.item
+        if (orientations(item).every((box) => !fitsInsideContainer({ x: 0, y: 0, z: 0 }, box, effective))) {
+          continue
+        }
+        if (usedWeight + item.weight > effective.maxWeight + EPSILON) {
+          continue
+        }
+        for (const box of orientations(item)) {
+          if (
+            box.length > effective.length ||
+            box.width > effective.width ||
+            box.height > effective.height
+          ) {
+            continue
+          }
+          for (const point of extremePoints) {
+            if (!canPlace(point, box, effective, placed)) continue
+            const score = placementScore(item, box, point, placed, effective)
+            if (
+              best === null ||
+              score < best.score ||
+              (score === best.score && box.width > best.box.width)
+            ) {
+              best = { score, box, point, idx }
+            }
+          }
+        }
+      }
+
+      if (!best) break
+      const entry = remaining[best.idx]
+      remaining.splice(best.idx, 1)
+      placeEntry(entry, { box: best.box, point: best.point })
+    }
+
+    // Anything still in `remaining` is unplaced; categorize each by reason.
+    for (const entry of remaining) {
+      const item = entry.item
+      if (orientations(item).every((box) => !fitsInsideContainer({ x: 0, y: 0, z: 0 }, box, effective))) {
+        markUnplaced(item, entry.label, 'Exceeds container dimensions')
+        continue
+      }
+      if (usedWeight + item.weight > effective.maxWeight + EPSILON) {
+        markUnplaced(item, entry.label, 'Exceeds maximum payload')
+        continue
+      }
+      markUnplaced(item, entry.label, 'No remaining loading space')
+    }
+  } else {
+    for (const entry of expanded) {
+      const item = entry.item
+
+      if (orientations(item).every((box) => !fitsInsideContainer({ x: 0, y: 0, z: 0 }, box, effective))) {
+        markUnplaced(item, entry.label, 'Exceeds container dimensions')
+        continue
+      }
+
+      if (usedWeight + item.weight > effective.maxWeight) {
+        markUnplaced(item, entry.label, 'Exceeds maximum payload')
+        continue
+      }
+
+      const placement = bestPlacement(item, effective, placed, extremePoints)
+      if (!placement) {
+        markUnplaced(item, entry.label, 'No remaining loading space')
+        continue
+      }
+      placeEntry(entry, placement)
+    }
   }
 
   const usedVolume = placed.reduce((sum, box) => sum + box.length * box.width * box.height, 0)
