@@ -26,6 +26,21 @@ type MeshEntry = {
   edges: THREE.LineSegments
 }
 
+type SceneState = {
+  scene: THREE.Scene
+  camera: THREE.PerspectiveCamera
+  renderer: THREE.WebGLRenderer
+  controls: OrbitControls
+  pickables: THREE.Mesh[]
+  boxByUuid: Map<string, string>
+  meshEntries: Map<string, MeshEntry>
+  invalidOverride: Set<string>
+  scale: number
+  length: number
+  width: number
+  height: number
+}
+
 const textureCache = new Map<string, THREE.Texture>()
 const materialCache = new Map<string, THREE.Material>()
 
@@ -153,13 +168,46 @@ function cameraPositionForMode(mode: SceneViewMode, length: number, width: numbe
   return new THREE.Vector3(distance * 0.72, distance * 0.48, distance * 0.82)
 }
 
-export function ContainerScene({ container, boxes, activeLayerId, activeLabelId, viewMode, freeView, selectedBoxId, onSelectBox, invalidBoxIds, manualEditable, onManualMove, onManualDropFromPool }: ContainerSceneProps) {
+function rectsOverlap(
+  ax: number, ay: number, al: number, aw: number,
+  bx: number, by: number, bl: number, bw: number,
+  epsilon = 0.01,
+) {
+  return (
+    ax + al > bx + epsilon &&
+    bx + bl > ax + epsilon &&
+    ay + aw > by + epsilon &&
+    by + bw > ay + epsilon
+  )
+}
+
+function isOutOfBounds(x: number, y: number, l: number, w: number, container: { length: number; width: number }, epsilon = 0.01) {
+  return x < -epsilon || y < -epsilon || x + l > container.length + epsilon || y + w > container.width + epsilon
+}
+
+export function ContainerScene({
+  container,
+  boxes,
+  activeLayerId,
+  activeLabelId,
+  viewMode,
+  freeView,
+  selectedBoxId,
+  onSelectBox,
+  invalidBoxIds,
+  manualEditable,
+  onManualMove,
+  onManualDropFromPool,
+}: ContainerSceneProps) {
   const mountRef = useRef<HTMLDivElement | null>(null)
-  const meshEntriesRef = useRef<Map<string, MeshEntry>>(new Map())
+  const sceneStateRef = useRef<SceneState | null>(null)
   const invalidBoxIdsRef = useRef<Set<string>>(invalidBoxIds ?? new Set())
   const manualEditableRef = useRef<boolean>(manualEditable ?? false)
+  const freeViewRef = useRef<boolean>(freeView ?? false)
   const onManualMoveRef = useRef<typeof onManualMove>(onManualMove)
   const onManualDropFromPoolRef = useRef<typeof onManualDropFromPool>(onManualDropFromPool)
+  const onSelectBoxRef = useRef<typeof onSelectBox>(onSelectBox)
+  const visualPropsRef = useRef({ activeLayerId, activeLabelId, selectedBoxId })
 
   useEffect(() => {
     invalidBoxIdsRef.current = invalidBoxIds ?? new Set()
@@ -170,12 +218,24 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
   }, [manualEditable])
 
   useEffect(() => {
+    freeViewRef.current = freeView ?? false
+  }, [freeView])
+
+  useEffect(() => {
     onManualMoveRef.current = onManualMove
   }, [onManualMove])
 
   useEffect(() => {
     onManualDropFromPoolRef.current = onManualDropFromPool
   }, [onManualDropFromPool])
+
+  useEffect(() => {
+    onSelectBoxRef.current = onSelectBox
+  }, [onSelectBox])
+
+  useEffect(() => {
+    visualPropsRef.current = { activeLayerId, activeLabelId, selectedBoxId }
+  }, [activeLayerId, activeLabelId, selectedBoxId])
 
   useEffect(() => {
     const mount = mountRef.current
@@ -207,15 +267,14 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
     controls.enableDamping = true
     controls.target.copy(target)
     controls.maxDistance = 45
-    controls.enabled = freeView ?? false
 
     const ambient = new THREE.HemisphereLight(0xffffff, 0x8d8d8d, 2.4)
     scene.add(ambient)
 
-    const key = new THREE.DirectionalLight(0xffffff, 2.1)
-    key.position.set(7, 10, 5)
-    key.castShadow = true
-    scene.add(key)
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.1)
+    keyLight.position.set(7, 10, 5)
+    keyLight.castShadow = true
+    scene.add(keyLight)
 
     const floorGeometry = new THREE.BoxGeometry(length, 0.05, width)
     const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xb6b1a4, roughness: 0.85 })
@@ -237,54 +296,32 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
     rearWall.position.set(-length / 2, height / 2, 0)
     scene.add(rearWall)
 
-    const pickables: THREE.Mesh[] = []
-    const boxByUuid = new Map<string, string>()
-    const meshEntries = new Map<string, MeshEntry>()
-    meshEntriesRef.current = meshEntries
-
-    boxes.forEach((box) => {
-      const geometry = new THREE.BoxGeometry(box.length * scale, box.height * scale, box.width * scale)
-      const invalid = invalidBoxIdsRef.current.has(box.id)
-      const visualState = boxVisualState(box, 'all', 'all', null, invalid)
-      const material = getCachedBoxMaterial(box, visualState.selected, visualState.opacity, invalid)
-      const mesh = new THREE.Mesh(geometry, material)
-      mesh.position.set(
-        -length / 2 + (box.x + box.length / 2) * scale,
-        (box.z + box.height / 2) * scale,
-        -width / 2 + (box.y + box.width / 2) * scale,
-      )
-      mesh.castShadow = true
-      mesh.receiveShadow = true
-      scene.add(mesh)
-      pickables.push(mesh)
-      boxByUuid.set(mesh.uuid, box.id)
-
-      const edges = new THREE.LineSegments(
-        new THREE.EdgesGeometry(geometry),
-        new THREE.LineBasicMaterial({
-          color: visualState.edgeColor,
-          transparent: true,
-          opacity: visualState.edgeOpacity,
-        }),
-      )
-      edges.position.copy(mesh.position)
-      scene.add(edges)
-      meshEntries.set(box.id, { box, mesh, edges })
-    })
-
     const grid = new THREE.GridHelper(Math.max(length, width), 16, 0x8b8b8b, 0xbdbdbd)
     grid.position.y = 0.002
     scene.add(grid)
 
+    const sceneState: SceneState = {
+      scene,
+      camera,
+      renderer,
+      controls,
+      pickables: [],
+      boxByUuid: new Map(),
+      meshEntries: new Map(),
+      invalidOverride: new Set(),
+      scale,
+      length,
+      width,
+      height,
+    }
+    sceneStateRef.current = sceneState
+
     const resize = () => {
-      if (!mount.clientWidth || !mount.clientHeight) {
-        return
-      }
+      if (!mount.clientWidth || !mount.clientHeight) return
       camera.aspect = mount.clientWidth / mount.clientHeight
       camera.updateProjectionMatrix()
       renderer.setSize(mount.clientWidth, mount.clientHeight)
     }
-
     const observer = new ResizeObserver(resize)
     observer.observe(mount)
 
@@ -304,20 +341,55 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
       y: (worldZ + width / 2) / scale,
     })
 
-    type DragState = { boxId: string; offsetXmm: number; offsetYmm: number; entry: MeshEntry }
+    type DragState = {
+      boxId: string
+      offsetXmm: number
+      offsetYmm: number
+      entry: MeshEntry
+      wasInvalid: boolean
+    }
     let dragState: DragState | null = null
+
+    const computeDragInvalid = (entry: MeshEntry, x: number, y: number) => {
+      if (isOutOfBounds(x, y, entry.box.length, entry.box.width, container)) return true
+      for (const other of sceneState.meshEntries.values()) {
+        if (other.box.id === entry.box.id) continue
+        if (other.box.z >= entry.box.z + entry.box.height || entry.box.z >= other.box.z + other.box.height) continue
+        if (
+          rectsOverlap(
+            x,
+            y,
+            entry.box.length,
+            entry.box.width,
+            other.box.x,
+            other.box.y,
+            other.box.length,
+            other.box.width,
+          )
+        ) {
+          return true
+        }
+      }
+      return false
+    }
+
+    const refreshEntryVisual = (entry: MeshEntry) => {
+      const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb } = visualPropsRef.current
+      const invalid = sceneState.invalidOverride.has(entry.box.id) || invalidBoxIdsRef.current.has(entry.box.id)
+      applyBoxVisualState(entry, la, lb, sb, invalid)
+    }
 
     const onPointerDown = (event: PointerEvent) => {
       if (event.button !== 0) return
       updatePointer(event)
       raycaster.setFromCamera(pointer, camera)
-      const hit = raycaster.intersectObjects(pickables, false)[0]
-      const boxId = hit ? boxByUuid.get(hit.object.uuid) : undefined
+      const hit = raycaster.intersectObjects(sceneState.pickables, false)[0]
+      const boxId = hit ? sceneState.boxByUuid.get(hit.object.uuid) : undefined
       if (boxId) {
-        onSelectBox?.(boxId)
+        onSelectBoxRef.current?.(boxId)
       }
       if (!manualEditableRef.current || !boxId) return
-      const entry = meshEntries.get(boxId)
+      const entry = sceneState.meshEntries.get(boxId)
       if (!entry) return
       raycaster.ray.intersectPlane(groundPlane, intersectionPoint)
       const containerMm = worldToContainerMm(intersectionPoint.x, intersectionPoint.z)
@@ -326,6 +398,7 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
         offsetXmm: containerMm.x - entry.box.x,
         offsetYmm: containerMm.y - entry.box.y,
         entry,
+        wasInvalid: sceneState.invalidOverride.has(boxId) || invalidBoxIdsRef.current.has(boxId),
       }
       controls.enabled = false
       renderer.domElement.setPointerCapture?.(event.pointerId)
@@ -346,6 +419,14 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
       entry.mesh.position.z = newWorldZ
       entry.edges.position.x = newWorldX
       entry.edges.position.z = newWorldZ
+
+      const invalid = computeDragInvalid(entry, nextX, nextY)
+      if (invalid) {
+        sceneState.invalidOverride.add(entry.box.id)
+      } else {
+        sceneState.invalidOverride.delete(entry.box.id)
+      }
+      refreshEntryVisual(entry)
     }
 
     const onPointerUp = (event: PointerEvent) => {
@@ -353,11 +434,17 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
         const { entry, boxId } = dragState
         const finalXmm = (entry.mesh.position.x + length / 2) / scale - entry.box.length / 2
         const finalYmm = (entry.mesh.position.z + width / 2) / scale - entry.box.width / 2
+        sceneState.invalidOverride.delete(boxId)
+        refreshEntryVisual(entry)
         onManualMoveRef.current?.(boxId, finalXmm, finalYmm)
         renderer.domElement.releasePointerCapture?.(event.pointerId)
         dragState = null
       }
-      controls.enabled = freeView ?? false
+      if (manualEditableRef.current) {
+        controls.enabled = true
+      } else {
+        controls.enabled = freeViewRef.current
+      }
     }
 
     const onDragOver = (event: DragEvent) => {
@@ -390,7 +477,9 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
     let frame = 0
     const animate = () => {
       frame = requestAnimationFrame(animate)
-      controls.update()
+      if (controls.enabled) {
+        controls.update()
+      }
       renderer.render(scene, camera)
     }
     animate()
@@ -399,6 +488,15 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
       cancelAnimationFrame(frame)
       observer.disconnect()
       controls.dispose()
+      sceneState.meshEntries.forEach((entry) => {
+        entry.mesh.geometry.dispose()
+        entry.edges.geometry.dispose()
+        scene.remove(entry.mesh)
+        scene.remove(entry.edges)
+      })
+      sceneState.meshEntries.clear()
+      sceneState.pickables.length = 0
+      sceneState.boxByUuid.clear()
       const geometries = new Set<THREE.BufferGeometry>()
       scene.traverse((object) => {
         if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments) {
@@ -406,10 +504,6 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
         }
       })
       geometries.forEach((geometry) => geometry.dispose())
-      meshEntries.clear()
-      if (meshEntriesRef.current === meshEntries) {
-        meshEntriesRef.current = new Map()
-      }
       renderer.dispose()
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
       renderer.domElement.removeEventListener('pointermove', onPointerMove)
@@ -418,15 +512,134 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
       renderer.domElement.removeEventListener('dragover', onDragOver)
       renderer.domElement.removeEventListener('drop', onDrop)
       mount.removeChild(renderer.domElement)
+      if (sceneStateRef.current === sceneState) {
+        sceneStateRef.current = null
+      }
     }
-  }, [container, boxes, viewMode, freeView, onSelectBox])
+  }, [container]) // eslint-disable-line react-hooks/exhaustive-deps -- viewMode is handled by its own effect; we only rebuild on container change
 
   useEffect(() => {
-    meshEntriesRef.current.forEach((entry) => {
-      const invalid = invalidBoxIdsRef.current.has(entry.box.id)
-      applyBoxVisualState(entry, activeLayerId, activeLabelId, selectedBoxId, invalid)
+    const state = sceneStateRef.current
+    if (!state) return
+    const { scene, meshEntries, pickables, boxByUuid, scale, length, width } = state
+
+    const incomingIds = new Set(boxes.map((box) => box.id))
+    for (const [id, entry] of meshEntries) {
+      if (!incomingIds.has(id)) {
+        scene.remove(entry.mesh)
+        scene.remove(entry.edges)
+        entry.mesh.geometry.dispose()
+        entry.edges.geometry.dispose()
+        const idx = pickables.indexOf(entry.mesh)
+        if (idx >= 0) pickables.splice(idx, 1)
+        boxByUuid.delete(entry.mesh.uuid)
+        meshEntries.delete(id)
+      }
+    }
+
+    const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb } = visualPropsRef.current
+    boxes.forEach((box) => {
+      const existing = meshEntries.get(box.id)
+      const invalid = state.invalidOverride.has(box.id) || invalidBoxIdsRef.current.has(box.id)
+      if (existing) {
+        const sameSize = existing.box.length === box.length && existing.box.width === box.width && existing.box.height === box.height
+        if (!sameSize) {
+          existing.mesh.geometry.dispose()
+          existing.edges.geometry.dispose()
+          const geometry = new THREE.BoxGeometry(box.length * scale, box.height * scale, box.width * scale)
+          existing.mesh.geometry = geometry
+          existing.edges.geometry = new THREE.EdgesGeometry(geometry)
+        }
+        existing.mesh.position.set(
+          -length / 2 + (box.x + box.length / 2) * scale,
+          (box.z + box.height / 2) * scale,
+          -width / 2 + (box.y + box.width / 2) * scale,
+        )
+        existing.edges.position.copy(existing.mesh.position)
+        existing.box = box
+        applyBoxVisualState(existing, la, lb, sb, invalid)
+        return
+      }
+      const geometry = new THREE.BoxGeometry(box.length * scale, box.height * scale, box.width * scale)
+      const visualState = boxVisualState(box, la, lb, sb, invalid)
+      const material = getCachedBoxMaterial(box, visualState.selected, visualState.opacity, invalid)
+      const mesh = new THREE.Mesh(geometry, material)
+      mesh.position.set(
+        -length / 2 + (box.x + box.length / 2) * scale,
+        (box.z + box.height / 2) * scale,
+        -width / 2 + (box.y + box.width / 2) * scale,
+      )
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      scene.add(mesh)
+      pickables.push(mesh)
+      boxByUuid.set(mesh.uuid, box.id)
+
+      const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geometry),
+        new THREE.LineBasicMaterial({
+          color: visualState.edgeColor,
+          transparent: true,
+          opacity: visualState.edgeOpacity,
+        }),
+      )
+      edges.position.copy(mesh.position)
+      scene.add(edges)
+      meshEntries.set(box.id, { box, mesh, edges })
+    })
+  }, [boxes])
+
+  useEffect(() => {
+    const state = sceneStateRef.current
+    if (!state) return
+    state.camera.position.copy(cameraPositionForMode(viewMode, state.length, state.width, state.height))
+    state.camera.lookAt(0, state.height / 2, 0)
+    state.controls.target.set(0, state.height / 2, 0)
+    state.controls.update()
+  }, [viewMode])
+
+  useEffect(() => {
+    const state = sceneStateRef.current
+    if (!state) return
+    if (manualEditable) {
+      state.controls.enabled = true
+      state.controls.mouseButtons = {
+        LEFT: null,
+        MIDDLE: THREE.MOUSE.DOLLY,
+        RIGHT: THREE.MOUSE.ROTATE,
+      }
+    } else if (freeView) {
+      state.controls.enabled = true
+      state.controls.mouseButtons = {
+        LEFT: THREE.MOUSE.ROTATE,
+        MIDDLE: THREE.MOUSE.DOLLY,
+        RIGHT: THREE.MOUSE.PAN,
+      }
+    } else {
+      state.controls.enabled = false
+    }
+  }, [manualEditable, freeView])
+
+  useEffect(() => {
+    const state = sceneStateRef.current
+    if (!state) return
+    const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb } = visualPropsRef.current
+    state.meshEntries.forEach((entry) => {
+      const invalid = state.invalidOverride.has(entry.box.id) || invalidBoxIdsRef.current.has(entry.box.id)
+      applyBoxVisualState(entry, la, lb, sb, invalid)
     })
   }, [activeLayerId, activeLabelId, selectedBoxId, invalidBoxIds])
 
-  return <div ref={mountRef} className="h-full min-h-[420px] w-full" data-testid="container-scene" />
+  const controlsEnabled = !!(manualEditable || freeView)
+  const interactionMode = manualEditable ? 'manual' : freeView ? 'free' : 'locked'
+
+  return (
+    <div
+      ref={mountRef}
+      className="h-full min-h-[420px] w-full"
+      data-testid="container-scene"
+      data-controls-enabled={controlsEnabled ? 'true' : 'false'}
+      data-interaction-mode={interactionMode}
+    />
+  )
 }

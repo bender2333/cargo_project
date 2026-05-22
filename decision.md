@@ -233,3 +233,20 @@
   - 手动 2D front/side 视图目前只支持读视图；要让拖拽改 box.z 需要扩展 `manualPlacement.setBoxPosition` 接收 z 参数与对应 reducer 命名约定，留待后续轮次。
   - 3D 手动模式当前只做平面 XY 平移；旋转仍走顶部工具栏的 `handleManualRotate`，本身能影响 3D 渲染（因 boxes prop 由 manualDraft 派生），但缺少键盘快捷键体验，可在后续轮接入。
   - 装箱算法 quantity 路径不走 best-fit decreasing，在"小货 + 大件"混排时利用率明显低于 volume；如果未来用户期望"数量优先但智能交错"，需要把 best-fit 抽出共用辅助。
+
+
+## 2026-05-22 第十轮收尾：手动 3D 编辑器视角、碰撞、性能三件套
+
+- 背景：第十轮主提交把手动模式 3D 拖拽与 pool drop 跑通后，用户提出三点遗留：(1) 视角不能移动（OrbitControls 默认关掉），(2) 拖拽中没有实时碰撞反馈（只在松手后由 manualPlacement.validateDraft 反算 issue），(3) 每次手动 commit 都重建 Scene，体感卡顿。
+- 决策：在 `ContainerScene.tsx` 做一次性的有限重构，避免变成 3D 编辑器全量重写：
+  1. 视角：手动模式下 `controls.enabled = true`、`mouseButtons = { LEFT: null, MIDDLE: DOLLY, RIGHT: ROTATE }`；自由视角下保留默认 `LEFT: ROTATE, MIDDLE: DOLLY, RIGHT: PAN`；其他情况锁定。把"controls 启用 / 当前交互模式"暴露成 `data-controls-enabled` 与 `data-interaction-mode`，给 E2E 一个稳定断言点（playwright `page.mouse.wheel` 在 WebGL canvas 上不可靠，不用作回归点）。
+  2. 实时碰撞：拖拽 pointermove 中按当前候选位置算与其它箱体的 XY 重叠 + 容器越界（仅同 z 重叠区间需要检测），命中则把当前 box.id 临时塞进 `sceneState.invalidOverride`，pointerup 落地后清空 override 让 `manualPlacement.validateDraft` 的持久 issues 接管。`refreshEntryVisual` 复用既有 `applyBoxVisualState` 路径，红边即时反馈。
+  3. 性能：把单一大 `useEffect` 拆为三层：主 effect 仅依赖 `[container]`（容器尺寸变了才重建场景），新增 `boxes` effect 做增量 mesh add/update/remove + dispose，`viewMode` / `manualEditable+freeView` 各一个 effect 单独同步 camera 与 controls。`controls.update()` 仅在 enabled 时调用，减少 idle 状态的无用计算。本地全量 E2E 时长从 5.5min 降到 4.0min（约 27% 改善）。
+- 影响：
+  - 主 effect 依赖减少导致 React Hooks ESLint 报 "missing dependency: viewMode"，已用行内 disable + 注释明确意图，避免未来无意中加回 deps 触发重建。
+  - 手动模式视角操作改成"右键旋转 / 中键 / 滚轮缩放 / 左键留给箱体拾取与拖拽"，与一般 3D 编辑器约定一致。键盘 PAN 暂不支持。
+  - 拖拽碰撞检测是 O(N) per move（N=已放置箱数）；当 N 巨大（>1000）时可能感受到帧率影响，本期不引入空间索引，预留下一轮（uniform grid / 简单 KD-tree）。
+- 后续：
+  - 手动 3D 仍是 XY 平面平移；要支持把箱体抬起堆叠（改 z）需要扩展 `manualPlacement.setBoxPosition` 接收 z 并把 raycast 改为同时支持 ground + 已放置箱顶面。
+  - OrbitControls.mouseButtons LEFT=null 的类型在 three@old 上是 `MOUSE | undefined`，本期用 `null` 强制赋值（运行时 OK）；如果未来 three.js 升级类型变严格，需要改成 `undefined`。
+  - 远程 E2E 跑了 41 个用例 → 40 pass / 1 skipped（`responsive-3d.spec.ts` 仍待补真后端流程），与本地一致。

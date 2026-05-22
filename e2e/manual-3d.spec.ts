@@ -87,10 +87,22 @@ test('手动模式 2D 视角切换前/侧视图，SVG viewBox 随之变化', asy
 test('手动模式 3D 暴露 manualEditable canvas，pool 项目可拖拽', async ({ page }) => {
   await ensureChinese(page)
   await enterManualMode(page)
-  await expect(page.getByTestId('container-scene')).toBeVisible()
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toBeVisible()
+  await expect(scene).toHaveAttribute('data-interaction-mode', 'manual')
+  await expect(scene).toHaveAttribute('data-controls-enabled', 'true')
 
   const poolItems = page.getByTestId('manual-pool-item')
   const count = await poolItems.count()
   expect(count).toBeGreaterThan(0)
   await expect(poolItems.first()).toHaveAttribute('draggable', 'true')
+})
+
+test('自动模式默认锁定视角；点自由视角后切到 free 状态', async ({ page }) => {
+  await ensureChinese(page)
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toBeVisible()
+  await expect(scene).toHaveAttribute('data-interaction-mode', 'locked')
+  await page.getByRole('button', { name: '自由视角' }).click()
+  await expect(scene).toHaveAttribute('data-interaction-mode', 'free')
 })

@@ -2,6 +2,14 @@
 
 ## 2026-05-22
 
+- Completed subtask: enhance manual 3D editor with camera control, live collision feedback, and incremental scene updates.
+  - `ContainerScene` refactored: main effect rebuilds only on `container` change; new effects increment-sync `boxes` (add/update/remove mesh + edges with proper geometry disposal), camera position by `viewMode`, and OrbitControls enable/mouse-button mapping by `manualEditable` + `freeView`.
+  - Manual mode mouse mapping: LEFT → box raycast/drag, MIDDLE → dolly, RIGHT → rotate; free view keeps LEFT → rotate; locked mode disables controls. `controls.update()` is now skipped when disabled.
+  - Live collision feedback: while dragging, the candidate XY rectangle is checked against the other boxes' XY footprint (with z-overlap filter) and container bounds; the dragged box's edge turns red the moment a collision/out-of-bounds is detected, and reverts on pointerup once `validateDraft` takes over the persistent state.
+  - Scene exposes `data-controls-enabled` and `data-interaction-mode` (`manual`/`free`/`locked`) for stable E2E assertions (WebGL canvas wheel events are unreliable in Playwright).
+  - New E2E `自动模式默认锁定视角；点自由视角后切到 free 状态` plus extended `手动模式 3D 暴露 manualEditable canvas` assertion (interaction mode = manual, controls enabled = true).
+  - Verification: `npm run lint && npm test && npm run build` 全绿；本地 E2E 41 用例 → 40 pass / 1 skipped；远程 (101.33.232.150) E2E 同样 40 pass / 1 skipped；本地全量 E2E 时长 5.5min → 4.0min (~27% 提升).
+
 - Completed subtask: deliver tenth review (auto/manual mode polish, default quantity loading, badge placement, full E2E green) and resolve all carry-over failures.
   - Recorded Tenth Review and execution plan in `REVIEW.md`.
   - `loadingMode` default switched to `quantity` (前端 useState + lib 默认值 + 单元测试 + UI dropdown all aligned).
