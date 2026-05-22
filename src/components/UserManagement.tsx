@@ -7,6 +7,8 @@ interface UserItem {
   role: 'user' | 'admin'
   disabled: number
   created_at: string
+  last_login_at: string | null
+  last_login_ip: string | null
 }
 
 interface UserManagementProps {
@@ -135,6 +137,12 @@ export function UserManagement({ onBack }: UserManagementProps) {
                       注册时间
                     </th>
                     <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      最近登录
+                    </th>
+                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      登录 IP
+                    </th>
+                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                       账号状态
                     </th>
                     <th scope="col" className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -145,7 +153,7 @@ export function UserManagement({ onBack }: UserManagementProps) {
                 <tbody className="bg-white divide-y divide-slate-200">
                   {users.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-sm text-slate-500">
+                      <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-500">
                         暂无普通注册用户
                       </td>
                     </tr>
@@ -172,6 +180,12 @@ export function UserManagement({ onBack }: UserManagementProps) {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                           {new Date(user.created_at).toLocaleString('zh-CN')}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                          {user.last_login_at ? new Date(user.last_login_at).toLocaleString('zh-CN') : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-mono">
+                          {user.last_login_ip ?? '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${

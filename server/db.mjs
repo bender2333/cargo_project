@@ -46,6 +46,49 @@ db.exec(`
   );
 `)
 
+// 1a. Schema migrations (idempotent, version-tracked via PRAGMA user_version)
+const hasColumn = (table, column) => {
+  const cols = db.pragma(`table_info(${table})`)
+  return cols.some((c) => c.name === column)
+}
+
+const migrations = [
+  // Migration 1: add admin audit fields to users table
+  {
+    version: 1,
+    description: 'Add last_login_at and last_login_ip to users',
+    up: () => {
+      if (!hasColumn('users', 'last_login_at')) {
+        db.exec('ALTER TABLE users ADD COLUMN last_login_at TEXT')
+      }
+      if (!hasColumn('users', 'last_login_ip')) {
+        db.exec('ALTER TABLE users ADD COLUMN last_login_ip TEXT')
+      }
+    },
+  },
+]
+
+const runMigrations = () => {
+  const currentVersion = db.pragma('user_version', { simple: true })
+  for (const migration of migrations) {
+    if (migration.version > currentVersion) {
+      const tx = db.transaction(() => {
+        migration.up()
+        db.pragma(`user_version = ${migration.version}`)
+      })
+      try {
+        tx()
+        console.log(`Migration ${migration.version} applied: ${migration.description}`)
+      } catch (err) {
+        console.error(`Migration ${migration.version} failed:`, err.message)
+        throw err
+      }
+    }
+  }
+}
+
+runMigrations()
+
 // 2. Initialize default admin account
 const initAdmin = () => {
   const existing = db.prepare('SELECT * FROM users WHERE username = ?').get('admin')

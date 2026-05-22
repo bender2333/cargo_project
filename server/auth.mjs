@@ -68,6 +68,21 @@ router.post('/login', (req, res) => {
       return res.status(401).json({ error: 'Invalid username or password' })
     }
 
+    // Record audit fields: last login timestamp and source IP
+    const last_login_at = new Date().toISOString()
+    const last_login_ip =
+      req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || null
+    try {
+      db.prepare('UPDATE users SET last_login_at = ?, last_login_ip = ? WHERE id = ?').run(
+        last_login_at,
+        last_login_ip,
+        user.id
+      )
+    } catch (auditErr) {
+      // Audit logging should not block login; surface in server logs only
+      console.error('Login Audit Error:', auditErr.message)
+    }
+
     const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' })
 
     res.json({
