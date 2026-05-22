@@ -15,6 +15,9 @@ type ContainerSceneProps = {
   selectedBoxId?: string | null
   onSelectBox?: (boxId: string) => void
   invalidBoxIds?: Set<string>
+  manualEditable?: boolean
+  onManualMove?: (boxId: string, x: number, y: number) => void
+  onManualDropFromPool?: (cargoId: string, x: number, y: number) => void
 }
 
 type MeshEntry = {
@@ -150,14 +153,29 @@ function cameraPositionForMode(mode: SceneViewMode, length: number, width: numbe
   return new THREE.Vector3(distance * 0.72, distance * 0.48, distance * 0.82)
 }
 
-export function ContainerScene({ container, boxes, activeLayerId, activeLabelId, viewMode, freeView, selectedBoxId, onSelectBox, invalidBoxIds }: ContainerSceneProps) {
+export function ContainerScene({ container, boxes, activeLayerId, activeLabelId, viewMode, freeView, selectedBoxId, onSelectBox, invalidBoxIds, manualEditable, onManualMove, onManualDropFromPool }: ContainerSceneProps) {
   const mountRef = useRef<HTMLDivElement | null>(null)
   const meshEntriesRef = useRef<Map<string, MeshEntry>>(new Map())
   const invalidBoxIdsRef = useRef<Set<string>>(invalidBoxIds ?? new Set())
+  const manualEditableRef = useRef<boolean>(manualEditable ?? false)
+  const onManualMoveRef = useRef<typeof onManualMove>(onManualMove)
+  const onManualDropFromPoolRef = useRef<typeof onManualDropFromPool>(onManualDropFromPool)
 
   useEffect(() => {
     invalidBoxIdsRef.current = invalidBoxIds ?? new Set()
   }, [invalidBoxIds])
+
+  useEffect(() => {
+    manualEditableRef.current = manualEditable ?? false
+  }, [manualEditable])
+
+  useEffect(() => {
+    onManualMoveRef.current = onManualMove
+  }, [onManualMove])
+
+  useEffect(() => {
+    onManualDropFromPoolRef.current = onManualDropFromPool
+  }, [onManualDropFromPool])
 
   useEffect(() => {
     const mount = mountRef.current
@@ -272,21 +290,102 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
 
     const raycaster = new THREE.Raycaster()
     const pointer = new THREE.Vector2()
-    const onPointerDown = (event: PointerEvent) => {
-      if (!onSelectBox) {
-        return
-      }
+    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+    const intersectionPoint = new THREE.Vector3()
+
+    const updatePointer = (event: PointerEvent | DragEvent) => {
       const rect = renderer.domElement.getBoundingClientRect()
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+    }
+
+    const worldToContainerMm = (worldX: number, worldZ: number) => ({
+      x: (worldX + length / 2) / scale,
+      y: (worldZ + width / 2) / scale,
+    })
+
+    type DragState = { boxId: string; offsetXmm: number; offsetYmm: number; entry: MeshEntry }
+    let dragState: DragState | null = null
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return
+      updatePointer(event)
       raycaster.setFromCamera(pointer, camera)
       const hit = raycaster.intersectObjects(pickables, false)[0]
       const boxId = hit ? boxByUuid.get(hit.object.uuid) : undefined
       if (boxId) {
-        onSelectBox(boxId)
+        onSelectBox?.(boxId)
+      }
+      if (!manualEditableRef.current || !boxId) return
+      const entry = meshEntries.get(boxId)
+      if (!entry) return
+      raycaster.ray.intersectPlane(groundPlane, intersectionPoint)
+      const containerMm = worldToContainerMm(intersectionPoint.x, intersectionPoint.z)
+      dragState = {
+        boxId,
+        offsetXmm: containerMm.x - entry.box.x,
+        offsetYmm: containerMm.y - entry.box.y,
+        entry,
+      }
+      controls.enabled = false
+      renderer.domElement.setPointerCapture?.(event.pointerId)
+    }
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (!dragState) return
+      updatePointer(event)
+      raycaster.setFromCamera(pointer, camera)
+      if (!raycaster.ray.intersectPlane(groundPlane, intersectionPoint)) return
+      const containerMm = worldToContainerMm(intersectionPoint.x, intersectionPoint.z)
+      const nextX = containerMm.x - dragState.offsetXmm
+      const nextY = containerMm.y - dragState.offsetYmm
+      const { entry } = dragState
+      const newWorldX = -length / 2 + (nextX + entry.box.length / 2) * scale
+      const newWorldZ = -width / 2 + (nextY + entry.box.width / 2) * scale
+      entry.mesh.position.x = newWorldX
+      entry.mesh.position.z = newWorldZ
+      entry.edges.position.x = newWorldX
+      entry.edges.position.z = newWorldZ
+    }
+
+    const onPointerUp = (event: PointerEvent) => {
+      if (dragState) {
+        const { entry, boxId } = dragState
+        const finalXmm = (entry.mesh.position.x + length / 2) / scale - entry.box.length / 2
+        const finalYmm = (entry.mesh.position.z + width / 2) / scale - entry.box.width / 2
+        onManualMoveRef.current?.(boxId, finalXmm, finalYmm)
+        renderer.domElement.releasePointerCapture?.(event.pointerId)
+        dragState = null
+      }
+      controls.enabled = freeView ?? false
+    }
+
+    const onDragOver = (event: DragEvent) => {
+      if (!manualEditableRef.current) return
+      event.preventDefault()
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'copy'
       }
     }
+
+    const onDrop = (event: DragEvent) => {
+      if (!manualEditableRef.current) return
+      event.preventDefault()
+      const cargoId = event.dataTransfer?.getData('application/x-cargo-id') ?? event.dataTransfer?.getData('text/plain')
+      if (!cargoId) return
+      updatePointer(event)
+      raycaster.setFromCamera(pointer, camera)
+      if (!raycaster.ray.intersectPlane(groundPlane, intersectionPoint)) return
+      const containerMm = worldToContainerMm(intersectionPoint.x, intersectionPoint.z)
+      onManualDropFromPoolRef.current?.(cargoId, containerMm.x, containerMm.y)
+    }
+
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
+    renderer.domElement.addEventListener('pointermove', onPointerMove)
+    renderer.domElement.addEventListener('pointerup', onPointerUp)
+    renderer.domElement.addEventListener('pointercancel', onPointerUp)
+    renderer.domElement.addEventListener('dragover', onDragOver)
+    renderer.domElement.addEventListener('drop', onDrop)
 
     let frame = 0
     const animate = () => {
@@ -313,6 +412,11 @@ export function ContainerScene({ container, boxes, activeLayerId, activeLabelId,
       }
       renderer.dispose()
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
+      renderer.domElement.removeEventListener('pointermove', onPointerMove)
+      renderer.domElement.removeEventListener('pointerup', onPointerUp)
+      renderer.domElement.removeEventListener('pointercancel', onPointerUp)
+      renderer.domElement.removeEventListener('dragover', onDragOver)
+      renderer.domElement.removeEventListener('drop', onDrop)
       mount.removeChild(renderer.domElement)
     }
   }, [container, boxes, viewMode, freeView, onSelectBox])

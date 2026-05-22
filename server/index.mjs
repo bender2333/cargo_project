@@ -202,6 +202,15 @@ app.delete('/api/history/:id', authenticate, (req, res) => {
   }
 })
 
+app.delete('/api/history', authenticate, (req, res) => {
+  try {
+    const result = db.prepare('DELETE FROM history_plans WHERE user_id = ?').run(req.user.id)
+    res.json({ deleted: result.changes })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // Serve static frontend files in production
 const distPath = path.join(__dirname, '../dist')
 app.use(express.static(distPath))

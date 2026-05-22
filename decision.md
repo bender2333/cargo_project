@@ -210,3 +210,26 @@
 - 通用后续：
   - 在 `server/index.mjs` 增加一条 `DELETE /api/history/all`（鉴权 + 仅当前用户）以支持 E2E 清场，避免后续测试依赖 admin 接口。
   - 把 `responsive-3d.spec.ts` 当前的 `test.skip(true)` 替换为需要后端的真实流程：用户登录 → 调三种 viewport，下一轮兑现。
+
+
+## 2026-05-22 第十轮交付完成与遗留问题清零
+
+- 背景：第十轮 Review 提出 4 项核心需求（模式收敛、手动 3D 操作、手动 2D 视角、尺寸 badge 不遮挡、装载规则默认数量优先）+ 远程部署 + E2E 验证。同时需要把第九轮遗留的 3 个 E2E 失败用例（cancel 歧义、history 污染、auth-isolation 污染）一并解决。
+- 决策与实现：
+  1. 装载规则默认值从 `volume` 改为 `quantity`；现有依赖默认 volume 行为的单元/E2E 测试（packing.test.ts 138 行、packing.31pallet.test.ts、container-calc.spec.ts:518 旋转测试 / 193 导出测试）显式补传 `loadingMode: 'volume'` 或 UI 切换；新增 `defaults to quantity-priority loading mode when none is specified` 单元用例锁定默认值。
+  2. 容器尺寸 badge 从画布绝对定位（`absolute left-5 top-5`）改为顶部工具栏右侧（`ml-auto`），统一自动/手动模式渲染，且不再遮挡 manual-undo/redo/旋转/删除按钮；新增 E2E `容器尺寸 badge 与场景同步且不遮挡手动工具栏` 用 boundingBox 不相交断言保护。
+  3. `ManualPlacement2D` 接收 `viewMode: top|front|side`，按视图选择 viewBox 与 box 投影坐标；新增组件单元测试覆盖三视图 viewBox/rect 尺寸。本期 front/side 渲染为只读，拖拽改 z 暂未实现 — 见下方"后续"。
+  4. `ContainerScene` 新增 `manualEditable` 模式：左键按下命中 box 后通过 raycast 投影到 y=0 ground plane 拖动（同步 mesh + edges 位置）；pointerup 写回 `onManualMove`；接收 HTML5 drop（含 `application/x-cargo-id`）将 cargoId + 落点 mm 转给 `onManualDropFromPool`；OrbitControls 在拖拽中禁用，结束后恢复 freeView 状态。
+  5. `vite.config.ts` 新增 `/api` proxy 默认指向 `http://127.0.0.1:3010`（环境变量 `VITE_API_TARGET` 可覆盖）；本地 3000 端口被 docker 占用时，用 `PORT=3010 npm run start:server` 启动后端即可让 dev server 跟 E2E 都走真后端。
+  6. 装箱 / Load 按钮取消自动 POST history（第九轮遗留行为），避免与 "保存方案" 重复写入 history 并触发 prune 抖动；显式 save 只走 `saveCurrentPlan`。
+  7. server 新增 `DELETE /api/history`（鉴权，仅当前用户），E2E `beforeEach` 登录后清空 testuser 历史，彻底解决远程数据库状态污染（失败 2、失败 3 全部通过）。
+  8. 编辑货物对话框头部 × 按钮 `aria-label` 从 `t.cancel` 改为新增的 `t.closeEditDialog`（中文：关闭编辑对话框 / 英文：Close edit dialog），与底部 Cancel 按钮区分语义（失败 1 通过）。
+- 验证：`npm run lint && npm test && npm run build` 全绿；E2E 40 用例 39 通过 + 1 主动 skip（`responsive-3d.spec.ts` 仍是占位）；本地登录、装箱、手动模式、历史保存与恢复、auth 隔离全部 OK。
+- 影响：
+  - 默认装载规则改动会影响"未显式指定 loadingMode 的旧调用方"的装箱顺序；所有已知调用点都已校准（前端 UI 默认下拉框、单元测试夹具、E2E 用例）。
+  - `vite.config.ts` 引入了 server proxy 默认值；CI / 部署不应受影响（生产由 nginx 反代 `/api/` → 后端，无需 dev proxy）。
+  - 取消 Load 按钮自动 save，等价于把"保存"行为显式化；如果有历史轮次依赖"装箱即落库"的隐含语义，需在新轮明确产品定义。
+- 后续：
+  - 手动 2D front/side 视图目前只支持读视图；要让拖拽改 box.z 需要扩展 `manualPlacement.setBoxPosition` 接收 z 参数与对应 reducer 命名约定，留待后续轮次。
+  - 3D 手动模式当前只做平面 XY 平移；旋转仍走顶部工具栏的 `handleManualRotate`，本身能影响 3D 渲染（因 boxes prop 由 manualDraft 派生），但缺少键盘快捷键体验，可在后续轮接入。
+  - 装箱算法 quantity 路径不走 best-fit decreasing，在"小货 + 大件"混排时利用率明显低于 volume；如果未来用户期望"数量优先但智能交错"，需要把 best-fit 抽出共用辅助。

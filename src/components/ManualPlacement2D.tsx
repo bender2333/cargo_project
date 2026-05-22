@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, DragEvent as ReactDragEvent } from 'react'
 import type { ContainerSpec } from '../types'
-import type { ManualDraft, ValidationIssue } from '../lib/manualPlacement'
+import type { ManualDraft, ManualPlacedBox, ValidationIssue } from '../lib/manualPlacement'
+
+export type ManualViewMode = 'top' | 'front' | 'side'
 
 type ManualPlacement2DProps = {
   container: ContainerSpec
@@ -11,6 +13,7 @@ type ManualPlacement2DProps = {
   onSelectBox: (id: string | null) => void
   onMoveBox: (id: string, x: number, y: number) => void
   onDropFromPool: (cargoId: string, x: number, y: number) => void
+  viewMode?: ManualViewMode
 }
 
 const padding = 28
@@ -21,25 +24,62 @@ type DragState = {
   offsetY: number
 }
 
-function svgPointToMm(
-  svg: SVGSVGElement,
-  clientX: number,
-  clientY: number,
-  containerLength: number,
-  containerWidth: number,
-) {
+type Projection = {
+  horizontalSpan: number
+  verticalSpan: number
+  rectX: (box: ManualPlacedBox) => number
+  rectY: (box: ManualPlacedBox) => number
+  rectWidth: (box: ManualPlacedBox) => number
+  rectHeight: (box: ManualPlacedBox) => number
+  toMm: (svgX: number, svgY: number) => { x: number; y: number }
+  editable: boolean
+}
+
+function buildProjection(container: ContainerSpec, viewMode: ManualViewMode): Projection {
+  if (viewMode === 'front') {
+    return {
+      horizontalSpan: container.length,
+      verticalSpan: container.height,
+      rectX: (box) => padding + box.x,
+      rectY: (box) => padding + container.height - box.z - box.height,
+      rectWidth: (box) => box.length,
+      rectHeight: (box) => box.height,
+      toMm: (svgX, svgY) => ({ x: svgX - padding, y: container.height - (svgY - padding) }),
+      editable: false,
+    }
+  }
+  if (viewMode === 'side') {
+    return {
+      horizontalSpan: container.width,
+      verticalSpan: container.height,
+      rectX: (box) => padding + box.y,
+      rectY: (box) => padding + container.height - box.z - box.height,
+      rectWidth: (box) => box.width,
+      rectHeight: (box) => box.height,
+      toMm: (svgX, svgY) => ({ x: svgX - padding, y: container.height - (svgY - padding) }),
+      editable: false,
+    }
+  }
+  return {
+    horizontalSpan: container.length,
+    verticalSpan: container.width,
+    rectX: (box) => padding + box.x,
+    rectY: (box) => padding + container.width - box.y - box.width,
+    rectWidth: (box) => box.length,
+    rectHeight: (box) => box.width,
+    toMm: (svgX, svgY) => ({ x: svgX - padding, y: container.width - (svgY - padding) }),
+    editable: true,
+  }
+}
+
+function svgPoint(svg: SVGSVGElement, clientX: number, clientY: number) {
   const point = svg.createSVGPoint()
   point.x = clientX
   point.y = clientY
   const ctm = svg.getScreenCTM()
   if (!ctm) return { x: 0, y: 0 }
   const transformed = point.matrixTransform(ctm.inverse())
-
-  const xMm = transformed.x - padding
-  const yMm = containerWidth - (transformed.y - padding)
-
-  void containerLength
-  return { x: xMm, y: yMm }
+  return { x: transformed.x, y: transformed.y }
 }
 
 export function ManualPlacement2D({
@@ -50,10 +90,12 @@ export function ManualPlacement2D({
   onSelectBox,
   onMoveBox,
   onDropFromPool,
+  viewMode = 'top',
 }: ManualPlacement2DProps) {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const [dragState, setDragState] = useState<DragState | null>(null)
-  const viewBox = `0 0 ${container.length + padding * 2} ${container.width + padding * 2}`
+  const projection = buildProjection(container, viewMode)
+  const viewBox = `0 0 ${projection.horizontalSpan + padding * 2} ${projection.verticalSpan + padding * 2}`
 
   const issuesByBoxId = new Map<string, ValidationIssue[]>()
   for (const issue of issues) {
@@ -69,20 +111,24 @@ export function ManualPlacement2D({
   const handlePointerDown = (event: ReactPointerEvent<SVGGElement>, boxId: string) => {
     event.stopPropagation()
     onSelectBox(boxId)
+    if (!projection.editable) return
     const svg = svgRef.current
     if (!svg) return
     const box = draft.boxes.find((b) => b.id === boxId)
     if (!box) return
-    const point = svgPointToMm(svg, event.clientX, event.clientY, container.length, container.width)
+    const raw = svgPoint(svg, event.clientX, event.clientY)
+    const point = projection.toMm(raw.x, raw.y)
     setDragState({ boxId, offsetX: point.x - box.x, offsetY: point.y - box.y })
     ;(event.target as Element).setPointerCapture?.(event.pointerId)
   }
 
   const handlePointerMove = (event: ReactPointerEvent<SVGSVGElement>) => {
     if (!dragState) return
+    if (!projection.editable) return
     const svg = svgRef.current
     if (!svg) return
-    const point = svgPointToMm(svg, event.clientX, event.clientY, container.length, container.width)
+    const raw = svgPoint(svg, event.clientX, event.clientY)
+    const point = projection.toMm(raw.x, raw.y)
     onMoveBox(dragState.boxId, point.x - dragState.offsetX, point.y - dragState.offsetY)
   }
 
@@ -91,6 +137,7 @@ export function ManualPlacement2D({
   }
 
   const handleDragOver = (event: ReactDragEvent<SVGSVGElement>) => {
+    if (!projection.editable) return
     event.preventDefault()
     if (event.dataTransfer) {
       event.dataTransfer.dropEffect = 'copy'
@@ -98,12 +145,14 @@ export function ManualPlacement2D({
   }
 
   const handleDrop = (event: ReactDragEvent<SVGSVGElement>) => {
+    if (!projection.editable) return
     event.preventDefault()
     const svg = svgRef.current
     if (!svg) return
     const cargoId = event.dataTransfer?.getData('application/x-cargo-id') ?? event.dataTransfer?.getData('text/plain')
     if (!cargoId) return
-    const point = svgPointToMm(svg, event.clientX, event.clientY, container.length, container.width)
+    const raw = svgPoint(svg, event.clientX, event.clientY)
+    const point = projection.toMm(raw.x, raw.y)
     onDropFromPool(cargoId, point.x, point.y)
   }
 
@@ -112,6 +161,7 @@ export function ManualPlacement2D({
       ref={svgRef}
       className="h-full min-h-[420px] w-full bg-[#d8d8d8] touch-none"
       data-testid="manual-placement-2d"
+      data-view-mode={viewMode}
       role="img"
       viewBox={viewBox}
       onClick={handleBackgroundClick}
@@ -123,10 +173,10 @@ export function ManualPlacement2D({
     >
       <rect
         fill="#f5f5f0"
-        height={container.width}
+        height={projection.verticalSpan}
         stroke="#555"
         strokeWidth={8}
-        width={container.length}
+        width={projection.horizontalSpan}
         x={padding}
         y={padding}
       />
@@ -136,9 +186,13 @@ export function ManualPlacement2D({
         const isSelected = box.id === selectedBoxId
         const stroke = hasIssue ? '#dc2626' : isSelected ? '#f3b21a' : '#222222'
         const strokeWidth = hasIssue || isSelected ? 14 : 5
-        const textX = padding + box.x + box.length / 2
-        const textY = padding + container.width - box.y - box.width / 2
-        const rotation = box.labelRotationDeg
+        const rectX = projection.rectX(box)
+        const rectY = projection.rectY(box)
+        const rectWidth = projection.rectWidth(box)
+        const rectHeight = projection.rectHeight(box)
+        const textX = rectX + rectWidth / 2
+        const textY = rectY + rectHeight / 2
+        const rotation = viewMode === 'top' ? box.labelRotationDeg : 0
 
         return (
           <g
@@ -146,24 +200,24 @@ export function ManualPlacement2D({
             data-box-id={box.id}
             data-has-issue={hasIssue ? 'true' : 'false'}
             onPointerDown={(event) => handlePointerDown(event, box.id)}
-            style={{ cursor: 'grab' }}
+            style={{ cursor: projection.editable ? 'grab' : 'pointer' }}
           >
             <rect
               aria-label={`${box.label} manual placement`}
               fill={box.color}
               opacity={hasIssue ? 0.5 : 0.88}
-              height={box.width}
+              height={rectHeight}
               stroke={stroke}
               strokeWidth={strokeWidth}
               tabIndex={0}
-              width={box.length}
-              x={padding + box.x}
-              y={padding + container.width - box.y - box.width}
+              width={rectWidth}
+              x={rectX}
+              y={rectY}
             />
             <text
               dominantBaseline="middle"
               fill="#111"
-              fontSize={Math.max(80, Math.min(box.length, box.width) * 0.38)}
+              fontSize={Math.max(80, Math.min(rectWidth, rectHeight) * 0.38)}
               fontWeight="700"
               pointerEvents="none"
               textAnchor="middle"

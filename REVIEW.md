@@ -1358,6 +1358,9 @@
 - 在搜索框输入用户名前缀，验证只显示匹配用户。
 - 点击刷新按钮后用户数和最近列表更新。
 
+#### 5.i进行性能优化
+操作起来有些卡顿，需要优化
+
 ## 下一阶段执行计划（第九轮）
 
 ### 阶段 1：lib 业务消息结构化与本地化（高优先级）
@@ -1432,3 +1435,132 @@
 - 浏览器响应式调整不得破坏现有 1366 宽屏的可读性。
 - 手动 ↔ 自动联动是产品闭环，不允许做成"占位按钮"。
 - 用户管理排查必须先确认数据库实际状态，再决定改 API 还是改前端。
+
+---
+
+# 第十轮 Review 与下一阶段开发计划
+
+日期：2026-05-22
+
+## 背景
+
+继上一轮聚焦"自动 → 手动闭环 / 用户管理 / 响应式布局"之后，用户实际使用第九轮成果时发现以下未达预期的体验问题，要求在本轮内修复并完成远程部署 + E2E 验证。
+
+参考文件：
+- `src/Workbench.tsx` 第 565、1700-1932 行（placementMode 与画布工具栏）
+- `src/components/ContainerScene.tsx`（3D 视图、selectBox/freeView 能力）
+- `src/components/ManualPlacement2D.tsx`（手动 2D 俯视图）
+- `src/lib/manualPlacement.ts`（手动草稿模型）
+- `src/lib/packing.ts:382`（loadingMode 默认值）
+
+## Review 结论
+
+### 1. 排布模式收敛为仅两种（auto / manual）
+
+**现状**：
+- `placementMode` 已是 `'auto' | 'manual'`，在工具栏中分为两个 archive-tab。
+- 但用户进入手动模式后，3D 视图只能"选中"现有箱体（`ContainerScene` 的 `onSelectBox`），无法拖拽移动、无法旋转、也无法接受从待放置池中拖入。结果：手动模式在 3D 下名义存在但实际不可操作。
+- 池中可拖箱目前只对 `ManualPlacement2D` 的 `<svg>` 区域生效；3D 视图没有任何 drag-drop 接收器，也没有键盘旋转/移动快捷键。
+
+**要求**：
+- 显式声明且仅保留两种排布模式：自动 (`auto`) 与手动 (`manual`)。
+- 手动模式 3D 视图必须支持真正的操作：
+  - 选中后可通过工具栏按钮"旋转"将选中箱体在水平面绕 Z 轴 90°（已有 `handleManualRotate` 但 3D 上未触发视觉变化的拖拽路径）。
+  - 选中后可拖动其在容器底面 (XY) 内移动；落点经 `commitManualMove` 校验，发生越界/重叠时仍允许放下但标红。
+  - 从待放置池 (`manual-pool-item`) 拖入 3D 区域时，箱体应基于落点 + container.length/width 反算 mm 坐标并新增到 draft。
+  - 删除/撤销/重做等操作与 2D 保持一致（通过同一 `commit`/`undo`/`redo` 路径）。
+- `ContainerScene` 不应被改造成完整 3D 编辑器；本轮只新增拖拽位移（XY 平面）+ pool drop 落点 + 选中状态联动，旋转复用现有工具栏按钮即可。Z 高度（堆叠）仍由后续轮次扩展。
+
+### 2. 手动排布视角错误（2D 不会切换为前 / 侧视图）
+
+**现状**：
+- `ManualPlacement2D` 渲染的是固定俯视图：`viewBox = '0 0 length+pad*2 width+pad*2'`，使用 `container.length × container.width`。
+- 上方工具栏的"俯视/正视/侧视"按钮 (`planViewMode`) 只在自动模式 `ContainerPlan2D` 起作用，手动模式下点击没有任何视觉变化——用户感觉"视角不正确"。
+- 由此造成"手动模式无法看到货物在容器高度方向的堆叠情况"。
+
+**要求**：
+- `ManualPlacement2D` 必须响应外部传入的 `viewMode`（top/front/side）：
+  - top：当前实现，XY 平面、纵轴向上=远端（width）。
+  - front：从柜门外向内看，XZ 平面，纵轴=Z（height），横轴=X（length）。
+  - side：从侧面看，YZ 平面，纵轴=Z（height），横轴=Y（width）。
+- 拖拽时根据当前 viewMode 把 SVG 坐标反算成 (x, y, z) 中相应两个轴；本轮可先支持 top 视图的拖拽，front/side 至少能正确渲染只读视图（拖拽改 z 由后续轮处理）。
+- 3D 视图的 viewMode 仍由 `sceneViewMode` 控制，不强制与 2D 联动。
+
+### 3. 画布左上角的尺寸 badge 遮盖工具栏
+
+**现状**：
+- `src/Workbench.tsx:1783` 处的 badge 使用 `absolute left-5 top-5 z-10`，无论 placementMode 都覆盖在画布上。
+- 自动模式下画布内部没有其他控件，badge 不影响。但手动模式的工具栏（undo/redo/旋转/删除/提示）紧贴 `manual-workspace` 顶部，会被这个尺寸 badge 完全遮挡。
+- 文案是 `${selectedContainer.label}` + `${renderingContainer.length × width × height} mm`：尺寸数字本身已经跟随 `renderingContainer` 实时变动，但"标签"还是 `selectedContainer.label`（自定义柜型自定义命名场景下 OK），用户的诉求是 badge 内容随场景变动；这一点目前其实满足，但需 E2E 锁定，避免回归。
+
+**E2E 没暴露的原因**：
+- 现有 manual-mode E2E (`e2e/container-calc.spec.ts` 等) 只校验按钮存在性，没有断言按钮"可见且未被覆盖" (`toBeVisible` + bounding box 不与 badge 重叠)。
+- 也没有覆盖"切换容器后 badge 内容是否同步变化"。
+
+**要求**：
+- badge 在手动模式下不得遮盖工具栏：可以把 badge 从画布绝对定位改成嵌入工具栏右侧（更稳），或者把 badge 在 `placementMode === 'manual'` 时下移到画布右上角 / 隐藏。优先采用"嵌入工具栏"方案，让 badge 在所有模式下都成为工具栏的一员，避免再次出现遮盖。
+- badge 内容必须严格随 `renderingContainer`（即用户当前在表单中编辑的尺寸）变化，不再使用 `selectedContainer` 的旧标签字段以外的固定值。
+- E2E 必须验证：
+  - 手动模式下 undo/redo/旋转/删除四个按钮的 `boundingBox` 与 badge 不相交（或 badge 不存在于该位置）。
+  - 修改自定义柜型的 length/width/height 后，badge 文本同步更新。
+
+### 4. 装载规则默认值应改为"数量优先"
+
+**现状**：
+- `src/Workbench.tsx:550` 与 `src/lib/packing.ts:382` 都将 `loadingMode` 默认为 `'volume'`（体积优先）。
+- 用户实际业务希望默认按"数量优先"装载，匹配 LoadingMode `'quantity'`。
+
+**要求**：
+- 把前端 useState 初始值与 lib 默认值都改为 `'quantity'`。
+- 单元测试：在没有指定 `loadingMode` 的情况下，`calculatePacking` 的装载顺序遵循 quantity 模式。
+- E2E：首次进入工作台时下拉框默认显示"数量优先"。
+
+## 下一阶段开发计划（第十轮）
+
+### 阶段 A：装载规则默认值 = 数量优先（最小变更）
+- `src/Workbench.tsx`：`useState<LoadingMode>('volume')` → `'quantity'`。
+- `src/lib/packing.ts:382`：`options.loadingMode ?? 'volume'` → `'quantity'`。
+- 单元测试：新增 `loadingMode default is quantity` 用例。
+- E2E：默认下拉框文本为"数量优先"。
+
+### 阶段 B：尺寸 badge 不再遮盖工具栏
+- 把 `<div className="absolute left-5 top-5 ...">` 从画布绝对定位改造为工具栏右侧的一个元素（archive-tab 同级、`ml-auto` 推到尾部），所有模式共用。
+- 自动模式下保留视觉一致性。
+- 单元 / 视觉断言：badge 出现在 toolbar 内，bbox 不与 manual 工具栏按钮相交。
+
+### 阶段 C：手动排布 2D 视角联动
+- `ManualPlacement2D` 增加 `viewMode: 'top' | 'front' | 'side'` prop，按视角选择 viewBox、坐标轴映射、box 渲染矩形。
+- top 继续支持拖拽编辑；front/side 在本轮先渲染为只读（拖拽改 z 由后续轮次）。
+- Workbench：把 `planViewMode` 透传给手动 2D。
+- 单元测试：`ManualPlacement2D` 的 viewBox 与 box 渲染坐标随 viewMode 变化。
+
+### 阶段 D：手动排布 3D 真正可操作
+- `ContainerScene` 增加：
+  - `manualEditable?: boolean`、`onManualMove?: (boxId, x, y) => void`、`onManualDropFromPool?: (cargoId, x, y) => void`、`onManualRotate?: (boxId) => void`（旋转保留给工具栏触发即可，可选）。
+  - 在 manualEditable 模式下：禁用 OrbitControls 的 left-drag 旋转（改右键/滚轮缩放），左键单击-拖拽即"沿 XY 平面平移选中箱体"，配合 raycast 与底面 plane intersect。
+  - 接受 HTML5 drop 事件：检测 dataTransfer 中 cargoId，落点经 raycast 投影到底面 → mm 坐标，调用 `onManualDropFromPool`。
+- Workbench：把 `manualEditable={placementMode === 'manual'}` 与对应 handler 传给 `ContainerScene`；handler 内部调用现有 `commitManualMove` / `commitManualAdd`。
+- 单元测试覆盖：`manualPlacement.ts` 的 move/add/rotate 已有，则补 3D side 的集成行为通过 E2E 校验。
+
+### 阶段 E：E2E 补强
+- `e2e/manual-3d.spec.ts`（新）：
+  - 默认装载规则文本断言。
+  - badge 不遮工具栏（boundingBox 不相交）。
+  - 手动模式下点击 2D 前视图按钮，SVG viewBox 改变。
+  - 手动模式下 3D 从池拖入一个箱体，draft 计数 +1，未放置池数量 -1。
+  - 手动模式下 3D 内拖动已放置箱体，位置变化通过工具栏数值或断言可观测。
+- 失败用例不允许通过弱化断言来通过；如果实现确认存在风险，记入 `decision.md`。
+
+### 阶段 F：本地验证与远程部署
+- `npm run lint && npm test && npm run build`
+- `npm run test:e2e`（必须包含本轮新加的 manual-3d 用例）
+- 按 CLAUDE.md 中的部署步骤推送 `dist/` 到 `tencent-container-layout`。
+- 远程冒烟：`curl -fsS http://101.33.232.150/`、人工核对默认装载规则 + badge 位置。
+
+## 执行约束
+
+- 本轮不引入新的 3D 编辑器/全局状态库；3D 可编辑能力优先做"水平面平移 + pool drop"，不强行做堆叠 / Z 抬升。
+- 默认装载规则改动不得破坏既有单元测试的语义；现有用例必须显式传 `loadingMode` 才能保持原行为。
+- 任何因实现成本暂缓的功能（如 front/side 视图的拖拽改 z）必须写入 `decision.md`。
+- 部署成功的判断包含远程 200 + 默认装载规则 = "数量优先"。
+

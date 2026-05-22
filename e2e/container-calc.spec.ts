@@ -127,6 +127,11 @@ test.beforeEach(async ({ page }) => {
     await page.fill('#password', 'testuser123')
     await page.click('button[type="submit"]')
     await expect(page.getByTestId('report-panel')).toBeVisible()
+    await page.evaluate(async () => {
+      const token = window.localStorage.getItem('cargo_token')
+      if (!token) return
+      await fetch('/api/history', { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+    })
   }
 })
 
@@ -207,7 +212,7 @@ test('exports shipment-prefixed workbook data from the named plan', async ({ pag
   expect(shipmentRows[0]).toMatchObject({
     shipmentName: 'Prefix Plan',
     container: "Container 20'",
-    loadingMode: 'volume',
+    loadingMode: 'quantity',
   })
 })
 
@@ -229,7 +234,7 @@ test('shows custom container fields and effective dimensions', async ({ page }) 
   await page.getByLabel('Top gap mm').fill('100')
   await page.getByLabel('Side gap mm').fill('50')
 
-  await expect(page.getByTestId('visual-workspace').getByText('14,700 x 2,300 x 2,500 mm')).toBeVisible()
+  await expect(page.getByTestId('visual-workspace').getByText('14,700 × 2,300 × 2,500 mm')).toBeVisible()
 })
 
 test('adds cargo and recalculates utilization', async ({ page }) => {
@@ -532,6 +537,7 @@ test('rotates 2D labels using packing orientation metadata', async ({ page }) =>
   await cargoForm.getByLabel('Weight kg').fill('10')
   await cargoForm.getByLabel('Quantity').fill('1')
   await page.getByRole('button', { name: '+ Add cargo item' }).click()
+  await page.getByLabel('Loading rules').selectOption('volume')
   await page.getByRole('button', { name: 'Load' }).click()
   await page.getByRole('button', { name: '2D' }).click()
 

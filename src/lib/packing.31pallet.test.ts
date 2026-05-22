@@ -39,7 +39,7 @@ describe('calculatePacking — 31 Russian pallets in a custom 13400×2450×2650 
       sideGap: 0,
     }
 
-    const result = calculatePacking(container, items)
+    const result = calculatePacking(container, items, { loadingMode: 'volume' })
 
     expect(result.totalCargoCount).toBe(31)
     expect(result.placedCount).toBe(result.totalCargoCount)

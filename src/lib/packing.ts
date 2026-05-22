@@ -379,7 +379,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   let usedWeight = 0
   let totalCargoCount = 0
 
-  const loadingMode = options.loadingMode ?? 'volume'
+  const loadingMode = options.loadingMode ?? 'quantity'
   const expanded = cargoItems
     .flatMap((item, itemIndex) => {
       totalCargoCount += item.quantity

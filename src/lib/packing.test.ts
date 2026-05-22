@@ -135,8 +135,21 @@ describe('calculatePacking', () => {
       cargo({ id: 'large', label: 'L', length: 1000, width: 1000, height: 1000, quantity: 1, canRotate: false }),
     ]
 
-    expect(calculatePacking(container, items).workSteps.map((step) => step.label)).toEqual(['L', 'S'])
+    expect(calculatePacking(container, items, { loadingMode: 'volume' }).workSteps.map((step) => step.label)).toEqual(['L', 'S'])
     expect(calculatePacking(container, items, { loadingMode: 'input' }).workSteps.map((step) => step.label)).toEqual(['S', 'L'])
+  })
+
+  it('defaults to quantity-priority loading mode when none is specified', () => {
+    const container = testContainer({ length: 5000, width: 1000, height: 1000 })
+    const items = [
+      cargo({ id: 'small-many', label: 'Q', length: 400, width: 1000, height: 1000, weight: 5, quantity: 3, canRotate: false }),
+      cargo({ id: 'heavy-one', label: 'W', length: 500, width: 1000, height: 1000, weight: 80, quantity: 1, canRotate: false }),
+    ]
+
+    const defaultLabels = calculatePacking(container, items).workSteps.map((step) => step.label).slice(0, 2)
+    const quantityLabels = calculatePacking(container, items, { loadingMode: 'quantity' }).workSteps.map((step) => step.label).slice(0, 2)
+    expect(defaultLabels).toEqual(quantityLabels)
+    expect(defaultLabels).toEqual(['Q', 'Q'])
   })
 
   it('supports selectable weight and quantity loading rules', () => {
@@ -230,7 +243,7 @@ describe('calculatePacking', () => {
     const result = calculatePacking(container, [
       cargo({ id: 'tall-base', label: 'T', length: 1000, width: 1000, height: 1000, quantity: 1, canRotate: false }),
       cargo({ id: 'half', label: 'H', length: 1000, width: 1000, height: 500, quantity: 3, canRotate: false }),
-    ])
+    ], { loadingMode: 'volume' })
 
     expectValidPacking(container, result)
     expect(result.layers.map((layer) => ({ layer: layer.physicalLayer, count: layer.count }))).toEqual([

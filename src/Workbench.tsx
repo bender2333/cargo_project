@@ -74,6 +74,7 @@ const copy = {
     editCargoTitle: 'Edit cargo item',
     saveChanges: 'Save changes',
     cancel: 'Cancel',
+    closeEditDialog: 'Close edit dialog',
     deleteCargo: 'Delete cargo',
     dragCargo: 'Drag to reorder cargo',
     dropCargo: 'Drop cargo here',
@@ -222,6 +223,7 @@ const copy = {
     editCargo: '编辑货物',
     editCargoTitle: '编辑货物项目',
     saveChanges: '保存修改',
+    closeEditDialog: '关闭编辑对话框',
     cancel: '取消',
     deleteCargo: '删除货物',
     dragCargo: '拖拽调整货物顺序',
@@ -547,7 +549,7 @@ function Workbench() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeNav, setActiveNav] = useState<NavTarget>('overview')
   const [selectedContainerId, setSelectedContainerId] = useState(containers[0].id)
-  const [loadingMode, setLoadingMode] = useState<LoadingMode>('volume')
+  const [loadingMode, setLoadingMode] = useState<LoadingMode>('quantity')
   const [containerOverrides, setContainerOverrides] = useState(() => Object.fromEntries(containers.map((container) => [container.id, container])))
   const [customContainer, setCustomContainer] = useState(customContainerDefaults)
   const [cargoItems, setCargoItems] = useState<CargoItem[]>(initialCargo)
@@ -1161,7 +1163,7 @@ function Workbench() {
       }
     }
     setCargoItems(plan.cargoItems)
-    setLoadingMode(plan.loadingMode || 'volume')
+    setLoadingMode(plan.loadingMode || 'quantity')
     setActiveLayerId('all')
     setActiveLabelId('all')
     setSelectedBoxId(null)
@@ -1772,6 +1774,15 @@ function Workbench() {
             <button className="archive-button success" type="button" onClick={exportCurrentView}>
               {t.exportView}
             </button>
+            <div
+              className="ml-auto flex items-center gap-2 rounded-lg bg-[#f1f5f9] px-3 py-1.5 text-xs text-[#0f172a] shadow-sm"
+              data-testid="container-dimension-badge"
+            >
+              <strong className="text-sm">{selectedContainer.label}</strong>
+              <span className="text-[#475569]">
+                {renderingContainer.length.toLocaleString()} × {renderingContainer.width.toLocaleString()} × {renderingContainer.height.toLocaleString()} mm
+              </span>
+            </div>
             </div>
             <div
               className={`relative w-full bg-gradient-to-b from-[#eef6ff] to-[#f8fafc] ${
@@ -1780,10 +1791,6 @@ function Workbench() {
                   : 'aspect-[16/9] min-h-[420px] max-h-[85vh] xl:min-h-[560px]'
               }`}
             >
-              <div className="absolute left-5 top-5 z-10 rounded-xl bg-white/85 px-4 py-3 text-sm shadow">
-                <strong>{selectedContainer.label}</strong>
-                <div>{renderingContainer.length.toLocaleString()} x {renderingContainer.width.toLocaleString()} x {renderingContainer.height.toLocaleString()} mm</div>
-              </div>
               {placementMode === 'manual' ? (
                 <div className="flex h-full w-full flex-col gap-3 p-4" data-testid="manual-workspace">
                   <div className="flex flex-wrap items-center gap-2">
@@ -1879,8 +1886,11 @@ function Workbench() {
                           container={renderingContainer}
                           freeView={freeViewEnabled}
                           invalidBoxIds={manualInvalidBoxIds}
+                          manualEditable
                           selectedBoxId={manualSelectedId}
                           viewMode={sceneViewMode}
+                          onManualDropFromPool={handleManualDropFromPool}
+                          onManualMove={handleManualMoveBox}
                           onSelectBox={setManualSelectedId}
                         />
                       ) : (
@@ -1889,6 +1899,7 @@ function Workbench() {
                           draft={manualDraft}
                           selectedBoxId={manualSelectedId}
                           issues={manualIssues}
+                          viewMode={planViewMode}
                           onSelectBox={setManualSelectedId}
                           onMoveBox={handleManualMoveBox}
                           onDropFromPool={handleManualDropFromPool}
@@ -1905,27 +1916,7 @@ function Workbench() {
               <button
                 className="archive-button success absolute bottom-6 right-6"
                 type="button"
-                onClick={() => {
-                  setHasCalculated(true)
-                  const planData = {
-                    containerId: selectedContainer.id,
-                    container: selectedContainer,
-                    cargoItems: displayCargoItems,
-                    placedCount: result.placedCount,
-                    totalCargoCount: result.totalCargoCount,
-                    layerCount: result.layers.length,
-                    labelSummary: result.labelStats.map((item) => `${item.label}:${item.placed}/${item.planned}`).join(', '),
-                  }
-                  fetchWithAuth('/api/history', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                      projectName,
-                      shipmentName,
-                      loadingMode,
-                      data: planData,
-                    }),
-                  }).then(() => fetchHistory()).catch(err => console.error('Auto-save history failed:', err))
-                }}
+                onClick={() => setHasCalculated(true)}
               >
                 {t.load}
               </button>
@@ -2231,7 +2222,7 @@ function Workbench() {
                   <h3 className="text-xl font-bold text-slate-900">{t.editCargoTitle}</h3>
                   <p className="mt-1 text-sm text-slate-500">{editingCargo.name}</p>
                 </div>
-                <button className="border border-slate-300 bg-white px-3 py-1 text-sm font-semibold" type="button" onClick={() => setEditingCargo(null)} aria-label={t.cancel}>
+                <button className="border border-slate-300 bg-white px-3 py-1 text-sm font-semibold" type="button" onClick={() => setEditingCargo(null)} aria-label={t.closeEditDialog}>
                   ×
                 </button>
               </div>

@@ -2,6 +2,19 @@
 
 ## 2026-05-22
 
+- Completed subtask: deliver tenth review (auto/manual mode polish, default quantity loading, badge placement, full E2E green) and resolve all carry-over failures.
+  - Recorded Tenth Review and execution plan in `REVIEW.md`.
+  - `loadingMode` default switched to `quantity` (前端 useState + lib 默认值 + 单元测试 + UI dropdown all aligned).
+  - Container dimension badge moved into the visual workspace toolbar (no longer overlaps manual mode undo/redo/rotate/delete buttons).
+  - `ManualPlacement2D` now accepts `viewMode` (`top|front|side`) and projects boxes accordingly; component tests cover viewBox + rect sizing per view.
+  - `ContainerScene` gains `manualEditable` mode: XY-plane drag for placed boxes (raycast against ground plane) plus HTML5 drop receiver from the manual pool; OrbitControls suspended during drag.
+  - `vite.config.ts` adds `/api` proxy (default `http://127.0.0.1:3010`) so dev/E2E can run against the local backend without nginx.
+  - Removed the implicit history POST on the "Load" button — save is now exclusively driven by `saveCurrentPlan` (避免与 "保存方案" 重复).
+  - New endpoint `DELETE /api/history` (authenticated, current user only) and updated E2E `beforeEach` to clear `testuser` history → resolves prior remote regression #2 and #3.
+  - Edit cargo dialog header × button now uses `t.closeEditDialog` aria-label, removing ambiguity with the footer Cancel button → resolves prior regression #1.
+  - New E2E `e2e/manual-3d.spec.ts` covering default loading rule, badge non-overlap, manual 2D viewMode switch, manual 3D pool draggability.
+  - Verification: `npm run lint && npm test && npm run build` 全绿；`npx playwright test` 40 用例 → 39 passed, 1 skipped, 0 failed.
+
 - Completed subtask: document eighth review and next-stage business usability/operations plan.
   - Updated `PRD.md` with cargo item editing, real workbook 31-pallet packing target, manual placement mode, navigation copy cleanup, admin login audit, migration compatibility, deployment/operations, and E2E requirements.
   - Added the Eighth Review section to `REVIEW.md`, splitting the next implementation into cargo editing/navigation, admin audit and SQLite migrations, 31-pallet algorithm work, manual placement mode, deployment scripts/docs, and E2E principles.
