@@ -134,7 +134,50 @@ server {
 | 站点根目录 | `/usr/share/nginx/html` |
 | 备份目录格式 | `/root/cargo_project-backup-YYYYMMDD-HHMMSS` |
 
-当前远端 Nginx 直接从 `/usr/share/nginx/html` 提供静态文件。部署时先在本地构建，再上传 `dist/` 内容并覆盖站点根目录：
+当前远端 Nginx 直接从 `/usr/share/nginx/html` 提供静态文件。部署时先在本地构建，再上传 `dist/` 内容并覆盖站点根目录。
+
+#### 一键部署
+
+推荐使用脚本 `scripts/deploy.mjs`，对应的 npm 命令是 `npm run deploy`。脚本会按顺序执行：本地构建 → 远端备份当前站点 → 上传 `dist/*` 到远端 `/tmp/cargo-dist/` 暂存目录 → `rsync -a --delete` 同步到 `/usr/share/nginx/html/` → 重置 owner 和权限 → 远端本地健康检查 `curl -fsS http://127.0.0.1/`。
+
+```bash
+# 真正执行部署
+npm run deploy
+
+# 只打印命令、不连接远端（用于自检）
+npm run deploy -- --dry-run
+
+# 查看完整帮助
+npm run deploy -- --help
+```
+
+脚本不会硬编码任何密码或私钥，SSH 鉴权完全复用本机的 SSH agent 或 `~/.ssh/config` 中 `tencent-container-layout` 主机别名对应的私钥。
+
+常用环境变量（全部带默认值，平时无需设置）：
+
+| 变量 | 作用 | 默认值 |
+| --- | --- | --- |
+| `DEPLOY_SSH_HOST` | SSH 主机别名 | `tencent-container-layout` |
+| `DEPLOY_REMOTE_USER` | 显式的 `user@host`，覆盖主机别名 | 未设置 |
+| `DEPLOY_SITE_ROOT` | 远端站点目录 | `/usr/share/nginx/html` |
+| `DEPLOY_BACKUP_BASE` | 远端备份目录前缀 | `/root/cargo_project-backup` |
+| `DEPLOY_STAGING_DIR` | 远端暂存目录 | `/tmp/cargo-dist` |
+| `DEPLOY_HEALTHCHECK` | 健康检查 URL | `http://127.0.0.1/` |
+| `DEPLOY_OWNER` | 站点目录 chown 目标 | `root:root` |
+| `DEPLOY_SKIP_BUILD` | 设为 `1` 跳过本地构建 | 未设置 |
+
+部署成功后，脚本会在终端打印本次备份的远端路径，例如：
+
+```
+Backup saved at: /root/cargo_project-backup-20260520-192916
+Deployment complete. Backup: /root/cargo_project-backup-20260520-192916
+```
+
+请把这一行记入运维日志，下面的「回滚」步骤会用到。
+
+#### 手动部署（保留参考）
+
+不依赖 `scripts/deploy.mjs` 时，也可以直接拼接 SSH/SCP 命令完成部署：
 
 ```bash
 npm run build
@@ -153,6 +196,59 @@ curl -I http://101.33.232.150/
 ```
 
 最近一次部署备份目录：`/root/cargo_project-backup-20260520-192916`。
+
+#### 回滚到上一次备份
+
+如果新版本上线后发现回归，可以快速回滚到任意一次备份。先在远端列出可用备份：
+
+```bash
+ssh tencent-container-layout 'ls -1dt /root/cargo_project-backup-* | head -n 5'
+```
+
+确认目标备份目录后，按以下步骤恢复站点：
+
+```bash
+# 1) 把当前线上目录另存为应急备份，便于事后排查
+ssh tencent-container-layout 'set -e; ts=$(date +%Y%m%d-%H%M%S); incident=/root/cargo_project-incident-$ts; mkdir -p "$incident"; cp -a /usr/share/nginx/html/. "$incident"/; echo "$incident"'
+
+# 2) 用 rsync 把备份目录覆盖回站点根目录，并修正权限
+ssh tencent-container-layout 'rsync -a --delete /root/cargo_project-backup-20260520-192916/ /usr/share/nginx/html/ && chown -R root:root /usr/share/nginx/html && chmod -R a+rX /usr/share/nginx/html'
+
+# 3) 远端健康检查
+ssh tencent-container-layout 'curl -fsS http://127.0.0.1/ >/dev/null && echo rolled-back'
+
+# 4) 本机验证公网访问
+curl -I http://101.33.232.150/
+```
+
+请将示例中的 `20260520-192916` 替换为你实际要恢复的备份时间戳。
+
+#### 备份恢复步骤
+
+“回滚”是把整套站点切换回旧版本；如果只是误删了少量文件，或者需要从备份目录中取出单个资源，可以参考下面的步骤：
+
+```bash
+# 查看备份目录内容
+ssh tencent-container-layout 'ls -la /root/cargo_project-backup-20260520-192916/'
+
+# 把备份打成 tarball 拉到本机审查
+ssh tencent-container-layout 'tar -C /root/cargo_project-backup-20260520-192916 -czf /tmp/cargo-backup.tgz .'
+scp tencent-container-layout:/tmp/cargo-backup.tgz ./cargo-backup-20260520-192916.tgz
+
+# 把单个文件恢复回线上目录
+ssh tencent-container-layout 'install -m 0644 /root/cargo_project-backup-20260520-192916/index.html /usr/share/nginx/html/index.html && chown root:root /usr/share/nginx/html/index.html'
+```
+
+清理过旧的备份（保留最近 5 份）：
+
+```bash
+ssh tencent-container-layout "ls -1dt /root/cargo_project-backup-* | tail -n +6 | xargs -r rm -rf"
+```
+
+注意事项：
+
+- 当前站点目录只存放静态资源，不包含数据库或用户上传内容，因此 `rsync --delete` 和回滚操作都不会破坏生产数据。
+- 如果将来引入服务器端数据，请先在 `scripts/deploy.mjs` 中拓展备份范围，再启用 `--delete` 风格的同步。
 
 ## 架构设计
 
