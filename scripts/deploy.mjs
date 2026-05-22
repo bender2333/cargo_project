@@ -194,11 +194,7 @@ async function main() {
     'set -e',
     `backup=${shellQuote(backupDir)}`,
     `mkdir -p "$backup"`,
-    `if [ -d ${shellQuote(CONFIG.siteRoot)} ] && [ -n "$(ls -A ${shellQuote(CONFIG.siteRoot)} 2>/dev/null)" ]; then`,
-    `  cp -a ${shellQuote(CONFIG.siteRoot)}/. "$backup"/`,
-    'else',
-    `  echo "Warning: ${CONFIG.siteRoot} is empty; skipping copy"`,
-    'fi',
+    `( [ -d ${shellQuote(CONFIG.siteRoot)} ] && [ -n "$(ls -A ${shellQuote(CONFIG.siteRoot)} 2>/dev/null)" ] && cp -a ${shellQuote(CONFIG.siteRoot)}/. "$backup"/ ) || echo "Warning: ${CONFIG.siteRoot} is empty; skipping copy"`,
     'echo "$backup"',
   ].join('; ')
   const createdBackup = runCommand(buildSshCommand(CONFIG.sshTarget, backupScript), {
