@@ -184,3 +184,29 @@
   - 3D 手动编辑（拖拽、层级切换、堆叠支撑提示）需要单独设计。
   - 自动→手动的反向回流（手动结果导出回自动验证）尚未规划，避免循环触发。
 
+
+## 2026-05-22 第九轮远程 E2E 三个失败用例的归因
+
+- 背景：第九轮收尾后将 dist 与 Node 后端部署到 `http://101.33.232.150/`（systemd `cargo-server.service` + EnvironmentFile `/etc/cargo-server.env`，nginx `/api/` → `127.0.0.1:3100`），并以 `PLAYWRIGHT_BASE_URL=http://101.33.232.150/` 跑完整 36 用例的 E2E。32 通过、1 主动 skip、3 失败。本节按项目规则 "不通过的点记录到 decision.md，不为通过修改测试" 整理失败归因。
+- 选项：
+  1. 立刻修 UI 或测试让用例通过。
+  2. 仅记录归因，留待下一轮 Review 决定是改 UI、改测试夹具还是补隔离。
+- 决策：选择 2，理由是三个失败都不是本轮交付（本地化、布局、手动排布闭环、用户管理）回归，而是新增覆盖与旧用例对 "无状态/可重复" 的隐含期望与服务端长存数据冲突。
+- 失败 1 — `container-calc.spec.ts:321 edits cargo item details and keeps cancel as a no-op`
+  - 报错：`getByRole('form', { name: 'Edit cargo item' }).getByRole('button', { name: 'Cancel' })` 命中 2 个按钮。
+  - 根因：编辑对话框头部的关闭 × 按钮 `aria-label={t.cancel}`（值 `Cancel`/`取消`），底部 Cancel 按钮文本同名；role-name 命中两个。
+  - 影响：用例是本轮新增的“编辑货物对话框”回归覆盖，断言流程本身正确，但 UI 没有给两个取消按钮区分语义。
+  - 后续：下一轮把头部 × 的 aria-label 改成 `Close`/`关闭`，或在底部按钮加 `data-testid="edit-cargo-cancel"` 让测试可指向单一元素；本期不动 UI，避免与第十轮反馈中提到的“性能优化”一起改动。
+- 失败 2 — `container-calc.spec.ts:776 saves and restores history plans with labels and layers intact`
+  - 报错：从历史页点 `Back to workbench` 后立即 `setInputFiles(xlsx)`，断言 `cargo-list-item` 含 `Imported crate` 不可见；页面快照显示仍停留在历史页（含历次回归的 “21/21·H:3/3” 等历史记录）。
+  - 根因：远端 Node 后端是长生命周期实例，每次 E2E 都会向 `history_plans` 写入；当本测试在测试用户的历史里已经有 5 条记录时，新计划落库会异步触发 `prune to 5`，导致 `Back to workbench` 的 React state 在导入文件之前还没完成切回 Workbench；本地 dev 重启清掉本地存储不会复现。
+  - 影响：用例对 “历史只有自己刚保存的一条” 的隐含假设不成立；不会动到本轮交付，但说明 E2E 与生产数据库共享状态。
+  - 后续：下一轮在测试 `beforeEach` 里调用 `DELETE /api/history`（或 `DELETE /api/admin/history?username=testuser`）做隔离，或在测试结尾点 `Back to workbench` 后插入 `await expect(page.getByTestId('cargo-panel')).toBeVisible()` 等同步点；本期保留失败作为远端状态污染证据。
+- 失败 3 — `auth-isolation.spec.ts:34 ensures strict data isolation for custom containers and history plans`
+  - 报错：`getByText('Shipment-User1')` strict mode 命中 2 个 `<p>装运名称: Shipment-User1</p>`。
+  - 根因：同上，远端 `history_plans` 在多轮回归之后已经为新建测试用户保留了多条同名 `Shipment-User1`，断言期望唯一。
+  - 影响：用户隔离逻辑本身没问题（每条记录都属于当前用户），只是测试夹具没做清理；这次不动测试以免误把真实数据隔离 bug 隐藏掉。
+  - 后续：与失败 2 共享方案——给 `auth-isolation` 增加一次性清理接口或在每条测试开头删除当前用户的全部历史；最终方案放到下一轮 Review。
+- 通用后续：
+  - 在 `server/index.mjs` 增加一条 `DELETE /api/history/all`（鉴权 + 仅当前用户）以支持 E2E 清场，避免后续测试依赖 admin 接口。
+  - 把 `responsive-3d.spec.ts` 当前的 `test.skip(true)` 替换为需要后端的真实流程：用户登录 → 调三种 viewport，下一轮兑现。
