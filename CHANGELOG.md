@@ -2,6 +2,11 @@
 
 ## 2026-05-22
 
+- Completed subtask: document eighth review and next-stage business usability/operations plan.
+  - Updated `PRD.md` with cargo item editing, real workbook 31-pallet packing target, manual placement mode, navigation copy cleanup, admin login audit, migration compatibility, deployment/operations, and E2E requirements.
+  - Added the Eighth Review section to `REVIEW.md`, splitting the next implementation into cargo editing/navigation, admin audit and SQLite migrations, 31-pallet algorithm work, manual placement mode, deployment scripts/docs, and E2E principles.
+  - Recorded decisions that the real workbook 31-pallet target is a hard algorithm acceptance criterion, manual placement starts with 2D top-view editing, upgrades use idempotent SQLite migrations, and E2E tests must not be weakened to match incomplete implementation.
+  - Verification: documentation-only change; code verification not rerun.
 - Completed subtask: add seventh review, update PRD, and implement first 3D/label-orientation refactor.
   - Updated `PRD.md` with responsive 3D sizing, free-view rendering stability, label orientation metadata, Excel mapping-workbench requirements, and acceptance/test criteria.
   - Added the Seventh Review section to `REVIEW.md`, covering browser-maximized 3D scaling, free-view missing faces, rotating labels, Excel mapping preview/unit design, and code re-estimation.
