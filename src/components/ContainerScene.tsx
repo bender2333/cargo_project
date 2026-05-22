@@ -59,15 +59,16 @@ function makeFaceLabelTexture(label: string, color: string, selected: boolean, r
 }
 
 function makeBoxMaterial(texture: THREE.Texture, selected: boolean, opacity: number) {
+  const isOpaque = opacity >= 0.99
   return new THREE.MeshStandardMaterial({
     map: texture,
     roughness: 0.58,
     metalness: 0.04,
     emissive: selected ? new THREE.Color(0x332100) : new THREE.Color(0x000000),
-    transparent: opacity < 1,
+    transparent: !isOpaque,
     opacity,
-    depthWrite: opacity >= 0.99,
-    side: THREE.DoubleSide,
+    depthWrite: isOpaque,
+    side: isOpaque ? THREE.DoubleSide : THREE.FrontSide,
   })
 }
 

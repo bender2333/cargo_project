@@ -25,9 +25,8 @@ const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6'
 
 const copy = {
   en: {
-    nav: ['EasyCargo', 'Shipments & Reports', 'Cargo items', 'Cargo spaces', 'History'],
+    nav: ['Workbench', 'History'],
     title: 'Cargo loading workspace',
-    subtitle: 'Container packing, visual review, import/export, and local plan history',
     shipment: 'Enter shipment name',
     savedShipment: 'Shipment name is saved with history plans',
     menu: 'Workspace menu',
@@ -55,6 +54,10 @@ const copy = {
     expand: 'Expand',
     importLog: 'Import log',
     noImportLog: 'No import activity yet',
+    editCargo: 'Edit cargo',
+    editCargoTitle: 'Edit cargo item',
+    saveChanges: 'Save changes',
+    cancel: 'Cancel',
     deleteCargo: 'Delete cargo',
     dragCargo: 'Drag to reorder cargo',
     dropCargo: 'Drop cargo here',
@@ -87,6 +90,24 @@ const copy = {
     importSuccess: 'Import success',
     importMappedFields: 'Mapped fields',
     importConvertedRows: 'Rows converted from cm',
+    mappingTitle: 'Smart field mapping',
+    mappingSubtitle: 'Match the source columns to required fields and choose units before importing.',
+    mappingPreview: 'Source data preview',
+    mappingUnit: 'Unit',
+    mappingAutoUnit: 'Auto',
+    mappingTotalRows: 'Total rows',
+    mappingTotalCols: 'columns',
+    mappingConfirm: 'Confirm import',
+    mappingCancel: 'Cancel',
+    mappingSelectColumn: '-- Select column --',
+    mappingConvertHint: 'Values will be converted to mm',
+    mappingFieldLabel: 'Cargo label',
+    mappingFieldName: 'Cargo name',
+    mappingFieldLength: 'Length',
+    mappingFieldWidth: 'Width',
+    mappingFieldHeight: 'Height',
+    mappingFieldWeight: 'Unit weight',
+    mappingFieldQuantity: 'Quantity',
     load: 'Load',
     view2d: '2D',
     view3d: '3D',
@@ -139,9 +160,8 @@ const copy = {
     uploadProject: 'Upload Project',
   },
   zh: {
-    nav: ['EasyCargo', '装箱报告', '货物项目', '货柜空间', '历史方案'],
+    nav: ['工作台', '历史方案'],
     title: '货柜排箱装柜工作台',
-    subtitle: '装箱计算、可视化复核、导入导出和本地历史方案',
     shipment: '输入装运名称',
     savedShipment: '装运名称会随历史方案保存',
     menu: '工作台菜单',
@@ -169,6 +189,10 @@ const copy = {
     expand: '展开',
     importLog: '导入日志',
     noImportLog: '暂无导入记录',
+    editCargo: '编辑货物',
+    editCargoTitle: '编辑货物项目',
+    saveChanges: '保存修改',
+    cancel: '取消',
     deleteCargo: '删除货物',
     dragCargo: '拖拽调整货物顺序',
     dropCargo: '拖放到这里',
@@ -201,6 +225,24 @@ const copy = {
     importSuccess: '导入成功',
     importMappedFields: '识别字段',
     importConvertedRows: '厘米换算行数',
+    mappingTitle: '智能字段映射',
+    mappingSubtitle: '请关联源文件列并选择单位以开始导入。',
+    mappingPreview: '原始数据预览',
+    mappingUnit: '单位',
+    mappingAutoUnit: '自动识别',
+    mappingTotalRows: '总行数',
+    mappingTotalCols: '列',
+    mappingConfirm: '确认导入',
+    mappingCancel: '取消',
+    mappingSelectColumn: '-- 请选择数据列 --',
+    mappingConvertHint: '将转换为 mm',
+    mappingFieldLabel: '货物标识',
+    mappingFieldName: '货物名称',
+    mappingFieldLength: '长度',
+    mappingFieldWidth: '宽度',
+    mappingFieldHeight: '高度',
+    mappingFieldWeight: '单件重量',
+    mappingFieldQuantity: '数量',
     load: '装箱',
     view2d: '2D',
     view3d: '3D',
@@ -407,6 +449,8 @@ function Workbench() {
   const [customContainer, setCustomContainer] = useState(customContainerDefaults)
   const [cargoItems, setCargoItems] = useState<CargoItem[]>(initialCargo)
   const [form, setForm] = useState<CargoForm>(emptyForm)
+  const [editingCargo, setEditingCargo] = useState<CargoItem | null>(null)
+  const [editForm, setEditForm] = useState<CargoForm>(emptyForm)
   const [hasCalculated, setHasCalculated] = useState(true)
   const [activeLayerId, setActiveLayerId] = useState('all')
   const [activeLabelId, setActiveLabelId] = useState('all')
@@ -441,6 +485,12 @@ function Workbench() {
     height: '',
     weight: '',
     quantity: '',
+  })
+  type DimensionUnit = 'auto' | 'mm' | 'cm'
+  const [customUnits, setCustomUnits] = useState<Record<'length' | 'width' | 'height', DimensionUnit>>({
+    length: 'auto',
+    width: 'auto',
+    height: 'auto',
   })
   const workspaceRef = useRef<HTMLElement | null>(null)
   const reportRef = useRef<HTMLElement | null>(null)
@@ -552,6 +602,10 @@ function Workbench() {
     setForm((current) => ({ ...current, [field]: Number(value) || 0 }))
   }
 
+  const updateEditNumber = (field: keyof Pick<CargoForm, 'length' | 'width' | 'height' | 'weight' | 'quantity'>, value: string) => {
+    setEditForm((current) => ({ ...current, [field]: Number(value) || 0 }))
+  }
+
   const updateContainerNumber = (field: 'length' | 'width' | 'height' | 'maxWeight' | 'doorGap' | 'topGap' | 'sideGap', value: string) => {
     const nextValue = Math.max(0, Number(value) || 0)
     if (selectedContainerId === 'custom') {
@@ -586,8 +640,63 @@ function Workbench() {
     setHasCalculated(false)
   }
 
+  const openEditCargo = (cargo: CargoItem) => {
+    setEditingCargo(cargo)
+    setEditForm({
+      name: cargo.name,
+      label: cargo.label,
+      length: cargo.length,
+      width: cargo.width,
+      height: cargo.height,
+      weight: cargo.weight,
+      quantity: cargo.quantity,
+      color: cargo.color,
+      canRotate: cargo.canRotate,
+      stackable: cargo.stackable,
+    })
+  }
+
+  const saveEditedCargo = (event: FormEvent) => {
+    event.preventDefault()
+    if (!editingCargo) return
+
+    const nextCargo: CargoItem = {
+      ...editForm,
+      id: editingCargo.id,
+      name: editForm.name.trim() || editingCargo.name,
+      label: (editForm.label || editingCargo.label || nextLabel(cargoItems.length)).toUpperCase().slice(0, 2),
+      quantity: Math.max(1, Math.floor(editForm.quantity)),
+    }
+
+    setCargoItems((items) => items.map((item) => item.id === editingCargo.id ? nextCargo : item))
+    setEditingCargo(null)
+    setSelectedBoxId(null)
+    setHasCalculated(false)
+  }
+
   const confirmMappingImport = () => {
-    const imported = parseCargoRowsWithMapping(importRows, customMapping, { colors })
+    const dimensionFields: Array<'length' | 'width' | 'height'> = ['length', 'width', 'height']
+    const effectiveMapping: Record<string, string> = { ...customMapping }
+    const effectiveRows: ImportCargoRow[] = importRows.map((row) => ({ ...row }))
+
+    dimensionFields.forEach((field) => {
+      const colName = customMapping[field]
+      const unit = customUnits[field]
+      if (!colName || unit === 'auto') return
+
+      // Build a sanitized synthetic key whose unit hint is unambiguous to the
+      // lib (which detects cm via substring match). We strip any existing cm /
+      // 厘米 markers from the original column name to avoid false positives.
+      const sanitized = colName.replace(/cm/gi, '').replace(/厘米/g, '')
+      const suffix = unit === 'cm' ? ' cm' : ' mm'
+      const syntheticKey = `${sanitized}__unit${suffix}`
+      effectiveMapping[field] = syntheticKey
+      effectiveRows.forEach((row, index) => {
+        row[syntheticKey] = importRows[index]?.[colName]
+      })
+    })
+
+    const imported = parseCargoRowsWithMapping(effectiveRows, effectiveMapping, { colors })
     setImportMessages([
       `${t.importSuccess}: ${imported.summary.importedRows}`,
       `${t.importMappedFields}: ${imported.summary.mappedFields.join(', ') || '-'}`,
@@ -931,7 +1040,7 @@ function Workbench() {
     setFreeViewEnabled(true)
   }
 
-  const navTargets: NavTarget[] = ['overview', 'report', 'cargo', 'container', 'history']
+  const navTargets: NavTarget[] = ['overview', 'history']
 
   if (!loggedIn) {
     if (showRegister) {
@@ -971,7 +1080,6 @@ function Workbench() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1 className="m-0 text-[30px] font-bold">{t.title}</h1>
-              <p className="m-0 mt-2 opacity-95">{t.subtitle}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <div className="flex items-center gap-2 rounded-[10px] bg-white/10 px-3 py-1.5 border border-white/20 mr-2">
@@ -1142,10 +1250,8 @@ function Workbench() {
               </div>
           {menuOpen && (
             <div className="grid gap-2 border-b border-[#e5e7eb] bg-[#f8fafc] p-3 text-sm" data-testid="workspace-menu">
-              <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('report')}>{t.nav[1]}</button>
-              <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('cargo')}>{t.nav[2]}</button>
-              <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('container')}>{t.nav[3]}</button>
-              <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('history')}>{t.nav[4]}</button>
+              <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('overview')}>{t.nav[0]}</button>
+              <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('history')}>{t.nav[1]}</button>
             </div>
           )}
           <div className="flex items-center justify-between bg-[#b0b4b7] pl-4">
@@ -1287,6 +1393,9 @@ function Workbench() {
                       <span className="h-3 w-3 shrink-0" style={{ backgroundColor: item.color }} />
                       <span className="truncate">{item.name}</span>
                     </button>
+                    <button className="border border-[#b8b8b8] bg-white px-2 py-1 text-xs" type="button" aria-label={`${t.editCargo}: ${item.name}`} onClick={() => openEditCargo(item)}>
+                      {locale === 'zh' ? '编辑' : 'Edit'}
+                    </button>
                     <button className="border border-[#b8b8b8] bg-white px-2 py-1 text-xs" type="button" aria-label={`${t.deleteCargo}: ${item.name}`} onClick={() => deleteCargo(item.id)}>
                       ×
                     </button>
@@ -1357,7 +1466,13 @@ function Workbench() {
               {t.exportView}
             </button>
             </div>
-            <div className="relative w-full aspect-[16/9] min-h-[420px] max-h-[85vh] xl:min-h-[560px] bg-gradient-to-b from-[#eef6ff] to-[#f8fafc]">
+            <div
+              className={`relative w-full bg-gradient-to-b from-[#eef6ff] to-[#f8fafc] ${
+                workspaceView === '3d'
+                  ? 'min-h-[480px] xl:min-h-[640px] 2xl:min-h-[760px] h-[70vh] xl:h-[78vh]'
+                  : 'aspect-[16/9] min-h-[420px] max-h-[85vh] xl:min-h-[560px]'
+              }`}
+            >
               <div className="absolute left-5 top-5 z-10 rounded-xl bg-white/85 px-4 py-3 text-sm shadow">
                 <strong>{selectedContainer.label}</strong>
                 <div>{renderingContainer.length.toLocaleString()} x {renderingContainer.width.toLocaleString()} x {renderingContainer.height.toLocaleString()} mm</div>
@@ -1574,48 +1689,107 @@ function Workbench() {
         )}
         {showMappingModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" data-testid="mapping-modal">
-            <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
-              <div className="mb-4">
-                <h3 className="text-xl font-bold text-slate-800">智能字段映射</h3>
-                <p className="mt-1 text-sm text-slate-500">上传的 Excel 包含非标准列名，请手动关联关键字段以开始导入。</p>
+            <div className="w-full max-w-5xl rounded-xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in duration-200 max-h-[92vh] overflow-y-auto">
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-800">{t.mappingTitle}</h3>
+                  <p className="mt-1 text-sm text-slate-500">{t.mappingSubtitle}</p>
+                </div>
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600" data-testid="mapping-stats">
+                  {t.mappingTotalRows}: {importRows.length} / {Object.keys(importRows[0] ?? {}).length} {t.mappingTotalCols}
+                </div>
               </div>
-              <div className="space-y-4">
-                {Object.keys(customMapping).map((fieldKey) => {
-                  const labelMap: Record<string, string> = {
-                    label: '货物标识 / 托盘代码 (Label)',
-                    name: '货物名称 / 品名 (Name)',
-                    length: '长度 (Length)',
-                    width: '宽度 (Width)',
-                    height: '高度 (Height)',
-                    weight: '单件重量 (Weight)',
-                    quantity: '数量 / 箱数 (Quantity)',
-                  }
-                  const excelColumns = Object.keys(importRows[0] ?? {})
-                  return (
-                    <label key={fieldKey} className="block text-sm font-semibold text-slate-700">
-                      {labelMap[fieldKey] || fieldKey}
-                      <select
-                        className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        value={customMapping[fieldKey]}
-                        onChange={(e) => setCustomMapping(prev => ({ ...prev, [fieldKey]: e.target.value }))}
-                        data-testid={`map-select-${fieldKey}`}
-                      >
-                        <option value="">-- 请选择数据列 --</option>
-                        {excelColumns.map(col => (
-                          <option key={col} value={col}>{col}</option>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-3" data-testid="mapping-fields">
+                  {Object.keys(customMapping).map((fieldKey) => {
+                    const labelMap: Record<string, string> = {
+                      label: t.mappingFieldLabel,
+                      name: t.mappingFieldName,
+                      length: t.mappingFieldLength,
+                      width: t.mappingFieldWidth,
+                      height: t.mappingFieldHeight,
+                      weight: t.mappingFieldWeight,
+                      quantity: t.mappingFieldQuantity,
+                    }
+                    const excelColumns = Object.keys(importRows[0] ?? {})
+                    const isDimension = fieldKey === 'length' || fieldKey === 'width' || fieldKey === 'height'
+                    const dimensionKey = fieldKey as 'length' | 'width' | 'height'
+                    return (
+                      <div key={fieldKey} className="rounded-md border border-slate-200 bg-white p-3">
+                        <label className="block text-sm font-semibold text-slate-700">
+                          {labelMap[fieldKey] || fieldKey}
+                          <select
+                            className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            value={customMapping[fieldKey]}
+                            onChange={(e) => setCustomMapping(prev => ({ ...prev, [fieldKey]: e.target.value }))}
+                            data-testid={`map-select-${fieldKey}`}
+                          >
+                            <option value="">{t.mappingSelectColumn}</option>
+                            {excelColumns.map(col => (
+                              <option key={col} value={col}>{col}</option>
+                            ))}
+                          </select>
+                        </label>
+                        {isDimension && (
+                          <label className="mt-2 block text-xs font-semibold text-slate-600">
+                            {t.mappingUnit}
+                            <select
+                              className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              value={customUnits[dimensionKey]}
+                              onChange={(e) => setCustomUnits(prev => ({ ...prev, [dimensionKey]: e.target.value as DimensionUnit }))}
+                              data-testid={`map-unit-${fieldKey}`}
+                            >
+                              <option value="auto">{t.mappingAutoUnit}</option>
+                              <option value="mm">mm</option>
+                              <option value="cm">cm</option>
+                            </select>
+                            {customUnits[dimensionKey] === 'cm' && (
+                              <span className="mt-1 inline-block text-[11px] font-medium text-amber-600">{t.mappingConvertHint}</span>
+                            )}
+                          </label>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid="mapping-preview">
+                  <div className="mb-2 text-sm font-semibold text-slate-700">{t.mappingPreview}</div>
+                  <div className="max-h-[420px] overflow-auto">
+                    <table className="min-w-full border-collapse text-xs">
+                      <thead className="sticky top-0 bg-slate-100">
+                        <tr>
+                          {Object.keys(importRows[0] ?? {}).map((col) => (
+                            <th key={col} className="border border-slate-200 px-2 py-1 text-left font-semibold text-slate-700 whitespace-nowrap">{col}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importRows.slice(0, 5).map((row, rowIndex) => (
+                          <tr key={rowIndex} className="odd:bg-white even:bg-slate-50">
+                            {Object.keys(importRows[0] ?? {}).map((col) => (
+                              <td key={col} className="border border-slate-200 px-2 py-1 text-slate-700 whitespace-nowrap">
+                                {row[col] === undefined || row[col] === null ? '' : String(row[col])}
+                              </td>
+                            ))}
+                          </tr>
                         ))}
-                      </select>
-                    </label>
-                  )
-                })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-              <div className="mt-6 flex justify-end gap-3">
+              <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+                {(customUnits.length === 'cm' || customUnits.width === 'cm' || customUnits.height === 'cm') && (
+                  <span className="mr-auto text-xs font-semibold text-amber-600" data-testid="mapping-convert-hint">
+                    {t.mappingConvertHint}
+                  </span>
+                )}
                 <button
                   className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none"
                   type="button"
                   onClick={() => setShowMappingModal(false)}
                 >
-                  取消
+                  {t.mappingCancel}
                 </button>
                 <button
                   className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
@@ -1623,10 +1797,51 @@ function Workbench() {
                   data-testid="confirm-mapping"
                   onClick={confirmMappingImport}
                 >
-                  确认导入
+                  {t.mappingConfirm}
                 </button>
               </div>
             </div>
+          </div>
+        )}
+        {editingCargo && (
+          <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4">
+            <form className="w-full max-w-[560px] rounded-xl bg-white p-5 shadow-2xl" onSubmit={saveEditedCargo} aria-label={t.editCargoTitle}>
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">{t.editCargoTitle}</h3>
+                  <p className="mt-1 text-sm text-slate-500">{editingCargo.name}</p>
+                </div>
+                <button className="border border-slate-300 bg-white px-3 py-1 text-sm font-semibold" type="button" onClick={() => setEditingCargo(null)} aria-label={t.cancel}>
+                  ×
+                </button>
+              </div>
+              <div className="grid grid-cols-[1fr_72px] gap-3">
+                <label className="field-label">{t.name}<input className="field-input mt-1" value={editForm.name} onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))} /></label>
+                <label className="field-label">{t.label}<input className="field-input mt-1 text-center font-bold" maxLength={2} value={editForm.label ?? ''} onChange={(event) => setEditForm((current) => ({ ...current, label: event.target.value.toUpperCase() }))} /></label>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-3">
+                <label className="field-label">{t.length}<input className="field-input mt-1" type="number" value={editForm.length} onChange={(event) => updateEditNumber('length', event.target.value)} /></label>
+                <label className="field-label">{t.width}<input className="field-input mt-1" type="number" value={editForm.width} onChange={(event) => updateEditNumber('width', event.target.value)} /></label>
+                <label className="field-label">{t.height}<input className="field-input mt-1" type="number" value={editForm.height} onChange={(event) => updateEditNumber('height', event.target.value)} /></label>
+              </div>
+              <div className="mt-3 grid grid-cols-[1fr_1fr_72px] gap-3">
+                <label className="field-label">{t.weight}<input className="field-input mt-1" type="number" value={editForm.weight} onChange={(event) => updateEditNumber('weight', event.target.value)} /></label>
+                <label className="field-label">{t.quantity}<input className="field-input mt-1" type="number" value={editForm.quantity} onChange={(event) => updateEditNumber('quantity', event.target.value)} /></label>
+                <label className="field-label">{t.color}<input className="mt-1 h-10 w-full border border-[#a8a8a8]" type="color" value={editForm.color} onChange={(event) => setEditForm((current) => ({ ...current, color: event.target.value }))} /></label>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <label className="flex items-center gap-2"><input checked={editForm.canRotate} type="checkbox" onChange={(event) => setEditForm((current) => ({ ...current, canRotate: event.target.checked }))} />{t.rotate}</label>
+                <label className="flex items-center gap-2"><input checked={editForm.stackable} type="checkbox" onChange={(event) => setEditForm((current) => ({ ...current, stackable: event.target.checked }))} />{t.stackable}</label>
+              </div>
+              <div className="mt-5 flex justify-end gap-2">
+                <button className="border border-slate-300 bg-white px-4 py-2 text-sm font-semibold" type="button" onClick={() => setEditingCargo(null)}>
+                  {t.cancel}
+                </button>
+                <button className="archive-button px-4 py-2 text-sm" type="submit">
+                  {t.saveChanges}
+                </button>
+              </div>
+            </form>
           </div>
         )}
       </div>
