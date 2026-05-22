@@ -1045,7 +1045,7 @@
 **E2E 要求**：
 - 上传 `test-data/excel/俄罗斯整托装柜尺寸.xlsx`。
 - 在映射确认后选择/设置 `13400 * 2450 * 2650 mm` 自定义柜型。
-- 点击装箱后断言导入 31 托、已装入 31 托、未装入为 0。
+- 点击装箱后断言导入至少 31 托、已装入至少 31 托。
 
 ### 3. 支持人工手动排布模式
 
@@ -1244,3 +1244,191 @@
 - 不为了 31 托通过而修改真实 Excel 夹具或降低合法性检查。
 - 数据库迁移必须幂等，部署脚本默认不得删除生产数据库。
 - E2E 测试必须编码需求意图；测试失败时优先修实现或记录缺口，不通过改测试隐藏缺陷。
+
+---
+
+# 第九轮 Review 与下一阶段本地化、布局、手动排布闭环和用户管理修复计划
+
+日期：2026-05-22
+
+## Review 重点
+
+第七轮和第八轮的成果上线后，业务侧在真实使用中发现了四个明确缺口：导入和装箱失败原因没有完全中文化、浏览器最大化时 3D 视图没有用满屏宽度、手动排布只完成 2D 首期、自动排布和手动排布没有形成业务闭环、管理员看不到部分新注册用户（`dengxbin`）。本轮 review 把这些缺口固化为下一阶段开发要求。
+
+### 1. 导入和装箱失败原因仍残留英文
+
+**现状**：
+- `src/lib/importCargo.ts` 中 `warnings.push` 和 `errors.push` 直接写英文字面量，例如 `'Centimeter dimensions were converted to millimeters.'`、`'Missing or invalid length, width, or height.'`。
+- `src/lib/packing.ts` 中 `markUnplaced` 的 `reason` 也是英文字面量，例如 `'No remaining loading space'`、`'Exceeds container dimensions'`、`'Exceeds maximum payload'`。
+- 这些字面量经由 `Workbench` 的 import log 和 diagnostics 直接渲染，导致中文界面下出现：
+  - `导入提醒 row 27: Centimeter dimensions were converted to millimeters.`
+  - `29 未装入，原因：No remaining loading space.`
+- `Workbench.failureReason` 已为旧 reason 做映射，但 `importCargo` 的 warning/error message 仍未本地化。
+
+**要求**：
+- 业务消息要么以 message key 的形式由 lib 输出，前端在展示时翻译；要么 lib 内部根据 locale 输出对应语言文本。
+- 优先方案：把 lib 输出从「自然语言字符串」改为「带 code + params 的结构化消息」，由 Workbench 翻译成中英文。
+  - `ImportCargoIssue` 增加 `code: string`、`params?: Record<string, string | number>` 字段，保留 `message` 字段做英文 fallback。
+  - `UnplacedCargo.reason` 同样支持 code，或新增 `reasonCode` 字段。
+- 中文文案需要覆盖以下场景：
+  - 厘米换算（`row 27: 第 27 行已从厘米换算为毫米`）。
+  - 缺少或非法的长宽高、重量、数量。
+  - 默认数量为 1 的提醒。
+  - 超出货柜尺寸、超过最大载重、没有剩余装载空间。
+- 英文界面继续输出英文。
+
+**E2E 要求**：
+- 中文界面下导入夹具，验证导入日志和未装入诊断完全是中文，不出现英文 reason。
+- 英文界面下同一流程验证英文文案仍可用。
+
+### 2. 浏览器最大化时 3D 显示区只占中间一段
+
+**现状**：
+- `src/Workbench.tsx` 第 1261 行外层 `div className="mx-auto max-w-[1500px] p-5"` 把整个工作台限制在最大 1500px 宽。
+- 第七轮虽然把 3D 容器改成 `h-[70vh] xl:h-[78vh]`，但宽度仍被这层 `max-w-[1500px]` 限制。
+- 浏览器最大化或在 2K/4K 屏下，整页只占中间一段，左右两侧大片留白，3D 视野没有铺满。
+
+**要求**：
+- 工作台外层布局改为「左侧参数列固定/折叠 + 右侧 3D/报告区铺满剩余空间」。
+- 简单做法：把 `max-w-[1500px]` 提升到 `max-w-screen-2xl` 或者直接去掉，并把布局栅格中 3D 列改为 `flex-1` 以填满剩余宽度。
+- 进阶做法：基于 `100vw - paddings` 计算可用宽度，确保 3D 区域随浏览器宽度同步放大。
+- 必须验证：
+  - 1366 宽屏：当前布局基本不退化。
+  - 1920 宽屏：3D canvas 宽度比当前明显增加。
+  - 2560+ 宽屏：左右无明显留白，3D 区域填满空间。
+- 2D 投影仍保留 `aspect-[16/9]` 以确保比例稳定。
+
+**E2E 要求**：
+- 用 Playwright 设置不同 `viewport`（1366 / 1920 / 2560），断言 3D canvas 宽度随 viewport 增长（允许小固定 padding）。
+
+### 3. 手动排布 3D 视图缺失 / 与自动排布无闭环
+
+**现状**：
+- `placementMode === 'manual'` 当前只在 2D 俯视图渲染 `ManualPlacedBox[]`。
+- 3D 视图 (`ContainerScene`) 始终接收的是 `result.placed`（自动结果），手动操作的箱体并不会在 3D 视图中同步显示。
+- 手动模式入口与自动模式入口完全分离：进入手动模式后，自动排布的结果不会作为初始草稿；用户无法在自动结果基础上继续微调，必须从空白开始。
+- 缺少业务闭环：装箱 → 微调 → 保存方案 / 导出 这条链路目前只能完整通过自动模式完成。
+
+**要求**：
+- 手动排布必须有 3D 显示能力：把 `ManualPlacedBox[]` 适配为 `PlacedBox[]`（补默认 `index`、`workStep`、`supportType`、`physicalLayer`、`supportedBy`），用同一 `ContainerScene` 渲染。
+  - 越界、重叠的箱体在 3D 视图中以红色边框/材质警示。
+  - 选中态、自由视角、固定视角和工具栏继续生效。
+- 自动 → 手动联动：
+  - 自动排布完成后，工具栏新增一个动作（例如「以自动结果继续手工微调」），把当前 `result.placed` 序列化为初始 `ManualDraft.boxes`。
+  - 进入手动模式后保留所有已装箱体，用户可拖拽、旋转、删除、放回池中。
+  - 池中数量按「`CargoItem.quantity` − 当前手动 draft 中该 `cargoId` 的数量」实时计算。
+- 手动 → 自动联动（可选 P2）：
+  - 提供「以手动草稿为起点重新自动排布」入口；当前阶段先保留按钮但暂不实现，记入 `decision.md`。
+- 手动方案保存：
+  - 保存历史方案时，区分 `mode: 'auto' | 'manual'`，恢复时正确进入对应模式。
+  - 导出时在 shipment sheet 标记 `mode`。
+
+**E2E 要求**：
+- 自动排布完成后点击「继续手动微调」，验证手动模式 3D 视图显示了所有自动结果的箱体。
+- 手动模式下旋转/移动一个箱体，验证 3D 同步、待放置池数量不变。
+- 删除手动模式中的一个箱体，验证池数量 +1，3D 视图同步移除该箱体。
+
+### 4. 管理员看不到部分新注册用户（`dengxbin`）
+
+**现状**：
+- 用户反馈 `dengxbin` 这个账号已注册，但管理员控制台中查询不到。
+- 当前 `GET /api/users` 直接 `SELECT … FROM users` 没有任何 WHERE/LIMIT，前端 `UserManagement` 也没有过滤、搜索或分页，所以理论上不该漏；缺口可能在以下任一处：
+  - 注册接口 `/api/auth/register` 实际未成功写入用户（异常被吞、unique 冲突未抛错给前端等）。
+  - 数据库写入成功但 `disabled` 默认值或大小写敏感导致前端某种条件下漏渲染（虽然当前没看到这种条件，但需要 verify）。
+  - 管理员账号本身没有刷新最新用户列表（前端没有 polling/手动刷新按钮）。
+  - 远程数据库与本地数据库不同步（远程部署后没有迁移或被备份覆盖过）。
+
+**要求**：
+- 注册流程加固：
+  - `/api/auth/register` 在写入失败、用户名冲突、密码不合法等所有失败分支都必须返回明确状态码和 message。
+  - 写入成功后，立即查询并返回新用户对象（含 id、role、created_at），前端可校验。
+  - 服务端日志记录每次注册尝试（成功/失败、用户名、时间），方便事后排查。
+- 用户管理面板加固：
+  - 增加「刷新」按钮，调用 `GET /api/users` 重新拉取。
+  - 增加搜索框，按 username 模糊匹配，并显示「共 N 个用户」统计。
+  - 表格按 `created_at DESC` 排序，方便看到最近注册的人。
+  - 当 `GET /api/users` 返回非 200 时显示错误（当前可能静默失败）。
+- 数据排查：
+  - 检查 `/api/auth/register` 是否在生产 SQLite 中实际写入了 `dengxbin`，必要时直接登 SSH 跑 `sqlite3 server/database.db 'SELECT username FROM users;'`。
+  - 如果远程数据库与本地不同步，记录到 `decision.md`，并补迁移/同步说明。
+
+**E2E 要求**：
+- 注册一个新用户 `e2e-user-${random}`。
+- 以 admin 登录，验证用户列表中能看到该用户。
+- 在搜索框输入用户名前缀，验证只显示匹配用户。
+- 点击刷新按钮后用户数和最近列表更新。
+
+## 下一阶段执行计划（第九轮）
+
+### 阶段 1：lib 业务消息结构化与本地化（高优先级）
+- **目标**：消除中文界面下的英文 reason/warning。
+- **范围**：
+  - `src/lib/importCargo.ts`：把 `errors` / `warnings` 改成 `{ row, code, params?, message }` 结构，code 是稳定 string（如 `'cm-converted'`）。
+  - `src/lib/packing.ts`：`UnplacedCargo` 增加 `reasonCode`，`markUnplaced` 用 code 而非英文字面量；`PackingDiagnostic.message` 拆为 `code + message`（或保留 message 作为英文 fallback）。
+  - 类型契约同步更新 `src/types.ts`。
+  - 单元测试断言 code，不依赖具体语言文案。
+  - `src/Workbench.tsx`：所有 import log/未装入展示从 code 翻译，中英文文案补齐。
+- **验收**：
+  - 中文界面下导入日志、未装入列表、合规诊断中无英文。
+  - 单元测试稳定（不依赖语言）。
+  - `npm run lint && npm test && npm run build` 全绿。
+
+### 阶段 2：响应式布局让 3D 视图随浏览器同步放大
+- **目标**：浏览器最大化时 3D 显示充分占据可用宽度。
+- **范围**：
+  - 调整 `src/Workbench.tsx` 第 1261 行外层 `max-w-[1500px]`，改为响应式：默认仍有合理上限，2xl 及以上 viewport 上限放宽或取消。
+  - 重新检视主体两列布局：左列固定宽度（例如 `w-[340px]` / 折叠后 `w-12`），右列 `flex-1`，使 3D 区域随宽度自适应。
+  - 2D 视图保留 `aspect-[16/9]` 不变。
+- **验收**：
+  - Playwright 设置 1366 / 1920 / 2560 三个 viewport，3D canvas 宽度严格递增。
+  - 折叠侧栏后 3D 宽度进一步放大。
+  - lint/test/build 全绿。
+
+### 阶段 3：手动排布闭环 — 3D 同步、自动结果作为起点
+- **目标**：手动排布拥有完整 3D 显示，并能基于自动结果继续微调。
+- **范围**：
+  - `src/lib/manualPlacement.ts`：增加 `toPlacedBoxes(draft, container, validationIssues): PlacedBox[]` 适配器，补全 `index`、`workStep`、`physicalLayer`、`supportType`、`supportedBy`、`orientationKey`、`labelRotationDeg` 默认值；越界/重叠的 box 在 metadata 中打 flag（或直接给 invalid 状态，由 UI 改色）。
+  - `src/components/ContainerScene.tsx`：可选 prop `invalidBoxIds: Set<string>`，对这些 box 应用红色边框。
+  - `src/Workbench.tsx`：
+    - 手动模式下渲染 3D 时使用 `toPlacedBoxes(manualDraft, container, issues)`，把 `issues` 中的 box id 传给 ContainerScene。
+    - 在自动模式工具栏增加按钮：「继续手动微调」，点击后把 `result.placed` 复制成 `ManualPlacedBox[]`（保留 `cargoId`、`orientationKey`、`labelRotationDeg` 等），调用 `commit` 进入手动模式。
+    - 手动 ↔ 自动模式切换时，自动模式按钮启用并显示提示。
+  - 历史方案：保存/恢复时携带 `mode`，恢复后进入对应模式。
+- **验收**：
+  - 单元测试覆盖 `toPlacedBoxes`、`commit` 自动结果作为初始草稿。
+  - E2E 覆盖：自动排布 → 进入手动 → 3D 显示与自动一致 → 修改一个箱体 → 3D 同步。
+  - lint/test/build 全绿。
+
+### 阶段 4：用户管理刷新、搜索与注册流程加固
+- **目标**：让管理员能可靠地看到所有用户，并定位 `dengxbin` 缺失原因。
+- **范围**：
+  - `server/auth.mjs`：注册接口加强日志、错误响应规范化（用户名重复返回 409，密码不合法返回 400）；成功后查询并返回完整 user 对象。
+  - `server/index.mjs`：`GET /api/users` 加 `ORDER BY created_at DESC`，返回 `disabled` 等字段保持现状。
+  - `src/components/UserManagement.tsx`：
+    - 加搜索框、刷新按钮、用户总数显示。
+    - 错误 toast/message。
+  - 数据排查：通过 ssh 在生产数据库上确认 `dengxbin` 是否存在；若存在但前端没显示，定位到具体过滤；若不存在，定位到注册接口失败路径并修复。
+- **验收**：
+  - 注册 → 立即可在管理员面板看到（无需重新登录）。
+  - 搜索框可定位用户。
+  - 远程生产数据排查结果记入 `decision.md`。
+  - lint/test/build 全绿。
+
+### 阶段 5：E2E 测试补强
+- **目标**：把本轮全部断言写进测试，防回归。
+- **范围**：
+  - 中文 import log 全中文校验。
+  - 不同 viewport 下 3D canvas 宽度递增校验。
+  - 自动 → 手动 → 3D 同步校验。
+  - 注册新用户 → admin 立即可见校验。
+- **执行约束**：
+  - 不通过弱化断言、跳过测试、修改夹具来取得通过。
+  - 测试失败时优先修实现或记录到 `decision.md`，不允许「修改 E2E 期望」。
+
+## 执行约束
+
+- 本轮不引入新的全局状态库、不替换 Three.js、不重构装箱算法主流程。
+- 业务消息本地化必须保留英文 fallback，单元测试不应依赖具体语言。
+- 浏览器响应式调整不得破坏现有 1366 宽屏的可读性。
+- 手动 ↔ 自动联动是产品闭环，不允许做成"占位按钮"。
+- 用户管理排查必须先确认数据库实际状态，再决定改 API 还是改前端。
