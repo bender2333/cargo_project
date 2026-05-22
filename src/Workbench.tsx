@@ -1258,7 +1258,7 @@ function Workbench() {
 
   return (
     <main className="min-h-screen bg-[#f4f7fb] text-[#1f2937]">
-      <div className="mx-auto max-w-[1500px] p-5">
+      <div className="mx-auto p-5 max-w-[1500px] xl:max-w-[1800px] 2xl:max-w-none 2xl:px-8">
         <header className="mb-5 rounded-2xl bg-gradient-to-br from-[#2563eb] to-[#7c3aed] p-6 text-white">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -1388,8 +1388,8 @@ function Workbench() {
             )}
           </section>
         ) : (
-        <section className={sidebarCollapsed ? "grid grid-cols-[32px_1fr] gap-5" : "grid grid-cols-[minmax(340px,25%)_minmax(0,1fr)] gap-5 max-lg:grid-cols-1"} data-testid="workbench-layout">
-          <aside className={sidebarCollapsed ? "w-[32px] overflow-hidden flex flex-col items-center" : "space-y-4"}>
+        <section className={sidebarCollapsed ? "flex gap-5 max-lg:flex-col" : "flex gap-5 max-lg:flex-col"} data-testid="workbench-layout">
+          <aside className={sidebarCollapsed ? "w-[32px] shrink-0 overflow-hidden flex flex-col items-center" : "w-[340px] lg:w-[360px] shrink-0 space-y-4 max-lg:w-full"}>
             {sidebarCollapsed ? (
               <button
                 className="mt-4 flex h-8 w-8 items-center justify-center rounded bg-[#111827] text-white hover:bg-slate-700 font-bold"
@@ -1592,7 +1592,7 @@ function Workbench() {
           )}
         </aside>
 
-        <section className="space-y-4 max-2xl:col-span-1" ref={workspaceRef}>
+        <section className="flex-1 min-w-0 space-y-4" ref={workspaceRef}>
           <div className="grid grid-cols-5 gap-3 max-xl:grid-cols-2" data-testid="archive-stat-grid">
             <div className="archive-stat"><div className="archive-stat-value">{result.placedCount}</div><div className="archive-stat-key">{t.loaded}</div></div>
             <div className="archive-stat"><div className="archive-stat-value">{Math.round(result.usedWeight)}</div><div className="archive-stat-key">{t.weight}</div></div>
