@@ -1,10 +1,25 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, DragEvent as ReactDragEvent } from 'react'
 import * as XLSX from 'xlsx'
 import { ContainerScene } from './components/ContainerScene'
 import type { SceneViewMode } from './components/ContainerScene'
 import { ContainerPlan2D } from './components/ContainerPlan2D'
 import type { PlanViewMode } from './components/ContainerPlan2D'
+import { ManualPlacement2D } from './components/ManualPlacement2D'
+import {
+  addBox as manualAddBox,
+  buildPool as manualBuildPool,
+  commit as manualCommit,
+  emptyHistory as manualEmptyHistory,
+  makeManualBox,
+  redo as manualRedo,
+  removeBox as manualRemoveBox,
+  rotateBox as manualRotateBox,
+  setBoxPosition as manualSetBoxPosition,
+  undo as manualUndo,
+  validateDraft as manualValidateDraft,
+} from './lib/manualPlacement'
+import type { ManualHistory } from './lib/manualPlacement'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from './data/containers'
 import { buildExportPlanRows } from './lib/exportPlan'
 import type { HistoryPlan } from './lib/historyPlans'
@@ -158,6 +173,18 @@ const copy = {
     newProject: 'New Project',
     saveProject: 'Save Project',
     uploadProject: 'Upload Project',
+    autoMode: 'Auto placement',
+    manualMode: 'Manual placement',
+    placementPool: 'Placement pool',
+    poolRemaining: 'Remaining',
+    manualIssues: 'Validation issues',
+    manualNoIssues: 'No validation issues',
+    manualRotate: 'Rotate 90°',
+    manualDelete: 'Delete',
+    undo: 'Undo',
+    redo: 'Redo',
+    manualHint: 'Drag cargo from the pool. Use R to rotate, arrows to move (Shift = 500mm), Delete to remove, Ctrl/Cmd+Z to undo.',
+    poolEmpty: 'All cargo has been placed.',
   },
   zh: {
     nav: ['工作台', '历史方案'],
@@ -293,6 +320,18 @@ const copy = {
     newProject: '新建项目',
     saveProject: '保存项目',
     uploadProject: '上传项目',
+    autoMode: '自动排布',
+    manualMode: '手动排布',
+    placementPool: '待放置池',
+    poolRemaining: '剩余',
+    manualIssues: '校验问题',
+    manualNoIssues: '当前无校验问题',
+    manualRotate: '旋转 90°',
+    manualDelete: '删除',
+    undo: '撤销',
+    redo: '重做',
+    manualHint: '从待放置池拖入货物。R 旋转，方向键移动（Shift 500mm），Delete 删除，Ctrl/Cmd+Z 撤销。',
+    poolEmpty: '所有货物已放置完毕。',
   },
 }
 
@@ -459,6 +498,9 @@ function Workbench() {
   const [freeViewEnabled, setFreeViewEnabled] = useState(false)
   const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
   const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
+  const [placementMode, setPlacementMode] = useState<'auto' | 'manual'>('auto')
+  const [manualHistory, setManualHistory] = useState<ManualHistory>(() => manualEmptyHistory())
+  const [manualSelectedId, setManualSelectedId] = useState<string | null>(null)
   
   // Backend integrated states
   const [loggedIn, setLoggedIn] = useState(() => isLoggedIn())
@@ -584,6 +626,147 @@ function Workbench() {
   const displayCargoItems = useMemo(() => normalizeCargoLabelColors(cargoItems), [cargoItems])
   const result = useMemo(() => calculatePacking(selectedContainer, displayCargoItems, { loadingMode }), [displayCargoItems, loadingMode, selectedContainer])
   const detailRows = useMemo(() => buildExportPlanRows(displayCargoItems, result), [displayCargoItems, result])
+
+  const manualDraft = manualHistory.present
+  const manualPool = useMemo(
+    () => manualBuildPool(displayCargoItems, manualDraft),
+    [displayCargoItems, manualDraft],
+  )
+  const manualIssues = useMemo(
+    () => manualValidateDraft(manualDraft, renderingContainer),
+    [manualDraft, renderingContainer],
+  )
+  const manualCanUndo = manualHistory.past.length > 0
+  const manualCanRedo = manualHistory.future.length > 0
+
+  const commitManual = (nextDraft: typeof manualDraft) => {
+    setManualHistory((current) => manualCommit(current, nextDraft))
+  }
+
+  const handleManualMoveBox = (id: string, x: number, y: number) => {
+    commitManual(manualSetBoxPosition(manualDraft, id, x, y))
+  }
+
+  const handleManualDropFromPool = (cargoId: string, dropX: number, dropY: number) => {
+    const cargoItem = displayCargoItems.find((item) => item.id === cargoId)
+    if (!cargoItem) return
+    const used = manualDraft.boxes.filter((box) => box.cargoId === cargoId).length
+    if (used >= cargoItem.quantity) return
+    const boxId = `manual-${cargoId}-${Date.now()}-${used + 1}`
+    const newBox = makeManualBox({
+      id: boxId,
+      cargoId,
+      label: cargoItem.label ?? cargoItem.name,
+      color: cargoItem.color,
+      length: cargoItem.length,
+      width: cargoItem.width,
+      height: cargoItem.height,
+      x: Math.max(0, dropX - cargoItem.length / 2),
+      y: Math.max(0, dropY - cargoItem.width / 2),
+    })
+    commitManual(manualAddBox(manualDraft, newBox))
+    setManualSelectedId(boxId)
+  }
+
+  const handleManualPoolDragStart = (event: ReactDragEvent<HTMLDivElement>, cargoId: string) => {
+    event.dataTransfer.setData('application/x-cargo-id', cargoId)
+    event.dataTransfer.setData('text/plain', cargoId)
+    event.dataTransfer.effectAllowed = 'copy'
+  }
+
+  const handleManualUndo = () => {
+    setManualHistory((current) => manualUndo(current))
+  }
+
+  const handleManualRedo = () => {
+    setManualHistory((current) => manualRedo(current))
+  }
+
+  const handleManualRotate = () => {
+    if (!manualSelectedId) return
+    commitManual(manualRotateBox(manualDraft, manualSelectedId))
+  }
+
+  const handleManualDelete = () => {
+    if (!manualSelectedId) return
+    commitManual(manualRemoveBox(manualDraft, manualSelectedId))
+    setManualSelectedId(null)
+  }
+
+  useEffect(() => {
+    if (placementMode !== 'manual') return
+    const handleKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target) {
+        const tag = target.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) {
+          return
+        }
+      }
+
+      const isMeta = event.ctrlKey || event.metaKey
+
+      if (isMeta && (event.key === 'z' || event.key === 'Z')) {
+        event.preventDefault()
+        if (event.shiftKey) {
+          setManualHistory((current) => manualRedo(current))
+        } else {
+          setManualHistory((current) => manualUndo(current))
+        }
+        return
+      }
+      if (isMeta && (event.key === 'y' || event.key === 'Y')) {
+        event.preventDefault()
+        setManualHistory((current) => manualRedo(current))
+        return
+      }
+
+      if (event.key === 'Escape') {
+        setManualSelectedId(null)
+        return
+      }
+
+      if (!manualSelectedId) return
+
+      if (event.key === 'r' || event.key === 'R') {
+        if (event.shiftKey) return
+        event.preventDefault()
+        setManualHistory((current) => manualCommit(current, manualRotateBox(current.present, manualSelectedId)))
+        return
+      }
+
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault()
+        setManualHistory((current) => manualCommit(current, manualRemoveBox(current.present, manualSelectedId)))
+        setManualSelectedId(null)
+        return
+      }
+
+      const arrowDeltas: Record<string, { dx: number; dy: number }> = {
+        ArrowLeft: { dx: -1, dy: 0 },
+        ArrowRight: { dx: 1, dy: 0 },
+        ArrowUp: { dx: 0, dy: 1 },
+        ArrowDown: { dx: 0, dy: -1 },
+      }
+      const delta = arrowDeltas[event.key]
+      if (delta) {
+        event.preventDefault()
+        const step = event.shiftKey ? 500 : 50
+        setManualHistory((current) => {
+          const box = current.present.boxes.find((b) => b.id === manualSelectedId)
+          if (!box) return current
+          return manualCommit(
+            current,
+            manualSetBoxPosition(current.present, manualSelectedId, box.x + delta.dx * step, box.y + delta.dy * step),
+          )
+        })
+      }
+    }
+
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [placementMode, manualSelectedId])
+
   const activeLayer = result.layers.find((layer) => layer.id === activeLayerId)
   const visibleBoxes = hasCalculated
     ? result.placed.filter((box) => (activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId) && (activeLabelId === 'all' || box.label === activeLabelId))
@@ -1420,6 +1603,23 @@ function Workbench() {
 
           <section className="archive-card overflow-hidden" data-testid="visual-workspace">
             <div className="flex flex-wrap gap-2 border-b border-[#e5e7eb] p-[18px]">
+              <button
+                className={`archive-tab ${placementMode === 'auto' ? 'active' : ''}`}
+                type="button"
+                data-testid="placement-mode-auto"
+                onClick={() => setPlacementMode('auto')}
+              >
+                {t.autoMode}
+              </button>
+              <button
+                className={`archive-tab ${placementMode === 'manual' ? 'active' : ''}`}
+                type="button"
+                data-testid="placement-mode-manual"
+                onClick={() => setPlacementMode('manual')}
+              >
+                {t.manualMode}
+              </button>
+              <span className="mx-2 self-center text-[#cbd5e1]">|</span>
               <button className={`archive-tab ${workspaceView === '2d' ? 'active' : ''}`} type="button" onClick={() => setWorkspaceView('2d')}>
                 {t.view2d}
               </button>
@@ -1477,7 +1677,106 @@ function Workbench() {
                 <strong>{selectedContainer.label}</strong>
                 <div>{renderingContainer.length.toLocaleString()} x {renderingContainer.width.toLocaleString()} x {renderingContainer.height.toLocaleString()} mm</div>
               </div>
-              {workspaceView === '3d' ? (
+              {placementMode === 'manual' ? (
+                <div className="flex h-full w-full flex-col gap-3 p-4" data-testid="manual-workspace">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      className="archive-button"
+                      type="button"
+                      onClick={handleManualUndo}
+                      disabled={!manualCanUndo}
+                      data-testid="manual-undo"
+                    >
+                      {t.undo}
+                    </button>
+                    <button
+                      className="archive-button"
+                      type="button"
+                      onClick={handleManualRedo}
+                      disabled={!manualCanRedo}
+                      data-testid="manual-redo"
+                    >
+                      {t.redo}
+                    </button>
+                    <button
+                      className="archive-button"
+                      type="button"
+                      onClick={handleManualRotate}
+                      disabled={!manualSelectedId}
+                      data-testid="manual-rotate"
+                    >
+                      {t.manualRotate}
+                    </button>
+                    <button
+                      className="archive-button"
+                      type="button"
+                      onClick={handleManualDelete}
+                      disabled={!manualSelectedId}
+                      data-testid="manual-delete"
+                    >
+                      {t.manualDelete}
+                    </button>
+                    <span className="ml-auto text-xs text-[#475569]">{t.manualHint}</span>
+                  </div>
+                  {manualIssues.length > 0 && (
+                    <div
+                      className="rounded-xl border border-[#fecaca] bg-[#fef2f2] p-3 text-xs text-[#991b1b]"
+                      data-testid="manual-issues"
+                    >
+                      <div className="mb-1 font-semibold">{t.manualIssues} ({manualIssues.length})</div>
+                      <ul className="list-inside list-disc space-y-0.5">
+                        {manualIssues.slice(0, 10).map((issue, index) => (
+                          <li key={`${issue.boxId}-${issue.type}-${index}`}>{issue.message}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <div className="flex flex-1 gap-3 overflow-hidden">
+                    <aside
+                      className="flex w-56 shrink-0 flex-col gap-2 overflow-auto rounded-xl border border-[#e5e7eb] bg-white p-3"
+                      data-testid="manual-pool"
+                    >
+                      <h3 className="text-sm font-bold">{t.placementPool}</h3>
+                      {manualPool.every((entry) => entry.remaining === 0) ? (
+                        <p className="text-xs text-[#64748b]">{t.poolEmpty}</p>
+                      ) : (
+                        manualPool.map((entry) => (
+                          <div
+                            key={entry.cargoId}
+                            draggable={entry.remaining > 0}
+                            data-testid="manual-pool-item"
+                            data-cargo-id={entry.cargoId}
+                            onDragStart={(event) => handleManualPoolDragStart(event, entry.cargoId)}
+                            className={`flex flex-col gap-1 rounded-lg border p-2 text-xs ${
+                              entry.remaining > 0
+                                ? 'cursor-grab border-[#c9c9c9] bg-white'
+                                : 'cursor-not-allowed border-[#e5e7eb] bg-[#f1f5f9] opacity-60'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="grid h-5 w-5 shrink-0 place-items-center rounded bg-[#222] text-[10px] text-white">{entry.label}</span>
+                              <span className="h-3 w-3 shrink-0" style={{ backgroundColor: entry.color }} />
+                              <span className="ml-auto font-semibold">{t.poolRemaining}: {entry.remaining}</span>
+                            </div>
+                            <span className="text-[#64748b]">{entry.length} x {entry.width} x {entry.height} mm</span>
+                          </div>
+                        ))
+                      )}
+                    </aside>
+                    <div className="flex-1 overflow-hidden rounded-xl border border-[#e5e7eb] bg-white">
+                      <ManualPlacement2D
+                        container={renderingContainer}
+                        draft={manualDraft}
+                        selectedBoxId={manualSelectedId}
+                        issues={manualIssues}
+                        onSelectBox={setManualSelectedId}
+                        onMoveBox={handleManualMoveBox}
+                        onDropFromPool={handleManualDropFromPool}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : workspaceView === '3d' ? (
                 <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={hasCalculated ? result.placed : []} container={renderingContainer} freeView={freeViewEnabled} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onSelectBox={setSelectedBoxId} />
               ) : (
                 <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={result.placed} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
