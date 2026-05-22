@@ -4,8 +4,22 @@ import { createClientId } from './clientId'
 type RowValue = string | number | boolean | null | undefined
 export type ImportCargoRow = Record<string, RowValue>
 
+export const IMPORT_CODES = {
+  CM_CONVERTED: 'cm-converted',
+  INVALID_DIMENSIONS: 'invalid-dimensions',
+  INVALID_QUANTITY: 'invalid-quantity',
+  QUANTITY_DEFAULTED: 'quantity-defaulted',
+} as const
+
+export type ImportCargoCode = (typeof IMPORT_CODES)[keyof typeof IMPORT_CODES]
+
 export type ImportCargoIssue = {
   row: number
+  /** Structured code for localized rendering. */
+  code: string
+  /** Optional parameters that vary the rendered message (e.g., row, value). */
+  params?: Record<string, string | number>
+  /** English fallback message retained for backwards compatibility. */
   message: string
 }
 
@@ -112,23 +126,43 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
     const convertedFromCm = length.convertedFromCm || width.convertedFromCm || height.convertedFromCm
 
     if (length.value <= 0 || width.value <= 0 || height.value <= 0) {
-      errors.push({ row: rowNumber, message: 'Missing or invalid length, width, or height.' })
+      errors.push({
+        row: rowNumber,
+        code: IMPORT_CODES.INVALID_DIMENSIONS,
+        params: { row: rowNumber },
+        message: 'Missing or invalid length, width, or height.',
+      })
       return
     }
 
     const rawQuantity = valueFor(row, fields.quantity)
     const quantity = rawQuantity === undefined ? 1 : Math.floor(numberValue(rawQuantity))
     if (quantity <= 0) {
-      errors.push({ row: rowNumber, message: 'Missing or invalid quantity.' })
+      errors.push({
+        row: rowNumber,
+        code: IMPORT_CODES.INVALID_QUANTITY,
+        params: { row: rowNumber },
+        message: 'Missing or invalid quantity.',
+      })
       return
     }
 
     if (rawQuantity === undefined) {
-      warnings.push({ row: rowNumber, message: 'Quantity was missing and defaulted to 1.' })
+      warnings.push({
+        row: rowNumber,
+        code: IMPORT_CODES.QUANTITY_DEFAULTED,
+        params: { row: rowNumber },
+        message: 'Quantity was missing and defaulted to 1.',
+      })
     }
 
     if (convertedFromCm) {
-      warnings.push({ row: rowNumber, message: 'Centimeter dimensions were converted to millimeters.' })
+      warnings.push({
+        row: rowNumber,
+        code: IMPORT_CODES.CM_CONVERTED,
+        params: { row: rowNumber },
+        message: 'Centimeter dimensions were converted to millimeters.',
+      })
       convertedCentimeterRows += 1
     }
 

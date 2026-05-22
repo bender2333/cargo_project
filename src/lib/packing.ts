@@ -1,6 +1,20 @@
-import type { CargoItem, ContainerSpec, LoadingMode, PackingDiagnostic, PackingResult, PlacedBox } from '../types'
+import type { CargoItem, ContainerSpec, LoadingMode, PackingDiagnostic, PackingResult, PlacedBox, UnplacedCargo } from '../types'
 import { effectiveContainer, getContainerVolume } from '../data/containers'
 import { assignDepthLayers, buildPackingLayers } from './layers'
+
+export const UNPLACED_REASON_CODES = {
+  EXCEEDS_DIMENSIONS: 'exceeds-dimensions',
+  EXCEEDS_PAYLOAD: 'exceeds-payload',
+  NO_SPACE: 'no-space',
+} as const
+
+export type UnplacedReasonCode = (typeof UNPLACED_REASON_CODES)[keyof typeof UNPLACED_REASON_CODES]
+
+const UNPLACED_REASON_MESSAGES: Record<UnplacedReasonCode, string> = {
+  [UNPLACED_REASON_CODES.EXCEEDS_DIMENSIONS]: 'Exceeds container dimensions',
+  [UNPLACED_REASON_CODES.EXCEEDS_PAYLOAD]: 'Exceeds maximum payload',
+  [UNPLACED_REASON_CODES.NO_SPACE]: 'No remaining loading space',
+}
 
 type BoxSize = {
   length: number
@@ -333,6 +347,13 @@ function buildDiagnostics(
     diagnostics.push({
       id: `unplaced-${item.cargoId}`,
       severity: 'warning',
+      code: item.reasonCode,
+      params: {
+        label: item.label,
+        name: item.name,
+        quantity: item.quantity,
+        reasonCode: item.reasonCode,
+      },
       message: `${item.label} ${item.name}: ${item.quantity} unplaced because ${item.reason}.`,
     })
   })
@@ -354,7 +375,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   const effective = effectiveContainer(container)
   const placed: PlacedBox[] = []
   let extremePoints: Point[] = [{ x: 0, y: 0, z: 0 }]
-  const unplacedMap = new Map<string, { cargoId: string; name: string; label: string; quantity: number; reason: string }>()
+  const unplacedMap = new Map<string, UnplacedCargo>()
   let usedWeight = 0
   let totalCargoCount = 0
 
@@ -378,14 +399,15 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       return b.item.length * b.item.width * b.item.height - a.item.length * a.item.width * a.item.height
     })
 
-  const markUnplaced = (item: CargoItem, label: string, reason: string) => {
+  const markUnplaced = (item: CargoItem, label: string, reasonCode: UnplacedReasonCode) => {
     const current = unplacedMap.get(item.id)
     unplacedMap.set(item.id, {
       cargoId: item.id,
       name: item.name,
       label,
       quantity: (current?.quantity ?? 0) + 1,
-      reason,
+      reasonCode,
+      reason: UNPLACED_REASON_MESSAGES[reasonCode],
     })
   }
 
@@ -486,32 +508,32 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     for (const entry of remaining) {
       const item = entry.item
       if (orientations(item).every((box) => !fitsInsideContainer({ x: 0, y: 0, z: 0 }, box, effective))) {
-        markUnplaced(item, entry.label, 'Exceeds container dimensions')
+        markUnplaced(item, entry.label, UNPLACED_REASON_CODES.EXCEEDS_DIMENSIONS)
         continue
       }
       if (usedWeight + item.weight > effective.maxWeight + EPSILON) {
-        markUnplaced(item, entry.label, 'Exceeds maximum payload')
+        markUnplaced(item, entry.label, UNPLACED_REASON_CODES.EXCEEDS_PAYLOAD)
         continue
       }
-      markUnplaced(item, entry.label, 'No remaining loading space')
+      markUnplaced(item, entry.label, UNPLACED_REASON_CODES.NO_SPACE)
     }
   } else {
     for (const entry of expanded) {
       const item = entry.item
 
       if (orientations(item).every((box) => !fitsInsideContainer({ x: 0, y: 0, z: 0 }, box, effective))) {
-        markUnplaced(item, entry.label, 'Exceeds container dimensions')
+        markUnplaced(item, entry.label, UNPLACED_REASON_CODES.EXCEEDS_DIMENSIONS)
         continue
       }
 
       if (usedWeight + item.weight > effective.maxWeight) {
-        markUnplaced(item, entry.label, 'Exceeds maximum payload')
+        markUnplaced(item, entry.label, UNPLACED_REASON_CODES.EXCEEDS_PAYLOAD)
         continue
       }
 
       const placement = bestPlacement(item, effective, placed, extremePoints)
       if (!placement) {
-        markUnplaced(item, entry.label, 'No remaining loading space')
+        markUnplaced(item, entry.label, UNPLACED_REASON_CODES.NO_SPACE)
         continue
       }
       placeEntry(entry, placement)

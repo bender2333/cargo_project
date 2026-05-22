@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseCargoRows, parseCargoRowsWithMapping } from './importCargo'
+import { IMPORT_CODES, parseCargoRows, parseCargoRowsWithMapping } from './importCargo'
 
 describe('parseCargoRows', () => {
   it('maps Chinese headers and converts centimeter dimensions to millimeters', () => {
@@ -37,9 +37,13 @@ describe('parseCargoRows', () => {
       },
     ])
     expect(result.errors).toEqual([])
-    expect(result.warnings).toEqual([
-      { row: 2, message: 'Centimeter dimensions were converted to millimeters.' },
-    ])
+    expect(result.warnings).toHaveLength(1)
+    expect(result.warnings[0]).toMatchObject({
+      row: 2,
+      code: IMPORT_CODES.CM_CONVERTED,
+      params: { row: 2 },
+    })
+    expect(typeof result.warnings[0].message).toBe('string')
     expect(result.summary).toEqual({
       importedRows: 1,
       mappedFields: ['canRotate', 'color', 'height', 'label', 'name', 'quantity', 'stackable', 'weight', 'width', 'length'].sort(),
@@ -60,10 +64,9 @@ describe('parseCargoRows', () => {
     expect(result.items).toHaveLength(2)
     expect(result.items[0]).toMatchObject({ label: 'A', name: 'Valid', length: 1000, quantity: 1 })
     expect(result.items[1]).toMatchObject({ label: 'C', name: 'Missing quantity', length: 1000, quantity: 1 })
-    expect(result.errors).toEqual([
-      { row: 3, message: 'Missing or invalid length, width, or height.' },
-    ])
-    expect(result.warnings).toContainEqual({ row: 4, message: 'Quantity was missing and defaulted to 1.' })
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0]).toMatchObject({ row: 3, code: IMPORT_CODES.INVALID_DIMENSIONS, params: { row: 3 } })
+    expect(result.warnings.some((issue) => issue.row === 4 && issue.code === IMPORT_CODES.QUANTITY_DEFAULTED)).toBe(true)
     expect(result.summary.importedRows).toBe(2)
   })
 
@@ -85,7 +88,27 @@ describe('parseCargoRows', () => {
     expect(result.items).toEqual([
       expect.objectContaining({ label: '1', name: 'Pallet item', quantity: 1, length: 1000, width: 800, height: 600 }),
     ])
-    expect(result.warnings).toContainEqual({ row: 2, message: 'Quantity was missing and defaulted to 1.' })
+    expect(result.warnings.some((issue) => issue.row === 2 && issue.code === IMPORT_CODES.QUANTITY_DEFAULTED)).toBe(true)
+  })
+
+  it('emits structured codes with English fallback message for downstream localization', () => {
+    const result = parseCargoRows(
+      [
+        { Label: 'A', Length: 0, Width: 0, Height: 0, Quantity: 1 },
+        { Label: 'B', Length: 1000, Width: 1000, Height: 1000, Quantity: 0 },
+      ],
+      { createId: () => 'codes-id' },
+    )
+
+    expect(result.errors).toHaveLength(2)
+    for (const issue of result.errors) {
+      expect(typeof issue.code).toBe('string')
+      expect(issue.code.length).toBeGreaterThan(0)
+      expect(typeof issue.message).toBe('string')
+      expect(issue.message.length).toBeGreaterThan(0)
+    }
+    expect(result.errors[0].code).toBe(IMPORT_CODES.INVALID_DIMENSIONS)
+    expect(result.errors[1].code).toBe(IMPORT_CODES.INVALID_QUANTITY)
   })
 })
 

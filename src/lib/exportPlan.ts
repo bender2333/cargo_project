@@ -16,6 +16,7 @@ export type ExportPlanRow = {
   layer: string
   workStep: string
   failureReason: string
+  failureReasonCode: string
 }
 
 function formatNumberList(values: number[]) {
@@ -44,6 +45,7 @@ export function buildExportPlanRows(cargoItems: CargoItem[], result: PackingResu
       layer: formatNumberList(stats?.layers ?? [...new Set(placedBoxes.map((box) => box.physicalLayer))].sort((a, b) => a - b)),
       workStep: formatNumberList(placedBoxes.map((box) => box.workStep).sort((a, b) => a - b)),
       failureReason: unplaced?.reason ?? '',
+      failureReasonCode: unplaced?.reasonCode ?? '',
     }
   })
 }

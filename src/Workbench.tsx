@@ -405,7 +405,65 @@ function moveItem<T>(items: T[], fromIndex: number, toIndex: number) {
   return next
 }
 
+function formatTemplate(template: string, params?: Record<string, string | number>) {
+  if (!params) return template
+  return template.replace(/\{(\w+)\}/g, (match, key: string) =>
+    Object.prototype.hasOwnProperty.call(params, key) ? String(params[key]) : match,
+  )
+}
+
+const importCodeMessages: Record<Locale, Record<string, string>> = {
+  zh: {
+    'cm-converted': '第 {row} 行已从厘米换算为毫米。',
+    'invalid-dimensions': '第 {row} 行缺少或非法的长宽高。',
+    'invalid-quantity': '第 {row} 行缺少或非法的数量。',
+    'quantity-defaulted': '第 {row} 行未填数量，已默认为 1。',
+  },
+  en: {
+    'cm-converted': 'Row {row}: Centimeter dimensions were converted to millimeters.',
+    'invalid-dimensions': 'Row {row}: Missing or invalid length, width, or height.',
+    'invalid-quantity': 'Row {row}: Missing or invalid quantity.',
+    'quantity-defaulted': 'Row {row}: Quantity was missing and defaulted to 1.',
+  },
+}
+
+const unplacedReasonMessages: Record<Locale, Record<string, string>> = {
+  zh: {
+    'exceeds-dimensions': '超出货柜尺寸',
+    'exceeds-payload': '超过最大载重',
+    'no-space': '没有剩余装载空间',
+  },
+  en: {
+    'exceeds-dimensions': 'Exceeds container dimensions',
+    'exceeds-payload': 'Exceeds maximum payload',
+    'no-space': 'No remaining loading space',
+  },
+}
+
+function translateImportIssue(
+  issue: { code: string; params?: Record<string, string | number>; row: number; message: string },
+  locale: Locale,
+) {
+  const template = importCodeMessages[locale]?.[issue.code]
+  if (template) {
+    return formatTemplate(template, issue.params ?? { row: issue.row })
+  }
+  return issue.message
+}
+
 function diagnosticMessage(diagnostic: PackingDiagnostic, locale: Locale) {
+  if (diagnostic.id.startsWith('unplaced-') && diagnostic.code) {
+    const reason = unplacedReasonMessages[locale]?.[diagnostic.code] ?? diagnostic.code
+    const params = diagnostic.params ?? {}
+    const label = String(params.label ?? '')
+    const name = String(params.name ?? '')
+    const quantity = String(params.quantity ?? '')
+    if (locale === 'zh') {
+      return `${label} ${name}：${quantity} 未装入，原因：${reason}。`
+    }
+    return `${label} ${name}: ${quantity} unplaced because ${reason}.`
+  }
+
   if (locale === 'en') {
     return diagnostic.message
   }
@@ -437,14 +495,15 @@ function diagnosticMessage(diagnostic: PackingDiagnostic, locale: Locale) {
     return zhMessages[diagnostic.id]
   }
 
-  if (diagnostic.id.startsWith('unplaced-')) {
-    return diagnostic.message.replace('unplaced because', '未装入，原因：')
-  }
-
   return diagnostic.message
 }
 
-function failureReason(reason: string, locale: Locale) {
+function failureReason(reason: string, locale: Locale, reasonCode?: string) {
+  if (reasonCode) {
+    const translated = unplacedReasonMessages[locale]?.[reasonCode]
+    if (translated) return translated
+  }
+
   if (locale === 'en') {
     return reason
   }
@@ -884,8 +943,8 @@ function Workbench() {
       `${t.importSuccess}: ${imported.summary.importedRows}`,
       `${t.importMappedFields}: ${imported.summary.mappedFields.join(', ') || '-'}`,
       `${t.importConvertedRows}: ${imported.summary.convertedCentimeterRows}`,
-      ...imported.errors.map((issue) => `${t.importIssue} row ${issue.row}: ${issue.message}`),
-      ...imported.warnings.map((issue) => `${t.importWarning} row ${issue.row}: ${issue.message}`),
+      ...imported.errors.map((issue) => `${t.importIssue} row ${issue.row}: ${translateImportIssue(issue, locale)}`),
+      ...imported.warnings.map((issue) => `${t.importWarning} row ${issue.row}: ${translateImportIssue(issue, locale)}`),
     ])
     if (imported.items.length > 0) {
       setCargoItems(imported.items)
@@ -954,8 +1013,8 @@ function Workbench() {
         `${t.importSuccess}: ${imported.summary.importedRows}`,
         `${t.importMappedFields}: ${imported.summary.mappedFields.join(', ') || '-'}`,
         `${t.importConvertedRows}: ${imported.summary.convertedCentimeterRows}`,
-        ...imported.errors.map((issue) => `${t.importIssue} row ${issue.row}: ${issue.message}`),
-        ...imported.warnings.map((issue) => `${t.importWarning} row ${issue.row}: ${issue.message}`),
+        ...imported.errors.map((issue) => `${t.importIssue} row ${issue.row}: ${translateImportIssue(issue, locale)}`),
+        ...imported.warnings.map((issue) => `${t.importWarning} row ${issue.row}: ${translateImportIssue(issue, locale)}`),
       ])
       if (imported.items.length > 0) {
         setCargoItems(imported.items)
@@ -1924,7 +1983,7 @@ function Workbench() {
                         <td className="p-2">{item.unplacedQuantity}</td>
                         <td className="p-2">{item.layer || '-'}</td>
                         <td className="p-2">{item.workStep || '-'}</td>
-                        <td className="p-2">{item.failureReason ? failureReason(item.failureReason, locale) : t.noFailure}</td>
+                        <td className="p-2">{item.failureReason ? failureReason(item.failureReason, locale, item.failureReasonCode) : t.noFailure}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1943,7 +2002,7 @@ function Workbench() {
                 {result.unplaced.map((item) => (
                   <div className="border border-[#d7b7b7] bg-white p-2" key={item.cargoId}>
                     <strong>{item.label} {item.name}</strong>
-                    <p>{t.failureReason}: {failureReason(item.reason || t.noFailure, locale)}</p>
+                    <p>{t.failureReason}: {failureReason(item.reason || t.noFailure, locale, item.reasonCode)}</p>
                   </div>
                 ))}
               </div>
@@ -1978,7 +2037,7 @@ function Workbench() {
             {result.unplaced.length > 0 && (
               <div className="mt-3 border-t pt-2">
                 <strong>{t.unloaded}</strong>
-                {result.unplaced.map((item) => <p className="text-xs" key={item.cargoId}>{item.name} x {item.quantity}: {failureReason(item.reason, locale)}</p>)}
+                {result.unplaced.map((item) => <p className="text-xs" key={item.cargoId}>{item.name} x {item.quantity}: {failureReason(item.reason, locale, item.reasonCode)}</p>)}
               </div>
             )}
           </div>

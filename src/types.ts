@@ -53,7 +53,10 @@ export type UnplacedCargo = {
   name: string
   label: string
   quantity: number
+  /** English fallback reason text retained for backwards compatibility. */
   reason: string
+  /** Structured reason code used for localized rendering. */
+  reasonCode: string
 }
 
 export type LayerLabelCount = {
@@ -97,6 +100,10 @@ export type PackingDiagnostic = {
   id: string
   severity: 'info' | 'warning' | 'error'
   message: string
+  /** Optional structured code used for localized rendering (e.g., unplaced reason). */
+  code?: string
+  /** Optional parameters that vary the rendered message (e.g., label, name, quantity). */
+  params?: Record<string, string | number>
 }
 
 export type LoadingMode = 'volume' | 'weight' | 'quantity' | 'input'

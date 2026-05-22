@@ -58,6 +58,7 @@ describe('buildExportPlanRows', () => {
         layer: '1',
         workStep: '1',
         failureReason: 'Exceeds maximum payload',
+        failureReasonCode: 'exceeds-payload',
       },
       {
         label: 'B',
@@ -75,6 +76,7 @@ describe('buildExportPlanRows', () => {
         layer: '1',
         workStep: '2',
         failureReason: '',
+        failureReasonCode: '',
       },
     ])
   })

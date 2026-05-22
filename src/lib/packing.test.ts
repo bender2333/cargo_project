@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from '../data/containers'
 import type { CargoItem, ContainerSpec, PackingResult, PlacedBox } from '../types'
-import { calculatePacking, orientations } from './packing'
+import { UNPLACED_REASON_CODES, calculatePacking, orientations } from './packing'
 
 const cargo = (overrides: Partial<CargoItem> = {}): CargoItem => ({
   id: 'cargo-1',
@@ -197,7 +197,7 @@ describe('calculatePacking', () => {
 
     expectValidPacking(container, result)
     expect(result.placedCount).toBe(0)
-    expect(result.unplaced[0]).toMatchObject({ cargoId: 'fixed', quantity: 1, reason: 'Exceeds container dimensions' })
+    expect(result.unplaced[0]).toMatchObject({ cargoId: 'fixed', quantity: 1, reasonCode: UNPLACED_REASON_CODES.EXCEEDS_DIMENSIONS })
   })
 
   it('packs exact edge-aligned boxes without treating touching faces as overlap', () => {
@@ -221,7 +221,7 @@ describe('calculatePacking', () => {
     expectValidPacking(container, result)
     expect(result.placedCount).toBe(2)
     expect(result.unplaced).toEqual([
-      { cargoId: 'fits-two', name: 'Fits two', label: 'F', quantity: 2, reason: 'No remaining loading space' },
+      { cargoId: 'fits-two', name: 'Fits two', label: 'F', quantity: 2, reasonCode: UNPLACED_REASON_CODES.NO_SPACE, reason: 'No remaining loading space' },
     ])
   })
 
@@ -257,7 +257,7 @@ describe('calculatePacking', () => {
       { label: 'A', name: 'Alpha', color: '#f59e0b', planned: 2, placed: 1, unplaced: 1, layers: [1] },
       { label: 'B', name: 'Beta', color: '#f59e0b', planned: 1, placed: 1, unplaced: 0, layers: [1] },
     ])
-    expect(result.unplaced[0]).toMatchObject({ cargoId: 'a', label: 'A', quantity: 1, reason: 'Exceeds maximum payload' })
+    expect(result.unplaced[0]).toMatchObject({ cargoId: 'a', label: 'A', quantity: 1, reasonCode: UNPLACED_REASON_CODES.EXCEEDS_PAYLOAD })
   })
 
   it('reports explicit compliance diagnostics and optimization guidance', () => {
@@ -281,6 +281,18 @@ describe('calculatePacking', () => {
     expect(result.diagnostics.find((item) => item.id === 'support-check')).toMatchObject({ severity: 'info' })
     expect(result.diagnostics.find((item) => item.id === 'stacking-check')).toMatchObject({ severity: 'info' })
     expect(result.diagnostics.find((item) => item.id === 'optimization-suggestion')?.message).toContain('review unplaced cargo')
+
+    const unplacedDiagnostic = result.diagnostics.find((item) => item.id === 'unplaced-a')
+    expect(unplacedDiagnostic).toMatchObject({
+      severity: 'warning',
+      code: UNPLACED_REASON_CODES.EXCEEDS_PAYLOAD,
+    })
+    expect(unplacedDiagnostic?.params).toMatchObject({
+      label: 'A',
+      name: 'Alpha',
+      quantity: 1,
+      reasonCode: UNPLACED_REASON_CODES.EXCEEDS_PAYLOAD,
+    })
   })
 
   it('supports gravity-stable stacking on top of fully supported boxes', () => {
@@ -302,7 +314,7 @@ describe('calculatePacking', () => {
 
     expectValidPacking(containers[0], result)
     expect(result.placed.some((box) => box.z > 0)).toBe(false)
-    expect(result.unplaced[0]).toMatchObject({ quantity: 1, reason: 'No remaining loading space' })
+    expect(result.unplaced[0]).toMatchObject({ quantity: 1, reasonCode: UNPLACED_REASON_CODES.NO_SPACE })
   })
 
   it('rejects boxes that exceed dimensions', () => {
@@ -310,7 +322,7 @@ describe('calculatePacking', () => {
 
     expectValidPacking(containers[0], result)
     expect(result.placedCount).toBe(0)
-    expect(result.unplaced[0]).toMatchObject({ quantity: 1, reason: 'Exceeds container dimensions' })
+    expect(result.unplaced[0]).toMatchObject({ quantity: 1, reasonCode: UNPLACED_REASON_CODES.EXCEEDS_DIMENSIONS })
   })
 
   it('rejects boxes after payload is exhausted', () => {
@@ -318,7 +330,7 @@ describe('calculatePacking', () => {
 
     expectValidPacking(containers[0], result)
     expect(result.placedCount).toBe(1)
-    expect(result.unplaced[0]).toMatchObject({ quantity: 1, reason: 'Exceeds maximum payload' })
+    expect(result.unplaced[0]).toMatchObject({ quantity: 1, reasonCode: UNPLACED_REASON_CODES.EXCEEDS_PAYLOAD })
   })
 
   it('uses effective dimensions after reserved gaps for boundary checks', () => {
@@ -327,7 +339,7 @@ describe('calculatePacking', () => {
     ])
 
     expect(result.placedCount).toBe(0)
-    expect(result.unplaced[0]).toMatchObject({ cargoId: 'gap-blocked', reason: 'Exceeds container dimensions' })
+    expect(result.unplaced[0]).toMatchObject({ cargoId: 'gap-blocked', reasonCode: UNPLACED_REASON_CODES.EXCEEDS_DIMENSIONS })
   })
 
   it('reports deterministic totals for a partially loaded container', () => {
