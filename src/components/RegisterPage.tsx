@@ -33,12 +33,24 @@ export function RegisterPage({ onRegisterSuccess, onToggleLogin }: RegisterPageP
       const data = await res.json()
       if (!res.ok) {
         let errMsg = data.error || '注册失败'
-        if (errMsg === 'Username must be at least 3 characters long') {
+        if (errMsg === 'Username is required') {
+          errMsg = '请输入用户名'
+        } else if (errMsg === 'Username must be at least 3 characters long') {
           errMsg = '用户名长度必须至少为 3 个字符'
-        } else if (errMsg === 'Password must be at least 6 characters long') {
+        } else if (errMsg === 'Password is required') {
+          errMsg = '请输入密码'
+        } else if (
+          errMsg === 'Password too short' ||
+          errMsg === 'Password must be at least 6 characters long'
+        ) {
           errMsg = '密码长度必须至少为 6 个字符'
-        } else if (errMsg === 'Username already taken') {
+        } else if (
+          errMsg === 'Username already exists' ||
+          errMsg === 'Username already taken'
+        ) {
           errMsg = '用户名已被占用'
+        } else if (errMsg === 'Database error during registration') {
+          errMsg = '注册失败，请稍后重试或联系管理员'
         }
         throw new Error(errMsg)
       }

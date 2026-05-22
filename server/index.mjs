@@ -23,7 +23,12 @@ app.use('/api/auth', authRouter)
 // 2. Admin User management
 app.get('/api/users', authenticate, requireAdmin, (req, res) => {
   try {
-    const users = db.prepare('SELECT id, username, role, disabled, created_at, last_login_at, last_login_ip FROM users').all()
+    // Admin must see ALL users, newest first. No LIMIT — registered users must never be hidden.
+    const users = db
+      .prepare(
+        'SELECT id, username, role, disabled, created_at, last_login_at, last_login_ip FROM users ORDER BY datetime(created_at) DESC'
+      )
+      .all()
     res.json(users)
   } catch (err) {
     res.status(500).json({ error: err.message })

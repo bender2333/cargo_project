@@ -6,22 +6,42 @@ import { JWT_SECRET, authenticate } from './middleware.mjs'
 
 const router = express.Router()
 
+function logRegistration(stage, username, extra) {
+  const ts = new Date().toISOString()
+  const safeName = typeof username === 'string' ? username : '<invalid>'
+  const tail = extra ? ` reason="${extra}"` : ''
+  console.log(`[register] ${ts} stage=${stage} username="${safeName}"${tail}`)
+}
+
 router.post('/register', (req, res) => {
   const { username, password } = req.body
+  const rawUsername = typeof username === 'string' ? username : ''
+  logRegistration('attempt', rawUsername)
 
-  if (!username || typeof username !== 'string' || username.trim().length < 3) {
+  if (!username || typeof username !== 'string' || username.trim().length === 0) {
+    logRegistration('rejected', rawUsername, 'empty_username')
+    return res.status(400).json({ error: 'Username is required' })
+  }
+  if (username.trim().length < 3) {
+    logRegistration('rejected', rawUsername, 'username_too_short')
     return res.status(400).json({ error: 'Username must be at least 3 characters long' })
   }
-  if (!password || typeof password !== 'string' || password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters long' })
+  if (!password || typeof password !== 'string') {
+    logRegistration('rejected', rawUsername, 'password_required')
+    return res.status(400).json({ error: 'Password is required' })
+  }
+  if (password.length < 6) {
+    logRegistration('rejected', rawUsername, 'password_too_short')
+    return res.status(400).json({ error: 'Password too short' })
   }
 
   const normalized = username.trim()
-  
+
   try {
     const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(normalized)
     if (existing) {
-      return res.status(400).json({ error: 'Username already taken' })
+      logRegistration('rejected', normalized, 'username_already_exists')
+      return res.status(409).json({ error: 'Username already exists' })
     }
 
     const id = Math.random().toString(36).substring(2) + Date.now().toString(36)
@@ -29,19 +49,40 @@ router.post('/register', (req, res) => {
     const password_hash = bcrypt.hashSync(password, salt)
     const created_at = new Date().toISOString()
 
-    db.prepare(`
-      INSERT INTO users (id, username, password_hash, role, disabled, created_at)
-      VALUES (?, ?, ?, 'user', 0, ?)
-    `).run(id, normalized, password_hash, created_at)
+    try {
+      db.prepare(`
+        INSERT INTO users (id, username, password_hash, role, disabled, created_at)
+        VALUES (?, ?, ?, 'user', 0, ?)
+      `).run(id, normalized, password_hash, created_at)
+    } catch (insertErr) {
+      console.error('[register] insert failed:', insertErr.message)
+      logRegistration('failed', normalized, `db_insert_error:${insertErr.message}`)
+      return res.status(500).json({ error: 'Database error during registration' })
+    }
 
-    const token = jwt.sign({ id, username: normalized, role: 'user' }, JWT_SECRET, { expiresIn: '7d' })
+    // Read back the persisted row to guarantee the user is queryable before we respond.
+    const persisted = db
+      .prepare('SELECT id, username, role, created_at FROM users WHERE id = ?')
+      .get(id)
+    if (!persisted) {
+      logRegistration('failed', normalized, 'post_insert_lookup_missing')
+      return res.status(500).json({ error: 'Database error during registration' })
+    }
 
+    const token = jwt.sign(
+      { id: persisted.id, username: persisted.username, role: persisted.role },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    )
+
+    logRegistration('success', persisted.username, `id=${persisted.id}`)
     res.status(201).json({
       token,
-      user: { id, username: normalized, role: 'user' }
+      user: persisted,
     })
   } catch (err) {
     console.error('Registration Error:', err.message)
+    logRegistration('failed', normalized, `unhandled:${err.message}`)
     res.status(500).json({ error: 'Database error during registration' })
   }
 })

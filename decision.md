@@ -143,5 +143,28 @@
 - 背景：本轮明确要求 E2E 根据需求制定，不能为了通过而修改测试。
 - 选项：用当前实现能力定义测试；把真实业务目标写成待实现但不跑；先写需求真实验收测试，失败则修实现。
 - 决策：采用第三项。真实业务夹具、31 托装载、审计字段、手动排布等 E2E 必须编码需求意图；实现没完成时应修实现或明确记录缺口，不降低断言。
-- 影响：短期可能出现红色测试，但能防止“测试绿色但业务不成立”。
+- 影响：短期可能出现红色测试，但能防止"测试绿色但业务不成立"。
 - 后续：每个阶段先确认需求级验收，再实现功能；测试改动需要能追溯到需求变化，而不是实现便利。
+
+## 2026-05-22 dengxbin 用户管理不可见排查
+
+- 背景：用户反馈 `dengxbin` 账号已注册成功但管理员控制台看不到。运维需要确认是注册接口、用户列表 API、前端展示，还是远端数据库存在分歧导致用户消失。
+- 排查方式：
+  1. 本地 SQLite：`sqlite3 server/database.db "SELECT username, created_at FROM users ORDER BY created_at DESC;"`，结果显示 `dengxbin|user|0|2026-05-22T02:19:18.191Z` 存在并且 `disabled=0`、`role=user`。
+  2. 远端站点：`ssh tencent-container-layout 'ls /usr/share/nginx/html/'` 仅有 `assets`、`favicon.svg`、`icons.svg`、`index.html`；远端没有 Node 进程和 SQLite 数据库，部署形态是纯静态前端，`scripts/deploy.mjs` 也只同步 `dist/`。
+  3. API/前端：`GET /api/users` 旧实现没有 `ORDER BY`，依赖 SQLite 自然行序；`UserManagement.tsx` 没有刷新按钮、搜索框，也无显式错误条幅，浏览器一旦缓存旧分页或 fetch 静默失败就会看起来"用户不见了"。
+- 结论：
+  - 本地服务端用户表里 `dengxbin` 确实存在，数据没有丢；远端目前没有真正的注册后端，所以用户反馈中的 dengxbin 只可能落在曾经运行过 Node 服务的本地/演示环境上。
+  - 管理员看不到的真正风险来自前端：没有刷新、没有错误提示、列表顺序不可控、长列表不可搜，注册时一旦后端报错（如 5xx）也不会让管理员知道需要重新拉数据。
+- 决策：
+  1. 服务端：注册接口区分 400/409/500，写入后回读完整 user 行再返回，所有阶段写 `console.log` 审计；`GET /api/users` 增加 `ORDER BY datetime(created_at) DESC` 且不加 LIMIT。
+  2. 前端：`UserManagement` 增加刷新按钮、搜索框、用户总数与匹配数显示、可关闭的红色错误条幅；toggle/delete 失败也回写错误条幅。
+  3. 文案：在组件内放置 `zh`/`en` 两套 copy，从 `localStorage.locale` 读取（缺省 `zh`），与现有 Workbench locale 保持一致。
+- 影响：
+  - 注册流程从隐式 400 升级为带状态码与日志的硬约束接口，管理员通过审计日志即可定位"是否真的注册过"。
+  - 管理员控制台具备自助排障能力：刷新即可消除缓存，搜索 dengxbin 即可定位该账号，错误不再静默。
+  - 远端部署需要重新规划：要么把 Node 服务（含 SQLite）放到 tencent-container-layout，要么继续保持静态前端但接入独立 API 域名；本期不在此 PR 中切换部署架构。
+- 后续：
+  - 在下一次部署后，在生产数据库上重跑同样的 SELECT 验证 dengxbin 与 created_at 顺序；如果生产没有 Node/数据库，先决定部署架构再讨论"管理员可见用户"。
+  - 增补一条 E2E：注册一个新用户后切换 admin 账号，应在 `/api/users` 顶部找到该用户名；当前 `auth-isolation` 已覆盖部分流程，可在阶段 4/5 中补强搜索与刷新断言。
+
