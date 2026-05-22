@@ -1,4 +1,4 @@
-import type { CargoItem, ContainerSpec } from '../types'
+import type { CargoItem, ContainerSpec, PlacedBox } from '../types'
 
 export type OrientationKey = 'LWH' | 'WLH' | 'LHW' | 'HLW' | 'WHL' | 'HWL'
 export type LabelRotationDeg = 0 | 90 | 180 | 270
@@ -256,4 +256,41 @@ export function makeManualBox(params: {
     orientationKey: 'LWH',
     labelRotationDeg: 0,
   }
+}
+
+/**
+ * Adapter: convert manual placed boxes into the PlacedBox shape consumed by
+ * the 3D scene and the layered plan view. Fills in safe defaults for fields
+ * the manual editor does not track yet (work step, layer, support, weight).
+ *
+ * The set of invalid box ids is passed alongside so the renderer can apply
+ * a red highlight without polluting PlacedBox with a manual-only flag.
+ */
+export function toPlacedBoxes(
+  draft: ManualDraft,
+  invalidBoxIds: Set<string>,
+): PlacedBox[] {
+  void invalidBoxIds
+  return draft.boxes.map((box) => ({
+    id: box.id,
+    cargoId: box.cargoId,
+    name: box.label,
+    label: box.label,
+    index: 1,
+    x: box.x,
+    y: box.y,
+    z: box.z,
+    length: box.length,
+    width: box.width,
+    height: box.height,
+    orientationKey: box.orientationKey,
+    labelRotationDeg: box.labelRotationDeg,
+    weight: 0,
+    color: box.color,
+    stackable: true,
+    physicalLayer: 1,
+    workStep: 1,
+    supportType: 'floor',
+    supportedBy: [],
+  }))
 }

@@ -168,3 +168,19 @@
   - 在下一次部署后，在生产数据库上重跑同样的 SELECT 验证 dengxbin 与 created_at 顺序；如果生产没有 Node/数据库，先决定部署架构再讨论"管理员可见用户"。
   - 增补一条 E2E：注册一个新用户后切换 admin 账号，应在 `/api/users` 顶部找到该用户名；当前 `auth-isolation` 已覆盖部分流程，可在阶段 4/5 中补强搜索与刷新断言。
 
+## 2026-05-22 手动排布 3D 同步与自动到手动联动
+
+- 背景：第九轮 Review 阶段 4 要求闭合手动排布回路：手动结果要在 3D 中可复核、自动结果要能一键进入手动微调。
+- 决策：
+  1. `manualPlacement.toPlacedBoxes` 适配器把 `ManualPlacedBox` 转换为 `PlacedBox`，缺省字段 `index=1`、`workStep=1`、`physicalLayer=1`、`supportType='floor'`、`supportedBy=[]`、`weight=0`、`stackable=true`，保留 `orientationKey`、`labelRotationDeg`、`color`、`label`、坐标和尺寸。`invalidBoxIds` 不写进 `PlacedBox`，由 3D 组件单独消费。
+  2. `ContainerScene` 新增可选 `invalidBoxIds`，对命中集合中的盒子使用红色描边（0xef4444）和暗红 emissive（0x5a1212）；材质缓存键加入 `inv|ok` 后缀，避免污染正常材质。
+  3. Workbench 手动模式下复用顶部 2D/3D 切换：`workspaceView==='3d'` 渲染 `ContainerScene`（点击可选择，但不支持拖拽），`'2d'` 保留 `ManualPlacement2D` 编辑。
+  4. 自动模式工具栏增加 “继续手动微调 / Continue manually” 按钮，把 `result.placed` 一次性提交到 `manualHistory`，以新 id `manual-${box.id}` 避免与未来重复编号冲突，并切换到手动模式。
+- 影响：
+  - 手动结果与 3D 复核打通，但 3D 阶段不引入拖拽，避免一次性堆叠 picking + 高度选择 + 碰撞提示。
+  - 自动结果作为手动起点后会脱离自动重算；用户切回自动会覆盖 `result.placed`，但 `manualHistory` 不会被清空，仍可撤销/重做回到原始自动结果之前的手动起点。
+- 后续 / P2 待做：
+  - `history_plans` 表当前没有 `mode` 字段（schema 在 `server/db.mjs` 22-31 行仅含 `loading_mode`）。手动方案要落历史需要新增一次幂等迁移（例如 `ALTER TABLE history_plans ADD COLUMN mode TEXT DEFAULT 'auto'`）并在保存/恢复时携带；本期跳过，留待下一轮 Review 处理。
+  - 3D 手动编辑（拖拽、层级切换、堆叠支撑提示）需要单独设计。
+  - 自动→手动的反向回流（手动结果导出回自动验证）尚未规划，避免循环触发。
+

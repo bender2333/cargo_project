@@ -12,6 +12,7 @@ import {
   removeBox,
   rotateBox,
   setBoxPosition,
+  toPlacedBoxes,
   undo,
   validateDraft,
 } from './manualPlacement'
@@ -276,5 +277,48 @@ describe('manualPlacement', () => {
 
     expect(newBranch.future).toHaveLength(0)
     expect(newBranch.present.boxes[0].id).toBe('b2')
+  })
+
+  it('toPlacedBoxes converts every manual box and preserves orientation metadata', () => {
+    let draft = emptyDraft()
+    draft = addBox(draft, makeManualBox({
+      id: 'b1', cargoId: 'cargo-a', label: 'A', color: '#f59e0b',
+      length: 400, width: 500, height: 600, x: 100, y: 200,
+    }))
+    draft = rotateBox(draft, 'b1')
+    draft = addBox(draft, makeManualBox({
+      id: 'b2', cargoId: 'cargo-b', label: 'B', color: '#0ea5e9',
+      length: 300, width: 300, height: 300, x: 800, y: 0,
+    }))
+
+    const placed = toPlacedBoxes(draft, new Set(['b1']))
+
+    expect(placed).toHaveLength(2)
+    expect(placed[0]).toMatchObject({
+      id: 'b1',
+      cargoId: 'cargo-a',
+      label: 'A',
+      name: 'A',
+      color: '#f59e0b',
+      orientationKey: 'WLH',
+      labelRotationDeg: 90,
+      physicalLayer: 1,
+      workStep: 1,
+      supportType: 'floor',
+      supportedBy: [],
+      stackable: true,
+      weight: 0,
+      index: 1,
+    })
+    expect(placed[1]).toMatchObject({
+      id: 'b2',
+      orientationKey: 'LWH',
+      labelRotationDeg: 0,
+    })
+  })
+
+  it('toPlacedBoxes returns an empty array for an empty draft without throwing', () => {
+    expect(() => toPlacedBoxes(emptyDraft(), new Set())).not.toThrow()
+    expect(toPlacedBoxes(emptyDraft(), new Set())).toEqual([])
   })
 })

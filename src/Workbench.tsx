@@ -16,6 +16,7 @@ import {
   removeBox as manualRemoveBox,
   rotateBox as manualRotateBox,
   setBoxPosition as manualSetBoxPosition,
+  toPlacedBoxes as manualToPlacedBoxes,
   undo as manualUndo,
   validateDraft as manualValidateDraft,
 } from './lib/manualPlacement'
@@ -185,6 +186,8 @@ const copy = {
     redo: 'Redo',
     manualHint: 'Drag cargo from the pool. Use R to rotate, arrows to move (Shift = 500mm), Delete to remove, Ctrl/Cmd+Z to undo.',
     poolEmpty: 'All cargo has been placed.',
+    continueManually: 'Continue manually',
+    modeManual3D: '3D Review',
   },
   zh: {
     nav: ['工作台', '历史方案'],
@@ -332,6 +335,8 @@ const copy = {
     redo: '重做',
     manualHint: '从待放置池拖入货物。R 旋转，方向键移动（Shift 500mm），Delete 删除，Ctrl/Cmd+Z 撤销。',
     poolEmpty: '所有货物已放置完毕。',
+    continueManually: '继续手动微调',
+    modeManual3D: '3D 复核',
   },
 }
 
@@ -695,6 +700,17 @@ function Workbench() {
     () => manualValidateDraft(manualDraft, renderingContainer),
     [manualDraft, renderingContainer],
   )
+  const manualInvalidBoxIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const issue of manualIssues) {
+      ids.add(issue.boxId)
+    }
+    return ids
+  }, [manualIssues])
+  const manualPlacedBoxes = useMemo(
+    () => manualToPlacedBoxes(manualDraft, manualInvalidBoxIds),
+    [manualDraft, manualInvalidBoxIds],
+  )
   const manualCanUndo = manualHistory.past.length > 0
   const manualCanRedo = manualHistory.future.length > 0
 
@@ -750,6 +766,28 @@ function Workbench() {
     if (!manualSelectedId) return
     commitManual(manualRemoveBox(manualDraft, manualSelectedId))
     setManualSelectedId(null)
+  }
+
+  const handleContinueManually = () => {
+    const nextDraft = {
+      boxes: result.placed.map((box) => ({
+        id: `manual-${box.id}`,
+        cargoId: box.cargoId,
+        label: box.label,
+        color: box.color,
+        x: box.x,
+        y: box.y,
+        z: box.z,
+        length: box.length,
+        width: box.width,
+        height: box.height,
+        orientationKey: box.orientationKey,
+        labelRotationDeg: box.labelRotationDeg,
+      })),
+    }
+    setManualHistory((current) => manualCommit(current, nextDraft))
+    setManualSelectedId(null)
+    setPlacementMode('manual')
   }
 
   useEffect(() => {
@@ -1678,6 +1716,16 @@ function Workbench() {
               >
                 {t.manualMode}
               </button>
+              {placementMode === 'auto' && hasCalculated && (
+                <button
+                  className="archive-tab"
+                  type="button"
+                  data-testid="continue-manually"
+                  onClick={handleContinueManually}
+                >
+                  {t.continueManually}
+                </button>
+              )}
               <span className="mx-2 self-center text-[#cbd5e1]">|</span>
               <button className={`archive-tab ${workspaceView === '2d' ? 'active' : ''}`} type="button" onClick={() => setWorkspaceView('2d')}>
                 {t.view2d}
@@ -1822,16 +1870,30 @@ function Workbench() {
                         ))
                       )}
                     </aside>
-                    <div className="flex-1 overflow-hidden rounded-xl border border-[#e5e7eb] bg-white">
-                      <ManualPlacement2D
-                        container={renderingContainer}
-                        draft={manualDraft}
-                        selectedBoxId={manualSelectedId}
-                        issues={manualIssues}
-                        onSelectBox={setManualSelectedId}
-                        onMoveBox={handleManualMoveBox}
-                        onDropFromPool={handleManualDropFromPool}
-                      />
+                    <div className="flex-1 overflow-hidden rounded-xl border border-[#e5e7eb] bg-white" data-testid="manual-view-container">
+                      {workspaceView === '3d' ? (
+                        <ContainerScene
+                          activeLabelId={'all'}
+                          activeLayerId={'all'}
+                          boxes={manualPlacedBoxes}
+                          container={renderingContainer}
+                          freeView={freeViewEnabled}
+                          invalidBoxIds={manualInvalidBoxIds}
+                          selectedBoxId={manualSelectedId}
+                          viewMode={sceneViewMode}
+                          onSelectBox={setManualSelectedId}
+                        />
+                      ) : (
+                        <ManualPlacement2D
+                          container={renderingContainer}
+                          draft={manualDraft}
+                          selectedBoxId={manualSelectedId}
+                          issues={manualIssues}
+                          onSelectBox={setManualSelectedId}
+                          onMoveBox={handleManualMoveBox}
+                          onDropFromPool={handleManualDropFromPool}
+                        />
+                      )}
                     </div>
                   </div>
                 </div>
