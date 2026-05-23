@@ -2113,3 +2113,59 @@
 - `STANDARD_BOX_MAX_PER_CLICK = 50` 常量；add / add-all 都 clamp。
 - `FillSuggestionPanel` UI 文案中文 + 英文加入说明。
 - E2E 不必单测此值，但 lint 通过即可。
+
+---
+
+# 第十七轮 Review 与下一阶段开发计划（2026-05-24 续）
+
+## 背景
+
+第十六轮上线后用户测试发现 pool drag ghost 可见，但实际 drop 行为有两个具体 bug：
+- 把货物拖到**已放置箱体上方**时，ghost 可以贴附到顶面（绿色显示正常），但松手后箱体落回地面，无法真正放到上层。
+- ghost 颜色固定为绿色，不区分合法 / 不合法落点；越界、与其它箱体重叠、支撑不足时都没变红。
+
+## Review 结论
+
+### 1. Drop from pool 必须保留 surface snap 的 z 坐标
+
+- **现状**：`onDrop` 仍然只 raycast `groundPlane`，丢弃了 dragover 期间 `resolveDropTarget` 得到的 z 值。`onManualDropFromPool` 的签名是 `(cargoId, x, y)`，没有 z。前端 `addBox` 默认把新箱体放在 z=0。
+- **要求**：
+  - `onManualDropFromPool` 扩展为 `(cargoId, x, y, z?)`，`addBox` / `manualPlacement.makeManualBox` 接受可选 z 参数（默认 0 保持向后兼容）。
+  - `ContainerScene.onDrop` 用 `resolveDropTarget`，把 (x, y, z) 一起传到 Workbench。
+  - 单元测试覆盖 `addBox` 带 z 的路径。
+
+### 2. Ghost 颜色随合法性切换（pool drag + box drag 统一）
+
+- **现状**：`dragover` 仅用 `isOutOfBounds` 判断，不检查与现有箱体的 XY 重叠、不检查支撑率（50%）。导致用户拖到「会与已有箱体冲突」的位置 ghost 仍是绿色，给出错误预期。
+- **要求**：
+  - 把 `computeDragInvalid` 抽成「接收 size + boxId」的通用版本（保留现有 entry-based wrapper 给 box drag 用），dragover 用通用版本判定。
+  - Ghost 颜色由判定决定（绿 = 合法 / 红 = 越界 / 重叠 / 悬空）。
+  - drop 时如果 ghost 是红色，拒绝放置（不调 handler）；用户得到一致反馈：ghost 红 → 松手不放 → 不会出现「我看到红的还是放下去了」。
+  - E2E：构造一个拖到已有箱位置的场景，断言 ghost 期间 `data-pool-ghost-invalid="true"`。
+
+## 下一阶段开发计划（第十七轮）
+
+### 阶段 A：扩展 drop signature 支持 z（review #1，P0）
+
+- `manualPlacement.makeManualBox(cargo, x, y, z?)`；`addBox(draft, box)` 保持不变（box 已含 z）。
+- `Workbench.handleManualDropFromPool(cargoId, x, y, z?)` 转发 z。
+- `ContainerScene` props `onManualDropFromPool?: (cargoId, x, y, z?) => void`；`onDrop` 调用 `resolveDropTarget` 并传 z。
+- 单元测试：`makeManualBox` 默认 z=0 / 显式 z=500。
+
+### 阶段 B：Ghost 红/绿 + drop 守门（review #2，P0）
+
+- `ContainerScene` 内部把 `computeDragInvalid` 拆成 `computeInvalidByGeometry(boxId, x, y, z, l, w, h)`（无 entry），entry 版本调用 generic 版本。
+- `dragover` ghost 用 generic 版本判定 invalid，positionGhost 传 invalid 颜色。
+- `onDrop` 若 generic invalid → 不调 handler，clearGhost；保留 `data-pool-ghost-invalid` attribute 给 E2E。
+- E2E：拖 pool 到已有箱体上 → ghost active 且 invalid=false（合法）；拖到已有箱体侧面 / 越界 → invalid=true 且 drop 被拒。
+
+### 阶段 C：验证 + 部署
+
+- lint/test/build/E2E + 部署 + 远程 E2E + CHANGELOG / decision.
+
+## 执行约束
+
+- `onManualDropFromPool` 的 z 参数必须可选，旧 callers（如果有）不破坏。
+- Drop 守门是「if invalid → 不调 handler」；不要把 invalid item commit 进 draft（避免用户看到 red ghost 还放下去）。
+- `data-pool-ghost-active="true" / data-pool-ghost-invalid="true"` 都要有；E2E 断言这两个属性同时存在的情况。
+- 不弱化任何已有 E2E。

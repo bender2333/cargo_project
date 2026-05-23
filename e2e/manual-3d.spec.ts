@@ -354,3 +354,11 @@ test('补装建议面板提示每次最多 50 件限制', async ({ page }) => {
   await page.getByRole('button', { name: '补装建议' }).click()
   await expect(page.getByTestId('fill-cap-note')).toContainText('50')
 })
+
+test('pool ghost 默认存在但无激活；data attribute 完整', async ({ page }) => {
+  await ensureChinese(page)
+  await enterManualMode(page)
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-pool-ghost-active', 'false')
+  await expect(scene).toHaveAttribute('data-pool-ghost-invalid', 'false')
+})

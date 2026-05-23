@@ -404,3 +404,17 @@ describe('dryRunRotation', () => {
     expect(rotatedBox).toBeNull()
   })
 })
+
+import { makeManualBox as _makeManualBox } from './manualPlacement'
+
+describe('makeManualBox z parameter', () => {
+  it('defaults z to 0 when omitted', () => {
+    const box = _makeManualBox({ id: 'a', cargoId: 'c', label: 'A', color: '#000', length: 100, width: 100, height: 100, x: 0, y: 0 })
+    expect(box.z).toBe(0)
+  })
+
+  it('passes through an explicit z value', () => {
+    const box = _makeManualBox({ id: 'a', cargoId: 'c', label: 'A', color: '#000', length: 100, width: 100, height: 100, x: 0, y: 0, z: 750 })
+    expect(box.z).toBe(750)
+  })
+})

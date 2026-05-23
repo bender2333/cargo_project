@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-05-24 (Seventeenth Review Completion)
+
+- Completed subtask: ship the seventeenth-review pool-drop fix and ghost legality colouring.
+  - **Drop preserves surface-snap z (A)**: `makeManualBox` now accepts an optional `z`; `handleManualDropFromPool` plus its prop signature take `(cargoId, x, y, z?)`. `ContainerScene.onDrop` runs `resolveDropTarget` on the actual drop coordinates (matching the visible ghost) and forwards the full `(x, y, z)` to Workbench. Dragging a cargo from the pool onto an already-placed box now actually drops onto its top face — previously the box silently fell back to the floor.
+  - **Ghost legality (B)**: extracted `computeInvalidByGeometry(boxId, x, y, z, l, w, h)` from the entry-based `computeDragInvalid`. `dragover` now runs the full geometry check (bounds, overlap with stacked z-bands, 50% support) and toggles the ghost colour green/red plus `data-pool-ghost-invalid`. `drop` re-validates on the actual drop point; if invalid it discards the drop and does not commit anything — eliminating the "I saw red and it still landed" footgun.
+  - Verification: `npm run lint` passed; `npm test` passed 119 tests (including 2 new `makeManualBox` z-parameter tests, total file now 21 tests); `npm run build` passed with the existing Vite chunk-size warning; local `npm run test:e2e` passed 58 tests / 1 skipped / 0 failed (added `pool-ghost data attribute` assertion).
+  - Deployment: `DEPLOY_SKIP_BUILD=1 npm run deploy` ran clean; remote `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ npm run test:e2e` passed 58 tests / 1 skipped / 0 failed.
+
 ## 2026-05-24 (Sixteenth Review Completion)
 
 - Completed subtask: ship the sixteenth-review interaction fixes — pool drag preview, surface snap 50% guard, precise panel, fill add-all freeze fix.

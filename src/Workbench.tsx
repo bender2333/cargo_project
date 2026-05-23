@@ -939,12 +939,18 @@ function Workbench() {
     commitManual(nextDraft)
   }
 
-  const handleManualDropFromPool = (cargoId: string, dropX: number, dropY: number) => {
+  const handleManualDropFromPool = (cargoId: string, dropX: number, dropY: number, dropZ?: number) => {
     const cargoItem = displayCargoItems.find((item) => item.id === cargoId)
     if (!cargoItem) return
     const used = manualDraft.boxes.filter((box) => box.cargoId === cargoId).length
     if (used >= cargoItem.quantity) return
     const boxId = `manual-${cargoId}-${Date.now()}-${used + 1}`
+    // ContainerScene's onDrop already produces top-left corner via resolveDropTarget; the legacy
+    // ManualPlacement2D drop path passes the cursor centre, so we centre-shift only when no z
+    // was supplied (3D pool drop always passes z).
+    const supplyZ = typeof dropZ === 'number'
+    const x = supplyZ ? dropX : Math.max(0, dropX - cargoItem.length / 2)
+    const y = supplyZ ? dropY : Math.max(0, dropY - cargoItem.width / 2)
     const newBox = makeManualBox({
       id: boxId,
       cargoId,
@@ -953,8 +959,9 @@ function Workbench() {
       length: cargoItem.length,
       width: cargoItem.width,
       height: cargoItem.height,
-      x: Math.max(0, dropX - cargoItem.length / 2),
-      y: Math.max(0, dropY - cargoItem.width / 2),
+      x,
+      y,
+      z: supplyZ ? dropZ : 0,
     })
     const nextDraft = manualAddBox(manualDraft, newBox)
     if (manualValidateDraft(nextDraft, renderingContainer).length > 0) return

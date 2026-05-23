@@ -309,6 +309,7 @@ export function makeManualBox(params: {
   height: number
   x: number
   y: number
+  z?: number
 }): ManualPlacedBox {
   return {
     id: params.id,
@@ -317,7 +318,7 @@ export function makeManualBox(params: {
     color: params.color,
     x: params.x,
     y: params.y,
-    z: 0,
+    z: params.z ?? 0,
     length: params.length,
     width: params.width,
     height: params.height,

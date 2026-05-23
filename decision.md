@@ -2,6 +2,21 @@
 
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
+## 2026-05-24 第十七轮：drop 保留 z + ghost 红绿守门
+
+- 背景：第十六轮的 pool ghost 看起来工作正常，但 drop handler 仍只用 ground plane 投影 → 任何上层落点都被悄悄改回地面。Ghost 颜色固定绿色，越界/重叠/悬空无视觉反馈。
+- 决策：
+  - **drop signature 扩展为可选 z**：保留旧 callers（2D drop）的 (x, y) 调用，避免破坏；3D 路径始终带 z。`makeManualBox` 同样可选 z。Workbench 内部用 `typeof dropZ === 'number'` 区分 3D 路径（顶端坐标直接落地）和 2D 路径（仍是 cursor centre）。
+  - **`computeInvalidByGeometry` 通用化**：把 entry-based 校验抽成「直接接收 boxId+尺寸」的版本。dragover 和真实 box drag 都消费它，复用同一份「越界/重叠/支撑」规则。Pool ghost 没有真实 boxId，传 null，校验函数把 null 当成「没有自己要排除」。
+  - **drop 守门**：red ghost 时 onDrop 直接 return，不调 handler。决策考量：让 commit-time 校验做安全网（validateDraft 还在），但 user-facing 体验上「红色 → 松手 → 没放下」更可预期。
+  - **data attribute 暴露**：`data-pool-ghost-invalid` 直接通过 setAttribute 写到 mount root，避免每次 dragover 都 setState 触发 React 重渲染（dragover 60fps）。
+- 影响：
+  - 用户能从 pool 拖货物贴附到任何已放置箱顶 → 一手势完成上层放置，不再「看到 ghost 上去松手又落地」。
+  - red ghost 时 drop 拒绝，需要用户调整位置；不会出现「点 commit 失败提示后再调」的二段流程。
+- 后续：
+  - dragover 旁的浮动文字提示（具体原因：越界/重叠/悬空）下一轮做。
+  - box drag 也可以加同样的 data-attribute 暴露。
+
 ## 2026-05-24 第十六轮：Pool ghost / Snap 50% / Precise panel / Fill cap
 
 - 背景：第十五轮上线后，用户报 (a) pool 拖 cargo 进 3D 必须松手才显示；(b) 把箱子从底层往上叠 ghost 贴附 OK 但松手又回原位；(c) 一键补装直接卡死浏览器。

@@ -35,7 +35,7 @@ type ContainerSceneProps = {
   invalidBoxIds?: Set<string>
   manualEditable?: boolean
   onManualMove?: (boxId: string, x: number, y: number, z?: number) => void
-  onManualDropFromPool?: (cargoId: string, x: number, y: number) => void
+  onManualDropFromPool?: (cargoId: string, x: number, y: number, z?: number) => void
   onManualRotate?: (boxId: string) => void
   onManualDelete?: (boxId: string) => void
   selectedManualBoxId?: string | null
@@ -65,6 +65,7 @@ type SceneState = {
   hoverBoxId: string | null
   ghost: { mesh: THREE.Mesh; edges: THREE.LineSegments } | null
   cogGroup: THREE.Group | null
+  poolDrop: { x: number; y: number; z: number; invalid: boolean } | null
   scale: number
   length: number
   width: number
@@ -501,6 +502,7 @@ export function ContainerScene({
       hoverBoxId: null,
       ghost: null,
       cogGroup: null,
+      poolDrop: null,
       scale,
       length,
       width,
@@ -546,48 +548,39 @@ export function ContainerScene({
     let dragState: DragState | null = null
     const Z_PIXELS_PER_MM = 0.5 // 1mm = 0.5 px → 1000mm = 500px vertical drag
 
-    const computeDragInvalid = (entry: MeshEntry, x: number, y: number, z: number) => {
-      if (isOutOfBounds(x, y, entry.box.length, entry.box.width, container)) return true
-      if (z < -0.01 || z + entry.box.height > container.height + 0.01) return true
-      let supportedArea = z <= 0.01 ? entry.box.length * entry.box.width : 0
-      const baseArea = entry.box.length * entry.box.width
+    const computeInvalidByGeometry = (
+      boxId: string | null,
+      x: number,
+      y: number,
+      z: number,
+      l: number,
+      w: number,
+      h: number,
+    ) => {
+      if (isOutOfBounds(x, y, l, w, container)) return true
+      if (z < -0.01 || z + h > container.height + 0.01) return true
+      let supportedArea = z <= 0.01 ? l * w : 0
+      const baseArea = l * w
       for (const other of sceneState.meshEntries.values()) {
-        if (other.box.id === entry.box.id) continue
-        if (other.box.z >= z + entry.box.height || z >= other.box.z + other.box.height) continue
-        if (
-          rectsOverlap(
-            x,
-            y,
-            entry.box.length,
-            entry.box.width,
-            other.box.x,
-            other.box.y,
-            other.box.length,
-            other.box.width,
-          )
-        ) {
+        if (boxId && other.box.id === boxId) continue
+        if (other.box.z >= z + h || z >= other.box.z + other.box.height) continue
+        if (rectsOverlap(x, y, l, w, other.box.x, other.box.y, other.box.length, other.box.width)) {
           return true
         }
       }
       if (z > 0.01) {
         for (const other of sceneState.meshEntries.values()) {
-          if (other.box.id === entry.box.id) continue
+          if (boxId && other.box.id === boxId) continue
           if (Math.abs(other.box.z + other.box.height - z) > 0.01) continue
-          supportedArea += overlapAreaXY(
-            x,
-            y,
-            entry.box.length,
-            entry.box.width,
-            other.box.x,
-            other.box.y,
-            other.box.length,
-            other.box.width,
-          )
+          supportedArea += overlapAreaXY(x, y, l, w, other.box.x, other.box.y, other.box.length, other.box.width)
         }
       }
       if (baseArea <= 0 || supportedArea / baseArea < MIN_SUPPORT_OVERLAP_RATIO) return true
       return false
     }
+
+    const computeDragInvalid = (entry: MeshEntry, x: number, y: number, z: number) =>
+      computeInvalidByGeometry(entry.box.id, x, y, z, entry.box.length, entry.box.width, entry.box.height)
 
     const refreshEntryVisual = (entry: MeshEntry) => {
       const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb } = visualPropsRef.current
@@ -817,28 +810,62 @@ export function ContainerScene({
         stackable: true, physicalLayer: 1, workStep: 1, supportType: 'floor', supportedBy: [],
       }
       ensureGhost(sceneState, ghostBox, scale, length, width)
-      const invalid = isOutOfBounds(drop.x, drop.y, info.length, info.width, container)
+      const invalid = computeInvalidByGeometry(null, drop.x, drop.y, drop.z, info.length, info.width, info.height)
+      sceneState.poolDrop = { x: drop.x, y: drop.y, z: drop.z, invalid }
+      mountRef.current?.setAttribute('data-pool-ghost-invalid', invalid ? 'true' : 'false')
       positionGhost(sceneState, drop.x, drop.y, drop.z, ghostBox, invalid, scale, length, width)
     }
 
     const onDragLeave = () => {
       if (!poolDragInfoRef.current) return
       clearGhost(sceneState)
+      sceneState.poolDrop = null
+      mountRef.current?.setAttribute('data-pool-ghost-invalid', 'false')
     }
 
     const onDrop = (event: DragEvent) => {
       if (!manualEditableRef.current) return
       event.preventDefault()
-      clearGhost(sceneState)
       const cargoId = event.dataTransfer?.getData('application/x-cargo-id') ?? event.dataTransfer?.getData('text/plain')
+      // Re-compute the drop target on the drop coordinates so the result matches the visible
+      // ghost (dragover and drop events may have slightly different pointer positions).
+      let finalDrop = sceneState.poolDrop
+      if (cargoId) {
+        const info = poolDragInfoRef.current
+        if (info) {
+          updatePointer(event)
+          raycaster.setFromCamera(pointer, camera)
+          const rayOriginContainer = {
+            x: (raycaster.ray.origin.x + length / 2) / scale,
+            y: (raycaster.ray.origin.z + width / 2) / scale,
+            z: raycaster.ray.origin.y / scale,
+          }
+          const rayDirContainer = {
+            x: raycaster.ray.direction.x / scale,
+            y: raycaster.ray.direction.z / scale,
+            z: raycaster.ray.direction.y / scale,
+          }
+          const others: PlacedBox[] = []
+          sceneState.meshEntries.forEach((e) => others.push(e.box))
+          const target = resolveDropTarget({
+            rayOrigin: rayOriginContainer,
+            rayDirection: rayDirContainer,
+            boxes: others,
+            draggedBoxId: null,
+            draggedSize: { length: info.length, width: info.width, height: info.height },
+            container,
+          })
+          const invalid = computeInvalidByGeometry(null, target.x, target.y, target.z, info.length, info.width, info.height)
+          finalDrop = { x: target.x, y: target.y, z: target.z, invalid }
+        }
+      }
+      clearGhost(sceneState)
+      sceneState.poolDrop = null
       if (!cargoId) return
-      updatePointer(event)
-      raycaster.setFromCamera(pointer, camera)
-      if (!raycaster.ray.intersectPlane(groundPlane, intersectionPoint)) return
-      const containerMm = worldToContainerMm(intersectionPoint.x, intersectionPoint.z)
-      const x = gridSnapRef.current ? snapToGrid(containerMm.x) : containerMm.x
-      const y = gridSnapRef.current ? snapToGrid(containerMm.y) : containerMm.y
-      onManualDropFromPoolRef.current?.(cargoId, x, y)
+      if (!finalDrop || finalDrop.invalid) return
+      const snappedX = gridSnapRef.current && finalDrop.z === 0 ? snapToGrid(finalDrop.x) : finalDrop.x
+      const snappedY = gridSnapRef.current && finalDrop.z === 0 ? snapToGrid(finalDrop.y) : finalDrop.y
+      onManualDropFromPoolRef.current?.(cargoId, snappedX, snappedY, finalDrop.z)
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1184,6 +1211,7 @@ export function ContainerScene({
       data-grid-snap={gridSnap === false ? 'off' : 'on'}
       data-cog-overlay={cogOverlay ? 'on' : 'off'}
       data-pool-ghost-active={poolDragInfo ? 'true' : 'false'}
+      data-pool-ghost-invalid="false"
       data-box-count={boxes.length}
     />
   )
