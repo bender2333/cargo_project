@@ -2,6 +2,19 @@
 
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
+## 2026-05-23 第十四轮：去除 viewLocked / 重心阈值 / 多柜对比推荐 / Balance 命名
+
+- 背景：第十三轮的 viewLocked toggle 被用户实测为「无差异」；自动模式默认相机锁定违反直觉；同时需要在结果区加入运输安全 + 采购决策两个 PM 维度。
+- 决策：
+  - **去除视角锁定**：自动 + 手动模式都允许旋转视角（手动右键旋、自动左键旋）。提供 `reset-view` 按钮回 iso。`data-interaction-mode` 简化为 `auto` / `manual`。
+  - **重心阈值**：COMFORT 5%（绿色 balanced）、CRITICAL 10%（红色 warning）、之间黄色 cautious。比例按各轴 |offset| / 对应柜尺寸计算。
+  - **多柜对比推荐**：优先选「fit=full 且体积最小」的柜型；若没有 full，按 placedCount desc → volume asc 排序。
+  - **英文 Balance 命名**：原 `Load center` 与左下角 `Load` 按钮冲突 Playwright strict-mode，改为 `Balance`（中文仍为「装载重心」）。
+- 影响：
+  - 所有旧的 `toggle-view-lock` / `manual-locked` E2E 断言全部重写为 `data-interaction-mode=auto|manual` + `reset-view`。
+  - PlaybackPanel 的 `PlaybackSpeed` 类型从 hook 单源 import；后续添加更多 hook 时统一从 `src/hooks/` 导出。
+- 后续：拆 Workbench 子组件（>2400 行）下一轮做；多柜对比可加柱状图可视化。
+
 ## 2026-05-23 第十三轮：视角语义统一 / 建造游戏化 / 作业回放
 
 - 背景：第十二轮上线后，用户发现「自由视角」按钮与拖拽行为互斥；3D 编辑器缺少现代建造工具的实时反馈；自动排布结果缺少面向装卸工的「按顺序操作」入口。

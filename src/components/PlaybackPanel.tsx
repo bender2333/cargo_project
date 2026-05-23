@@ -1,5 +1,8 @@
 import type { Locale } from '../types'
 import type { PlaybackSequence } from '../lib/playback'
+import type { PlaybackSpeed } from '../hooks/usePlaybackController'
+
+export type { PlaybackSpeed }
 
 const T = {
   en: {
@@ -51,8 +54,6 @@ const T = {
     partialSupport: '部分支撑',
   },
 } as const
-
-export type PlaybackSpeed = 'slow' | 'normal' | 'fast'
 
 type Props = {
   sequence: PlaybackSequence

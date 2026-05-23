@@ -98,16 +98,13 @@ test('手动模式 3D 暴露 manualEditable canvas，pool 项目可拖拽', asyn
   await expect(poolItems.first()).toHaveAttribute('draggable', 'true')
 })
 
-test('手动模式默认可旋转视角；锁定视角后仅允许拖拽', async ({ page }) => {
+test('手动模式默认即可旋转视角与拖箱，显示旋转提示', async ({ page }) => {
   await ensureChinese(page)
   await enterManualMode(page)
   const scene = page.getByTestId('container-scene')
   await expect(scene).toHaveAttribute('data-interaction-mode', 'manual')
   await expect(scene).toHaveAttribute('data-controls-enabled', 'true')
-  await page.getByTestId('toggle-view-lock').click()
-  await expect(scene).toHaveAttribute('data-interaction-mode', 'manual-locked')
-  await expect(scene).toHaveAttribute('data-controls-enabled', 'false')
-  await expect(page.getByTestId('manual-view-locked-notice')).toContainText('视角已锁定')
+  await expect(page.getByTestId('manual-rotate-hint')).toContainText('右键拖动')
 })
 
 test('手动模式键盘帮助展示 Z 轴与快捷键说明', async ({ page }) => {
@@ -141,14 +138,14 @@ test('手动模式阻止键盘把箱体移动到悬空位置', async ({ page }) 
   await expect(scene).toHaveAttribute('data-box-count', '18')
 })
 
-test('自动模式默认锁定视角；解锁后可自由旋转', async ({ page }) => {
+test('自动模式默认即可旋转，重置视角按钮可用', async ({ page }) => {
   await ensureChinese(page)
   const scene = page.getByTestId('container-scene')
   await expect(scene).toBeVisible()
-  await expect(scene).toHaveAttribute('data-interaction-mode', 'locked')
-  await page.getByTestId('toggle-view-lock').click()
-  await expect(scene).toHaveAttribute('data-interaction-mode', 'free')
+  await expect(scene).toHaveAttribute('data-interaction-mode', 'auto')
   await expect(scene).toHaveAttribute('data-controls-enabled', 'true')
+  await page.getByTestId('reset-view').click()
+  await expect(scene).toHaveAttribute('data-interaction-mode', 'auto')
 })
 
 test('自动模式更换货柜后清空旧画布并提示重新计算', async ({ page }) => {
@@ -158,7 +155,7 @@ test('自动模式更换货柜后清空旧画布并提示重新计算', async ({
   await page.getByLabel('货柜类型').selectOption({ index: 1 })
   await expect(page.getByTestId('container-change-notice')).toContainText('重新计算')
   await expect(scene).toHaveAttribute('data-box-count', '0')
-  await expect(scene).toHaveAttribute('data-interaction-mode', 'locked')
+  await expect(scene).toHaveAttribute('data-interaction-mode', 'auto')
 })
 
 test('从历史方案恢复自定义柜型后 3D 场景重建并显示新箱体', async ({ page }) => {
@@ -279,4 +276,36 @@ test('手动模式作业回放面板提示不可用', async ({ page }) => {
   await enterManualMode(page)
   await page.getByRole('button', { name: '作业回放' }).click()
   await expect(page.getByTestId('playback-panel-empty')).toContainText('自动排布完成后')
+})
+
+test('装载重心面板显示三轴偏移与状态', async ({ page }) => {
+  await ensureChinese(page)
+  await page.getByRole('button', { name: '装载重心' }).click()
+  const panel = page.getByTestId('cog-panel')
+  await expect(panel).toBeVisible()
+  // status should be one of warning / balanced / cautious
+  const status = await panel.getAttribute('data-cog-status')
+  expect(['warning', 'balanced', 'cautious']).toContain(status)
+  // axis rows present
+  await expect(panel.locator('[data-axis="length"]')).toBeVisible()
+  await expect(panel.locator('[data-axis="width"]')).toBeVisible()
+  await expect(panel.locator('[data-axis="height"]')).toBeVisible()
+})
+
+test('柜型对比面板列出选中柜型的装载率', async ({ page }) => {
+  await ensureChinese(page)
+  await page.getByRole('button', { name: '柜型对比' }).click()
+  await expect(page.getByTestId('container-compare-panel')).toBeVisible()
+  // at least 1 row by default
+  const rows = page.locator('[data-testid^="container-compare-row-"]')
+  await expect(rows.first()).toBeVisible()
+  // recommended badge exists on exactly one row
+  const recommended = page.locator('[data-recommended="true"]')
+  await expect(recommended).toHaveCount(1)
+  // Apply best fit changes selected container
+  const recommendedId = await recommended.getAttribute('data-testid')
+  expect(recommendedId).toMatch(/^container-compare-row-/)
+  await page.getByTestId('container-compare-apply').click()
+  // After apply, scene re-renders for new container
+  await expect(page.getByTestId('container-scene')).toBeVisible()
 })

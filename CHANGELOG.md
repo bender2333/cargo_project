@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-05-23 (Fourteenth Review Completion)
+
+- Completed subtask: simplify view interaction, add load-balance + container-compare panels, and refactor playback to a hook.
+  - **View interaction simplified (A)**: `viewLocked` toggle and the `manual-locked` / `locked` / `free` interaction modes are gone. Both auto and manual modes always allow camera rotation (right-mouse in manual, left-mouse in auto). `data-interaction-mode` now collapses to `auto` / `manual`. A new `reset-view` button restores the iso camera pose, and a `manual-rotate-hint` banner reminds users that left mouse drags boxes / right mouse rotates the camera.
+  - **PM feature 1 — load balance (B1)**: `src/lib/centerOfGravity.ts` (with COMFORT 5% / CRITICAL 10% thresholds) computes the weight-weighted load center and signed offsets. `CenterOfGravityPanel` shows the three axis offsets, total weight, and a status banner (`warning` / `cautious` / `balanced`). Available on a new `Balance` (cog) result tab.
+  - **PM feature 2 — container comparison (B2)**: `src/lib/containerCompare.ts` runs the packing algorithm against each picked container and exposes a fit classification (`full` / `partial` / `none`). `ContainerComparisonPanel` shows side-by-side load percentages, marks the best fit, and offers an "Apply best fit" button that switches the active container. New `Compare` result tab.
+  - **Refactor (C)**: extracted `usePlaybackController` hook to own playback cursor + play state + speed + auto-advance timer (with unit tests under `src/hooks/usePlaybackController.test.ts` using `@testing-library/react`). Removed deprecated `viewLocked` / `freeView` / `manualFreeViewNotice` / `lockView` / `unlockView` / `viewLockedManualHint` state and i18n keys. `PlaybackPanel` now re-exports the hook-defined `PlaybackSpeed` type instead of redeclaring it.
+  - Verification: `npm run lint` passed; `npm test` passed 92 tests; `npm run build` passed with the existing Vite chunk-size warning; local `npm run test:e2e` passed 52 tests / 1 skipped / 0 failed. New / rewritten specs: rotate hint in manual mode, reset-view button in auto mode, balance panel three axes, container comparison `Apply best fit` flow.
+  - Deployment: `DEPLOY_SKIP_BUILD=1 npm run deploy`; remote health check passed; remote `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ npm run test:e2e` passed 52 tests / 1 skipped / 0 failed.
+
 ## 2026-05-23 (Thirteenth Review Completion)
 
 - Completed subtask: deliver thirteenth review — unified view-lock toggle, building-game polish (ghost / grid snap / hover tooltip), and loading playback PM feature.

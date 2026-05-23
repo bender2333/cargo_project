@@ -571,8 +571,9 @@ test('filters the plan view by cargo label', async ({ page }) => {
 
 test('renders an interactive 3D canvas', async ({ page }) => {
   await openEnglish(page)
-  await page.getByTestId('toggle-view-lock').click()
-  await expect(page.getByTestId('toggle-view-lock')).toHaveAttribute('aria-pressed', 'false')
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-interaction-mode', 'auto')
+  await expect(scene).toHaveAttribute('data-controls-enabled', 'true')
   const canvas = page.locator('canvas').first()
   await expect(canvas).toBeVisible()
   const box = await canvas.boundingBox()

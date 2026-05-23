@@ -1850,3 +1850,74 @@
 - Ghost / hover / playback 都要走「读取 PackingResult，不重新计算」原则。
 - 不弱化测试；旧用例如果因为手动模式 free view 按钮移除失败，必须重写断言匹配新交互。
 - 任何对 mouseButtons 行为的判断要由 `data-interaction-mode` 暴露，便于 E2E。
+
+---
+
+# 第十四轮 Review 与下一阶段开发计划（2026-05-23 深夜）
+
+## 背景
+
+第十三轮交付了「锁定/解锁视角」toggle、ghost/snap/hover 建造游戏化、装柜作业回放。用户实测发现锁定/解锁的视角概念本身不正确：手动模式下 toggle 无明显效果，自动模式下根本不需要这个 toggle。同时希望从产品角度再加两个 PM 功能，并对代码做一次健身。
+
+## Review 结论
+
+### 1. 视角锁定/解锁需要重新设计
+
+- **现状**：`toggle-view-lock` 按钮在自动/手动两个模式下都存在。手动模式下「锁定」`controls.enabled=false`，但 LEFT 本来就是给拖箱用、不影响左键拖；用户感觉点了按钮没有任何变化。自动模式默认锁定相机，用户必须点一下才能旋转——这违反了用户直觉（看到 3D 第一反应是「我能不能转一下」）。
+- **要求**：
+  - **自动模式：去掉视角锁定**。装载完成后用户就应该能直接旋转、缩放观察。
+  - **手动模式：保留旋转能力，但不暴露锁定按钮**。改为通过明确的交互方式让用户知道「右键拖动旋转视角，左键拖动移动箱子」——例如工具栏 hint 文字 + 鼠标 cursor 提示。
+  - 整体移除 `viewLocked` state 与 `toggle-view-lock` 按钮。`data-interaction-mode` 简化为 `auto` / `manual`。
+  - 提供一个「重置视角」小按钮（替代锁定按钮的位置），让用户旋转过头后能一键回 ISO。
+
+### 2. 从 PM 角度新增 2 个功能
+
+待对齐方向。候选清单：
+
+- **重心与偏置警告**：基于已放置箱体 + 重量计算实时装载重心，标示与柜底几何中心的偏置距离（XYZ 三方向）；超过阈值（如 ±500mm 或柜长 5%）显示「运输安全风险」红色提示。运输货代场景下属于刚需。
+- **多柜型并排对比**：选定 2–3 个柜型对同一批货物一次性计算装载率，结果以表格 / 柱状图并排展示，辅助采购决策。
+- **剩余空间利用建议**：基于当前装载结果反推柜内剩余可用空间，推荐若干常用箱型（120×100×80 等）的可填入数量。
+- **作业指令 PDF**：把回放序列导成可打印 PDF（每页一个步骤 + 平面图 + 二维码），方便现场装卸工拿纸单作业。
+
+### 3. 代码检查与优化
+
+- **现状**：`Workbench.tsx` 已 2400+ 行，`ContainerScene.tsx` 接近 900 行；state 散乱，pointer / drag / ghost / hover / keyboard 全部混在主 useEffect 里；很多 useRef 是为了在 scene closure 中读取最新 prop。
+- **要求**：
+  - 抽 hook：`usePlaybackController(sequence)` 包含 cursor + playing + speed + 自动播放定时器；`useCargoMutations` 包含 add/update/delete/reorder。
+  - 抽组件：`PlacementToolbar`、`WorkspaceCanvas`、`HoverTooltip` 各自独立。
+  - ContainerScene 把 drag handler / hover / ghost 抽到 `src/lib/sceneInteractions.ts`；保留 SceneState 拼装。
+  - 删除已经废弃的 i18n keys（`freeView`, `manualFreeViewNotice` 等）与 `viewLocked` 相关代码。
+  - 单元测试覆盖新 hook / 工具函数。
+- **底线**：所有现有 E2E 必须维持通过；代码优化纯粹是结构调整，不改变功能行为。
+
+## 下一阶段开发计划（第十四轮）
+
+### 阶段 A：移除 viewLocked 与 toggle（review #1，P0）
+
+- `Workbench`：删除 `viewLocked` state、`toggleViewLock`、`manual-view-locked-notice`、`viewLockedManualHint`、`lockView/unlockView` i18n keys。
+- `ContainerScene`：删除 `viewLocked` prop；mouseButtons 始终启用旋转/缩放；`data-interaction-mode` 简化为 `auto` / `manual`。
+- 新增「重置视角」按钮：调用 `camera.position.copy(cameraPositionForMode('iso', ...))`，工具栏占位与原锁定按钮一致。
+- 改写 E2E 中所有 `toggle-view-lock` / `manual-locked` 断言；`reset-view` 加新断言。
+
+### 阶段 B：PM 新功能 1+2（review #2，待用户选）
+
+- 待用户从候选中确认两个方向。
+- 每个功能：库函数 + 单元测试 + 组件 + i18n + Workbench wiring + E2E。
+
+### 阶段 C：代码优化与测试加固（review #3）
+
+- 抽 `usePlaybackController(sequence)` hook（cursor/playing/speed/计时器）；Workbench 直接消费；写 hook 单测（renderHook from @testing-library/react）。
+- 抽 `src/lib/sceneInteractions.ts`：`computeDragInvalid`、`positionGhost`、`updateHoverHighlight`、`snap*` 已抽；继续把 pointer/drag 状态机抽出。
+- 删 deprecated i18n keys / `freeViewEnabled` 残留。
+- 把 `clearPlacementOnContainerChange` 与 `manualPlacement` validate 写在一起的复杂 if 进一步用守卫函数命名解释。
+
+### 阶段 D：本地 + 远程验证 + 部署
+
+- 全套验证 + 远程 E2E + decision.md + CHANGELOG.
+
+## 执行约束
+
+- 不能弱化 E2E；若功能行为变了导致旧断言失效，重写断言匹配新行为。
+- 重构必须在功能确认通过的前提下做；先稳功能，再重构。
+- 代码优化每一步都要测试可回滚（拆 hook → 跑测；拆组件 → 跑测）。
+- 不允许在重构提交里夹带功能改动。

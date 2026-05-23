@@ -26,8 +26,8 @@ type ContainerSceneProps = {
   activeLayerId: string
   activeLabelId: string
   viewMode: SceneViewMode
-  viewLocked?: boolean
   gridSnap?: boolean
+  resetViewTick?: number
   selectedBoxId?: string | null
   onSelectBox?: (boxId: string) => void
   invalidBoxIds?: Set<string>
@@ -332,8 +332,8 @@ export function ContainerScene({
   activeLayerId,
   activeLabelId,
   viewMode,
-  viewLocked,
   gridSnap,
+  resetViewTick,
   selectedBoxId,
   onSelectBox,
   invalidBoxIds,
@@ -350,7 +350,6 @@ export function ContainerScene({
   const sceneStateRef = useRef<SceneState | null>(null)
   const invalidBoxIdsRef = useRef<Set<string>>(invalidBoxIds ?? new Set())
   const manualEditableRef = useRef<boolean>(manualEditable ?? false)
-  const viewLockedRef = useRef<boolean>(viewLocked ?? false)
   const gridSnapRef = useRef<boolean>(gridSnap ?? true)
   const onManualMoveRef = useRef<typeof onManualMove>(onManualMove)
   const onManualDropFromPoolRef = useRef<typeof onManualDropFromPool>(onManualDropFromPool)
@@ -369,10 +368,6 @@ export function ContainerScene({
   useEffect(() => {
     manualEditableRef.current = manualEditable ?? false
   }, [manualEditable])
-
-  useEffect(() => {
-    viewLockedRef.current = viewLocked ?? false
-  }, [viewLocked])
 
   useEffect(() => {
     gridSnapRef.current = gridSnap ?? true
@@ -741,8 +736,8 @@ export function ContainerScene({
         renderer.domElement.releasePointerCapture?.(event.pointerId)
         dragState = null
       }
-      // restore controls based on viewLocked, not on manualEditable + freeView
-      controls.enabled = !viewLockedRef.current
+      // controls are always enabled — auto + manual both rotate via right mouse
+      controls.enabled = true
     }
 
     const onDragOver = (event: DragEvent) => {
@@ -969,29 +964,26 @@ export function ContainerScene({
     state.camera.lookAt(0, state.height / 2, 0)
     state.controls.target.set(0, state.height / 2, 0)
     state.controls.update()
-  }, [viewMode])
+  }, [viewMode, resetViewTick])
 
   useEffect(() => {
     const state = sceneStateRef.current
     if (!state) return
-    if (viewLocked) {
-      state.controls.enabled = false
-    } else if (manualEditable) {
-      state.controls.enabled = true
+    state.controls.enabled = true
+    if (manualEditable) {
       state.controls.mouseButtons = {
         LEFT: null,
         MIDDLE: THREE.MOUSE.DOLLY,
         RIGHT: THREE.MOUSE.ROTATE,
       }
     } else {
-      state.controls.enabled = true
       state.controls.mouseButtons = {
         LEFT: THREE.MOUSE.ROTATE,
         MIDDLE: THREE.MOUSE.DOLLY,
         RIGHT: THREE.MOUSE.PAN,
       }
     }
-  }, [manualEditable, viewLocked])
+  }, [manualEditable])
 
   useEffect(() => {
     const state = sceneStateRef.current
@@ -1003,17 +995,14 @@ export function ContainerScene({
     })
   }, [activeLayerId, activeLabelId, selectedBoxId, invalidBoxIds])
 
-  const controlsEnabled = !viewLocked
-  const interactionMode = viewLocked
-    ? (manualEditable ? 'manual-locked' : 'locked')
-    : (manualEditable ? 'manual' : 'free')
+  const interactionMode = manualEditable ? 'manual' : 'auto'
 
   return (
     <div
       ref={mountRef}
       className="h-full min-h-[420px] w-full"
       data-testid="container-scene"
-      data-controls-enabled={controlsEnabled ? 'true' : 'false'}
+      data-controls-enabled="true"
       data-interaction-mode={interactionMode}
       data-grid-snap={gridSnap === false ? 'off' : 'on'}
       data-box-count={boxes.length}

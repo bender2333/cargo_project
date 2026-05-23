@@ -7,8 +7,13 @@ import { ContainerPlan2D } from './components/ContainerPlan2D'
 import type { PlanViewMode } from './components/ContainerPlan2D'
 import { ManualPlacement2D } from './components/ManualPlacement2D'
 import { PlaybackPanel } from './components/PlaybackPanel'
-import type { PlaybackSpeed } from './components/PlaybackPanel'
+import { CenterOfGravityPanel } from './components/CenterOfGravityPanel'
+import { ContainerComparisonPanel } from './components/ContainerComparisonPanel'
 import { buildPlaybackSequence, visibleBoxesAt } from './lib/playback'
+import { usePlaybackController } from './hooks/usePlaybackController'
+import type { PlaybackSpeed } from './hooks/usePlaybackController'
+import { computeCenterOfGravity } from './lib/centerOfGravity'
+import { compareContainers } from './lib/containerCompare'
 import {
   addBox as manualAddBox,
   buildPool as manualBuildPool,
@@ -134,11 +139,11 @@ const copy = {
     view2d: '2D',
     view3d: '3D',
     isoView: 'Iso',
-    freeView: 'Free view',
+    resetView: 'Reset view',
     playbackTab: 'Playback',
+    cogTab: 'Balance',
+    compareTab: 'Compare',
     playbackResetNotice: 'Playback restarted because the plan changed.',
-    lockView: 'Lock view',
-    unlockView: 'Unlock view',
     gridSnap: '50mm snap',
     gridSnapOff: 'Free move',
     hoverTooltipLabel: 'Label',
@@ -209,9 +214,7 @@ const copy = {
       'Modifiers: Shift = 100 mm, Ctrl/Cmd = 1 mm',
       'R: rotate, Delete: remove, Esc: clear selection',
     ],
-    manualFreeViewNotice: 'Free view is read-only in manual mode. Switch it off to move cargo.',
-    viewLockedNotice: 'View is locked. Unlock to rotate the camera.',
-    viewLockedManualHint: 'View is locked for precise placement. Unlock to rotate the camera with right mouse button.',
+    manualRotateHint: 'Drag with left mouse to move boxes; rotate the camera with right mouse drag.',
     containerChangedNotice: 'Container changed. Recalculate to refresh the automatic placement.',
     manualIssueBoundary: 'exceeds the effective container bounds',
     manualIssueOverlap: 'overlaps another cargo box',
@@ -309,11 +312,11 @@ const copy = {
     view2d: '2D',
     view3d: '3D',
     isoView: '轴测',
-    freeView: '自由视角',
+    resetView: '重置视角',
     playbackTab: '作业回放',
+    cogTab: '装载重心',
+    compareTab: '柜型对比',
     playbackResetNotice: '方案变更，作业回放已重置。',
-    lockView: '锁定视角',
-    unlockView: '解锁视角',
     gridSnap: '50mm 网格',
     gridSnapOff: '自由移动',
     hoverTooltipLabel: '标签',
@@ -384,9 +387,7 @@ const copy = {
       '修饰键：Shift = 100 mm，Ctrl/Cmd = 1 mm',
       'R：旋转，Delete：删除，Esc：取消选中',
     ],
-    manualFreeViewNotice: '手动模式下自由视角为只读浏览，关闭后才能移动货物。',
-    viewLockedNotice: '视角已锁定，解锁后可旋转相机。',
-    viewLockedManualHint: '视角已锁定方便精细放置；解锁后右键可旋转相机。',
+    manualRotateHint: '左键拖动可移动箱体；右键拖动可旋转视角。',
     containerChangedNotice: '已更换货柜，请重新计算以刷新自动排布。',
     manualIssueBoundary: '超出有效货柜边界',
     manualIssueOverlap: '与其他货物发生碰撞',
@@ -428,7 +429,7 @@ const customContainerDefaults = {
 
 type CargoForm = Omit<CargoItem, 'id'>
 type WorkspaceView = '3d' | '2d'
-type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback'
+type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback' | 'cog' | 'compare'
 type NavTarget = 'overview' | 'report' | 'cargo' | 'container' | 'history'
 
 const emptyForm: CargoForm = {
@@ -636,12 +637,10 @@ function Workbench() {
   const [activeLabelId, setActiveLabelId] = useState('all')
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
   const [sceneViewMode, setSceneViewMode] = useState<SceneViewMode>('iso')
-  const [viewLocked, setViewLocked] = useState(true) // auto mode default locked; toggled per placement mode in effect
   const [gridSnap, setGridSnap] = useState(true)
   const [hoverInfo, setHoverInfo] = useState<{ id: string; label: string; length: number; width: number; height: number; x: number; y: number; z: number; clientX: number; clientY: number } | null>(null)
-  const [playbackCursor, setPlaybackCursor] = useState(0)
-  const [playbackPlaying, setPlaybackPlaying] = useState(false)
-  const [playbackSpeed, setPlaybackSpeed] = useState<'slow' | 'normal' | 'fast'>('normal')
+  const [resetViewTick, setResetViewTick] = useState(0)
+  const [compareSelection, setCompareSelection] = useState<string[]>(() => containers.slice(0, 3).map((c) => c.id))
   const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
   const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
   const [placementMode, setPlacementMode] = useState<'auto' | 'manual'>('auto')
@@ -951,11 +950,9 @@ function Workbench() {
     setManualHistory((current) => manualCommit(current, nextDraft))
     setManualSelectedId(null)
     setPlacementMode('manual')
-    setViewLocked(false)
   }
 
   useEffect(() => {
-    setViewLocked(placementMode === 'auto')
     setHoverInfo(null)
   }, [placementMode])
 
@@ -1000,34 +997,28 @@ function Workbench() {
   const activeLayer = result.layers.find((layer) => layer.id === activeLayerId)
   const playbackSequence = useMemo(() => buildPlaybackSequence(hasCalculated ? result : null), [result, hasCalculated])
   const playbackAvailable = placementMode === 'auto' && hasCalculated && playbackSequence.total > 0
+  const playback = usePlaybackController(playbackSequence)
   const playbackActive = playbackAvailable && activeResultTab === 'playback'
-  const visibleAutoBoxes = playbackActive
-    ? visibleBoxesAt(playbackSequence, playbackCursor)
-    : hasCalculated
-      ? result.placed
-      : []
-
-  useEffect(() => {
-    setPlaybackCursor(0)
-    setPlaybackPlaying(false)
-  }, [playbackSequence.total])
-
-  useEffect(() => {
-    if (!playbackPlaying) return
-    if (playbackCursor >= playbackSequence.total) {
-      setPlaybackPlaying(false)
-      return
-    }
-    const intervalMs = playbackSpeed === 'slow' ? 1200 : playbackSpeed === 'fast' ? 250 : 600
-    const handle = window.setTimeout(() => {
-      setPlaybackCursor((c) => Math.min(c + 1, playbackSequence.total))
-    }, intervalMs)
-    return () => window.clearTimeout(handle)
-  }, [playbackPlaying, playbackCursor, playbackSequence.total, playbackSpeed])
+  const visibleAutoBoxes = useMemo(() => {
+    if (playbackActive) return visibleBoxesAt(playbackSequence, playback.cursor)
+    return hasCalculated ? result.placed : []
+  }, [playbackActive, playbackSequence, playback.cursor, hasCalculated, result.placed])
 
   const visibleBoxes = hasCalculated
     ? result.placed.filter((box) => (activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId) && (activeLabelId === 'all' || box.label === activeLabelId))
     : []
+
+  const cogResult = useMemo(() => computeCenterOfGravity(visibleAutoBoxes.length > 0 ? visibleAutoBoxes : result.placed, selectedContainer), [result.placed, visibleAutoBoxes, selectedContainer])
+
+  const compareCandidates = useMemo(() => {
+    const allCustom = customContainers.filter((c) => !!c)
+    return [...containers, ...allCustom]
+  }, [customContainers])
+  const compareRows = useMemo(() => {
+    if (compareSelection.length === 0) return []
+    const chosen = compareCandidates.filter((c) => compareSelection.includes(c.id))
+    return compareContainers(chosen, displayCargoItems, loadingMode)
+  }, [compareSelection, compareCandidates, displayCargoItems, loadingMode])
   const labelOptions = [...new Set(result.labelStats.map((item) => item.label))]
   const activeLayerIndex = result.layers.findIndex((layer) => layer.id === activeLayerId)
   const loadingModeLabels: Record<LoadingMode, string> = {
@@ -1512,9 +1503,10 @@ function Workbench() {
     setSceneViewMode(view)
   }
 
-  const toggleViewLock = () => {
-    setViewLocked((current) => !current)
+  const resetSceneView = () => {
+    setSceneViewMode('iso')
     setWorkspaceView('3d')
+    setResetViewTick((t) => t + 1)
   }
 
   const navTargets: NavTarget[] = ['overview', 'history']
@@ -1956,18 +1948,19 @@ function Workbench() {
                   </button>
                 ))}
                 <button
-                  className={`archive-tab inline-flex items-center gap-2 ${viewLocked ? 'active' : ''}`}
+                  className="archive-tab inline-flex items-center gap-2"
                   type="button"
-                  aria-pressed={viewLocked}
-                  aria-label={viewLocked ? t.unlockView : t.lockView}
-                  data-testid="toggle-view-lock"
-                  onClick={toggleViewLock}
+                  aria-label={t.resetView}
+                  data-testid="reset-view"
+                  onClick={resetSceneView}
                 >
                   <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
-                    <rect x="4" y="11" width="16" height="9" rx="2" />
-                    {viewLocked ? <path d="M8 11V8a4 4 0 0 1 8 0v3" /> : <path d="M8 11V8a4 4 0 0 1 7.7-1.4" />}
+                    <path d="M3 12a9 9 0 0 1 15.3-6.4L21 8" />
+                    <path d="M21 3v5h-5" />
+                    <path d="M21 12a9 9 0 0 1-15.3 6.4L3 16" />
+                    <path d="M3 21v-5h5" />
                   </svg>
-                  {viewLocked ? t.lockView : t.unlockView}
+                  {t.resetView}
                 </button>
                 <button
                   className={`archive-tab inline-flex items-center gap-2 ${gridSnap ? 'active' : ''}`}
@@ -2070,11 +2063,9 @@ function Workbench() {
                     </div>
                     <span className="ml-auto text-xs text-[#475569]">{t.manualHint}</span>
                   </div>
-                  {viewLocked && (
-                    <div className="rounded-xl border border-[#bfdbfe] bg-[#eff6ff] p-3 text-xs font-semibold text-[#1d4ed8]" data-testid="manual-view-locked-notice">
-                      {t.viewLockedManualHint}
-                    </div>
-                  )}
+                  <div className="rounded-xl border border-[#bfdbfe] bg-[#eff6ff] p-3 text-xs font-semibold text-[#1d4ed8]" data-testid="manual-rotate-hint">
+                    {t.manualRotateHint}
+                  </div>
                   {manualIssues.length > 0 && (
                     <div
                       className="rounded-xl border border-[#fecaca] bg-[#fef2f2] p-3 text-xs text-[#991b1b]"
@@ -2130,9 +2121,9 @@ function Workbench() {
                           gridSnap={gridSnap}
                           invalidBoxIds={manualInvalidBoxIds}
                           manualEditable
+                          resetViewTick={resetViewTick}
                           selectedBoxId={manualSelectedId}
                           selectedManualBoxId={manualSelectedId}
-                          viewLocked={viewLocked}
                           viewMode={sceneViewMode}
                           onClearSelection={() => setManualSelectedId(null)}
                           onHoverBox={setHoverInfo}
@@ -2164,7 +2155,7 @@ function Workbench() {
                       {containerChangeNotice}
                     </div>
                   )}
-                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} container={renderingContainer} gridSnap={gridSnap} selectedBoxId={selectedBoxId} viewLocked={viewLocked} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
+                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} container={renderingContainer} gridSnap={gridSnap} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
                 </>
               ) : (
                 <>
@@ -2173,7 +2164,7 @@ function Workbench() {
                       {containerChangeNotice}
                     </div>
                   )}
-                  <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={playbackActive ? visibleAutoBoxes : (hasCalculated ? result.placed : [])} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
+                  <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
                 </>
               )}
               <button
@@ -2217,6 +2208,8 @@ function Workbench() {
                 { id: 'diagnostics' as const, label: t.diagnostics },
                 { id: 'importLog' as const, label: t.importLog },
                 { id: 'playback' as const, label: t.playbackTab },
+                { id: 'cog' as const, label: t.cogTab },
+                { id: 'compare' as const, label: t.compareTab },
               ].map((tab) => (
                 <button className={`archive-tab ${activeResultTab === tab.id ? 'active' : ''}`} key={tab.id} type="button" onClick={() => setActiveResultTab(tab.id)}>
                   {tab.label}
@@ -2353,26 +2346,51 @@ function Workbench() {
               <div className="mt-3" data-testid="playback-tab-panel">
                 <PlaybackPanel
                   available={playbackAvailable}
-                  cursor={playbackCursor}
+                  cursor={playback.cursor}
                   locale={locale}
-                  playing={playbackPlaying}
+                  playing={playback.playing}
                   sequence={playbackSequence}
-                  speed={playbackSpeed}
-                  onCursorChange={(next) => {
-                    setPlaybackCursor(Math.max(0, Math.min(next, playbackSequence.total)))
-                    setPlaybackPlaying(false)
-                  }}
-                  onFinish={() => {
-                    setPlaybackCursor(playbackSequence.total)
-                    setPlaybackPlaying(false)
-                  }}
-                  onReset={() => {
-                    setPlaybackCursor(0)
-                    setPlaybackPlaying(false)
-                  }}
-                  onSpeedChange={(next: PlaybackSpeed) => setPlaybackSpeed(next)}
-                  onTogglePlay={() => setPlaybackPlaying((p) => !p)}
+                  speed={playback.speed}
+                  onCursorChange={playback.setCursor}
+                  onFinish={playback.finish}
+                  onReset={playback.reset}
+                  onSpeedChange={(next: PlaybackSpeed) => playback.setSpeed(next)}
+                  onTogglePlay={playback.togglePlay}
                   onExport={exportPlaybackInstructions}
+                />
+              </div>
+            )}
+
+            {activeResultTab === 'cog' && (
+              <div className="mt-3" data-testid="cog-tab-panel">
+                <CenterOfGravityPanel
+                  container={{ length: selectedContainer.length, width: selectedContainer.width, height: selectedContainer.height }}
+                  locale={locale}
+                  result={cogResult}
+                />
+              </div>
+            )}
+
+            {activeResultTab === 'compare' && (
+              <div className="mt-3" data-testid="compare-tab-panel">
+                <ContainerComparisonPanel
+                  candidates={compareCandidates}
+                  hasCargo={displayCargoItems.length > 0}
+                  locale={locale}
+                  rows={compareRows}
+                  selectedIds={compareSelection}
+                  onApplyRecommended={(id) => {
+                    setSelectedContainerId(id)
+                    setHasCalculated(true)
+                    setContainerChangeNotice('')
+                  }}
+                  onToggleCandidate={(id) => {
+                    setCompareSelection((current) =>
+                      current.includes(id)
+                        ? current.filter((entry) => entry !== id)
+                        : [...current, id],
+                    )
+                  }}
                 />
               </div>
             )}
