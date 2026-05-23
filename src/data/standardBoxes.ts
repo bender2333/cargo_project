@@ -1,6 +1,13 @@
 import type { CargoItem } from '../types'
 
 /**
+ * Cap how many of a single preset get added in one click. Adding thousands at once
+ * makes `calculatePacking` (O(n²) per loading mode) freeze the browser. 50 is enough
+ * for the user to feel "filled in" and they can repeat the click for more.
+ */
+export const STANDARD_BOX_MAX_PER_CLICK = 50
+
+/**
  * Industry-common box presets that operators may want to top up a half-filled container with.
  * Each entry maps to a standalone CargoItem ready to be appended to the cargo list.
  *

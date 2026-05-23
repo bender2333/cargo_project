@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-05-24 (Sixteenth Review Completion)
+
+- Completed subtask: ship the sixteenth-review interaction fixes — pool drag preview, surface snap 50% guard, precise panel, fill add-all freeze fix.
+  - **Pool drag ghost (A)**: dragging a cargo from the manual pool into the 3D canvas now shows a translucent outline at the snapped drop target the entire time, not only after release. `Workbench` sets `poolDragInfo` on dragstart (size + colour) and clears on dragend; `ContainerScene` accepts a `poolDragInfo` prop, raycasts on `dragover`, and updates the ghost. `data-pool-ghost-active` exposes the state to E2E.
+  - **Surface snap 50% guard (B)**: `resolveDropTarget` now refuses to snap onto a top face that wouldn't support at least 50% of the dragged box. It first tries cursor-centred placement, then surface-centred placement; if neither makes it past the threshold it falls through to the ground plane. This kills the "ghost glues on, commit rejects, box falls back down" flicker that surfaced when stacking a larger box onto a smaller one. 3 new unit tests covering reject / surface-rescue / direct-snap.
+  - **Precise placement panel (C)**: `src/components/ManualPrecisePanel.tsx` mounts on the right of the manual workspace. Shows the selected box's label/size, X/Y/Z input fields (Enter / Apply commits), and one-click alignment buttons: centre on floor, pin to front / back / left / right, drop to floor. Plus quick rotate / delete buttons.
+  - **Fill add-all freeze fix (C2)**: a single click could enqueue several thousand cargo items (e.g. 3120 small cartons at the Small preset in a 40HQ), and the subsequent `calculatePacking` froze the browser. `STANDARD_BOX_MAX_PER_CLICK = 50` now caps both per-row and add-all additions; the UI explicitly tells the user to repeat clicks for more (`fill-cap-note`).
+  - Verification: `npm run lint` passed; `npm test` passed 119 tests; `npm run build` passed with the existing Vite chunk-size warning; local `npm run test:e2e` passed 57 tests / 1 skipped / 0 failed (new specs: precise-panel-empty, fill cap note).
+  - Deployment: `DEPLOY_SKIP_BUILD=1 npm run deploy` ran clean; remote `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ npm run test:e2e` passed 57 tests / 1 skipped / 0 failed.
+
 ## 2026-05-24 (Fifteenth Review Completion)
 
 - Completed subtask: ship the fifteenth-review building-game polish, explicit-feedback PM pass, fill suggestion feature, and CoG 3D overlay.

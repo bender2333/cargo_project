@@ -1,4 +1,5 @@
 import type { PlacedBox, ContainerSpec } from '../types'
+import { MIN_SUPPORT_OVERLAP_RATIO } from './manualPlacement'
 
 export type DropSize = { length: number; width: number; height: number }
 export type DropTarget = {
@@ -9,19 +10,24 @@ export type DropTarget = {
   surfaceBoxId: string | null
 }
 
+function overlapArea(ax: number, ay: number, al: number, aw: number, bx: number, by: number, bl: number, bw: number) {
+  const xOverlap = Math.max(0, Math.min(ax + al, bx + bl) - Math.max(ax, bx))
+  const yOverlap = Math.max(0, Math.min(ay + aw, by + bw) - Math.max(ay, by))
+  return xOverlap * yOverlap
+}
+
 /**
  * Resolve a building-game style drop point for a dragged box.
  *
  * Behaviour:
- *  - Iterate every other placed box and compute the parametric hit distance of the
- *    pointer ray against its top face (z = box.z + box.height) restricted to the box's
- *    XY rectangle.
- *  - The closest valid top-face hit wins; the dragged box is placed *on top* of it
- *    (z = surface.top, centred on the cursor).
+ *  - Raycast every other placed box's top face. Closest valid hit wins.
+ *  - When snapping onto a surface, the dragged box must have at least
+ *    `MIN_SUPPORT_OVERLAP_RATIO` (50%) of its footprint resting on the surface.
+ *    We first try cursor-centred placement; if not enough, we try surface-centred;
+ *    if still not enough we skip the snap entirely (no flicker on commit).
  *  - If no top face is hit, fall back to the ground plane (z = 0).
  *
- * The returned (x, y) is the top-left corner of the dragged box, centred on the cursor.
- * The caller is responsible for validating overlap / boundary / support afterwards.
+ * The returned (x, y) is the top-left corner of the dragged box.
  */
 export function resolveDropTarget(params: {
   rayOrigin: { x: number; y: number; z: number }
@@ -32,12 +38,13 @@ export function resolveDropTarget(params: {
   container: Pick<ContainerSpec, 'length' | 'width' | 'height'>
 }): DropTarget {
   const { rayOrigin, rayDirection, boxes, draggedBoxId, draggedSize, container } = params
+  const baseArea = draggedSize.length * draggedSize.width
 
   let bestHit: { t: number; box: PlacedBox } | null = null
   for (const other of boxes) {
     if (other.id === draggedBoxId) continue
     const topZ = other.z + other.height
-    if (topZ + draggedSize.height > container.height + 0.5) continue // would overflow
+    if (topZ + draggedSize.height > container.height + 0.5) continue
     if (Math.abs(rayDirection.z) < 1e-6) continue
     const t = (topZ - rayOrigin.z) / rayDirection.z
     if (t <= 0) continue
@@ -45,27 +52,38 @@ export function resolveDropTarget(params: {
     const hy = rayOrigin.y + rayDirection.y * t
     if (hx < other.x || hx > other.x + other.length) continue
     if (hy < other.y || hy > other.y + other.width) continue
-    if (!bestHit || t < bestHit.t) {
-      bestHit = { t, box: other }
-    }
+    if (!bestHit || t < bestHit.t) bestHit = { t, box: other }
   }
 
-  // Fallback: ground plane z = 0.
-  const useGround = !bestHit
-  const hitZ = useGround ? 0 : bestHit!.box.z + bestHit!.box.height
-  const groundT = Math.abs(rayDirection.z) < 1e-6 ? 0 : (hitZ - rayOrigin.z) / rayDirection.z
-  const t = bestHit ? bestHit.t : groundT
-  const cursorX = rayOrigin.x + rayDirection.x * t
-  const cursorY = rayOrigin.y + rayDirection.y * t
+  if (bestHit) {
+    const surface = bestHit.box
+    const surfaceTopZ = surface.z + surface.height
+    const cursorX = rayOrigin.x + rayDirection.x * bestHit.t
+    const cursorY = rayOrigin.y + rayDirection.y * bestHit.t
 
-  // Cursor sits at the centre of the box footprint; the caller stores the top-left corner.
-  const x = cursorX - draggedSize.length / 2
-  const y = cursorY - draggedSize.width / 2
+    // Try cursor-centred first.
+    const candidates: Array<{ x: number; y: number }> = [
+      { x: cursorX - draggedSize.length / 2, y: cursorY - draggedSize.width / 2 },
+      // Fallback: snap the box's centre to the surface's centre.
+      { x: surface.x + (surface.length - draggedSize.length) / 2, y: surface.y + (surface.width - draggedSize.width) / 2 },
+    ]
+    for (const cand of candidates) {
+      const overlap = overlapArea(cand.x, cand.y, draggedSize.length, draggedSize.width, surface.x, surface.y, surface.length, surface.width)
+      if (baseArea > 0 && overlap / baseArea >= MIN_SUPPORT_OVERLAP_RATIO) {
+        return { x: cand.x, y: cand.y, z: surfaceTopZ, surfaceBoxId: surface.id }
+      }
+    }
+    // Surface is too small; fall through to ground.
+  }
 
+  // Ground plane fallback.
+  const groundT = Math.abs(rayDirection.z) < 1e-6 ? 0 : (0 - rayOrigin.z) / rayDirection.z
+  const cursorX = rayOrigin.x + rayDirection.x * groundT
+  const cursorY = rayOrigin.y + rayDirection.y * groundT
   return {
-    x,
-    y,
-    z: hitZ,
-    surfaceBoxId: bestHit ? bestHit.box.id : null,
+    x: cursorX - draggedSize.length / 2,
+    y: cursorY - draggedSize.width / 2,
+    z: 0,
+    surfaceBoxId: null,
   }
 }

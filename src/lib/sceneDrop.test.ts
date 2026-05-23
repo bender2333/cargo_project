@@ -109,4 +109,54 @@ describe('resolveDropTarget', () => {
     expect(target.surfaceBoxId).toBeNull()
     expect(target.z).toBe(0)
   })
+
+  it('skips surface snap when the dragged box is larger than 50% of the target footprint', () => {
+    // surface 600×600; dragged 1000×1000 → overlap at most 600×600 = 360 000 mm²,
+    // baseArea = 1e6 mm² → ratio 0.36 < 0.5 → must fall back to ground.
+    const boxes = [makeBox({ id: 'small', x: 500, y: 500, z: 0, length: 600, width: 600, height: 500 })]
+    const target = resolveDropTarget({
+      rayOrigin: { x: 800, y: 800, z: 3000 },
+      rayDirection: { x: 0, y: 0, z: -1 },
+      boxes,
+      draggedBoxId: null,
+      draggedSize: { length: 1000, width: 1000, height: 400 },
+      container: makeContainer(),
+    })
+    expect(target.surfaceBoxId).toBeNull()
+    expect(target.z).toBe(0)
+  })
+
+  it('snaps when surface is at least 50% of the dragged footprint and cursor is centred', () => {
+    const boxes = [makeBox({ id: 'big', x: 500, y: 500, z: 0, length: 800, width: 800, height: 500 })]
+    const target = resolveDropTarget({
+      rayOrigin: { x: 900, y: 900, z: 3000 },
+      rayDirection: { x: 0, y: 0, z: -1 },
+      boxes,
+      draggedBoxId: null,
+      draggedSize: { length: 400, width: 400, height: 400 },
+      container: makeContainer(),
+    })
+    expect(target.surfaceBoxId).toBe('big')
+    expect(target.z).toBe(500)
+  })
+
+  it('falls back to surface-centred placement when cursor placement would underflow 50% but surface is large enough', () => {
+    // surface 1500×1500; dragged 1000×1000; cursor placed at corner so cursor-centred only
+    // overlaps half — surface-centred should rescue.
+    const boxes = [makeBox({ id: 'big', x: 0, y: 0, z: 0, length: 1500, width: 1500, height: 500 })]
+    // Pointer at very corner — cursor-centred candidate would land at (-100, -100) etc.
+    const target = resolveDropTarget({
+      rayOrigin: { x: 50, y: 50, z: 3000 },
+      rayDirection: { x: 0, y: 0, z: -1 },
+      boxes,
+      draggedBoxId: null,
+      draggedSize: { length: 1000, width: 1000, height: 400 },
+      container: makeContainer(),
+    })
+    // cursor-centred (-450, -450) overlaps surface (0..1500) by max 550×550 = 302500 / 1e6 = 30% → reject.
+    // surface-centred (250, 250) → fully on surface → 100% → accept.
+    expect(target.surfaceBoxId).toBe('big')
+    expect(target.x).toBe(250)
+    expect(target.y).toBe(250)
+  })
 })

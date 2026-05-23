@@ -342,3 +342,15 @@ test('手动模式剩余资源面板展示三项占用比例', async ({ page }) 
   const ratio = await page.getByTestId('remaining-volume-ratio').textContent()
   expect(ratio?.endsWith('%')).toBe(true)
 })
+
+test('精确数值面板：选中前为空，无可微调箱体提示', async ({ page }) => {
+  await ensureChinese(page)
+  await enterManualMode(page)
+  await expect(page.getByTestId('manual-precise-panel-empty')).toBeVisible()
+})
+
+test('补装建议面板提示每次最多 50 件限制', async ({ page }) => {
+  await ensureChinese(page)
+  await page.getByRole('button', { name: '补装建议' }).click()
+  await expect(page.getByTestId('fill-cap-note')).toContainText('50')
+})

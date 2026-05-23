@@ -42,6 +42,8 @@ type ContainerSceneProps = {
   onClearSelection?: () => void
   onHoverBox?: (info: HoverBoxInfo | null) => void
   cogOverlay?: CogOverlay | null
+  /** Size/color of the cargo currently being dragged from the pool — drives the dragover ghost. */
+  poolDragInfo?: { cargoId: string; length: number; width: number; height: number; color: string } | null
 }
 
 type MeshEntry = {
@@ -350,12 +352,14 @@ export function ContainerScene({
   onClearSelection,
   onHoverBox,
   cogOverlay,
+  poolDragInfo,
 }: ContainerSceneProps) {
   const mountRef = useRef<HTMLDivElement | null>(null)
   const sceneStateRef = useRef<SceneState | null>(null)
   const invalidBoxIdsRef = useRef<Set<string>>(invalidBoxIds ?? new Set())
   const manualEditableRef = useRef<boolean>(manualEditable ?? false)
   const gridSnapRef = useRef<boolean>(gridSnap ?? true)
+  const poolDragInfoRef = useRef<typeof poolDragInfo>(poolDragInfo ?? null)
   const onManualMoveRef = useRef<typeof onManualMove>(onManualMove)
   const onManualDropFromPoolRef = useRef<typeof onManualDropFromPool>(onManualDropFromPool)
   const onManualRotateRef = useRef<typeof onManualRotate>(onManualRotate)
@@ -377,6 +381,13 @@ export function ContainerScene({
   useEffect(() => {
     gridSnapRef.current = gridSnap ?? true
   }, [gridSnap])
+
+  useEffect(() => {
+    poolDragInfoRef.current = poolDragInfo ?? null
+    if (!poolDragInfo && sceneStateRef.current) {
+      clearGhost(sceneStateRef.current)
+    }
+  }, [poolDragInfo])
 
   useEffect(() => {
     onManualMoveRef.current = onManualMove
@@ -774,11 +785,51 @@ export function ContainerScene({
       if (event.dataTransfer) {
         event.dataTransfer.dropEffect = 'copy'
       }
+      const info = poolDragInfoRef.current
+      if (!info) return
+      // Compute a surface-snapped or ground drop target so the ghost mirrors what `drop` will produce.
+      updatePointer(event)
+      raycaster.setFromCamera(pointer, camera)
+      const rayOriginContainer = {
+        x: (raycaster.ray.origin.x + length / 2) / scale,
+        y: (raycaster.ray.origin.z + width / 2) / scale,
+        z: raycaster.ray.origin.y / scale,
+      }
+      const rayDirContainer = {
+        x: raycaster.ray.direction.x / scale,
+        y: raycaster.ray.direction.z / scale,
+        z: raycaster.ray.direction.y / scale,
+      }
+      const others: PlacedBox[] = []
+      sceneState.meshEntries.forEach((e) => others.push(e.box))
+      const drop = resolveDropTarget({
+        rayOrigin: rayOriginContainer,
+        rayDirection: rayDirContainer,
+        boxes: others,
+        draggedBoxId: null,
+        draggedSize: { length: info.length, width: info.width, height: info.height },
+        container,
+      })
+      const ghostBox: PlacedBox = {
+        id: '__pool_ghost__', cargoId: info.cargoId, name: 'pool', label: 'P', index: 0,
+        x: drop.x, y: drop.y, z: drop.z, length: info.length, width: info.width, height: info.height,
+        orientationKey: 'LWH', labelRotationDeg: 0, weight: 0, color: info.color,
+        stackable: true, physicalLayer: 1, workStep: 1, supportType: 'floor', supportedBy: [],
+      }
+      ensureGhost(sceneState, ghostBox, scale, length, width)
+      const invalid = isOutOfBounds(drop.x, drop.y, info.length, info.width, container)
+      positionGhost(sceneState, drop.x, drop.y, drop.z, ghostBox, invalid, scale, length, width)
+    }
+
+    const onDragLeave = () => {
+      if (!poolDragInfoRef.current) return
+      clearGhost(sceneState)
     }
 
     const onDrop = (event: DragEvent) => {
       if (!manualEditableRef.current) return
       event.preventDefault()
+      clearGhost(sceneState)
       const cargoId = event.dataTransfer?.getData('application/x-cargo-id') ?? event.dataTransfer?.getData('text/plain')
       if (!cargoId) return
       updatePointer(event)
@@ -841,6 +892,7 @@ export function ContainerScene({
     renderer.domElement.addEventListener('pointerup', onPointerUp)
     renderer.domElement.addEventListener('pointercancel', onPointerUp)
     renderer.domElement.addEventListener('dragover', onDragOver)
+    renderer.domElement.addEventListener('dragleave', onDragLeave)
     renderer.domElement.addEventListener('drop', onDrop)
     window.addEventListener('keydown', onKeyDown)
 
@@ -905,6 +957,7 @@ export function ContainerScene({
       renderer.domElement.removeEventListener('pointerup', onPointerUp)
       renderer.domElement.removeEventListener('pointercancel', onPointerUp)
       renderer.domElement.removeEventListener('dragover', onDragOver)
+      renderer.domElement.removeEventListener('dragleave', onDragLeave)
       renderer.domElement.removeEventListener('drop', onDrop)
       window.removeEventListener('keydown', onKeyDown)
       mount.removeChild(renderer.domElement)
@@ -1130,6 +1183,7 @@ export function ContainerScene({
       data-interaction-mode={interactionMode}
       data-grid-snap={gridSnap === false ? 'off' : 'on'}
       data-cog-overlay={cogOverlay ? 'on' : 'off'}
+      data-pool-ghost-active={poolDragInfo ? 'true' : 'false'}
       data-box-count={boxes.length}
     />
   )

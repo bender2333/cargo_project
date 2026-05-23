@@ -11,6 +11,7 @@ const T = {
     addAll: 'Add every preset',
     none: 'No more boxes of any preset will fit.',
     warning: 'These are upper bounds; rerun the packer to confirm geometry.',
+    perClickCap: 'Each click adds at most 50 of a preset to keep the packer responsive. Click again for more.',
   },
   zh: {
     title: '剩余空间补装',
@@ -21,6 +22,7 @@ const T = {
     addAll: '一键全部加入',
     none: '所有候选箱型都装不下了。',
     warning: '这是上限值；如需确认请重新计算。',
+    perClickCap: '为避免一次性加入过多导致计算卡死，每次每个箱型最多加入 50 件。需要更多请反复点击。',
   },
 } as const
 
@@ -112,6 +114,9 @@ export function FillSuggestionPanel({ suggestions, available, locale, onAdd, onA
               {t.addAll}
             </button>
           </div>
+          <p className="rounded border border-[#bae6fd] bg-[#f0f9ff] p-2 text-[10px] text-[#0c4a6e]" data-testid="fill-cap-note">
+            {t.perClickCap}
+          </p>
         </>
       )}
     </div>

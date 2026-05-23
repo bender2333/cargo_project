@@ -2029,3 +2029,87 @@
 - `ContainerScene` 新增 `cogOverlay?: CogOverlay | null` prop，effect 监听变化增量添加 / 移除 Three.js group。
 - `CenterOfGravityPanel` 加 toggle + 把状态推到 Workbench → ContainerScene。
 - 关闭 / 切换柜型 / 跳到 manual mode 时自动清理 overlay。
+
+---
+
+# 第十六轮 Review 与下一阶段开发计划（2026-05-24）
+
+## 背景
+
+第十五轮上线了 surface-snap、旋转预检、剩余资源面板、补装建议、重心 3D。用户实测发现三个体验痛点：(a) 从左侧 pool 把新货物拖入 3D 画布时，必须松手才出现箱体——拖动过程中没有任何视觉跟随；(b) 把已放置箱体从地面往上层箱顶贴附时，拖动中 ghost 显示贴附正常，但松手后箱体又回到原位；(c) 整体手动模式仍像 CAD/调试器，远离用户对「3D 建造工具」的预期。
+
+## Review 结论
+
+### 1. Pool drag 进入 canvas 时立即显示 ghost
+
+- **现状**：HTML5 native drag 从 `manual-pool` 拖到 `container-scene` 时，dragover 仅 `preventDefault()` 并设 dropEffect，没有任何 ghost 跟随。只有 `drop` 触发后才把箱体实例化进场景。
+- **要求**：
+  - dragstart 时把 cargo 的 length/width/height/color 信息存到 sceneState（dataTransfer 的 payload 不能在 dragover 读到）。
+  - dragover 时持续 raycast (surface snap)，更新 ghost mesh 显示候选位置 + 合法/非法颜色。
+  - dragleave / drop / dragend 时清理 ghost。
+  - 单元测试 `resolveDropTarget` 已覆盖落点；新增 ContainerScene attribute `data-pool-ghost-active="true"` 给 E2E 断言。
+
+### 2. Surface snap 50% 重叠检查（防止贴附后回滚）
+
+- **现状**：`resolveDropTarget` 一旦命中其它箱顶面就贴附，但 `validateDraft` 在 commit 时要求至少 50% 底面支撑。当被拖箱比目标 surface 大时，贴附会成功显示，松手却因支撑不足回滚。用户感觉「看起来吸住了又掉下来」。
+- **要求**：
+  - `resolveDropTarget` 在贴附前预检：把被拖箱 XY 居中到 cursor，计算与目标 surface 顶面 XY 投影的重叠面积。若不足 `draggedArea × 50%`，再尝试「居中到 surface 中心」一次。仍不足则 **不贴附**，回退地面或被拖箱原 z（避免抖动）。
+  - 补单元测试：被拖箱 1000×1000 放在 600×600 表面 → skip surface（重叠仅 36%）；被拖箱 400×400 放在 800×800 surface → 贴附（重叠 100%）。
+  - 文档化：surface snap 需要至少 50% 支撑，这与 `MIN_SUPPORT_OVERLAP_RATIO` 一致。
+
+### 3. 借鉴建造软件，对手动模式做一轮 UX 升级
+
+- **现状**：拖动 + 键盘快捷键能用，但没有「选中后精确输入坐标」「锁定到柜面 / 柜中心」等常见辅助；用户没有反馈知道「为什么不能放」。
+- **要求**（本轮做一轮可控的升级，不重写整套）：
+  - **精确数值面板**：选中箱体后在工具栏右侧显示 XYZ 数值输入框，用户可输入精确 mm 值，校验通过则提交；不通过弹 rotation-notice 同款 banner。
+  - **「居中」「贴墙」快捷动作**：选中后提供「居中柜底」「靠左 / 靠右 / 靠前 / 靠后」按钮，一键把箱推到对应位置（取一个 axis-aligned 角点）。
+  - **当前工具栏状态显眼化**：把「已选中：标签 X、位置 (...)、尺寸 (...)」抽成 sticky 顶部 bar。
+  - **拖拽过程文字提示**：ghost 旁边漂浮文字「✓ legal / ✗ overlaps box B / ✗ needs ≥50% support」(基于 computeDragInvalid 返回的具体类型)。
+  - 这一阶段 **不做**：多选 / gizmo / 复制粘贴 / 二级 undo stack。等下一轮再考虑。
+
+## 下一阶段开发计划（第十六轮）
+
+### 阶段 A：Pool drag ghost preview（review #1，P0）
+
+- ContainerScene sceneState 新增 `poolGhost: { cargoId, length, width, height, color } | null`。
+- Workbench `handleManualPoolDragStart` 调 `setManualPoolDrag({...size})` 推到 ContainerScene；通过新 prop。
+- ContainerScene dragover handler 在 poolGhost 不为空时调 `resolveDropTarget` + 更新 ghost mesh；drag end / drop / leave 清空。
+- `data-pool-ghost-active` attribute 给 E2E。
+
+### 阶段 B：Surface snap 50% 校验（review #2，P0）
+
+- 改造 `resolveDropTarget`：贴附前算 cursor-centered overlap → 不够 → 算 surface-centered overlap → 不够 → 不贴附。
+- 单元测试 2 个新 case。
+- 不改 `validateDraft`（仍是 commit 时的安全网），但用户体验上不再出现「跳上去又掉下来」。
+
+### 阶段 C：精确数值面板 + 快捷对齐 + 拖拽文字提示（review #3）
+
+- `ManualPrecisePanel` 组件：显示选中箱标签 + 尺寸；XYZ 输入框；4 个对齐按钮（柜底中、左、右、前、后）。
+- Workbench：`handleManualMoveBox` 已存在，输入框校验后调用；快捷按钮先算坐标再调用同 handler。
+- ContainerScene 拖拽过程把 invalid 的具体 issue type emit 到 `onDragStateChange?`；Workbench 显示在 ghost 旁的 sticky banner（不在 3D 内部画文字以避开 Three.js 复杂度）。
+- E2E：选中箱 → 输入 X=500 → 断言 box.x = 500；点「居中柜底」→ 断言 box 居中。
+
+### 阶段 D：本地 + 远程验证 + 部署
+
+- lint/test/build/E2E 全绿 → 部署 → 远程 E2E 全绿 → 更新 decision.md / CHANGELOG。
+
+## 执行约束
+
+- 不弱化已有 E2E；新增的 ghost、对齐按钮、输入面板都要有 data-testid 暴露。
+- 阶段 C 的「精确输入」是受控 input，输入框 onBlur / Enter 提交，不允许每个 keystroke 抖动 history。
+- Pool ghost 在 drop / drag end 必须释放 Three.js 资源；不许在 sceneState 残留。
+- 50% 重叠检查只影响 surface snap 路径；地面落点不变。
+
+### 4. 补装建议「一键全部加入」卡死（追加）
+
+- **现状**：`handleAddAllFillCargo` 把每个 preset 按 `maxCount` push 到 cargoItems，maxCount 在空集装箱里可达数千（Small 400×300×200 在 40HQ 中 ~3120 件）。push 几千个 cargo item 后 `calculatePacking` 几百万次循环，浏览器卡死。
+- **要求**：
+  - 单次添加每个 preset 上限 **50 件**（add 单个按钮也限制）。如需更多重复点击。
+  - 面板上明确提示「单次最多 50 件/箱型，如需更多请重复点击」。
+  - 添加完成后自动滚到 cargo list / 切回 overview 让用户看到结果。
+
+### 阶段 C（增补）：补装建议 quantity guard
+
+- `STANDARD_BOX_MAX_PER_CLICK = 50` 常量；add / add-all 都 clamp。
+- `FillSuggestionPanel` UI 文案中文 + 英文加入说明。
+- E2E 不必单测此值，但 lint 通过即可。

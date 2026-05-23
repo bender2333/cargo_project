@@ -16,8 +16,9 @@ import { computeCenterOfGravity } from './lib/centerOfGravity'
 import { compareContainers } from './lib/containerCompare'
 import { computeRemainingCapacity } from './lib/remainingCapacity'
 import { suggestFillItems } from './lib/fillSuggestion'
-import { buildStandardCargoItem, STANDARD_BOXES } from './data/standardBoxes'
+import { buildStandardCargoItem, STANDARD_BOXES, STANDARD_BOX_MAX_PER_CLICK } from './data/standardBoxes'
 import { FillSuggestionPanel } from './components/FillSuggestionPanel'
+import { ManualPrecisePanel } from './components/ManualPrecisePanel'
 import { buildCogOverlay } from './lib/cogVisual'
 import {
   addBox as manualAddBox,
@@ -701,6 +702,7 @@ function Workbench() {
   const [sceneViewMode, setSceneViewMode] = useState<SceneViewMode>('iso')
   const [gridSnap, setGridSnap] = useState(true)
   const [hoverInfo, setHoverInfo] = useState<{ id: string; label: string; length: number; width: number; height: number; x: number; y: number; z: number; clientX: number; clientY: number } | null>(null)
+  const [poolDragInfo, setPoolDragInfo] = useState<{ cargoId: string; length: number; width: number; height: number; color: string } | null>(null)
   const [resetViewTick, setResetViewTick] = useState(0)
   const [compareSelection, setCompareSelection] = useState<string[]>(() => containers.slice(0, 3).map((c) => c.id))
   const [showCogOverlay, setShowCogOverlay] = useState(false)
@@ -964,6 +966,13 @@ function Workbench() {
     event.dataTransfer.setData('application/x-cargo-id', cargoId)
     event.dataTransfer.setData('text/plain', cargoId)
     event.dataTransfer.effectAllowed = 'copy'
+    const item = displayCargoItems.find((c) => c.id === cargoId)
+    if (item) {
+      setPoolDragInfo({ cargoId, length: item.length, width: item.width, height: item.height, color: item.color })
+    }
+  }
+  const handleManualPoolDragEnd = () => {
+    setPoolDragInfo(null)
   }
 
   const handleManualUndo = () => {
@@ -1110,7 +1119,8 @@ function Workbench() {
     if (quantity <= 0) return
     const preset = STANDARD_BOXES.find((p) => p.id === presetId)
     if (!preset) return
-    const item = buildStandardCargoItem(preset, quantity, () => createClientId())
+    const clamped = Math.min(quantity, STANDARD_BOX_MAX_PER_CLICK)
+    const item = buildStandardCargoItem(preset, clamped, () => createClientId())
     setCargoItems((current) => [...current, item])
     setHasCalculated(true)
   }
@@ -1121,7 +1131,8 @@ function Workbench() {
       if (row.maxCount <= 0) continue
       const preset = STANDARD_BOXES.find((p) => p.id === row.preset.id)
       if (!preset) continue
-      additions.push(buildStandardCargoItem(preset, row.maxCount, () => createClientId()))
+      const clamped = Math.min(row.maxCount, STANDARD_BOX_MAX_PER_CLICK)
+      additions.push(buildStandardCargoItem(preset, clamped, () => createClientId()))
       added += 1
     }
     if (added === 0) return
@@ -2248,6 +2259,7 @@ function Workbench() {
                             data-testid="manual-pool-item"
                             data-cargo-id={entry.cargoId}
                             onDragStart={(event) => handleManualPoolDragStart(event, entry.cargoId)}
+                            onDragEnd={handleManualPoolDragEnd}
                             className={`flex flex-col gap-1 rounded-lg border p-2 text-xs ${
                               entry.remaining > 0
                                 ? 'cursor-grab border-[#c9c9c9] bg-white'
@@ -2274,6 +2286,7 @@ function Workbench() {
                           gridSnap={gridSnap}
                           invalidBoxIds={manualInvalidBoxIds}
                           manualEditable
+                          poolDragInfo={poolDragInfo}
                           resetViewTick={resetViewTick}
                           selectedBoxId={manualSelectedId}
                           selectedManualBoxId={manualSelectedId}
@@ -2299,6 +2312,19 @@ function Workbench() {
                         />
                       )}
                     </div>
+                    <aside className="flex w-72 shrink-0 flex-col gap-2 overflow-auto">
+                      <ManualPrecisePanel
+                        container={{ length: renderingContainer.length, width: renderingContainer.width, height: renderingContainer.height }}
+                        locale={locale}
+                        selected={manualDraft.boxes.find((b) => b.id === manualSelectedId) ?? null}
+                        onDelete={handleManualDelete}
+                        onMove={(x, y, z) => {
+                          if (!manualSelectedId) return
+                          handleManualMoveBox(manualSelectedId, x, y, z)
+                        }}
+                        onRotate={handleManualRotate}
+                      />
+                    </aside>
                   </div>
                 </div>
               ) : workspaceView === '3d' ? (

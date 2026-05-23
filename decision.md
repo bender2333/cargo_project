@@ -2,6 +2,23 @@
 
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
+## 2026-05-24 第十六轮：Pool ghost / Snap 50% / Precise panel / Fill cap
+
+- 背景：第十五轮上线后，用户报 (a) pool 拖 cargo 进 3D 必须松手才显示；(b) 把箱子从底层往上叠 ghost 贴附 OK 但松手又回原位；(c) 一键补装直接卡死浏览器。
+- 决策：
+  - **Pool drag ghost**：dragstart 时 Workbench 把货物 size+color 推给 ContainerScene 的 `poolDragInfo` prop；dragover 在 ContainerScene 内 raycast + 渲染 ghost；dragleave / dragend / drop 清理。这是 dataTransfer 在 dragover 期间不可读的标准 work-around。
+  - **Surface snap 50% guard**：放进 `resolveDropTarget`，与 `MIN_SUPPORT_OVERLAP_RATIO=0.5` 保持一致。两层尝试：先 cursor-centred，不够再 surface-centred，再不够直接 fall through 到地面。这避免了「ghost 跳上去 → commit 失败 → box 跳回」的视觉跳动。
+  - **Precise panel 默认显示位置**：右侧 72-rem 宽。即使没有选中，也显示「点选箱体微调」提示，这样用户能马上看见有此功能而不是要先选中才发现按钮存在。
+  - **Fill 每次 50 件上限**：固定常量 `STANDARD_BOX_MAX_PER_CLICK = 50`。比起把数字做成 setting，硬编码 50 + UI 文案明确告知「重复点击」更直接。卡死的根因是 packing algorithm 对大数 cargo 的 O(n²) 行为，本轮不重写算法；50 件经验值是「点完不卡顿且能看到效果」的阈值。
+- 影响：
+  - 用户拖 pool 货物期间 ghost 始终可见，落点直观。
+  - 大箱叠在小箱上不再「跳上去又跳回」，直接保持地面（用户能再次拖动到合适位置）。
+  - 一键补装不再卡死，但需要用户重复点击 N 次才能装满。
+  - Precise panel 显示后让手动模式工具栏从「全靠键盘+快捷键」变为「显式可见的输入框 + 对齐按钮」。
+- 后续：
+  - 拖拽 invalid 文字提示（ghost 旁浮动「✗ overlaps box B」之类）延后到下一轮做；现在仍靠 ghost 红色 + manualIssues 面板。
+  - Packing algorithm 性能优化（让数千 cargo item 不卡死）需要单独立项；本轮只截断上限。
+
 ## 2026-05-24 第十五轮：贴附拖拽 / 旋转预检 / 补装建议 / 重心 3D 化
 
 - 背景：用户反映「把 A 放到 B 上面」目前必须先 XY 然后 Shift+Z 两段操作；旋转失败没有原因说明；重心 tab 只有数字没有空间感。
