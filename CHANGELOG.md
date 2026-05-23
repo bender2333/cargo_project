@@ -11,13 +11,15 @@
     - [x] E: document manual fine-tune versus manual placement product redesign.
     - [x] F: document end-to-end PM/user/admin logic audit.
     - [x] Local verification: lint, unit tests, build, and E2E.
-    - [ ] Remote deployment and remote E2E verification.
+    - [x] Remote deployment and remote E2E verification.
   - Automatic container changes now use `clearPlacementOnContainerChange`: when a calculated automatic result exists, changing the container ID/effective dimensions/payload/gaps clears the displayed boxes and shows "recalculate" guidance instead of reusing stale geometry. Restore/new/upload flows suppress that warning because they intentionally hydrate a saved configuration.
   - Manual free view is now `manual-free`: OrbitControls take priority, drag/drop/keyboard movement are disabled, and the UI shows a read-only notice until free view is turned off.
   - Manual keyboard help lists XY drag, Shift+drag Z movement, Arrow/PageUp/PageDown movement, Shift/Ctrl step modifiers, R/Delete/Esc shortcuts in English and Chinese.
   - Manual placement validation now distinguishes true 3D overlap from legal stacking and adds `floating` issues when a box is not on the floor and has less than 50% cumulative base support from boxes directly below. Invalid keyboard/drop/drag moves are not committed.
   - Added `docs/manual-flow-redesign.md` and `docs/ux-audit-2026-05.md`; recorded support/free-view/container-change decisions in `decision.md`.
   - Verification: `npm run lint` passed; `npm test` passed 63 tests; `npm run build` passed with the existing Vite chunk-size warning; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "悬空|自由视角|键盘帮助|更换货柜"` passed 5 tests; full local `npm run test:e2e` passed 47 tests / 1 skipped / 0 failed.
+  - Deployment: `npm run deploy` completed; remote backup saved at `/root/cargo_project-backup-20260523-084726`; remote HTTP health check passed.
+  - Remote verification: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ npm run test:e2e` passed 47 tests / 1 skipped / 0 failed.
 - Completed subtask: deliver eleventh review — fix history-restore 3D blackout, add Z-axis drag + keyboard shortcuts, ship debug panel + server logs endpoint.
   - **Bug fix (root cause)**: `ContainerScene` cached `THREE.Texture` / `THREE.Material` in module-level Maps shared across all scenes. After `renderer.dispose()` (triggered by container reference change in `restorePlan`), the cached textures held stale GPU handles; a new renderer rebuilt scene reused them and the box meshes rendered as background — user reported "restoring a saved plan shows 0 boxes in 3D" (admin reproduced). Fix: caches moved to `WeakMap<SceneState, Map>` per scene; main-effect cleanup disposes all entries. Regression E2E covers pixel-level box visibility after restore.
   - **Z-axis + shortcuts**: `manualPlacement.setBoxPosition(draft, id, x, y, z?)` accepts optional z. `ContainerScene` enters Z-drag mode on Shift+pointer: locks XY, maps cursor Y delta to z mm at 0.5 px/mm. Global keydown (only when manualEditable + boxSelected, ignoring inputs/textareas): R rotate, Delete/Backspace remove, Esc clear, Arrow keys ±X/Y, PgUp/PgDown ±Z; step = 10mm default, Shift 100mm, Ctrl/Meta 1mm. Workbench wires `onManualRotate` / `onManualDelete` / `onClearSelection` / `selectedManualBoxId` props.
