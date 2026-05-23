@@ -35,6 +35,7 @@ import type { User } from './lib/auth'
 import { LoginPage } from './components/LoginPage'
 import { RegisterPage } from './components/RegisterPage'
 import { UserManagement } from './components/UserManagement'
+import { DebugPanel } from './components/DebugPanel'
 import { CustomContainerDialog } from './components/CustomContainerDialog'
 
 const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
@@ -576,6 +577,35 @@ function Workbench() {
   const [customContainers, setCustomContainers] = useState<ContainerSpec[]>([])
   const [showCustomContainerDialog, setShowCustomContainerDialog] = useState(false)
   const [historyPlans, setHistoryPlans] = useState<HistoryPlan[]>([])
+  const [recentErrors, setRecentErrors] = useState<string[]>([])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const originalError = console.error
+    const originalWarn = console.warn
+    const append = (level: 'error' | 'warn', args: unknown[]) => {
+      const text = args.map((arg) => {
+        if (arg instanceof Error) return arg.message
+        if (typeof arg === 'object') {
+          try { return JSON.stringify(arg) } catch { return String(arg) }
+        }
+        return String(arg)
+      }).join(' ')
+      setRecentErrors((current) => [...current.slice(-29), `[${level}] ${new Date().toISOString()} ${text}`])
+    }
+    console.error = (...args: unknown[]) => {
+      append('error', args)
+      originalError.apply(console, args as [])
+    }
+    console.warn = (...args: unknown[]) => {
+      append('warn', args)
+      originalWarn.apply(console, args as [])
+    }
+    return () => {
+      console.error = originalError
+      console.warn = originalWarn
+    }
+  }, [])
 
   const [importMessages, setImportMessages] = useState<string[]>([])
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null)
@@ -720,8 +750,8 @@ function Workbench() {
     setManualHistory((current) => manualCommit(current, nextDraft))
   }
 
-  const handleManualMoveBox = (id: string, x: number, y: number) => {
-    commitManual(manualSetBoxPosition(manualDraft, id, x, y))
+  const handleManualMoveBox = (id: string, x: number, y: number, z?: number) => {
+    commitManual(manualSetBoxPosition(manualDraft, id, x, y, z))
   }
 
   const handleManualDropFromPool = (cargoId: string, dropX: number, dropY: number) => {
@@ -1888,9 +1918,13 @@ function Workbench() {
                           invalidBoxIds={manualInvalidBoxIds}
                           manualEditable
                           selectedBoxId={manualSelectedId}
+                          selectedManualBoxId={manualSelectedId}
                           viewMode={sceneViewMode}
+                          onClearSelection={() => setManualSelectedId(null)}
+                          onManualDelete={(boxId) => commitManual(manualRemoveBox(manualDraft, boxId))}
                           onManualDropFromPool={handleManualDropFromPool}
                           onManualMove={handleManualMoveBox}
+                          onManualRotate={(boxId) => commitManual(manualRotateBox(manualDraft, boxId))}
                           onSelectBox={setManualSelectedId}
                         />
                       ) : (
@@ -2270,6 +2304,29 @@ function Workbench() {
           }}
         />
       )}
+      <DebugPanel
+        snapshot={{
+          user: currentUser,
+          locale,
+          placementMode,
+          workspaceView,
+          selectedContainer: {
+            id: selectedContainer.id,
+            label: selectedContainer.label,
+            length: selectedContainer.length,
+            width: selectedContainer.width,
+            height: selectedContainer.height,
+          },
+          loadingMode,
+          cargoItemsCount: cargoItems.length,
+          placedCount: result.placedCount,
+          totalCargoCount: result.totalCargoCount,
+          layersCount: result.layers.length,
+          manualBoxesCount: manualDraft.boxes.length,
+          historyCount: historyPlans.length,
+          recentErrors,
+        }}
+      />
     </main>
   )
 }

@@ -211,6 +211,32 @@ app.delete('/api/history', authenticate, (req, res) => {
   }
 })
 
+// Admin-only: recent server-side log tail for triage
+import fs from 'fs/promises'
+
+const LOG_PATH = process.env.CARGO_LOG_PATH || '/var/log/cargo-server.log'
+const SENSITIVE_PATH_PREFIXES = ['/api/auth/']
+
+let lastLogRead = 0
+app.get('/api/_debug/recent-logs', authenticate, requireAdmin, async (req, res) => {
+  const now = Date.now()
+  if (now - lastLogRead < 500) {
+    return res.status(429).json({ error: 'Too many requests' })
+  }
+  lastLogRead = now
+
+  const limit = Math.max(1, Math.min(500, parseInt(String(req.query.limit ?? '200'), 10) || 200))
+  try {
+    const content = await fs.readFile(LOG_PATH, 'utf8')
+    const lines = content.split('\n').filter(Boolean)
+    const tail = lines.slice(-limit)
+      .filter((line) => !SENSITIVE_PATH_PREFIXES.some((prefix) => line.includes(prefix)))
+    res.json({ path: LOG_PATH, count: tail.length, lines: tail })
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read log', detail: err.message })
+  }
+})
+
 // Serve static frontend files in production
 const distPath = path.join(__dirname, '../dist')
 app.use(express.static(distPath))

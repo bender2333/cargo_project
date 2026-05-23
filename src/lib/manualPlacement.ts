@@ -69,10 +69,10 @@ export function moveBox(draft: ManualDraft, id: string, dx: number, dy: number):
   }
 }
 
-export function setBoxPosition(draft: ManualDraft, id: string, x: number, y: number): ManualDraft {
+export function setBoxPosition(draft: ManualDraft, id: string, x: number, y: number, z?: number): ManualDraft {
   return {
     boxes: draft.boxes.map((box) =>
-      box.id === id ? { ...box, x, y } : box,
+      box.id === id ? { ...box, x, y, ...(z !== undefined ? { z } : {}) } : box,
     ),
   }
 }

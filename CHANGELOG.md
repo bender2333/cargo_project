@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-05-23
+
+- Completed subtask: deliver eleventh review — fix history-restore 3D blackout, add Z-axis drag + keyboard shortcuts, ship debug panel + server logs endpoint.
+  - **Bug fix (root cause)**: `ContainerScene` cached `THREE.Texture` / `THREE.Material` in module-level Maps shared across all scenes. After `renderer.dispose()` (triggered by container reference change in `restorePlan`), the cached textures held stale GPU handles; a new renderer rebuilt scene reused them and the box meshes rendered as background — user reported "restoring a saved plan shows 0 boxes in 3D" (admin reproduced). Fix: caches moved to `WeakMap<SceneState, Map>` per scene; main-effect cleanup disposes all entries. Regression E2E covers pixel-level box visibility after restore.
+  - **Z-axis + shortcuts**: `manualPlacement.setBoxPosition(draft, id, x, y, z?)` accepts optional z. `ContainerScene` enters Z-drag mode on Shift+pointer: locks XY, maps cursor Y delta to z mm at 0.5 px/mm. Global keydown (only when manualEditable + boxSelected, ignoring inputs/textareas): R rotate, Delete/Backspace remove, Esc clear, Arrow keys ±X/Y, PgUp/PgDown ±Z; step = 10mm default, Shift 100mm, Ctrl/Meta 1mm. Workbench wires `onManualRotate` / `onManualDelete` / `onClearSelection` / `selectedManualBoxId` props.
+  - **DebugPanel**: new `src/components/DebugPanel.tsx`. Toggle via `Ctrl+Shift+D` or `?debug=1`. Shows user/locale/mode/container/cargo/result/history + recent 30 captured console errors. Admin can fetch `/api/_debug/recent-logs?limit=N`. Workbench wraps `console.error/warn` to feed `recentErrors`; exposes `window.__cargoSnapshot()`.
+  - **Server logs endpoint**: `GET /api/_debug/recent-logs?limit=N` (authenticate + requireAdmin). Reads `process.env.CARGO_LOG_PATH || /var/log/cargo-server.log`; skips lines containing `/api/auth/` to avoid login metadata leak; 500ms rate limit.
+  - Verification: `npm run lint && npm test && npm run build` 全绿；本地 E2E 44 用例 → 43 pass / 1 skipped / 0 failed；远程 (101.33.232.150) E2E 同样 43 pass / 1 skipped / 0 failed；`curl /api/_debug/recent-logs` admin 返回有效日志。
+  - Decision log: see `decision.md > 2026-05-23 第十一轮`.
+
 ## 2026-05-22
 
 - Completed subtask: enhance manual 3D editor with camera control, live collision feedback, and incremental scene updates.

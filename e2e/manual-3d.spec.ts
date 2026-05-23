@@ -106,3 +106,83 @@ test('自动模式默认锁定视角；点自由视角后切到 free 状态', as
   await page.getByRole('button', { name: '自由视角' }).click()
   await expect(scene).toHaveAttribute('data-interaction-mode', 'free')
 })
+
+test('从历史方案恢复自定义柜型后 3D 场景重建并显示新箱体', async ({ page }) => {
+  await ensureChinese(page)
+
+  await page.getByLabel('货柜类型').selectOption('custom')
+  await page.getByLabel('长 mm').first().fill('14000')
+  await page.getByLabel('宽 mm').first().fill('2350')
+  await page.getByLabel('高 mm').first().fill('2600')
+  await page.getByLabel('最大载重 kg').fill('30000')
+
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('名称', { exact: true }).fill('恢复探针')
+  await cargoForm.getByLabel('标识', { exact: true }).fill('P')
+  await cargoForm.getByLabel('长 mm').fill('1200')
+  await cargoForm.getByLabel('宽 mm').fill('800')
+  await cargoForm.getByLabel('高 mm').fill('900')
+  await cargoForm.getByLabel('重量 kg').fill('100')
+  await cargoForm.getByLabel('数量', { exact: true }).fill('5')
+  await page.getByRole('button', { name: '+ 添加货物' }).click()
+
+  await page.getByRole('button', { name: '装箱', exact: true }).click()
+  await page.getByRole('button', { name: '历史方案', exact: true }).click()
+  await page.getByRole('button', { name: '保存方案' }).click()
+  await page.waitForTimeout(300)
+
+  await page.getByRole('button', { name: '工作台', exact: true }).click()
+  await page.getByRole('button', { name: '新建项目' }).click()
+  await page.waitForTimeout(150)
+
+  await page.getByRole('button', { name: '历史方案', exact: true }).click()
+  await page.getByRole('button', { name: '恢复' }).first().click()
+  await page.waitForTimeout(400)
+
+  await expect(page.getByText('14,000 × 2,350 × 2,600 mm')).toBeVisible({ timeout: 5000 })
+
+  const canvas = page.locator('canvas').first()
+  await expect(canvas).toBeVisible()
+  await page.waitForTimeout(400)
+
+  const colors = await canvas.evaluate((node) => {
+    const el = node as HTMLCanvasElement
+    const gl = el.getContext('webgl2') ?? el.getContext('webgl')
+    if (!gl) return 0
+    const set = new Set<string>()
+    const pixel = new Uint8Array(4)
+    for (const x of [0.2, 0.35, 0.5, 0.65, 0.8]) {
+      for (const y of [0.2, 0.35, 0.5, 0.65, 0.8]) {
+        gl.readPixels(Math.floor(el.width * x), Math.floor(el.height * y), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel)
+        set.add(`${pixel[0]>>3}:${pixel[1]>>3}:${pixel[2]>>3}`)
+      }
+    }
+    return set.size
+  })
+  expect(colors).toBeGreaterThanOrEqual(4)
+})
+
+test('?debug=1 显示调试面板并展示当前状态', async ({ page }) => {
+  await page.goto('/?debug=1')
+  await expect(page.getByTestId('debug-panel')).toBeVisible()
+  await expect(page.getByTestId('debug-panel')).toContainText('testuser')
+  await expect(page.getByTestId('debug-panel')).toContainText('Container')
+})
+
+test('调试面板 admin 可拉取服务器日志', async ({ page }) => {
+  await page.evaluate(async () => {
+    await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+    }).then((r) => r.json()).then((data) => {
+      window.localStorage.setItem('cargo_token', data.token)
+    })
+  })
+  await page.goto('/?debug=1')
+  await expect(page.getByTestId('debug-panel')).toBeVisible()
+  const fetchBtn = page.getByTestId('debug-fetch-logs')
+  await expect(fetchBtn).toBeVisible()
+  await fetchBtn.click()
+  await page.waitForTimeout(500)
+})

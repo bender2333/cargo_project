@@ -250,3 +250,40 @@
   - 手动 3D 仍是 XY 平面平移；要支持把箱体抬起堆叠（改 z）需要扩展 `manualPlacement.setBoxPosition` 接收 z 并把 raycast 改为同时支持 ground + 已放置箱顶面。
   - OrbitControls.mouseButtons LEFT=null 的类型在 three@old 上是 `MOUSE | undefined`，本期用 `null` 强制赋值（运行时 OK）；如果未来 three.js 升级类型变严格，需要改成 `undefined`。
   - 远程 E2E 跑了 41 个用例 → 40 pass / 1 skipped（`responsive-3d.spec.ts` 仍待补真后端流程），与本地一致。
+
+
+## 2026-05-23 第十一轮：历史恢复 3D 不刷新根因 + 手动 3D Z 轴 + 调试面板
+
+- **背景**：远程 admin 反馈"从历史方案恢复后 3D 场景看不到任何箱体"，并提出"3D 还需要 Z 轴 + 快捷键 + 日志辅助"。本轮先复现 admin bug、找到根因、修复，再交付 Z 轴 + 调试面板能力。
+- **bug 根因**（diff 关键）：
+  - `ContainerScene.tsx` 之前在**模块作用域**持有 `textureCache: Map<string, THREE.Texture>` 和 `materialCache: Map<string, THREE.Material>`，所有 scene 实例共享。
+  - 当 `container.length/width/height` 变化时主 effect cleanup 旧 scene 并 `renderer.dispose()`，释放 GPU 资源；但 module 级 cache 中的 Texture/Material 仍持有 stale references。
+  - 下一次主 effect 创建新 scene + 新 renderer，box mesh 复用 cached material → material.map 是上一个 renderer context 的 texture handle → 在新 context 上 GPU side 无效 → mesh 表面变成"无纹理"（实际全透明/不可见），canvas 中心只看得到背景 + grid + floor 颜色，整体 distinct colors ≤ 3。
+  - 用户感知：恢复后柜型尺寸、cargo 列表、统计数字、layer 数全部正确，**但 3D 完全空白**。
+- **修复**：cache 改为 `WeakMap<SceneState, Map<string, Texture|Material>>` per-scene 实例；主 effect cleanup 时 `texture.dispose() / material.dispose()` 并清空 map。新增 regression E2E `从历史方案恢复自定义柜型后 3D 场景重建并显示新箱体`（pixel sample 验证箱体颜色出现，distinct colors >= 4）。
+- **附带：Z 轴拖拽 + 快捷键**：
+  - `manualPlacement.setBoxPosition(draft, id, x, y, z?)` 加可选 z 参数，z 缺省时保持原值；新增单元测试覆盖 z 缺省与显式。
+  - `ContainerScene` pointerdown 时根据 `event.shiftKey` 进入 'z' 模式：锁定 XY，把 pointer Y 像素位移按 `Z_PIXELS_PER_MM=0.5` 映射为 z mm；pointerup 落地时调用 `onManualMove(id, x, y, z)`（z 模式下传原 x/y）。
+  - 全局 `keydown` 监听（仅 manualEditable + 有选中 box）：R 旋转、Delete/Backspace 删除、Esc 取消选中、方向键 ±X/Y、PgUp/PgDown ±Z；step = Shift→100mm、Ctrl→1mm、默认 10mm。
+  - keydown 跳过 input/textarea/contentEditable，避免文本输入冲突。
+- **调试面板**：
+  - 新文件 `src/components/DebugPanel.tsx`：`Ctrl+Shift+D` 切换；`?debug=1` query 默认打开；面板 + 浮动按钮自适应。
+  - 展示 user/role/locale/placementMode/workspaceView/container summary/loadingMode/cargo & placed 数/manual boxes 数/history 数/最近 30 条 console.error|warn。
+  - Workbench 在 mount 时包裹 `console.error` / `console.warn`，把 stringified args 推入 `recentErrors` state（保留最近 30 条）。
+  - `window.__cargoSnapshot()` 暴露 JSON 快照，便于团队让用户在 console 直接拷贝。
+  - admin 角色额外显示"Fetch server logs"按钮，调 `GET /api/_debug/recent-logs?limit=120`。
+- **服务端日志接口**：
+  - `server/index.mjs` 新增 `GET /api/_debug/recent-logs?limit=N` (authenticate + requireAdmin)。
+  - 读 `process.env.CARGO_LOG_PATH || /var/log/cargo-server.log` 末尾 N 行（最大 500）。
+  - 过滤含 `/api/auth/` 路径的行避免泄漏登录尝试 metadata（即使日志只记 method+path，没记 body）。
+  - 简单 rate limit：两次调用间隔 < 500ms 返回 429。
+- **验证**：
+  - 本地 `lint && test (59 unit tests) && build`：全绿。
+  - 本地 E2E 44 用例 → 43 pass / 1 skipped / 0 failed。
+  - 远程 E2E (101.33.232.150) → 同样 43 pass / 1 skipped / 0 failed。
+  - admin 远程登录 + `/api/_debug/recent-logs` 返回有效日志（验证 systemd 服务用 `/var/log/cargo-server.log`）。
+- **后续**：
+  - 手动 3D 当前 Z 轴是"按 Shift 临时切换"模式；考虑后续把鼠标手势改成更直观的双指/中键 + 屏幕指示（小提示框显示 "X/Y / Z 模式"）。
+  - keydown 监听器是 window-scoped，若同页面挂了多个 ContainerScene（理论上不可能但需要小心），会冲突；当前 manualEditableRef 保证只有手动模式响应，但未防止两个 manualEditable scene 同时存在。
+  - `Z_PIXELS_PER_MM` 是常数，未来可改成 viewport 高度 / 容器高度的比例，让大柜小柜手感一致。
+  - 调试面板 admin 日志接口仅 tail；未实现"按 user_id / path 过滤"或"流式推送"，下一轮再做。

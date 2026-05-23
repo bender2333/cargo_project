@@ -112,6 +112,27 @@ describe('manualPlacement', () => {
     expect(moved.boxes[0]).toMatchObject({ x: 800, y: 900 })
   })
 
+  it('setBoxPosition keeps z unchanged when third argument is omitted, updates when provided', () => {
+    const box = makeManualBox({
+      id: 'box-z',
+      cargoId: 'cargo-a',
+      label: 'A',
+      color: '#fff',
+      length: 400,
+      width: 500,
+      height: 600,
+      x: 100,
+      y: 200,
+    })
+    const draft = addBox(emptyDraft(), box)
+
+    const xy = setBoxPosition(draft, 'box-z', 500, 600)
+    expect(xy.boxes[0]).toMatchObject({ x: 500, y: 600, z: 0 })
+
+    const stacked = setBoxPosition(xy, 'box-z', 500, 600, 600)
+    expect(stacked.boxes[0]).toMatchObject({ x: 500, y: 600, z: 600 })
+  })
+
   it('removeBox removes the matching id and keeps other boxes', () => {
     const draft = addBox(
       addBox(emptyDraft(), makeManualBox({

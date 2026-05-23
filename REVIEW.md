@@ -1564,3 +1564,106 @@
 - 任何因实现成本暂缓的功能（如 front/side 视图的拖拽改 z）必须写入 `decision.md`。
 - 部署成功的判断包含远程 200 + 默认装载规则 = "数量优先"。
 
+---
+
+# 第十一轮 Review 与下一阶段开发计划
+
+日期：2026-05-23
+
+## 背景
+
+第十轮交付了手动 3D 编辑（XY 平移 + pool drop + 实时碰撞 + 视角控制）。本轮用户实际使用时提出 3 项遗留：手动 3D 只能平面平移、远程 admin 复现"从历史方案恢复后自动模式 3D 不刷新"、缺少日志和调试入口。
+
+参考代码：
+- `src/components/ContainerScene.tsx` — 3D 场景与拖拽
+- `src/lib/manualPlacement.ts` — 手动草稿模型
+- `src/Workbench.tsx:1152` — `restorePlan`
+- 远程：`/var/log/cargo-server.log` 与 `/opt/cargo-server/server/database.db`
+
+## Review 结论
+
+### 1. 手动 3D 只能 XY 平移，缺少 Z 轴与快捷键
+
+**现状**：
+- `ContainerScene` 在 manualEditable 模式下，左键拖拽 box 时 raycast 投影到 y=0 ground plane，只能在 XY 平面平移。
+- 想要把箱子抬起放到另一个箱子顶上（堆叠）无法操作；旋转、删除、微调依赖工具栏按钮。
+- 手动 2D 的 front/side 视图当前是只读，不能拖动改 z。
+
+**要求**：
+- 手动模式下提供"垂直拖拽"模式：按住 Shift 拖动时沿 Z 轴升降（XY 锁定，鼠标 Y 像素映射到 z mm）。
+- 快捷键支持（仅在 manualEditable + 有选中 box 时生效）：
+  - R / Shift+R：水平旋转 box（绕 Z 轴 90°，方向相反）
+  - Delete / Backspace：删除选中 box
+  - 方向键 ←→↑↓：以 10mm 步长微调 X/Y；Shift+方向 = 100mm；Ctrl+方向 = 1mm
+  - PageUp / PageDown：以 10mm 步长升降 Z；Shift+ = 100mm
+  - Esc：取消选中
+- 落地依赖 `manualPlacement.setBoxPosition` 接受 z 参数，保持向后兼容。
+- `ContainerScene` 拖拽落点验证仍走 `validateDraft`，落点重叠/越界仍标红。
+
+### 2. 从历史方案恢复后自动模式 3D 不刷新（admin 远程复现）
+
+**根因**（已通过本地复现 + 调试日志定位）：
+- `ContainerScene.tsx` 之前在**模块作用域**持有 `textureCache: Map` 和 `materialCache: Map`，所有 scene instance 共享。
+- 当 `container` reference 变化（如 restorePlan 切换自定义柜型）时主 effect 会 cleanup 旧 scene 并 `renderer.dispose()`，释放 WebGL 资源。
+- 但 module 级 cache 中的 `THREE.Texture` / `THREE.Material` 引用没被清理；下一次 mesh 创建时复用旧 material → 它们持有的 GPU side texture handle 在新 renderer context 上已失效 → 渲染时 box 表面材质丢失，整张 canvas 只剩背景 + grid + floor 颜色。
+- 用户视觉表现：恢复后柜型尺寸正确、cargo 列表正确、统计数字正确、layer 数正确，**但 3D 场景里看不到任何箱体**。
+
+**复现路径**：
+1. 切换到自定义柜型并填尺寸
+2. 加 cargo → 装箱 → 保存方案
+3. 点"新建项目"重置工作台（触发 container 切回默认 20'）
+4. 点历史方案 → 恢复（container 重新切回自定义）
+5. 主 effect 重建 scene，box meshes 引用旧 cached material → GPU 资源失效 → 看不到箱体
+
+**修复**（本轮已合入）：
+- `textureCache` / `materialCache` 改为 `WeakMap<SceneState, Map>` per-scene 实例；主 effect cleanup 时 dispose 所有 cached texture/material 并清空 cache。
+- 新增 regression E2E `e2e/manual-3d.spec.ts > 从历史方案恢复自定义柜型后 3D 场景重建并显示新箱体`，通过 canvas pixel sample 验证恢复后箱体颜色出现（distinct colors >= 4）。
+
+### 3. 缺少日志和调试入口
+
+**现状**：
+- 前端目前没有用户可见的调试面板；浏览器 console 是开发者唯一渠道，普通用户没法把现场状态发回团队。
+- 后端 `server/index.mjs` 已有简单访问日志写到 `/var/log/cargo-server.log`，但没有面向 admin 的"查看最近 N 行日志"接口。
+- 出现 bug 时只能要求用户描述现象，无法快速拿到关键 state。
+
+**要求**：
+- 前端：增加 `?debug=1` query 或 `Ctrl+Shift+D` 快捷键打开调试面板，展示：
+  - 当前用户、locale、placementMode、workspaceView
+  - selectedContainer summary（id、label、length×width×height）
+  - cargoItems 数量、result.placedCount / totalCargoCount、layers 数量
+  - 最近一次 history fetch 返回的计划数 / 最新 id
+  - 最近 N 条前端 console.error / warn（捕获）
+  - "Copy debug snapshot" 按钮把上述信息拷贝到剪贴板
+- 后端：增加 `GET /api/_debug/recent-logs?limit=200`（仅 admin 鉴权）返回最近 N 行日志；面板里 admin 一键拉取。
+- 日志格式：保留时间戳 + method + path + user_id（如可解析），避免敏感字段（password / token）。
+
+## 下一阶段开发计划（第十一轮）
+
+### 阶段 A：bug 修复 — 历史恢复后 3D 不刷新（已紧急修复 ✓）
+- `ContainerScene.tsx`: cache 迁移到 per-scene WeakMap；cleanup dispose。
+- 新增 E2E `从历史方案恢复自定义柜型后 3D 场景重建并显示新箱体`。
+
+### 阶段 B：手动 3D Z 轴 + 快捷键
+- `manualPlacement.setBoxPosition(draft, id, x, y, z?)` 扩展可选 z 参数。
+- `ContainerScene` 拖拽时按 `event.shiftKey` 切换 XY/Z 模式；Z 模式锁定 XY、Y 像素位移映射 z mm。
+- 全局 keydown 监听（仅 manualEditable + selectedBoxId 时生效）：R 旋转、Delete 删除、方向键平移、PgUp/PgDown 升降、Esc 取消。
+- Workbench 把 handler 通过 prop 传给 ContainerScene。
+- 单元测试 + E2E 覆盖。
+
+### 阶段 C：日志与调试辅助
+- `src/components/DebugPanel.tsx`：浮动面板；Ctrl+Shift+D 切换；?debug=1 默认打开。
+- `window.__cargoSnapshot()` 全局函数返回 JSON 快照。
+- 后端 `GET /api/_debug/recent-logs?limit=200`（admin only）；env `CARGO_LOG_PATH` 可配置；rate limit。
+- E2E 覆盖 ?debug=1 + admin 拉日志 200。
+
+### 阶段 D：部署与远程 E2E
+- 本地 lint/test/build/E2E 全绿。
+- 推送 dist + server/index.mjs，重启服务，跑远程 E2E。
+- 远程 admin 手动复测 restore flow，记录现场。
+
+## 执行约束
+
+- 本轮**不**重写 3D 编辑器。
+- Z 轴拖拽通过 Shift 修饰键复用现有 pointer 流程，避免引入额外 UI mode。
+- 调试面板仅展示状态、不允许直接改 state。
+- 后端日志 endpoint 必须 admin-only 且不返回敏感字段；任何泄漏风险写入 `decision.md`。
