@@ -98,14 +98,16 @@ test('手动模式 3D 暴露 manualEditable canvas，pool 项目可拖拽', asyn
   await expect(poolItems.first()).toHaveAttribute('draggable', 'true')
 })
 
-test('手动模式自由视角是只读浏览态并展示提示', async ({ page }) => {
+test('手动模式默认可旋转视角；锁定视角后仅允许拖拽', async ({ page }) => {
   await ensureChinese(page)
   await enterManualMode(page)
   const scene = page.getByTestId('container-scene')
-  await page.getByRole('button', { name: '自由视角' }).click()
-  await expect(scene).toHaveAttribute('data-interaction-mode', 'manual-free')
+  await expect(scene).toHaveAttribute('data-interaction-mode', 'manual')
   await expect(scene).toHaveAttribute('data-controls-enabled', 'true')
-  await expect(page.getByTestId('manual-free-view-notice')).toContainText('只读浏览')
+  await page.getByTestId('toggle-view-lock').click()
+  await expect(scene).toHaveAttribute('data-interaction-mode', 'manual-locked')
+  await expect(scene).toHaveAttribute('data-controls-enabled', 'false')
+  await expect(page.getByTestId('manual-view-locked-notice')).toContainText('视角已锁定')
 })
 
 test('手动模式键盘帮助展示 Z 轴与快捷键说明', async ({ page }) => {
@@ -139,13 +141,14 @@ test('手动模式阻止键盘把箱体移动到悬空位置', async ({ page }) 
   await expect(scene).toHaveAttribute('data-box-count', '18')
 })
 
-test('自动模式默认锁定视角；点自由视角后切到 free 状态', async ({ page }) => {
+test('自动模式默认锁定视角；解锁后可自由旋转', async ({ page }) => {
   await ensureChinese(page)
   const scene = page.getByTestId('container-scene')
   await expect(scene).toBeVisible()
   await expect(scene).toHaveAttribute('data-interaction-mode', 'locked')
-  await page.getByRole('button', { name: '自由视角' }).click()
+  await page.getByTestId('toggle-view-lock').click()
   await expect(scene).toHaveAttribute('data-interaction-mode', 'free')
+  await expect(scene).toHaveAttribute('data-controls-enabled', 'true')
 })
 
 test('自动模式更换货柜后清空旧画布并提示重新计算', async ({ page }) => {
@@ -236,4 +239,44 @@ test('调试面板 admin 可拉取服务器日志', async ({ page }) => {
   await expect(fetchBtn).toBeVisible()
   await fetchBtn.click()
   await page.waitForTimeout(500)
+})
+
+test('网格吸附按钮切换 data-grid-snap', async ({ page }) => {
+  await ensureChinese(page)
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-grid-snap', 'on')
+  await page.getByTestId('toggle-grid-snap').click()
+  await expect(scene).toHaveAttribute('data-grid-snap', 'off')
+  await page.getByTestId('toggle-grid-snap').click()
+  await expect(scene).toHaveAttribute('data-grid-snap', 'on')
+})
+
+test('作业回放面板按 workSteps 顺序逐步显示箱体', async ({ page }) => {
+  await ensureChinese(page)
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toBeVisible()
+  const totalBoxes = await scene.getAttribute('data-box-count')
+  expect(Number(totalBoxes)).toBeGreaterThan(2)
+
+  // open playback tab
+  await page.getByRole('button', { name: '作业回放' }).click()
+  await expect(page.getByTestId('playback-panel')).toBeVisible()
+
+  // step from 0 to 2 and ensure data-box-count reflects cursor
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+  await page.getByTestId('playback-next').click()
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+  await page.getByTestId('playback-next').click()
+  await expect(scene).toHaveAttribute('data-box-count', '2')
+  await page.getByTestId('playback-prev').click()
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+  await page.getByTestId('playback-finish').click()
+  await expect(scene).toHaveAttribute('data-box-count', String(totalBoxes))
+})
+
+test('手动模式作业回放面板提示不可用', async ({ page }) => {
+  await ensureChinese(page)
+  await enterManualMode(page)
+  await page.getByRole('button', { name: '作业回放' }).click()
+  await expect(page.getByTestId('playback-panel-empty')).toContainText('自动排布完成后')
 })

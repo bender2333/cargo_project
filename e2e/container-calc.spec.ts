@@ -571,8 +571,8 @@ test('filters the plan view by cargo label', async ({ page }) => {
 
 test('renders an interactive 3D canvas', async ({ page }) => {
   await openEnglish(page)
-  await page.getByRole('button', { name: 'Free view' }).click()
-  await expect(page.getByRole('button', { name: 'Free view' })).toHaveClass(/active/)
+  await page.getByTestId('toggle-view-lock').click()
+  await expect(page.getByTestId('toggle-view-lock')).toHaveAttribute('aria-pressed', 'false')
   const canvas = page.locator('canvas').first()
   await expect(canvas).toBeVisible()
   const box = await canvas.boundingBox()

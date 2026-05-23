@@ -1767,3 +1767,86 @@
 - decision.md 必须记录支撑阈值、free view 与 manual 互斥策略、自动模式更换货柜的产品决策（清空 vs 重排）。
 - 本地 lint/test/build/E2E 全绿 + 远程部署 + 远程 E2E 全绿后才视为完成。
 - Goal 由用户在下一条消息明确，开发不在本次回复中开始。
+
+---
+
+# 第十三轮 Review 与下一阶段开发计划（2026-05-23 晚）
+
+## 背景
+
+第十二轮上线后，手动 3D 已具备 Z 轴拖拽、键盘快捷键、物理支撑校验、自由视角只读浏览态、键盘帮助 popover、自动模式更换货柜自动清空。但用户体验仍偏「工程化」而不像「3D 建造工具」，且自由视角与拖拽完全互斥造成不便。本轮 3 条 review 直接进入实现阶段。
+
+## Review 结论
+
+### 1. 自由视角与拖拽的关系：用「锁定视角」按钮替代当前互斥
+
+- **现状**：手动模式默认 LEFT=拖拽 / RIGHT=旋转 / 滚轮=缩放；点「自由视角」按钮后进入只读浏览态（manual-free），左键只能旋转、不能拖拽。两个模式互斥造成「想旋转看清角度→点自由视角→发现不能拖→再点回来→再拖」的反复切换。
+- **要求**：
+  - 手动模式默认即支持自由旋转视角（右键旋转、滚轮缩放、左键空白处旋转、左键箱体拖拽）。
+  - 增加「锁定视角」开关：开启时所有相机控制（旋转/缩放/拖动场景）禁用，仅允许箱体拖拽，避免精细调整时手抖误旋转。
+  - 移除目前「自由视角」按钮在手动模式下的语义；自由视角概念仅在自动模式下表示「解锁观察」。
+  - 锁定视角按钮在手动工具栏、自动工具栏统一一致的位置 + 文案。
+
+### 2. 3D 手动模式向 3D 建造游戏靠拢
+
+- **现状**：拖拽时仅显示箱体本身随鼠标移动 + 实时碰撞红色，无目标位置预览、无网格吸附、无 hover 反馈、相机切换硬跳。整体像 CAD 不像 SketchUp / Minecraft。
+- **要求**（本轮挑核心 3 项，其余下轮再做）：
+  - **Ghost preview**：拖拽过程中显示半透明目标位置 outline（绿色合法 / 红色非法），方便用户在 release 前判断落点。
+  - **Grid snap**：网格吸附开关，默认开启，步长 50mm（贴近常见集装箱单元）；关闭时回到当前自由像素拖拽。
+  - **Hover highlight**：鼠标 hover 在已放置箱体上时高亮 outline + 显示 tooltip（标签/尺寸/坐标），与拖拽逻辑解耦。
+- **暂不做**（记入未来 backlog）：相机缓动 lerp、撤销/重做长历史、复制粘贴/多选、剖切面视图。
+
+### 3. 新增 PM 视角实用功能：装柜作业回放
+
+- **现状**：自动排布生成 `workSteps`（按支撑链推算的装载顺序），目前只在「分层」「明细」表格里静态出现，工人在现场无法跟着「一步步装」。
+- **要求**：
+  - 新增「作业回放」面板：按 workSteps 顺序逐步在 3D 场景中显示箱体（动画 / 分步），用户可暂停、上一步、下一步、调速、跳转任意步。
+  - 当前步对应箱体高亮 + 半透明预览即将放置位置；已放置箱体维持现状；未来步骤箱体隐藏。
+  - 步骤列表与 3D 同步选中；点列表项跳转到对应步。
+  - 回放面板可一键导出当前序列为带顺序号的作业指令 PDF / Excel（本轮先做 Excel，PDF 入下轮）。
+  - 仅自动模式可用（手动模式没有 workSteps）。
+
+## 下一阶段开发计划（第十三轮）
+
+### 阶段 A：锁定视角按钮统一（review #1）
+
+- `Workbench`：新增 `viewLocked` state；手动 + 自动模式共用一个「锁定视角 / 解锁视角」按钮。
+- `ContainerScene` mouseButtons mapping 改为：
+  - 手动 + viewLocked=true → LEFT=drag, RIGHT/MIDDLE/WHEEL 禁用
+  - 手动 + viewLocked=false（默认）→ LEFT=drag-on-box / rotate-on-empty, RIGHT=rotate, WHEEL=zoom
+  - 自动 + viewLocked=true → 完全锁定
+  - 自动 + viewLocked=false → free view
+- 移除手动模式下原本的「自由视角」按钮；自动模式保留并改名「锁定视角」。
+- i18n 更新；旧测试断言改成新文案。
+- E2E：手动模式默认可旋转 + 拖拽；点锁定视角后无法旋转、仍可拖拽；自动模式默认锁定、解锁后可旋转。
+
+### 阶段 B：Ghost preview + Grid snap + Hover highlight（review #2）
+
+- `ContainerScene`：
+  - 新增 ghostMesh（拖拽时半透明 outline，颜色随 invalid 切换）；commit 后销毁。
+  - `gridSnap` state（true=吸附 50mm，false=自由），手动工具栏 toggle；snap 在 pointerMove 中应用到 x/y/z。
+  - hover raycast 单独 effect：进入某个 box 时高亮 outline + emit hoverInfo；离开清空；与 selectedBox 不冲突。
+- `Workbench`：tooltip overlay 读 hoverInfo，显示在 cursor 跟随的浮窗里（绝对定位）。
+- 单元测试：snap 工具函数 `snapToGrid(value, step)`。
+- E2E：拖拽时存在 ghost mesh DOM 标记；snap 开关切换；hover tooltip 出现/消失。
+
+### 阶段 C：作业回放面板（review #3）
+
+- `src/lib/playback.ts`：`buildPlaybackSequence(packingResult) → { steps, total }`；步骤包含 box 引用 + 推荐顺序。单元测试。
+- `src/components/PlaybackPanel.tsx`：播放控件 + 步骤列表，受控传给 Workbench。
+- `Workbench`：playback state（currentStep, playing, speed）；通过 prop 把 `visibleBoxes`（前 N 个）传给 ContainerScene；ContainerScene 依据 visibleBoxes 增量同步（复用现有 mesh diff）。
+- 「导出作业 Excel」按钮：基于 sequence 写入 sheet（顺序 / 标签 / 坐标 / 旋转 / 支撑来源），复用 exportPlan 工具。
+- E2E：跑装载 → 打开回放 → 点下一步 → 断言 3D 内只可见前 N 个箱（pixel 或 dataset）；导出 Excel 校验顺序列。
+
+### 阶段 D：本地 + 远程验证 + 部署
+
+- 本地 lint/test/build/E2E 全绿。
+- 远程部署，远程 E2E 全绿。
+- decision.md 记录：锁定视角语义统一、grid snap 步长 50mm 选定理由、回放仅 auto 模式限制。
+
+## 执行约束
+
+- 本轮代码改动集中在 `ContainerScene`、`Workbench`、新增 `PlaybackPanel` 与 `playback.ts`；其它模块不动。
+- Ghost / hover / playback 都要走「读取 PackingResult，不重新计算」原则。
+- 不弱化测试；旧用例如果因为手动模式 free view 按钮移除失败，必须重写断言匹配新交互。
+- 任何对 mouseButtons 行为的判断要由 `data-interaction-mode` 暴露，便于 E2E。

@@ -2,6 +2,20 @@
 
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
+## 2026-05-23 第十三轮：视角语义统一 / 建造游戏化 / 作业回放
+
+- 背景：第十二轮上线后，用户发现「自由视角」按钮与拖拽行为互斥；3D 编辑器缺少现代建造工具的实时反馈；自动排布结果缺少面向装卸工的「按顺序操作」入口。
+- 决策：
+  - **视角语义**：移除「自由视角」按钮所代表的互斥模式。统一为「锁定视角 / 解锁视角」toggle。自动模式默认锁定（相机不动），解锁后才能旋转；手动模式默认解锁（右键旋转 + 左键拖箱），锁定后用于精细调整。`data-interaction-mode` 取值：`locked` / `free` / `manual` / `manual-locked`。
+  - **网格吸附步长**：50 mm。50 是常见栈板和木箱单位的最大公约数；500 mm 太粗、10 mm 太细。Toggle 默认开启；以后若有客户需要可配置。
+  - **物理支撑阈值**：沿用上一轮 50% 投影重叠规则；ghost / drop / 键盘移动统一受控。
+  - **作业回放仅自动模式可用**：手动 ManualDraft 没有可比的 workSteps（用户自定义顺序），强行支持会引入歧义。手动模式下回放面板提示 `playback-panel-empty`。
+  - **回放导出**：本轮先导出 Excel `loading-instructions.xlsx`，PDF 留到下一轮。
+- 影响：
+  - 旧 E2E 中 `Free view` / `manual-free` 断言全部失效；改写为 `toggle-view-lock` + `manual-locked` 断言。
+  - `freeViewEnabled` 状态被 `viewLocked` 取代，`enableFreeView/selectSceneView` 取消互斥逻辑。
+- 后续：相机切换 lerp、复制粘贴、多选、播放时高亮当前 step 对应 box（已基本实现，未来可加入相机自动 follow）等下一轮再做。
+
 ## 记录格式
 
 ```md

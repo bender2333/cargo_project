@@ -6,6 +6,9 @@ import type { SceneViewMode } from './components/ContainerScene'
 import { ContainerPlan2D } from './components/ContainerPlan2D'
 import type { PlanViewMode } from './components/ContainerPlan2D'
 import { ManualPlacement2D } from './components/ManualPlacement2D'
+import { PlaybackPanel } from './components/PlaybackPanel'
+import type { PlaybackSpeed } from './components/PlaybackPanel'
+import { buildPlaybackSequence, visibleBoxesAt } from './lib/playback'
 import {
   addBox as manualAddBox,
   buildPool as manualBuildPool,
@@ -132,6 +135,15 @@ const copy = {
     view3d: '3D',
     isoView: 'Iso',
     freeView: 'Free view',
+    playbackTab: 'Playback',
+    playbackResetNotice: 'Playback restarted because the plan changed.',
+    lockView: 'Lock view',
+    unlockView: 'Unlock view',
+    gridSnap: '50mm snap',
+    gridSnapOff: 'Free move',
+    hoverTooltipLabel: 'Label',
+    hoverTooltipSize: 'Size',
+    hoverTooltipPosition: 'Position',
     topView: 'Top',
     frontView: 'Front',
     sideView: 'Side',
@@ -198,6 +210,8 @@ const copy = {
       'R: rotate, Delete: remove, Esc: clear selection',
     ],
     manualFreeViewNotice: 'Free view is read-only in manual mode. Switch it off to move cargo.',
+    viewLockedNotice: 'View is locked. Unlock to rotate the camera.',
+    viewLockedManualHint: 'View is locked for precise placement. Unlock to rotate the camera with right mouse button.',
     containerChangedNotice: 'Container changed. Recalculate to refresh the automatic placement.',
     manualIssueBoundary: 'exceeds the effective container bounds',
     manualIssueOverlap: 'overlaps another cargo box',
@@ -296,6 +310,15 @@ const copy = {
     view3d: '3D',
     isoView: '轴测',
     freeView: '自由视角',
+    playbackTab: '作业回放',
+    playbackResetNotice: '方案变更，作业回放已重置。',
+    lockView: '锁定视角',
+    unlockView: '解锁视角',
+    gridSnap: '50mm 网格',
+    gridSnapOff: '自由移动',
+    hoverTooltipLabel: '标签',
+    hoverTooltipSize: '尺寸',
+    hoverTooltipPosition: '位置',
     topView: '俯视',
     frontView: '正视',
     sideView: '侧视',
@@ -362,6 +385,8 @@ const copy = {
       'R：旋转，Delete：删除，Esc：取消选中',
     ],
     manualFreeViewNotice: '手动模式下自由视角为只读浏览，关闭后才能移动货物。',
+    viewLockedNotice: '视角已锁定，解锁后可旋转相机。',
+    viewLockedManualHint: '视角已锁定方便精细放置；解锁后右键可旋转相机。',
     containerChangedNotice: '已更换货柜，请重新计算以刷新自动排布。',
     manualIssueBoundary: '超出有效货柜边界',
     manualIssueOverlap: '与其他货物发生碰撞',
@@ -403,7 +428,7 @@ const customContainerDefaults = {
 
 type CargoForm = Omit<CargoItem, 'id'>
 type WorkspaceView = '3d' | '2d'
-type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog'
+type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback'
 type NavTarget = 'overview' | 'report' | 'cargo' | 'container' | 'history'
 
 const emptyForm: CargoForm = {
@@ -611,7 +636,12 @@ function Workbench() {
   const [activeLabelId, setActiveLabelId] = useState('all')
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
   const [sceneViewMode, setSceneViewMode] = useState<SceneViewMode>('iso')
-  const [freeViewEnabled, setFreeViewEnabled] = useState(false)
+  const [viewLocked, setViewLocked] = useState(true) // auto mode default locked; toggled per placement mode in effect
+  const [gridSnap, setGridSnap] = useState(true)
+  const [hoverInfo, setHoverInfo] = useState<{ id: string; label: string; length: number; width: number; height: number; x: number; y: number; z: number; clientX: number; clientY: number } | null>(null)
+  const [playbackCursor, setPlaybackCursor] = useState(0)
+  const [playbackPlaying, setPlaybackPlaying] = useState(false)
+  const [playbackSpeed, setPlaybackSpeed] = useState<'slow' | 'normal' | 'fast'>('normal')
   const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
   const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
   const [placementMode, setPlacementMode] = useState<'auto' | 'manual'>('auto')
@@ -921,7 +951,13 @@ function Workbench() {
     setManualHistory((current) => manualCommit(current, nextDraft))
     setManualSelectedId(null)
     setPlacementMode('manual')
+    setViewLocked(false)
   }
+
+  useEffect(() => {
+    setViewLocked(placementMode === 'auto')
+    setHoverInfo(null)
+  }, [placementMode])
 
   useEffect(() => {
     if (placementMode !== 'manual') return
@@ -962,6 +998,33 @@ function Workbench() {
   }, [placementMode])
 
   const activeLayer = result.layers.find((layer) => layer.id === activeLayerId)
+  const playbackSequence = useMemo(() => buildPlaybackSequence(hasCalculated ? result : null), [result, hasCalculated])
+  const playbackAvailable = placementMode === 'auto' && hasCalculated && playbackSequence.total > 0
+  const playbackActive = playbackAvailable && activeResultTab === 'playback'
+  const visibleAutoBoxes = playbackActive
+    ? visibleBoxesAt(playbackSequence, playbackCursor)
+    : hasCalculated
+      ? result.placed
+      : []
+
+  useEffect(() => {
+    setPlaybackCursor(0)
+    setPlaybackPlaying(false)
+  }, [playbackSequence.total])
+
+  useEffect(() => {
+    if (!playbackPlaying) return
+    if (playbackCursor >= playbackSequence.total) {
+      setPlaybackPlaying(false)
+      return
+    }
+    const intervalMs = playbackSpeed === 'slow' ? 1200 : playbackSpeed === 'fast' ? 250 : 600
+    const handle = window.setTimeout(() => {
+      setPlaybackCursor((c) => Math.min(c + 1, playbackSequence.total))
+    }, intervalMs)
+    return () => window.clearTimeout(handle)
+  }, [playbackPlaying, playbackCursor, playbackSequence.total, playbackSpeed])
+
   const visibleBoxes = hasCalculated
     ? result.placed.filter((box) => (activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId) && (activeLabelId === 'all' || box.label === activeLabelId))
     : []
@@ -1185,6 +1248,38 @@ function Workbench() {
     XLSX.utils.book_append_sheet(workbook, sheet, 'Packing Plan')
     const prefix = filenameSlug(shipmentName)
     XLSX.writeFile(workbook, `${prefix ? `${prefix}-` : ''}packing-plan.xlsx`)
+  }
+
+  const exportPlaybackInstructions = () => {
+    if (!playbackAvailable) return
+    const rows = playbackSequence.steps.map((entry) => {
+      const supportLabel = entry.box.supportType === 'floor'
+        ? (locale === 'zh' ? '地面' : 'floor')
+        : entry.box.supportType === 'fully-supported'
+          ? (locale === 'zh' ? '完全支撑' : 'fully supported')
+          : (locale === 'zh' ? '部分支撑' : 'partial support')
+      return {
+        step: entry.step,
+        boxId: entry.box.id,
+        label: entry.box.label,
+        cargoName: entry.box.name,
+        x: Math.round(entry.box.x),
+        y: Math.round(entry.box.y),
+        z: Math.round(entry.box.z),
+        length: entry.box.length,
+        width: entry.box.width,
+        height: entry.box.height,
+        orientation: entry.box.orientationKey,
+        physicalLayer: entry.box.physicalLayer,
+        supportType: supportLabel,
+        supportedBy: entry.box.supportedBy.join(','),
+      }
+    })
+    const sheet = XLSX.utils.json_to_sheet(rows)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Loading Steps')
+    const prefix = filenameSlug(shipmentName)
+    XLSX.writeFile(workbook, `${prefix ? `${prefix}-` : ''}loading-instructions.xlsx`)
   }
 
   const exportCurrentView = () => {
@@ -1415,12 +1510,11 @@ function Workbench() {
 
   const selectSceneView = (view: SceneViewMode) => {
     setSceneViewMode(view)
-    setFreeViewEnabled(false)
   }
 
-  const enableFreeView = () => {
+  const toggleViewLock = () => {
+    setViewLocked((current) => !current)
     setWorkspaceView('3d')
-    setFreeViewEnabled(true)
   }
 
   const navTargets: NavTarget[] = ['overview', 'history']
@@ -1857,18 +1951,38 @@ function Workbench() {
                   { id: 'front' as const, label: t.frontView },
                   { id: 'side' as const, label: t.sideView },
                 ].map((view) => (
-                  <button className={`archive-tab ${sceneViewMode === view.id && !freeViewEnabled ? 'active' : ''}`} key={view.id} type="button" onClick={() => selectSceneView(view.id)}>
+                  <button className={`archive-tab ${sceneViewMode === view.id ? 'active' : ''}`} key={view.id} type="button" onClick={() => selectSceneView(view.id)}>
                     {view.label}
                   </button>
                 ))}
-                <button className={`archive-tab inline-flex items-center gap-2 ${freeViewEnabled ? 'active' : ''}`} type="button" aria-pressed={freeViewEnabled} aria-label={t.freeView} onClick={enableFreeView}>
+                <button
+                  className={`archive-tab inline-flex items-center gap-2 ${viewLocked ? 'active' : ''}`}
+                  type="button"
+                  aria-pressed={viewLocked}
+                  aria-label={viewLocked ? t.unlockView : t.lockView}
+                  data-testid="toggle-view-lock"
+                  onClick={toggleViewLock}
+                >
                   <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
-                    <path d="M8 11V6a2 2 0 0 1 4 0v5" />
-                    <path d="M12 11V5a2 2 0 0 1 4 0v7" />
-                    <path d="M16 12V8a2 2 0 0 1 4 0v7a7 7 0 0 1-7 7h-1.5a7 7 0 0 1-5.6-2.8L3.2 15.6a2 2 0 0 1 3.1-2.5L8 15" />
-                    <path d="M8 11V8a2 2 0 0 0-4 0v6" />
+                    <rect x="4" y="11" width="16" height="9" rx="2" />
+                    {viewLocked ? <path d="M8 11V8a4 4 0 0 1 8 0v3" /> : <path d="M8 11V8a4 4 0 0 1 7.7-1.4" />}
                   </svg>
-                  {t.freeView}
+                  {viewLocked ? t.lockView : t.unlockView}
+                </button>
+                <button
+                  className={`archive-tab inline-flex items-center gap-2 ${gridSnap ? 'active' : ''}`}
+                  type="button"
+                  aria-pressed={gridSnap}
+                  data-testid="toggle-grid-snap"
+                  onClick={() => setGridSnap((s) => !s)}
+                >
+                  <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
+                    <rect x="3" y="3" width="7" height="7" />
+                    <rect x="14" y="3" width="7" height="7" />
+                    <rect x="3" y="14" width="7" height="7" />
+                    <rect x="14" y="14" width="7" height="7" />
+                  </svg>
+                  {gridSnap ? t.gridSnap : t.gridSnapOff}
                 </button>
               </>
             )}
@@ -1956,9 +2070,9 @@ function Workbench() {
                     </div>
                     <span className="ml-auto text-xs text-[#475569]">{t.manualHint}</span>
                   </div>
-                  {freeViewEnabled && (
-                    <div className="rounded-xl border border-[#bfdbfe] bg-[#eff6ff] p-3 text-xs font-semibold text-[#1d4ed8]" data-testid="manual-free-view-notice">
-                      {t.manualFreeViewNotice}
+                  {viewLocked && (
+                    <div className="rounded-xl border border-[#bfdbfe] bg-[#eff6ff] p-3 text-xs font-semibold text-[#1d4ed8]" data-testid="manual-view-locked-notice">
+                      {t.viewLockedManualHint}
                     </div>
                   )}
                   {manualIssues.length > 0 && (
@@ -2013,13 +2127,15 @@ function Workbench() {
                           activeLayerId={'all'}
                           boxes={manualPlacedBoxes}
                           container={renderingContainer}
-                          freeView={freeViewEnabled}
+                          gridSnap={gridSnap}
                           invalidBoxIds={manualInvalidBoxIds}
                           manualEditable
                           selectedBoxId={manualSelectedId}
                           selectedManualBoxId={manualSelectedId}
+                          viewLocked={viewLocked}
                           viewMode={sceneViewMode}
                           onClearSelection={() => setManualSelectedId(null)}
+                          onHoverBox={setHoverInfo}
                           onManualDelete={handleManualDeleteBox}
                           onManualDropFromPool={handleManualDropFromPool}
                           onManualMove={handleManualMoveBox}
@@ -2048,7 +2164,7 @@ function Workbench() {
                       {containerChangeNotice}
                     </div>
                   )}
-                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={hasCalculated ? result.placed : []} container={renderingContainer} freeView={freeViewEnabled} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onSelectBox={setSelectedBoxId} />
+                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} container={renderingContainer} gridSnap={gridSnap} selectedBoxId={selectedBoxId} viewLocked={viewLocked} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
                 </>
               ) : (
                 <>
@@ -2057,7 +2173,7 @@ function Workbench() {
                       {containerChangeNotice}
                     </div>
                   )}
-                  <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={hasCalculated ? result.placed : []} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
+                  <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={playbackActive ? visibleAutoBoxes : (hasCalculated ? result.placed : [])} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
                 </>
               )}
               <button
@@ -2070,6 +2186,17 @@ function Workbench() {
               >
                 {t.load}
               </button>
+              {hoverInfo && (
+                <div
+                  className="pointer-events-none fixed z-50 rounded-lg border border-[#1e293b] bg-[#0f172a] px-3 py-2 text-xs text-white shadow-xl"
+                  style={{ left: hoverInfo.clientX + 12, top: hoverInfo.clientY + 12 }}
+                  data-testid="hover-tooltip"
+                >
+                  <div className="font-bold">{t.hoverTooltipLabel}: {hoverInfo.label}</div>
+                  <div>{t.hoverTooltipSize}: {hoverInfo.length} × {hoverInfo.width} × {hoverInfo.height} mm</div>
+                  <div>{t.hoverTooltipPosition}: ({Math.round(hoverInfo.x)}, {Math.round(hoverInfo.y)}, {Math.round(hoverInfo.z)})</div>
+                </div>
+              )}
             </div>
           </section>
 
@@ -2089,6 +2216,7 @@ function Workbench() {
                 { id: 'details' as const, label: t.details },
                 { id: 'diagnostics' as const, label: t.diagnostics },
                 { id: 'importLog' as const, label: t.importLog },
+                { id: 'playback' as const, label: t.playbackTab },
               ].map((tab) => (
                 <button className={`archive-tab ${activeResultTab === tab.id ? 'active' : ''}`} key={tab.id} type="button" onClick={() => setActiveResultTab(tab.id)}>
                   {tab.label}
@@ -2218,6 +2346,34 @@ function Workbench() {
                 ) : (
                   importMessages.map((message) => <p className="border border-[#c6c6c6] bg-white p-2" key={message}>{message}</p>)
                 )}
+              </div>
+            )}
+
+            {activeResultTab === 'playback' && (
+              <div className="mt-3" data-testid="playback-tab-panel">
+                <PlaybackPanel
+                  available={playbackAvailable}
+                  cursor={playbackCursor}
+                  locale={locale}
+                  playing={playbackPlaying}
+                  sequence={playbackSequence}
+                  speed={playbackSpeed}
+                  onCursorChange={(next) => {
+                    setPlaybackCursor(Math.max(0, Math.min(next, playbackSequence.total)))
+                    setPlaybackPlaying(false)
+                  }}
+                  onFinish={() => {
+                    setPlaybackCursor(playbackSequence.total)
+                    setPlaybackPlaying(false)
+                  }}
+                  onReset={() => {
+                    setPlaybackCursor(0)
+                    setPlaybackPlaying(false)
+                  }}
+                  onSpeedChange={(next: PlaybackSpeed) => setPlaybackSpeed(next)}
+                  onTogglePlay={() => setPlaybackPlaying((p) => !p)}
+                  onExport={exportPlaybackInstructions}
+                />
               </div>
             )}
           </div>

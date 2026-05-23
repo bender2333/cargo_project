@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-05-23 (Thirteenth Review Completion)
+
+- Completed subtask: deliver thirteenth review — unified view-lock toggle, building-game polish (ghost / grid snap / hover tooltip), and loading playback PM feature.
+  - **View lock unification (A)**: `ContainerScene` `freeView` prop replaced by `viewLocked`. Auto mode defaults to `viewLocked=true` (camera frozen); manual mode defaults to `viewLocked=false` (right mouse rotates camera, left mouse drags boxes). Switching placement mode resets the toggle. The single `toggle-view-lock` button now controls both flows; `manual-locked` is the new `data-interaction-mode` for "locked while editing manually".
+  - **Building-game feel (B)**:
+    - Ghost preview: a translucent outline follows the drag target during XY/Z drag, colour switches between green (legal) and red (overlap / floating / out-of-bounds).
+    - Grid snap: 50 mm toggle (`toggle-grid-snap`), default on; off uses free pixel movement. Snap covers XY drag, Z drag, and drop-from-pool.
+    - Hover highlight + tooltip: pointer hover on a placed box draws an amber outline and surfaces label / size / position in a fixed-positioned tooltip near the cursor.
+  - **Loading playback (C, PM feature)**: new `Playback` result tab + `PlaybackPanel`. Walks the `workSteps` order step by step in 3D, supports play/pause, prev/next, finish, reset, slider scrub, three speeds (slow/normal/fast), and an Excel `loading-instructions.xlsx` export with sequence number, label, mm-rounded coordinates, orientation, layer, and support type. Available in automatic mode only.
+  - Helpers extracted: `src/lib/snap.ts` (`snapToGrid`, `GRID_SNAP_MM`), `src/lib/playback.ts` (`buildPlaybackSequence`, `visibleBoxesAt`, `currentBoxAt`). Both fully unit-tested.
+  - i18n additions: `lockView` / `unlockView`, `gridSnap` / `gridSnapOff`, `hoverTooltip*`, `playbackTab`, `viewLockedManualHint`.
+  - Verification: `npm run lint` passed; `npm test` passed 73 tests; `npm run build` passed with the existing Vite chunk-size warning; local `npm run test:e2e` passed 50 tests / 1 skipped / 0 failed (new specs: view-lock toggle, grid snap toggle, playback step-by-step, playback unavailable in manual mode).
+  - Deployment: `DEPLOY_SKIP_BUILD=1 npm run deploy` ran; remote health check passed; remote `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ npm run test:e2e` passed 50 tests / 1 skipped / 0 failed.
+
 ## 2026-05-23
 
 - Completed subtask: implement twelfth review local changes (A-F).

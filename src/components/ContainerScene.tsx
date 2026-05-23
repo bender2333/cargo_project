@@ -3,8 +3,22 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { ContainerSpec, PlacedBox } from '../types'
 import { MIN_SUPPORT_OVERLAP_RATIO } from '../lib/manualPlacement'
+import { snapToGrid } from '../lib/snap'
 
 export type SceneViewMode = 'iso' | 'top' | 'front' | 'side'
+
+export type HoverBoxInfo = {
+  id: string
+  label: string
+  length: number
+  width: number
+  height: number
+  x: number
+  y: number
+  z: number
+  clientX: number
+  clientY: number
+}
 
 type ContainerSceneProps = {
   container: ContainerSpec
@@ -12,7 +26,8 @@ type ContainerSceneProps = {
   activeLayerId: string
   activeLabelId: string
   viewMode: SceneViewMode
-  freeView?: boolean
+  viewLocked?: boolean
+  gridSnap?: boolean
   selectedBoxId?: string | null
   onSelectBox?: (boxId: string) => void
   invalidBoxIds?: Set<string>
@@ -23,6 +38,7 @@ type ContainerSceneProps = {
   onManualDelete?: (boxId: string) => void
   selectedManualBoxId?: string | null
   onClearSelection?: () => void
+  onHoverBox?: (info: HoverBoxInfo | null) => void
 }
 
 type MeshEntry = {
@@ -40,6 +56,9 @@ type SceneState = {
   boxByUuid: Map<string, string>
   meshEntries: Map<string, MeshEntry>
   invalidOverride: Set<string>
+  hoverHighlight: THREE.LineSegments | null
+  hoverBoxId: string | null
+  ghost: { mesh: THREE.Mesh; edges: THREE.LineSegments } | null
   scale: number
   length: number
   width: number
@@ -220,13 +239,101 @@ function overlapAreaXY(
   return xOverlap * yOverlap
 }
 
+const GHOST_VALID_COLOR = 0x22c55e
+const GHOST_INVALID_COLOR = 0xef4444
+const HOVER_HIGHLIGHT_COLOR = 0xf59e0b
+
+function ensureGhost(state: SceneState, box: PlacedBox, scale: number, length: number, width: number) {
+  if (!state.ghost) {
+    const geometry = new THREE.BoxGeometry(box.length * scale, box.height * scale, box.width * scale)
+    const material = new THREE.MeshBasicMaterial({
+      color: GHOST_VALID_COLOR,
+      transparent: true,
+      opacity: 0.18,
+      depthWrite: false,
+    })
+    const mesh = new THREE.Mesh(geometry, material)
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(geometry),
+      new THREE.LineBasicMaterial({ color: GHOST_VALID_COLOR }),
+    )
+    state.scene.add(mesh)
+    state.scene.add(edges)
+    state.ghost = { mesh, edges }
+  } else {
+    const sameSize = state.ghost.mesh.geometry instanceof THREE.BoxGeometry
+      && (state.ghost.mesh.geometry as THREE.BoxGeometry).parameters.width === box.length * scale
+      && (state.ghost.mesh.geometry as THREE.BoxGeometry).parameters.depth === box.width * scale
+      && (state.ghost.mesh.geometry as THREE.BoxGeometry).parameters.height === box.height * scale
+    if (!sameSize) {
+      state.ghost.mesh.geometry.dispose()
+      state.ghost.edges.geometry.dispose()
+      const geometry = new THREE.BoxGeometry(box.length * scale, box.height * scale, box.width * scale)
+      state.ghost.mesh.geometry = geometry
+      state.ghost.edges.geometry = new THREE.EdgesGeometry(geometry)
+    }
+    state.ghost.mesh.visible = true
+    state.ghost.edges.visible = true
+  }
+  void length
+  void width
+}
+
+function positionGhost(state: SceneState, x: number, y: number, z: number, box: PlacedBox, invalid: boolean, scale: number, length: number, width: number) {
+  if (!state.ghost) return
+  const worldX = -length / 2 + (x + box.length / 2) * scale
+  const worldY = (z + box.height / 2) * scale
+  const worldZ = -width / 2 + (y + box.width / 2) * scale
+  state.ghost.mesh.position.set(worldX, worldY, worldZ)
+  state.ghost.edges.position.set(worldX, worldY, worldZ)
+  const color = invalid ? GHOST_INVALID_COLOR : GHOST_VALID_COLOR
+  ;(state.ghost.mesh.material as THREE.MeshBasicMaterial).color.setHex(color)
+  ;(state.ghost.edges.material as THREE.LineBasicMaterial).color.setHex(color)
+}
+
+function clearGhost(state: SceneState) {
+  if (!state.ghost) return
+  state.ghost.mesh.visible = false
+  state.ghost.edges.visible = false
+}
+
+function updateHoverHighlight(state: SceneState, boxId: string | null, scale: number, length: number, width: number) {
+  if (!boxId) {
+    if (state.hoverHighlight) {
+      state.hoverHighlight.visible = false
+    }
+    return
+  }
+  const entry = state.meshEntries.get(boxId)
+  if (!entry) return
+  const geometry = new THREE.EdgesGeometry(
+    new THREE.BoxGeometry(entry.box.length * scale, entry.box.height * scale, entry.box.width * scale),
+  )
+  if (!state.hoverHighlight) {
+    state.hoverHighlight = new THREE.LineSegments(
+      geometry,
+      new THREE.LineBasicMaterial({ color: HOVER_HIGHLIGHT_COLOR, linewidth: 2 }),
+    )
+    state.scene.add(state.hoverHighlight)
+  } else {
+    state.hoverHighlight.geometry.dispose()
+    state.hoverHighlight.geometry = geometry
+  }
+  const worldX = -length / 2 + (entry.box.x + entry.box.length / 2) * scale
+  const worldY = (entry.box.z + entry.box.height / 2) * scale
+  const worldZ = -width / 2 + (entry.box.y + entry.box.width / 2) * scale
+  state.hoverHighlight.position.set(worldX, worldY, worldZ)
+  state.hoverHighlight.visible = true
+}
+
 export function ContainerScene({
   container,
   boxes,
   activeLayerId,
   activeLabelId,
   viewMode,
-  freeView,
+  viewLocked,
+  gridSnap,
   selectedBoxId,
   onSelectBox,
   invalidBoxIds,
@@ -237,18 +344,21 @@ export function ContainerScene({
   onManualDelete,
   selectedManualBoxId,
   onClearSelection,
+  onHoverBox,
 }: ContainerSceneProps) {
   const mountRef = useRef<HTMLDivElement | null>(null)
   const sceneStateRef = useRef<SceneState | null>(null)
   const invalidBoxIdsRef = useRef<Set<string>>(invalidBoxIds ?? new Set())
   const manualEditableRef = useRef<boolean>(manualEditable ?? false)
-  const freeViewRef = useRef<boolean>(freeView ?? false)
+  const viewLockedRef = useRef<boolean>(viewLocked ?? false)
+  const gridSnapRef = useRef<boolean>(gridSnap ?? true)
   const onManualMoveRef = useRef<typeof onManualMove>(onManualMove)
   const onManualDropFromPoolRef = useRef<typeof onManualDropFromPool>(onManualDropFromPool)
   const onManualRotateRef = useRef<typeof onManualRotate>(onManualRotate)
   const onManualDeleteRef = useRef<typeof onManualDelete>(onManualDelete)
   const onSelectBoxRef = useRef<typeof onSelectBox>(onSelectBox)
   const onClearSelectionRef = useRef<typeof onClearSelection>(onClearSelection)
+  const onHoverBoxRef = useRef<typeof onHoverBox>(onHoverBox)
   const selectedManualBoxIdRef = useRef<string | null>(selectedManualBoxId ?? null)
   const visualPropsRef = useRef({ activeLayerId, activeLabelId, selectedBoxId })
 
@@ -261,8 +371,12 @@ export function ContainerScene({
   }, [manualEditable])
 
   useEffect(() => {
-    freeViewRef.current = freeView ?? false
-  }, [freeView])
+    viewLockedRef.current = viewLocked ?? false
+  }, [viewLocked])
+
+  useEffect(() => {
+    gridSnapRef.current = gridSnap ?? true
+  }, [gridSnap])
 
   useEffect(() => {
     onManualMoveRef.current = onManualMove
@@ -283,6 +397,10 @@ export function ContainerScene({
   useEffect(() => {
     onClearSelectionRef.current = onClearSelection
   }, [onClearSelection])
+
+  useEffect(() => {
+    onHoverBoxRef.current = onHoverBox
+  }, [onHoverBox])
 
   useEffect(() => {
     selectedManualBoxIdRef.current = selectedManualBoxId ?? null
@@ -368,6 +486,9 @@ export function ContainerScene({
       boxByUuid: new Map(),
       meshEntries: new Map(),
       invalidOverride: new Set(),
+      hoverHighlight: null,
+      hoverBoxId: null,
+      ghost: null,
       scale,
       length,
       width,
@@ -471,7 +592,7 @@ export function ContainerScene({
       if (boxId) {
         onSelectBoxRef.current?.(boxId)
       }
-      if (!manualEditableRef.current || freeViewRef.current || !boxId) return
+      if (!manualEditableRef.current || !boxId) return
       const entry = sceneState.meshEntries.get(boxId)
       if (!entry) return
       raycaster.ray.intersectPlane(groundPlane, intersectionPoint)
@@ -486,12 +607,61 @@ export function ContainerScene({
         zStartPx: event.clientY,
         zStartMm: entry.box.z,
       }
+      ensureGhost(sceneState, entry.box, scale, length, width)
       controls.enabled = false
       renderer.domElement.setPointerCapture?.(event.pointerId)
     }
 
     const onPointerMove = (event: PointerEvent) => {
-      if (!dragState) return
+      if (!dragState) {
+        // hover mode (no drag): update hover highlight + tooltip info
+        if (!sceneState.meshEntries.size) return
+        updatePointer(event)
+        raycaster.setFromCamera(pointer, camera)
+        const hit = raycaster.intersectObjects(sceneState.pickables, false)[0]
+        const hoveredId = hit ? sceneState.boxByUuid.get(hit.object.uuid) ?? null : null
+        if (hoveredId !== sceneState.hoverBoxId) {
+          sceneState.hoverBoxId = hoveredId
+          updateHoverHighlight(sceneState, hoveredId, scale, length, width)
+          if (hoveredId) {
+            const entry = sceneState.meshEntries.get(hoveredId)
+            if (entry) {
+              onHoverBoxRef.current?.({
+                id: entry.box.id,
+                label: entry.box.label,
+                length: entry.box.length,
+                width: entry.box.width,
+                height: entry.box.height,
+                x: entry.box.x,
+                y: entry.box.y,
+                z: entry.box.z,
+                clientX: event.clientX,
+                clientY: event.clientY,
+              })
+            }
+          } else {
+            onHoverBoxRef.current?.(null)
+          }
+        } else if (hoveredId) {
+          const entry = sceneState.meshEntries.get(hoveredId)
+          if (entry) {
+            onHoverBoxRef.current?.({
+              id: entry.box.id,
+              label: entry.box.label,
+              length: entry.box.length,
+              width: entry.box.width,
+              height: entry.box.height,
+              x: entry.box.x,
+              y: entry.box.y,
+              z: entry.box.z,
+              clientX: event.clientX,
+              clientY: event.clientY,
+            })
+          }
+        }
+        return
+      }
+      // dragging
       const { entry } = dragState
       let nextX = entry.box.x
       let nextY = entry.box.y
@@ -511,6 +681,15 @@ export function ContainerScene({
         nextY = containerMm.y - dragState.offsetYmm
       }
 
+      if (gridSnapRef.current) {
+        if (dragState.mode === 'plane') {
+          nextX = snapToGrid(nextX)
+          nextY = snapToGrid(nextY)
+        } else {
+          nextZ = snapToGrid(nextZ)
+        }
+      }
+
       const newWorldX = -length / 2 + (nextX + entry.box.length / 2) * scale
       const newWorldY = (nextZ + entry.box.height / 2) * scale
       const newWorldZ = -width / 2 + (nextY + entry.box.width / 2) * scale
@@ -524,17 +703,27 @@ export function ContainerScene({
         sceneState.invalidOverride.delete(entry.box.id)
       }
       refreshEntryVisual(entry)
+      positionGhost(sceneState, nextX, nextY, nextZ, entry.box, invalid, scale, length, width)
     }
 
     const onPointerUp = (event: PointerEvent) => {
       if (dragState) {
         const { entry, boxId, mode } = dragState
-        const finalXmm = (entry.mesh.position.x + length / 2) / scale - entry.box.length / 2
-        const finalYmm = (entry.mesh.position.z + width / 2) / scale - entry.box.width / 2
-        const finalZmm = entry.mesh.position.y / scale - entry.box.height / 2
+        let finalXmm = (entry.mesh.position.x + length / 2) / scale - entry.box.length / 2
+        let finalYmm = (entry.mesh.position.z + width / 2) / scale - entry.box.width / 2
+        let finalZmm = entry.mesh.position.y / scale - entry.box.height / 2
+        if (gridSnapRef.current) {
+          if (mode === 'plane') {
+            finalXmm = snapToGrid(finalXmm)
+            finalYmm = snapToGrid(finalYmm)
+          } else {
+            finalZmm = snapToGrid(finalZmm)
+          }
+        }
         const invalid = sceneState.invalidOverride.has(boxId) || computeDragInvalid(entry, finalXmm, finalYmm, finalZmm)
         sceneState.invalidOverride.delete(boxId)
         refreshEntryVisual(entry)
+        clearGhost(sceneState)
         if (!invalid) {
           if (mode === 'z') {
             onManualMoveRef.current?.(boxId, entry.box.x, entry.box.y, Math.max(0, finalZmm))
@@ -552,17 +741,12 @@ export function ContainerScene({
         renderer.domElement.releasePointerCapture?.(event.pointerId)
         dragState = null
       }
-      if (freeViewRef.current) {
-        controls.enabled = true
-      } else if (manualEditableRef.current) {
-        controls.enabled = true
-      } else {
-        controls.enabled = freeViewRef.current
-      }
+      // restore controls based on viewLocked, not on manualEditable + freeView
+      controls.enabled = !viewLockedRef.current
     }
 
     const onDragOver = (event: DragEvent) => {
-      if (!manualEditableRef.current || freeViewRef.current) return
+      if (!manualEditableRef.current) return
       event.preventDefault()
       if (event.dataTransfer) {
         event.dataTransfer.dropEffect = 'copy'
@@ -570,7 +754,7 @@ export function ContainerScene({
     }
 
     const onDrop = (event: DragEvent) => {
-      if (!manualEditableRef.current || freeViewRef.current) return
+      if (!manualEditableRef.current) return
       event.preventDefault()
       const cargoId = event.dataTransfer?.getData('application/x-cargo-id') ?? event.dataTransfer?.getData('text/plain')
       if (!cargoId) return
@@ -578,12 +762,13 @@ export function ContainerScene({
       raycaster.setFromCamera(pointer, camera)
       if (!raycaster.ray.intersectPlane(groundPlane, intersectionPoint)) return
       const containerMm = worldToContainerMm(intersectionPoint.x, intersectionPoint.z)
-      onManualDropFromPoolRef.current?.(cargoId, containerMm.x, containerMm.y)
+      const x = gridSnapRef.current ? snapToGrid(containerMm.x) : containerMm.x
+      const y = gridSnapRef.current ? snapToGrid(containerMm.y) : containerMm.y
+      onManualDropFromPoolRef.current?.(cargoId, x, y)
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (!manualEditableRef.current) return
-      if (freeViewRef.current) return
       const target = event.target as HTMLElement | null
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
       const boxId = selectedManualBoxIdRef.current
@@ -650,6 +835,21 @@ export function ContainerScene({
       cancelAnimationFrame(frame)
       observer.disconnect()
       controls.dispose()
+      if (sceneState.ghost) {
+        sceneState.ghost.mesh.geometry.dispose()
+        sceneState.ghost.edges.geometry.dispose()
+        ;(sceneState.ghost.mesh.material as THREE.Material).dispose()
+        ;(sceneState.ghost.edges.material as THREE.Material).dispose()
+        scene.remove(sceneState.ghost.mesh)
+        scene.remove(sceneState.ghost.edges)
+        sceneState.ghost = null
+      }
+      if (sceneState.hoverHighlight) {
+        sceneState.hoverHighlight.geometry.dispose()
+        ;(sceneState.hoverHighlight.material as THREE.Material).dispose()
+        scene.remove(sceneState.hoverHighlight)
+        sceneState.hoverHighlight = null
+      }
       sceneState.meshEntries.forEach((entry) => {
         entry.mesh.geometry.dispose()
         entry.edges.geometry.dispose()
@@ -774,13 +974,8 @@ export function ContainerScene({
   useEffect(() => {
     const state = sceneStateRef.current
     if (!state) return
-    if (freeView) {
-      state.controls.enabled = true
-      state.controls.mouseButtons = {
-        LEFT: THREE.MOUSE.ROTATE,
-        MIDDLE: THREE.MOUSE.DOLLY,
-        RIGHT: THREE.MOUSE.PAN,
-      }
+    if (viewLocked) {
+      state.controls.enabled = false
     } else if (manualEditable) {
       state.controls.enabled = true
       state.controls.mouseButtons = {
@@ -789,9 +984,14 @@ export function ContainerScene({
         RIGHT: THREE.MOUSE.ROTATE,
       }
     } else {
-      state.controls.enabled = false
+      state.controls.enabled = true
+      state.controls.mouseButtons = {
+        LEFT: THREE.MOUSE.ROTATE,
+        MIDDLE: THREE.MOUSE.DOLLY,
+        RIGHT: THREE.MOUSE.PAN,
+      }
     }
-  }, [manualEditable, freeView])
+  }, [manualEditable, viewLocked])
 
   useEffect(() => {
     const state = sceneStateRef.current
@@ -803,8 +1003,10 @@ export function ContainerScene({
     })
   }, [activeLayerId, activeLabelId, selectedBoxId, invalidBoxIds])
 
-  const controlsEnabled = !!(manualEditable || freeView)
-  const interactionMode = manualEditable && freeView ? 'manual-free' : manualEditable ? 'manual' : freeView ? 'free' : 'locked'
+  const controlsEnabled = !viewLocked
+  const interactionMode = viewLocked
+    ? (manualEditable ? 'manual-locked' : 'locked')
+    : (manualEditable ? 'manual' : 'free')
 
   return (
     <div
@@ -813,6 +1015,7 @@ export function ContainerScene({
       data-testid="container-scene"
       data-controls-enabled={controlsEnabled ? 'true' : 'false'}
       data-interaction-mode={interactionMode}
+      data-grid-snap={gridSnap === false ? 'off' : 'on'}
       data-box-count={boxes.length}
     />
   )
