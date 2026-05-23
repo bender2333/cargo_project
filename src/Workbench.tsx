@@ -14,10 +14,16 @@ import { usePlaybackController } from './hooks/usePlaybackController'
 import type { PlaybackSpeed } from './hooks/usePlaybackController'
 import { computeCenterOfGravity } from './lib/centerOfGravity'
 import { compareContainers } from './lib/containerCompare'
+import { computeRemainingCapacity } from './lib/remainingCapacity'
+import { suggestFillItems } from './lib/fillSuggestion'
+import { buildStandardCargoItem, STANDARD_BOXES } from './data/standardBoxes'
+import { FillSuggestionPanel } from './components/FillSuggestionPanel'
+import { buildCogOverlay } from './lib/cogVisual'
 import {
   addBox as manualAddBox,
   buildPool as manualBuildPool,
   commit as manualCommit,
+  dryRunRotation as manualDryRunRotation,
   emptyHistory as manualEmptyHistory,
   makeManualBox,
   redo as manualRedo,
@@ -145,6 +151,7 @@ const copy = {
     playbackTab: 'Playback',
     cogTab: 'Balance',
     compareTab: 'Compare',
+    fillTab: 'Fill',
     playbackResetNotice: 'Playback restarted because the plan changed.',
     gridSnap: '50mm snap',
     gridSnapOff: 'Free move',
@@ -201,6 +208,11 @@ const copy = {
     placementPool: 'Placement pool',
     poolRemaining: 'Remaining',
     manualIssues: 'Validation issues',
+    dismissNotice: 'Dismiss',
+    remainingVolumeLabel: 'Volume used',
+    remainingWeightLabel: 'Weight used',
+    remainingFloorLabel: 'Floor used',
+    remainingLabel: 'left',
     manualNoIssues: 'No validation issues',
     manualRotate: 'Rotate 90°',
     manualDelete: 'Delete',
@@ -320,6 +332,7 @@ const copy = {
     playbackTab: '作业回放',
     cogTab: '装载重心',
     compareTab: '柜型对比',
+    fillTab: '补装建议',
     playbackResetNotice: '方案变更，作业回放已重置。',
     gridSnap: '50mm 网格',
     gridSnapOff: '自由移动',
@@ -376,6 +389,11 @@ const copy = {
     placementPool: '待放置池',
     poolRemaining: '剩余',
     manualIssues: '校验问题',
+    dismissNotice: '关闭',
+    remainingVolumeLabel: '体积占用',
+    remainingWeightLabel: '重量占用',
+    remainingFloorLabel: '占地占用',
+    remainingLabel: '剩余',
     manualNoIssues: '当前无校验问题',
     manualRotate: '旋转 90°',
     manualDelete: '删除',
@@ -433,8 +451,48 @@ const customContainerDefaults = {
 
 type CargoForm = Omit<CargoItem, 'id'>
 type WorkspaceView = '3d' | '2d'
-type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback' | 'cog' | 'compare'
+type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback' | 'cog' | 'compare' | 'fill'
 type NavTarget = 'overview' | 'report' | 'cargo' | 'container' | 'history'
+
+function buildRotationNotice(
+  dry: ReturnType<typeof manualDryRunRotation>,
+  container: ContainerSpec,
+  locale: Locale,
+): string {
+  if (dry.ok || !dry.rotatedBox) return ''
+  const box = dry.rotatedBox
+  const overflowL = box.x + box.length - container.length
+  const overflowW = box.y + box.width - container.width
+  const boundary = dry.issues.find((i) => i.type === 'boundary')
+  if (boundary) {
+    if (overflowL > 0) {
+      return locale === 'zh'
+        ? `旋转后长度 ${box.length} mm 超出柜长 ${container.length} mm（差 ${Math.round(overflowL)} mm）`
+        : `Rotated length ${box.length} mm exceeds container length ${container.length} mm (over by ${Math.round(overflowL)} mm)`
+    }
+    if (overflowW > 0) {
+      return locale === 'zh'
+        ? `旋转后宽度 ${box.width} mm 超出柜宽 ${container.width} mm（差 ${Math.round(overflowW)} mm）`
+        : `Rotated width ${box.width} mm exceeds container width ${container.width} mm (over by ${Math.round(overflowW)} mm)`
+    }
+    return locale === 'zh'
+      ? '旋转后会超出货柜边界'
+      : 'Rotated footprint exceeds the container'
+  }
+  const overlap = dry.issues.find((i) => i.type === 'overlap')
+  if (overlap) {
+    return locale === 'zh'
+      ? '旋转后会与其它货物重叠，请先腾出位置'
+      : 'Rotated box would overlap another cargo box'
+  }
+  const floating = dry.issues.find((i) => i.type === 'floating')
+  if (floating) {
+    return locale === 'zh'
+      ? '旋转后底面支撑不足（需要 ≥50%）'
+      : 'Rotated box has insufficient base support (≥50% required)'
+  }
+  return locale === 'zh' ? '旋转后不满足校验，已撤销' : 'Rotation rejected by validation'
+}
 
 const emptyForm: CargoForm = {
   name: 'Carton B',
@@ -645,6 +703,7 @@ function Workbench() {
   const [hoverInfo, setHoverInfo] = useState<{ id: string; label: string; length: number; width: number; height: number; x: number; y: number; z: number; clientX: number; clientY: number } | null>(null)
   const [resetViewTick, setResetViewTick] = useState(0)
   const [compareSelection, setCompareSelection] = useState<string[]>(() => containers.slice(0, 3).map((c) => c.id))
+  const [showCogOverlay, setShowCogOverlay] = useState(false)
   const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
   const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
   const [placementMode, setPlacementMode] = useState<'auto' | 'manual'>('auto')
@@ -652,6 +711,7 @@ function Workbench() {
   const [manualSelectedId, setManualSelectedId] = useState<string | null>(null)
   const [manualHelpOpen, setManualHelpOpen] = useState(false)
   const [containerChangeNotice, setContainerChangeNotice] = useState('')
+  const [rotationNotice, setRotationNotice] = useState('')
   const previousContainerKeyRef = useRef<string | null>(null)
   const previousAutoPlacedCountRef = useRef(0)
   const suppressContainerChangeNoticeRef = useRef(false)
@@ -860,6 +920,10 @@ function Workbench() {
     () => manualToPlacedBoxes(manualDraft, manualInvalidBoxIds),
     [manualDraft, manualInvalidBoxIds],
   )
+  const manualCapacity = useMemo(
+    () => computeRemainingCapacity(manualPlacedBoxes, renderingContainer),
+    [manualPlacedBoxes, renderingContainer],
+  )
   const manualCanUndo = manualHistory.past.length > 0
   const manualCanRedo = manualHistory.future.length > 0
 
@@ -912,14 +976,24 @@ function Workbench() {
 
   const handleManualRotate = () => {
     if (!manualSelectedId) return
+    const dry = manualDryRunRotation(manualDraft, manualSelectedId, renderingContainer)
+    if (!dry.ok) {
+      setRotationNotice(buildRotationNotice(dry, renderingContainer, locale))
+      return
+    }
     const nextDraft = manualRotateBox(manualDraft, manualSelectedId)
-    if (manualValidateDraft(nextDraft, renderingContainer).length > 0) return
+    setRotationNotice('')
     commitManual(nextDraft)
   }
 
   const handleManualRotateBox = (boxId: string) => {
+    const dry = manualDryRunRotation(manualDraft, boxId, renderingContainer)
+    if (!dry.ok) {
+      setRotationNotice(buildRotationNotice(dry, renderingContainer, locale))
+      return
+    }
     const nextDraft = manualRotateBox(manualDraft, boxId)
-    if (manualValidateDraft(nextDraft, renderingContainer).length > 0) return
+    setRotationNotice('')
     commitManual(nextDraft)
   }
 
@@ -1013,6 +1087,10 @@ function Workbench() {
     : []
 
   const cogResult = useMemo(() => computeCenterOfGravity(visibleAutoBoxes.length > 0 ? visibleAutoBoxes : result.placed, selectedContainer), [result.placed, visibleAutoBoxes, selectedContainer])
+  const cogOverlay = useMemo(
+    () => (showCogOverlay && placementMode === 'auto' ? buildCogOverlay(cogResult, selectedContainer) : null),
+    [showCogOverlay, placementMode, cogResult, selectedContainer],
+  )
 
   const compareCandidates = useMemo(() => {
     const allCustom = customContainers.filter((c) => !!c)
@@ -1023,6 +1101,33 @@ function Workbench() {
     const chosen = compareCandidates.filter((c) => compareSelection.includes(c.id))
     return compareContainers(chosen, displayCargoItems, loadingMode)
   }, [compareSelection, compareCandidates, displayCargoItems, loadingMode])
+  const fillSuggestions = useMemo(
+    () => suggestFillItems(hasCalculated ? result : null, selectedContainer),
+    [hasCalculated, result, selectedContainer],
+  )
+
+  const handleAddFillCargo = (presetId: string, quantity: number) => {
+    if (quantity <= 0) return
+    const preset = STANDARD_BOXES.find((p) => p.id === presetId)
+    if (!preset) return
+    const item = buildStandardCargoItem(preset, quantity, () => createClientId())
+    setCargoItems((current) => [...current, item])
+    setHasCalculated(true)
+  }
+  const handleAddAllFillCargo = (rows: { preset: { id: string }; maxCount: number }[]) => {
+    let added = 0
+    const additions: CargoItem[] = []
+    for (const row of rows) {
+      if (row.maxCount <= 0) continue
+      const preset = STANDARD_BOXES.find((p) => p.id === row.preset.id)
+      if (!preset) continue
+      additions.push(buildStandardCargoItem(preset, row.maxCount, () => createClientId()))
+      added += 1
+    }
+    if (added === 0) return
+    setCargoItems((current) => [...current, ...additions])
+    setHasCalculated(true)
+  }
   const labelOptions = [...new Set(result.labelStats.map((item) => item.label))]
   const activeLayerIndex = result.layers.findIndex((layer) => layer.id === activeLayerId)
   const loadingModeLabels: Record<LoadingMode, string> = {
@@ -2080,6 +2185,40 @@ function Workbench() {
                   <div className="rounded-xl border border-[#bfdbfe] bg-[#eff6ff] p-3 text-xs font-semibold text-[#1d4ed8]" data-testid="manual-rotate-hint">
                     {t.manualRotateHint}
                   </div>
+                  {rotationNotice && (
+                    <div
+                      className="rounded-xl border border-[#fbbf24] bg-[#fffbeb] p-3 text-xs font-semibold text-[#92400e]"
+                      data-testid="rotation-notice"
+                    >
+                      <button
+                        className="float-right text-base font-bold leading-none"
+                        type="button"
+                        aria-label={t.dismissNotice}
+                        onClick={() => setRotationNotice('')}
+                      >×</button>
+                      {rotationNotice}
+                    </div>
+                  )}
+                  <div
+                    className="grid grid-cols-3 gap-2 rounded-xl border border-[#e5e7eb] bg-white p-3 text-xs text-[#475569]"
+                    data-testid="remaining-capacity"
+                  >
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-[#94a3b8]">{t.remainingVolumeLabel}</div>
+                      <div className="font-mono text-sm font-bold text-[#0f172a]" data-testid="remaining-volume-ratio">{(manualCapacity.volumeRatio * 100).toFixed(1)}%</div>
+                      <div className="text-[10px]">{(manualCapacity.remainingVolume / 1e9).toFixed(2)} m³ {t.remainingLabel}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-[#94a3b8]">{t.remainingWeightLabel}</div>
+                      <div className="font-mono text-sm font-bold text-[#0f172a]">{(manualCapacity.weightRatio * 100).toFixed(1)}%</div>
+                      <div className="text-[10px]">{manualCapacity.remainingWeight.toFixed(1)} kg {t.remainingLabel}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-[#94a3b8]">{t.remainingFloorLabel}</div>
+                      <div className="font-mono text-sm font-bold text-[#0f172a]">{(manualCapacity.floorRatio * 100).toFixed(1)}%</div>
+                      <div className="text-[10px]">{(manualCapacity.remainingFloorArea / 1e6).toFixed(2)} m² {t.remainingLabel}</div>
+                    </div>
+                  </div>
                   {manualIssues.length > 0 && (
                     <div
                       className="rounded-xl border border-[#fecaca] bg-[#fef2f2] p-3 text-xs text-[#991b1b]"
@@ -2169,7 +2308,7 @@ function Workbench() {
                       {containerChangeNotice}
                     </div>
                   )}
-                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} container={renderingContainer} gridSnap={gridSnap} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
+                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} cogOverlay={cogOverlay} container={renderingContainer} gridSnap={gridSnap} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
                 </>
               ) : (
                 <>
@@ -2224,6 +2363,7 @@ function Workbench() {
                 { id: 'playback' as const, label: t.playbackTab },
                 { id: 'cog' as const, label: t.cogTab },
                 { id: 'compare' as const, label: t.compareTab },
+                { id: 'fill' as const, label: t.fillTab },
               ].map((tab) => (
                 <button className={`archive-tab ${activeResultTab === tab.id ? 'active' : ''}`} key={tab.id} type="button" onClick={() => setActiveResultTab(tab.id)}>
                   {tab.label}
@@ -2381,6 +2521,8 @@ function Workbench() {
                   container={{ length: selectedContainer.length, width: selectedContainer.width, height: selectedContainer.height }}
                   locale={locale}
                   result={cogResult}
+                  show3d={showCogOverlay}
+                  onToggle3d={setShowCogOverlay}
                 />
               </div>
             )}
@@ -2405,6 +2547,18 @@ function Workbench() {
                         : [...current, id],
                     )
                   }}
+                />
+              </div>
+            )}
+
+            {activeResultTab === 'fill' && (
+              <div className="mt-3" data-testid="fill-tab-panel">
+                <FillSuggestionPanel
+                  available={hasCalculated}
+                  locale={locale}
+                  suggestions={fillSuggestions}
+                  onAdd={handleAddFillCargo}
+                  onAddAll={handleAddAllFillCargo}
                 />
               </div>
             )}

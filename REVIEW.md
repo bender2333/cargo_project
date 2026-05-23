@@ -1921,3 +1921,111 @@
 - 重构必须在功能确认通过的前提下做；先稳功能，再重构。
 - 代码优化每一步都要测试可回滚（拆 hook → 跑测；拆组件 → 跑测）。
 - 不允许在重构提交里夹带功能改动。
+
+---
+
+# 第十五轮 Review 与下一阶段开发计划（2026-05-24）
+
+## 背景
+
+第十三/十四轮把 3D 手动模式从 CAD 风格拉近到建造工具风格（ghost / 50mm snap / hover tooltip / 物理支撑），但 Shift 切换的 Z 轴拖拽仍然是「平移 XY」与「升降 Z」二选一的两段式操作，用户没法在一次拖动里把货物 A 放到货物 B 上。同时报错只有「越界 / 碰撞 / 悬空」三种统一文案，没有解释「为什么旋转失败」「还有多少剩余空间」等用户视角问题。第十五轮聚焦：(a) 真正的建造游戏化交互；(b) PM 视角的「明确反馈」体验；(c) 再添一个 PM 价值功能。
+
+## Review 结论
+
+### 1. 手动模式「贴附到表面」的拖拽（建造游戏化 v2）
+
+- **现状**：拖动选中箱体只有两种模式 — 默认 XY 拖（z 保持原值）或 Shift+drag 切 Z（XY 锁定）。要把 A 放到 B 顶面需要先 XY 拖到 B 旁边的空位（z=0），再 Shift+drag 升上去，但这一连串步骤中途任意位置都会因为「与 B 在 z=0 重叠」而 invalid。
+- **要求**：
+  - 拖动一个箱体时，鼠标 raycast 不只命中地面，也命中其它已放置箱体的**顶面**。命中谁的顶面就把被拖箱体「贴」上去（z = 命中箱顶 z + 命中箱 height），ghost 同步显示。
+  - 鼠标在空地（无箱命中）时维持原来的「落地或当前 z 平移」逻辑。
+  - 这是建造游戏的核心交互（Minecraft 邻面 / SketchUp inferred surfaces / Lego DD「kiss」）。
+  - Shift+drag 保留为「严格 Z 微调」模式（精细模式）。
+  - 单元测试覆盖 `resolveDropTarget()` 工具函数：地面命中 vs 箱顶命中 vs 多个箱顶命中（取最近的）vs 命中后越界。
+
+### 2. 明确的失败原因 + 剩余资源提示（PM 视角）
+
+- **现状**：manualIssues 只有 boundary / overlap / floating 三种本地化文案；旋转按钮点了就转，转完才发现 invalid。用户没有看到「为什么不能」的具体数字。
+- **要求**：
+  - **旋转预检**：旋转前用 `manualPlacement.validateDraft({ ...candidateRotation })` 跑一遍，如果旋转后越界 / 碰撞，提示具体原因，例如：
+    - 「旋转后宽度 2400 mm 超出柜宽 2300 mm（差 100 mm）」
+    - 「旋转后会与货物 B 在 z=500-1200 重叠」
+  - **剩余资源面板**：在手动工具栏右侧 / 状态栏显示
+    - 剩余可用体积 (m³) + 比例
+    - 剩余可用重量 (kg) + 比例
+    - 剩余 XY 二维面积 (m²)（按 layer/最高层）
+  - **拖拽 hover 反馈**：拖动中 ghost 上方浮动展示「当前位置 (x,y,z)」+ 「合法 ✓ / 不合法（具体原因）」
+  - 错误文案中文 + 英文都要更新。
+
+### 3. 新增 PM 视角功能：剩余空间利用建议（推荐）
+
+- **现状**：已实现 重心 / 多柜对比 / 作业回放。下一个高价值缺口是「这柜还能塞下什么」—— 货代填完一批后想顺便加一批小件。
+- **要求**：
+  - 实现「剩余空间填充」功能：根据当前装载结果反推柜内空隙，给出若干常用箱型（例如 600×400×400、800×600×500 等）的「还能装下 N 个」建议。
+  - 在结果区新增 Tab「Fill」/「补装建议」。
+  - 用户可点「应用建议」自动把候选箱型添加到 cargoItems 重新计算。
+  - 单元测试 `suggestFillItems(packingResult, container)` 工具函数 + E2E 覆盖。
+
+### 备选 PM 候选（本轮不一起做）
+
+- 作业指令 PDF（之前 Excel 已有，PDF 留作下轮）
+- 历史方案对比（A/B diff）
+- 国际化扩展（增加日语 / 俄语）
+- API 接口开放（让 ERP 拉取计算结果）
+
+## 下一阶段开发计划（第十五轮）
+
+### 阶段 A：建造游戏化的「贴附拖拽」（review #1，P0）
+
+- 新增 `src/lib/sceneDrop.ts`：`resolveDropTarget({ rayOrigin, rayDirection, boxes, container, draggedBoxId, draggedSize })`，返回 `{ x, y, z }` 候选落点。
+- `ContainerScene` 的 pointer move 处理逻辑改造：从「ground plane intersect」改为「先 raycast 已放置箱体顶面，没命中再回退地面」；Z 模式（Shift+drag）保留为精细模式。
+- ghost preview 显示「落点候选」+ 颜色 / outline 跟随合法性。
+- 单元测试 / E2E 覆盖：拖 A 到 B 上 → A 自动落到 B 顶面。
+
+### 阶段 B：明确失败 / 剩余资源（review #2，P0）
+
+- 扩展 `manualPlacement.validateDraft` 返回的 issue type 加 `rotation`，新增 `dryRunRotation(draft, boxId)` 工具检查旋转结果。
+- `Workbench.handleManualRotateBox` 改为先 dryRun，若 invalid 弹出可定位的 toast / 浮层 + 不真正旋转。
+- 新增 `src/lib/remainingCapacity.ts`：根据 boxes + container 算剩余体积/重量/XY 面积；写单测。
+- `Workbench` 手动工具栏增加「剩余空间」小面板（折叠式）。
+- 拖拽 hover 时在 ghost 旁显示具体说明文案。
+- i18n 中英文齐。
+
+### 阶段 C：新功能「补装建议」（review #3，P1）
+
+- 新增 `src/lib/fillSuggestion.ts`：输入 `packingResult` + `container` + 候选箱型清单，返回每个候选还能放几个。
+- 候选箱型放在 `src/data/standardBoxes.ts`（如 600×400×400×5kg, 400×300×200×3kg, 800×600×500×10kg）。
+- `FillSuggestionPanel` 组件 + 新 result tab「Fill / 补装建议」。
+- 「应用建议」按钮 → push 新 cargo item，自动重算。
+- 单元测试 + E2E（开 Tab → 看到候选 → 应用 → cargo 数量 +1）。
+
+### 阶段 D：本地 + 远程验证 + 部署
+
+- lint/test/build/E2E 全绿 + decision.md + CHANGELOG。
+- 部署 + 远程 E2E 全绿。
+
+## 执行约束
+
+- 不破坏已有 E2E；新增的 hover hint / 旋转失败提示必须用 testid 表达。
+- 「贴附拖拽」必须默认开启，不允许另加 toggle 来掩饰故障。
+- 剩余资源面板不能在每次 pointermove 时重算（用 useMemo + boxes dep）。
+- 补装建议候选箱型不要硬编码进算法 — 抽 `src/data/standardBoxes.ts`。
+
+### 4. 装载重心 3D 化（追加 review，PM 视角）
+
+- **现状**：第十四轮的 Balance tab 只展示数字（三轴偏移 + 状态 banner），没有任何空间感。运输安全语境下，重心相对「卡车 + 拖挂」的位置才是有意义的——前后轴之间偏置 vs 拖挂尾部偏置 vs 头部偏置完全不同的风险等级。
+- **要求**：
+  - 在主 3D 场景里加一层可切换的「重心可视化」overlay：
+    - 重心点：红色/绿色球（按 warning/balanced 状态），与几何中心连一条线段。
+    - 安全范围 box：半透明绿色 / 红色长方体，标示「重心应落在哪片范围内」。X 方向通常居中±5-10%，Z 方向偏低更安全。
+    - 卡车 + 拖挂底盘简笔（地面下方）：用线框画出牵引车头 + 拖挂底盘 + 前后轴位置，让用户直观看到「重心在拖挂的什么位置」。
+  - 在 Balance tab 加 toggle 按钮「在 3D 中显示」，默认关闭；开启后主场景出现 overlay。
+  - 关闭后 overlay 完整 dispose（不残留 mesh）。
+  - 单元测试 `computeSafeCogBox(container, vehicleProfile)` 返回安全范围矩形。
+  - E2E 覆盖：打开 Balance → 点 toggle → 主场景出现 `data-testid="cog-overlay"` → 关闭 → 消失。
+
+## 阶段 E（补充）：重心 3D 化
+
+- `src/lib/cogVisual.ts`：`computeSafeCogBox()`、`buildTruckSilhouette()` 工具 + 单测。
+- `ContainerScene` 新增 `cogOverlay?: CogOverlay | null` prop，effect 监听变化增量添加 / 移除 Three.js group。
+- `CenterOfGravityPanel` 加 toggle + 把状态推到 Workbench → ContainerScene。
+- 关闭 / 切换柜型 / 跳到 manual mode 时自动清理 overlay。

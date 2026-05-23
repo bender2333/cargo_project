@@ -116,6 +116,24 @@ export function rotateBox(draft: ManualDraft, id: string): ManualDraft {
   }
 }
 
+/**
+ * Returns the issues that would occur if the given box was rotated in-place, without
+ * mutating the draft. Used to surface a specific reason ("rotated width exceeds container
+ * width by 100 mm" / "overlaps box B") before the user actually rotates.
+ */
+export function dryRunRotation(draft: ManualDraft, id: string, container: ContainerSpec): {
+  ok: boolean
+  rotatedBox: ManualPlacedBox | null
+  issues: ValidationIssue[]
+} {
+  const target = draft.boxes.find((b) => b.id === id)
+  if (!target) return { ok: false, rotatedBox: null, issues: [] }
+  const rotated = rotateBox(draft, id)
+  const rotatedBox = rotated.boxes.find((b) => b.id === id) ?? null
+  const issues = validateDraft(rotated, container).filter((issue) => issue.boxId === id)
+  return { ok: issues.length === 0, rotatedBox, issues }
+}
+
 function isOutOfBounds(box: ManualPlacedBox, container: ContainerSpec): boolean {
   return (
     box.x < -EPSILON ||

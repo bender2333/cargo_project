@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-05-24 (Fifteenth Review Completion)
+
+- Completed subtask: ship the fifteenth-review building-game polish, explicit-feedback PM pass, fill suggestion feature, and CoG 3D overlay.
+  - **Surface snap drag (A)**: `src/lib/sceneDrop.ts` — `resolveDropTarget` raycasts the top faces of every other placed box first (closest hit wins), then falls back to the ground plane. The dragged box is now placed *on top of* whatever's under the cursor in one continuous gesture. 6 unit tests. Shift+drag keeps the existing precision-Z behaviour.
+  - **Explicit-feedback PM pass (B)**:
+    - Rotation is now dry-run via `manualPlacement.dryRunRotation(...)`. If the rotation would overflow, overlap, or float, a `rotation-notice` banner explains the specific reason (e.g. `"Rotated width 2400 mm exceeds container width 2300 mm (over by 100 mm)"`) and the rotation is not committed. 3 unit tests added.
+    - `src/lib/remainingCapacity.ts` exposes volume / weight / floor-footprint usage. A new `remaining-capacity` panel in the manual toolbar shows the three percentages and absolute residuals. 5 unit tests.
+  - **PM feature — fill suggestions (C)**: `src/data/standardBoxes.ts` defines four common box presets (Small carton, Medium carton, Large carton, EU pallet load). `src/lib/fillSuggestion.ts` computes an upper-bound count per preset bounded by residual volume and weight. New `Fill` result tab with a `FillSuggestionPanel` listing every preset, each row showing `volume-bound` and `weight-bound` caps. Per-row `Add to cargo` and a bulk `Add every preset` push items into the cargo list. 4 unit tests.
+  - **CoG 3D overlay (D)**: `src/lib/cogVisual.ts` produces a safe-CoG box (X ±10% / Y ±5% / Z lower 60%) and a tractor+trailer silhouette (cab in front of x=0, axle wheels under the trailer). `ContainerScene` accepts a new `cogOverlay` prop and renders the safe range, the weighted CoG as a coloured sphere, a dashed line back to the container centre, and a wireframe truck silhouette beneath the floor. `CenterOfGravityPanel` gains a `cog-toggle-3d` toggle; closing it disposes the Three.js group completely. 6 unit tests + E2E (`Balance 3D 切换在主场景显示重心 overlay`).
+  - Verification: `npm run lint` passed; `npm test` passed 116 tests; `npm run build` passed with the existing Vite chunk-size warning; local `npm run test:e2e` passed 55 tests / 1 skipped / 0 failed.
+  - Deployment: `DEPLOY_SKIP_BUILD=1 npm run deploy` ran clean; remote `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ npm run test:e2e` passed 55 tests / 1 skipped / 0 failed.
+
 ## 2026-05-23 (Security Hardening Pass)
 
 - Completed subtask: ship the post-fourteenth-review security audit and the remediations across the backend, frontend and nginx.

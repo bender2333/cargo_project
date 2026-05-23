@@ -18,6 +18,8 @@ const T = {
     warning: 'Transport risk: load is biased — rebalance heavy cargo',
     okWithinComfort: 'Within ±5% of center on every axis.',
     cautious: 'Within ±10% — keep an eye on it.',
+    showIn3d: 'Show in 3D',
+    hideIn3d: 'Hide 3D overlay',
   },
   zh: {
     title: '装载重心',
@@ -34,6 +36,8 @@ const T = {
     warning: '运输风险：重心明显偏置，建议重新平衡较重货物',
     okWithinComfort: '各轴偏移在 ±5% 以内。',
     cautious: '偏移在 ±10% 以内，请留意。',
+    showIn3d: '在 3D 中显示',
+    hideIn3d: '关闭 3D 显示',
   },
 } as const
 
@@ -41,6 +45,8 @@ type Props = {
   result: CogResult
   container: { length: number; width: number; height: number }
   locale: Locale
+  show3d: boolean
+  onToggle3d: (show: boolean) => void
 }
 
 function formatMm(n: number) {
@@ -53,7 +59,7 @@ function ratio(value: number, dim: number) {
   return value / dim
 }
 
-export function CenterOfGravityPanel({ result, container, locale }: Props) {
+export function CenterOfGravityPanel({ result, container, locale, show3d, onToggle3d }: Props) {
   const t = T[locale]
   const empty = result.totalWeight <= 0
 
@@ -79,9 +85,20 @@ export function CenterOfGravityPanel({ result, container, locale }: Props) {
     <div className="space-y-3 rounded-xl border border-[#e5e7eb] bg-white p-4" data-testid="cog-panel" data-cog-status={status}>
       <div className="flex items-baseline justify-between">
         <h3 className="text-base font-bold text-[#0f172a]">{t.title}</h3>
-        <span className="text-xs text-[#475569]" data-testid="cog-total-weight">
-          {t.totalWeight}: {result.totalWeight.toFixed(1)} kg
-        </span>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            className={`rounded-full border px-3 py-1 text-xs font-semibold ${show3d ? 'border-[#0ea5e9] bg-[#e0f2fe] text-[#0369a1]' : 'border-[#cbd5e1] bg-white text-[#475569]'}`}
+            data-testid="cog-toggle-3d"
+            aria-pressed={show3d}
+            onClick={() => onToggle3d(!show3d)}
+          >
+            {show3d ? t.hideIn3d : t.showIn3d}
+          </button>
+          <span className="text-xs text-[#475569]" data-testid="cog-total-weight">
+            {t.totalWeight}: {result.totalWeight.toFixed(1)} kg
+          </span>
+        </div>
       </div>
       <p className="text-xs text-[#64748b]">{t.description}</p>
 

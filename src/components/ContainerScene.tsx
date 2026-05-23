@@ -4,6 +4,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { ContainerSpec, PlacedBox } from '../types'
 import { MIN_SUPPORT_OVERLAP_RATIO } from '../lib/manualPlacement'
 import { snapToGrid } from '../lib/snap'
+import { resolveDropTarget } from '../lib/sceneDrop'
+import type { CogOverlay } from '../lib/cogVisual'
 
 export type SceneViewMode = 'iso' | 'top' | 'front' | 'side'
 
@@ -39,6 +41,7 @@ type ContainerSceneProps = {
   selectedManualBoxId?: string | null
   onClearSelection?: () => void
   onHoverBox?: (info: HoverBoxInfo | null) => void
+  cogOverlay?: CogOverlay | null
 }
 
 type MeshEntry = {
@@ -59,6 +62,7 @@ type SceneState = {
   hoverHighlight: THREE.LineSegments | null
   hoverBoxId: string | null
   ghost: { mesh: THREE.Mesh; edges: THREE.LineSegments } | null
+  cogGroup: THREE.Group | null
   scale: number
   length: number
   width: number
@@ -345,6 +349,7 @@ export function ContainerScene({
   selectedManualBoxId,
   onClearSelection,
   onHoverBox,
+  cogOverlay,
 }: ContainerSceneProps) {
   const mountRef = useRef<HTMLDivElement | null>(null)
   const sceneStateRef = useRef<SceneState | null>(null)
@@ -484,6 +489,7 @@ export function ContainerScene({
       hoverHighlight: null,
       hoverBoxId: null,
       ghost: null,
+      cogGroup: null,
       scale,
       length,
       width,
@@ -660,7 +666,7 @@ export function ContainerScene({
       const { entry } = dragState
       let nextX = entry.box.x
       let nextY = entry.box.y
-      let nextZ = entry.box.z
+      let nextZ: number
 
       if (dragState.mode === 'z' || event.shiftKey) {
         // Z mode: lock XY, vertical pixel drag → z mm
@@ -668,12 +674,34 @@ export function ContainerScene({
         nextZ = Math.max(0, Math.min(container.height - entry.box.height, dragState.zStartMm + deltaPx / Z_PIXELS_PER_MM))
         dragState.mode = 'z'
       } else {
+        // building-game style: raycast the top faces of other boxes first, fall back to the
+        // ground plane. The resulting (x, y, z) places the dragged box on top of whatever is
+        // beneath the cursor.
         updatePointer(event)
         raycaster.setFromCamera(pointer, camera)
-        if (!raycaster.ray.intersectPlane(groundPlane, intersectionPoint)) return
-        const containerMm = worldToContainerMm(intersectionPoint.x, intersectionPoint.z)
-        nextX = containerMm.x - dragState.offsetXmm
-        nextY = containerMm.y - dragState.offsetYmm
+        const rayOriginContainer = {
+          x: (raycaster.ray.origin.x + length / 2) / scale,
+          y: (raycaster.ray.origin.z + width / 2) / scale,
+          z: raycaster.ray.origin.y / scale,
+        }
+        const rayDirContainer = {
+          x: raycaster.ray.direction.x / scale,
+          y: raycaster.ray.direction.z / scale,
+          z: raycaster.ray.direction.y / scale,
+        }
+        const otherBoxes: PlacedBox[] = []
+        sceneState.meshEntries.forEach((e) => { if (e.box.id !== entry.box.id) otherBoxes.push(e.box) })
+        const drop = resolveDropTarget({
+          rayOrigin: rayOriginContainer,
+          rayDirection: rayDirContainer,
+          boxes: otherBoxes,
+          draggedBoxId: entry.box.id,
+          draggedSize: { length: entry.box.length, width: entry.box.width, height: entry.box.height },
+          container,
+        })
+        nextX = drop.x
+        nextY = drop.y
+        nextZ = drop.z
       }
 
       if (gridSnapRef.current) {
@@ -988,6 +1016,102 @@ export function ContainerScene({
   useEffect(() => {
     const state = sceneStateRef.current
     if (!state) return
+    if (state.cogGroup) {
+      state.scene.remove(state.cogGroup)
+      state.cogGroup.traverse((obj) => {
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.LineSegments || obj instanceof THREE.Line) {
+          obj.geometry.dispose()
+          if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose())
+          else (obj.material as THREE.Material).dispose()
+        }
+      })
+      state.cogGroup = null
+    }
+    if (!cogOverlay) return
+    const { scale } = state
+    const group = new THREE.Group()
+    const toWorld = (x: number, y: number, z: number) => new THREE.Vector3(
+      -state.length / 2 + x * scale,
+      z * scale,
+      -state.width / 2 + y * scale,
+    )
+
+    // Safe range box (transparent green if balanced, amber if cautious)
+    const safeColor = cogOverlay.warning ? 0xef4444 : cogOverlay.balanced ? 0x22c55e : 0xf59e0b
+    const safe = cogOverlay.safe
+    const safeGeo = new THREE.BoxGeometry(
+      (safe.max.x - safe.min.x) * scale,
+      (safe.max.z - safe.min.z) * scale,
+      (safe.max.y - safe.min.y) * scale,
+    )
+    const safeMesh = new THREE.Mesh(safeGeo, new THREE.MeshBasicMaterial({ color: safeColor, transparent: true, opacity: 0.18, depthWrite: false }))
+    const safeCenter = toWorld((safe.min.x + safe.max.x) / 2, (safe.min.y + safe.max.y) / 2, (safe.min.z + safe.max.z) / 2)
+    safeMesh.position.copy(safeCenter)
+    group.add(safeMesh)
+    const safeEdges = new THREE.LineSegments(new THREE.EdgesGeometry(safeGeo), new THREE.LineBasicMaterial({ color: safeColor }))
+    safeEdges.position.copy(safeCenter)
+    group.add(safeEdges)
+
+    // CoG marker — small sphere + vertical drop line
+    const cogColor = cogOverlay.warning ? 0xef4444 : 0x16a34a
+    const cogPos = toWorld(cogOverlay.cog.x, cogOverlay.cog.y, cogOverlay.cog.z)
+    const sphere = new THREE.Mesh(
+      new THREE.SphereGeometry(Math.max(0.05, scale * 80), 16, 12),
+      new THREE.MeshBasicMaterial({ color: cogColor }),
+    )
+    sphere.position.copy(cogPos)
+    group.add(sphere)
+    const centerPos = toWorld(cogOverlay.center.x, cogOverlay.center.y, cogOverlay.center.z)
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([cogPos, centerPos]),
+      new THREE.LineDashedMaterial({ color: cogColor, dashSize: 0.1, gapSize: 0.05 }),
+    )
+    line.computeLineDistances()
+    group.add(line)
+
+    // Truck silhouette beneath the container (cab + trailer + axles)
+    const truck = cogOverlay.truck
+    const truckColor = 0x475569
+    const trailerLen = (truck.trailerEnd - truck.trailerStart) * scale
+    const trailerW = truck.trailerWidth * scale
+    const trailerDeck = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(trailerLen, 0.08, trailerW)),
+      new THREE.LineBasicMaterial({ color: truckColor }),
+    )
+    trailerDeck.position.set(-state.length / 2 + trailerLen / 2, -0.18, 0)
+    group.add(trailerDeck)
+
+    const cabLen = (truck.cabBack - truck.cabFront) * scale
+    const cabW = truck.cabWidth * scale
+    const cabH = truck.cabHeight * scale
+    const cab = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(cabLen, cabH, cabW)),
+      new THREE.LineBasicMaterial({ color: truckColor }),
+    )
+    cab.position.set(-state.length / 2 + (truck.cabFront + cabLen / 2) * scale, cabH / 2 - 0.05, 0)
+    group.add(cab)
+
+    const wheelGeom = new THREE.TorusGeometry(truck.wheelRadius * scale, 0.04, 8, 16)
+    const wheelMat = new THREE.LineBasicMaterial({ color: truckColor })
+    const addAxle = (xMm: number) => {
+      const yWorld = -0.18 - truck.wheelRadius * scale * 0.5
+      for (const sign of [-1, 1]) {
+        const wheel = new THREE.Line(new THREE.EdgesGeometry(wheelGeom), wheelMat)
+        wheel.rotation.z = Math.PI / 2
+        wheel.position.set(-state.length / 2 + xMm * scale, yWorld, sign * trailerW * 0.45)
+        group.add(wheel)
+      }
+    }
+    addAxle(truck.frontAxleX)
+    addAxle(truck.rearAxleX)
+
+    state.scene.add(group)
+    state.cogGroup = group
+  }, [cogOverlay])
+
+  useEffect(() => {
+    const state = sceneStateRef.current
+    if (!state) return
     const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb } = visualPropsRef.current
     state.meshEntries.forEach((entry) => {
       const invalid = state.invalidOverride.has(entry.box.id) || invalidBoxIdsRef.current.has(entry.box.id)
@@ -1005,6 +1129,7 @@ export function ContainerScene({
       data-controls-enabled="true"
       data-interaction-mode={interactionMode}
       data-grid-snap={gridSnap === false ? 'off' : 'on'}
+      data-cog-overlay={cogOverlay ? 'on' : 'off'}
       data-box-count={boxes.length}
     />
   )

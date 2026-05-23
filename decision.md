@@ -2,6 +2,24 @@
 
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
+## 2026-05-24 第十五轮：贴附拖拽 / 旋转预检 / 补装建议 / 重心 3D 化
+
+- 背景：用户反映「把 A 放到 B 上面」目前必须先 XY 然后 Shift+Z 两段操作；旋转失败没有原因说明；重心 tab 只有数字没有空间感。
+- 决策：
+  - **贴附拖拽 (Surface snap)**：drag 时先 raycast 其它箱顶面，命中则把被拖箱贴上去；未命中回落地面。Shift+drag 仍是「精细 Z 模式」。最近距离命中的箱子优先；若贴附后会超过柜顶高度则跳过该候选。
+  - **旋转预检**：`dryRunRotation` 在不改 draft 的前提下校验，把 issue 翻译为人类语言（差 X mm / 与 B 重叠 / 支撑不足）。点旋转无效时不改 state，只显示 `rotation-notice` banner，可关闭。
+  - **剩余容量**：体积 / 重量 / 占地三维度；其中「占地」只统计 z≈0 的箱，避免堆叠多计。MaxWeight=0 时 weightRatio=0（除零防御）。
+  - **补装建议候选**：先内置 4 个 preset（Small / Medium / Large / Pallet）。`maxCount = min(volumeCap, weightCap)`；这是上限值，文案明确告知「实际能否装下需重新计算」。未来如需更多 preset 可扩 `src/data/standardBoxes.ts`。
+  - **重心安全范围阈值**：X ±10% / Y ±5% / Z 在容器高度的 10%-70%。与第十四轮的 COMFORT 5% / CRITICAL 10% 一致。拖挂示意图按常见 HGV 比例硬编码（cab 长 2.5 m，前轴 600 mm，后轴在拖挂尾部 1.5 m）；不追求 CAD 精度，仅作示意。
+  - **CoG overlay 仅自动模式生效**：手动 draft 没有 packing result 的 cog 概念（用户自己拖动，不需要 overlay 干扰）。切到手动模式或切 placementMode 自动 dispose。
+- 影响：
+  - 拖动选中箱体时若鼠标 hover 在其它箱上方，会自动「贴」上去；用户必须明白这是 feature 而非 bug。文案 hint 「manualRotateHint」已经提示右键旋转，但贴附行为还需要时间观察用户反馈是否需要 toggle 关闭。
+  - 剩余容量面板始终显示（手动模式下），即使用户没放任何箱也会显示 100% 剩余。这是预期行为。
+- 后续：
+  - 拖拽 hover 浮动文案「合法 / 不合法（具体原因）」尚未做，下一轮加。
+  - Fill suggestion 「Add to cargo」按钮已实现 push 货物，但 E2E 端到端验证「重新计算后 placedCount 增加」延后做。
+  - 重心 overlay 默认关闭；若产品希望默认开启，调 `useState(false)` 即可。
+
 ## 2026-05-23 安全加固（审计 + 修复）
 
 - 背景：第十四轮远程部署后用户发现 `http://101.33.232.150/%EF%BC%89%EF%BC%9A**52` 返回 200。借此机会做完整安全审计。两份并行 audit（后端 + 前端）+ `npm audit` 列出 30+ 问题。

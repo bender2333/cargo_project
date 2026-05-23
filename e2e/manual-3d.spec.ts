@@ -309,3 +309,36 @@ test('柜型对比面板列出选中柜型的装载率', async ({ page }) => {
   // After apply, scene re-renders for new container
   await expect(page.getByTestId('container-scene')).toBeVisible()
 })
+
+test('补装建议面板列出标准箱型与剩余容量', async ({ page }) => {
+  await ensureChinese(page)
+  await page.getByRole('button', { name: '补装建议' }).click()
+  const panel = page.getByTestId('fill-panel')
+  await expect(panel).toBeVisible()
+  // at least one row visible
+  const rows = page.locator('[data-testid^="fill-row-"]')
+  await expect(rows.first()).toBeVisible()
+  // Either at least one preset has maxCount > 0, or the "none fits" notice is shown.
+  const positive = page.locator('[data-testid^="fill-row-"][data-max-count]:not([data-max-count="0"])').first()
+  const none = page.getByTestId('fill-none')
+  await expect(positive.or(none)).toBeVisible()
+})
+
+test('Balance 3D 切换在主场景显示重心 overlay', async ({ page }) => {
+  await ensureChinese(page)
+  await page.getByRole('button', { name: '装载重心' }).click()
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-cog-overlay', 'off')
+  await page.getByTestId('cog-toggle-3d').click()
+  await expect(scene).toHaveAttribute('data-cog-overlay', 'on')
+  await page.getByTestId('cog-toggle-3d').click()
+  await expect(scene).toHaveAttribute('data-cog-overlay', 'off')
+})
+
+test('手动模式剩余资源面板展示三项占用比例', async ({ page }) => {
+  await ensureChinese(page)
+  await enterManualMode(page)
+  await expect(page.getByTestId('remaining-capacity')).toBeVisible()
+  const ratio = await page.getByTestId('remaining-volume-ratio').textContent()
+  expect(ratio?.endsWith('%')).toBe(true)
+})

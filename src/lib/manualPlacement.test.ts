@@ -377,3 +377,30 @@ describe('manualPlacement', () => {
     expect(toPlacedBoxes(emptyDraft(), new Set())).toEqual([])
   })
 })
+
+import { dryRunRotation as _dryRunRotation } from './manualPlacement'
+import type { ContainerSpec as _CS } from '../types'
+
+describe('dryRunRotation', () => {
+  const container: _CS = { id: 't', label: 'T', description: '', length: 6000, width: 2300, height: 2600, maxWeight: 28000, doorGap: 0, topGap: 0, sideGap: 0 }
+
+  it('returns ok when rotation keeps the box inside the container', () => {
+    const box = { id: 'a', cargoId: 'c', label: 'A', x: 0, y: 0, z: 0, length: 1000, width: 800, height: 500, orientationKey: 'LWH' as const, labelRotationDeg: 0 as const, color: '#000' }
+    const { ok, issues } = _dryRunRotation({ boxes: [box] }, 'a', container)
+    expect(ok).toBe(true)
+    expect(issues).toEqual([])
+  })
+
+  it('flags boundary issue when rotated width would exceed container width', () => {
+    const box = { id: 'a', cargoId: 'c', label: 'A', x: 0, y: 0, z: 0, length: 5500, width: 2400, height: 500, orientationKey: 'LWH' as const, labelRotationDeg: 0 as const, color: '#000' }
+    const { ok, issues } = _dryRunRotation({ boxes: [box] }, 'a', container)
+    expect(ok).toBe(false)
+    expect(issues.some((i) => i.type === 'boundary')).toBe(true)
+  })
+
+  it('returns ok=false but rotatedBox is null when id not found', () => {
+    const { ok, rotatedBox } = _dryRunRotation({ boxes: [] }, 'ghost', container)
+    expect(ok).toBe(false)
+    expect(rotatedBox).toBeNull()
+  })
+})
