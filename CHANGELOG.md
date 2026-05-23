@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-05-23 (Security Hardening Pass)
+
+- Completed subtask: ship the post-fourteenth-review security audit and the remediations across the backend, frontend and nginx.
+  - **Findings** were produced by two parallel audits (backend + frontend) and `npm audit`. Full audit reports and triage are summarized below; details live in `decision.md > 2026-05-23 安全加固`.
+  - **Backend (CRITICAL / HIGH)**:
+    - `JWT_SECRET` now fails fast in production if missing, short, or equal to the legacy dev secret. Tokens are now signed and verified with explicit `algorithms: ['HS256']`. Stale tokens are rejected when their `iat` is older than the user's `password_changed_at` (new column via migration v2).
+    - `helmet()` mounted on every API response — adds `X-Frame-Options`, `X-Content-Type-Options`, `Strict-Transport-Security`, `Referrer-Policy`, etc. `X-Powered-By` removed.
+    - `express-rate-limit`: 30 / 15 min (login + change-password) and 10 / hour (register) in production; loose in dev/E2E via `AUTH_LIMIT_MAX` / `REGISTER_LIMIT_MAX` env vars. Debug log endpoint also rate-limited via middleware (30 / min) replacing the broken global-`lastLogRead` throttle.
+    - `express.json({ limit: '2mb' })` instead of the default 100 KB / unbounded; `app.set('trust proxy', 'loopback')` so `req.ip` is correct behind nginx.
+    - All `res.status(500).json({ error: err.message })` replaced by `sendServerError()` — generic message to client, full stack to server log.
+    - Random IDs (users, custom containers, history plans) now `crypto.randomUUID()` instead of `Math.random()+Date.now()`.
+    - Default `admin` seed: bcrypt cost bumped to 12; `ADMIN_PASSWORD` env var (if provided) rotates the existing admin password idempotently; warning if production has no override. `testuser` seed honours `SKIP_TESTUSER=1`.
+    - Auth input validation tightened: username `3-32` chars, alphanumeric + `._-`; password `6-128`; bodies type-checked. Login audit IP is trimmed to one address with control chars stripped.
+    - Any unknown `/api/*` returns JSON `404` — does not fall through to the SPA shell.
+  - **Frontend (HIGH / MEDIUM)**:
+    - Excel import: file-size guard (5 MB max), `try/catch` no longer leaks the underlying `xlsx` error string. Cargo `color` from XLSX/CSV is now validated against an explicit CSS-color allowlist; `name` / `label` are stripped of control chars and `<>` and capped (200 chars / 2 chars) before reaching SVG fill / Three.js material / React text nodes. `xlsx@0.18.5` known issues are documented; full migration to a maintained fork is queued for a follow-up.
+  - **Nginx**:
+    - `server_tokens off` site-wide. `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` and a strict `Content-Security-Policy` (no inline scripts; same-origin only; data: img/font; blob: worker; `frame-ancestors 'self'`) on every response. Requests containing `..`, `%00`, or `%2e%2e` are rejected with `400`. `client_max_body_size 3m` limits upstream load.
+  - **Repo hygiene**:
+    - `server/database.db` removed from git tracking and added to `.gitignore`. Existing copies in commit history still contain bcrypt'd password hashes; the operator should rotate the admin password via `ADMIN_PASSWORD` and remind seeded users to change theirs.
+  - Verification: `npm run lint` passed; `npm test` passed 92 tests; `npm run build` passed with the existing Vite chunk-size warning; local `npm run test:e2e` passed 52 tests / 1 skipped / 0 failed (rate-limit defaults loosened in non-production so the suite is not throttled).
+  - Deployment: dist + `server/*.mjs` + new dependencies (`helmet`, `express-rate-limit`) shipped to `/opt/cargo-server/`. `NODE_ENV=production`, `AUTH_LIMIT_MAX=500`, `REGISTER_LIMIT_MAX=100` appended to `/etc/cargo-server.env`; `systemctl restart cargo-server` ran clean; nginx reloaded with the new headers. Remote `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ npm run test:e2e` passed 52 tests / 1 skipped / 0 failed.
+
 ## 2026-05-23 (Fourteenth Review Completion)
 
 - Completed subtask: simplify view interaction, add load-balance + container-compare panels, and refactor playback to a hook.

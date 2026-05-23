@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
 import bcrypt from 'bcryptjs'
 import path from 'path'
+import { randomUUID } from 'crypto'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -66,6 +67,16 @@ const migrations = [
       }
     },
   },
+  // Migration 2: support per-user JWT invalidation on password change
+  {
+    version: 2,
+    description: 'Add password_changed_at to users',
+    up: () => {
+      if (!hasColumn('users', 'password_changed_at')) {
+        db.exec('ALTER TABLE users ADD COLUMN password_changed_at TEXT')
+      }
+    },
+  },
 ]
 
 const runMigrations = () => {
@@ -89,33 +100,58 @@ const runMigrations = () => {
 
 runMigrations()
 
+const BCRYPT_COST = 12
+const DEFAULT_ADMIN_PASSWORD = 'admin123'
+const DEFAULT_TEST_PASSWORD = 'testuser123'
+
+function hashPassword(plain) {
+  const salt = bcrypt.genSaltSync(BCRYPT_COST)
+  return bcrypt.hashSync(plain, salt)
+}
+
 // 2. Initialize default admin account
 const initAdmin = () => {
-  const existing = db.prepare('SELECT * FROM users WHERE username = ?').get('admin')
+  const desiredPassword = process.env.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD
+  const existing = db.prepare('SELECT id, password_hash FROM users WHERE username = ?').get('admin')
+  const now = new Date().toISOString()
   if (!existing) {
-    const id = Math.random().toString(36).substring(2) + Date.now().toString(36)
-    const salt = bcrypt.genSaltSync(10)
-    const hash = bcrypt.hashSync('admin123', salt)
+    const id = randomUUID()
     db.prepare(`
-      INSERT INTO users (id, username, password_hash, role, disabled, created_at)
-      VALUES (?, ?, ?, 'admin', 0, ?)
-    `).run(id, 'admin', hash, new Date().toISOString())
-    console.log('Default admin account initialized: admin / admin123')
+      INSERT INTO users (id, username, password_hash, role, disabled, created_at, password_changed_at)
+      VALUES (?, ?, ?, 'admin', 0, ?, ?)
+    `).run(id, 'admin', hashPassword(desiredPassword), now, now)
+    if (desiredPassword === DEFAULT_ADMIN_PASSWORD) {
+      console.warn('[security] admin account created with default password — set ADMIN_PASSWORD env var to override')
+    } else {
+      console.log('[security] admin account created with custom password from ADMIN_PASSWORD')
+    }
+    return
+  }
+  // If operator provided ADMIN_PASSWORD env, rotate to it (idempotent reset).
+  if (process.env.ADMIN_PASSWORD) {
+    const matches = bcrypt.compareSync(desiredPassword, existing.password_hash)
+    if (!matches) {
+      db.prepare('UPDATE users SET password_hash = ?, password_changed_at = ? WHERE id = ?')
+        .run(hashPassword(desiredPassword), now, existing.id)
+      console.log('[security] admin password rotated from ADMIN_PASSWORD env')
+    }
+  } else if (process.env.NODE_ENV === 'production') {
+    console.warn('[security] admin account exists but ADMIN_PASSWORD not set — password may still be the default')
   }
 }
 
-// 3. Initialize default test user account
+// 3. Initialize default test user account (dev / E2E support; skipped if SKIP_TESTUSER=1)
 const initTestUser = () => {
-  const existing = db.prepare('SELECT * FROM users WHERE username = ?').get('testuser')
+  if (process.env.SKIP_TESTUSER === '1') return
+  const existing = db.prepare('SELECT id FROM users WHERE username = ?').get('testuser')
   if (!existing) {
-    const id = Math.random().toString(36).substring(2) + Date.now().toString(36)
-    const salt = bcrypt.genSaltSync(10)
-    const hash = bcrypt.hashSync('testuser123', salt)
+    const id = randomUUID()
+    const now = new Date().toISOString()
     db.prepare(`
-      INSERT INTO users (id, username, password_hash, role, disabled, created_at)
-      VALUES (?, ?, ?, 'user', 0, ?)
-    `).run(id, 'testuser', hash, new Date().toISOString())
-    console.log('Default test user initialized: testuser / testuser123')
+      INSERT INTO users (id, username, password_hash, role, disabled, created_at, password_changed_at)
+      VALUES (?, ?, ?, 'user', 0, ?, ?)
+    `).run(id, 'testuser', hashPassword(DEFAULT_TEST_PASSWORD), now, now)
+    console.log('[security] testuser seeded (set SKIP_TESTUSER=1 to disable)')
   }
 }
 

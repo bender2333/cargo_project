@@ -1,5 +1,8 @@
 import express from 'express'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
 import path from 'path'
+import { randomUUID } from 'crypto'
 import { fileURLToPath } from 'url'
 import db from './db.mjs'
 import authRouter from './auth.mjs'
@@ -9,13 +12,52 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT || 3000
 
-app.use(express.json())
+// Behind nginx; trust only the loopback proxy so req.ip resolves to the original client.
+app.set('trust proxy', 'loopback')
 
-// Log requests
+// Security headers. Static frontend is served by nginx in production, so CSP/HSTS belong there.
+// For the API tier we keep the defaults that don't depend on TLS termination here.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}))
+
+// Body parsing with explicit size guard
+app.use(express.json({ limit: '2mb' }))
+
+// Log requests (method + url only; never log bodies or headers)
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`)
   next()
 })
+
+// Rate limit auth endpoints to slow down credential stuffing and registration abuse.
+// Values are loose enough for E2E suites and tighten when AUTH_LIMIT_MAX is set in production.
+const isProd = process.env.NODE_ENV === 'production'
+const AUTH_LIMIT_MAX = Number(process.env.AUTH_LIMIT_MAX) || (isProd ? 30 : 300)
+const REGISTER_LIMIT_MAX = Number(process.env.REGISTER_LIMIT_MAX) || (isProd ? 10 : 100)
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: AUTH_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts. Try again later.' },
+})
+app.use('/api/auth/login', authLimiter)
+app.use('/api/auth/register', rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: REGISTER_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many registration attempts. Try again later.' },
+}))
+app.use('/api/auth/change-password', authLimiter)
+
+function sendServerError(res, scope, err) {
+  console.error(`[${scope}]`, err?.message || err)
+  res.status(500).json({ error: 'Internal server error' })
+}
 
 // 1. Auth routes
 app.use('/api/auth', authRouter)
@@ -31,7 +73,7 @@ app.get('/api/users', authenticate, requireAdmin, (req, res) => {
       .all()
     res.json(users)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    sendServerError(res, req.path, err)
   }
 })
 
@@ -49,7 +91,7 @@ app.put('/api/users/:id/toggle-status', authenticate, requireAdmin, (req, res) =
     db.prepare('UPDATE users SET disabled = ? WHERE id = ?').run(nextStatus, id)
     res.json({ message: 'User status updated successfully', disabled: nextStatus === 1 })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    sendServerError(res, req.path, err)
   }
 })
 
@@ -66,7 +108,7 @@ app.delete('/api/users/:id', authenticate, requireAdmin, (req, res) => {
     db.prepare('DELETE FROM users WHERE id = ?').run(id)
     res.json({ message: 'User deleted successfully' })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    sendServerError(res, req.path, err)
   }
 })
 
@@ -76,7 +118,7 @@ app.get('/api/containers/custom', authenticate, (req, res) => {
     const list = db.prepare('SELECT * FROM custom_containers WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id)
     res.json(list)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    sendServerError(res, req.path, err)
   }
 })
 
@@ -85,7 +127,7 @@ app.post('/api/containers/custom', authenticate, (req, res) => {
   if (!name || !length || !width || !height || !maxWeight) {
     return res.status(400).json({ error: 'Missing required parameters' })
   }
-  const id = Math.random().toString(36).substring(2) + Date.now().toString(36)
+  const id = randomUUID()
   try {
     db.prepare(`
       INSERT INTO custom_containers (id, user_id, name, length, width, height, max_weight, door_gap, top_gap, side_gap, created_at)
@@ -95,7 +137,7 @@ app.post('/api/containers/custom', authenticate, (req, res) => {
     const created = db.prepare('SELECT * FROM custom_containers WHERE id = ?').get(id)
     res.status(201).json(created)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    sendServerError(res, req.path, err)
   }
 })
 
@@ -125,7 +167,7 @@ app.put('/api/containers/custom/:id', authenticate, (req, res) => {
     const updated = db.prepare('SELECT * FROM custom_containers WHERE id = ?').get(id)
     res.json(updated)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    sendServerError(res, req.path, err)
   }
 })
 
@@ -139,7 +181,7 @@ app.delete('/api/containers/custom/:id', authenticate, (req, res) => {
     db.prepare('DELETE FROM custom_containers WHERE id = ?').run(id)
     res.json({ message: 'Container preset deleted' })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    sendServerError(res, req.path, err)
   }
 })
 
@@ -152,7 +194,7 @@ app.get('/api/history', authenticate, (req, res) => {
       data: JSON.parse(item.data)
     })))
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    sendServerError(res, req.path, err)
   }
 })
 
@@ -162,7 +204,7 @@ app.post('/api/history', authenticate, (req, res) => {
     return res.status(400).json({ error: 'Missing required parameters' })
   }
 
-  const id = Math.random().toString(36).substring(2) + Date.now().toString(36)
+  const id = randomUUID()
   
   try {
     // Insert new plan
@@ -184,7 +226,7 @@ app.post('/api/history', authenticate, (req, res) => {
 
     res.status(201).json({ message: 'History plan saved successfully', id })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    sendServerError(res, req.path, err)
   }
 })
 
@@ -198,7 +240,7 @@ app.delete('/api/history/:id', authenticate, (req, res) => {
     db.prepare('DELETE FROM history_plans WHERE id = ?').run(id)
     res.json({ message: 'History plan deleted' })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    sendServerError(res, req.path, err)
   }
 })
 
@@ -207,7 +249,7 @@ app.delete('/api/history', authenticate, (req, res) => {
     const result = db.prepare('DELETE FROM history_plans WHERE user_id = ?').run(req.user.id)
     res.json({ deleted: result.changes })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    sendServerError(res, req.path, err)
   }
 })
 
@@ -217,14 +259,15 @@ import fs from 'fs/promises'
 const LOG_PATH = process.env.CARGO_LOG_PATH || '/var/log/cargo-server.log'
 const SENSITIVE_PATH_PREFIXES = ['/api/auth/']
 
-let lastLogRead = 0
-app.get('/api/_debug/recent-logs', authenticate, requireAdmin, async (req, res) => {
-  const now = Date.now()
-  if (now - lastLogRead < 500) {
-    return res.status(429).json({ error: 'Too many requests' })
-  }
-  lastLogRead = now
+const debugLogLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many log requests. Try again shortly.' },
+})
 
+app.get('/api/_debug/recent-logs', debugLogLimiter, authenticate, requireAdmin, async (req, res) => {
   const limit = Math.max(1, Math.min(500, parseInt(String(req.query.limit ?? '200'), 10) || 200))
   try {
     const content = await fs.readFile(LOG_PATH, 'utf8')
@@ -233,19 +276,22 @@ app.get('/api/_debug/recent-logs', authenticate, requireAdmin, async (req, res) 
       .filter((line) => !SENSITIVE_PATH_PREFIXES.some((prefix) => line.includes(prefix)))
     res.json({ path: LOG_PATH, count: tail.length, lines: tail })
   } catch (err) {
-    res.status(500).json({ error: 'Failed to read log', detail: err.message })
+    console.error('[debug-logs]', err?.message || err)
+    res.status(500).json({ error: 'Failed to read log' })
   }
+})
+
+// Any unknown /api/* returns JSON 404 (does not fall back to index.html)
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'Not found' })
 })
 
 // Serve static frontend files in production
 const distPath = path.join(__dirname, '../dist')
 app.use(express.static(distPath))
 
-// Single Page Application routing (fallback to index.html)
-app.get('*any', (req, res, next) => {
-  if (req.url.startsWith('/api')) {
-    return next()
-  }
+// SPA fallback (non-API paths only — /api is already terminated above)
+app.get('*any', (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'))
 })
 

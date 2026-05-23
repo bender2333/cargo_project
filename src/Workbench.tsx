@@ -113,6 +113,8 @@ const copy = {
     importIssue: 'Import issue',
     importWarning: 'Import warning',
     importParseFailed: 'Import parse failed',
+    importFileTooLarge: 'File larger than 5 MB is not allowed',
+    importFileUnreadable: 'File could not be read as a workbook',
     importNoData: 'No usable data found',
     importSuccess: 'Import success',
     importMappedFields: 'Mapped fields',
@@ -286,6 +288,8 @@ const copy = {
     importIssue: '导入问题',
     importWarning: '导入提醒',
     importParseFailed: '导入解析失败',
+    importFileTooLarge: '文件大于 5 MB，已拒绝导入',
+    importFileUnreadable: '无法解析为工作簿',
     importNoData: '未找到可用数据',
     importSuccess: '导入成功',
     importMappedFields: '识别字段',
@@ -1174,13 +1178,23 @@ function Workbench() {
 
   const importExcel = async (file: File | null) => {
     if (!file) return
+    const MAX_BYTES = 5 * 1024 * 1024
+    if (file.size > MAX_BYTES) {
+      setImportMessages([`${t.importIssue}: ${t.importFileTooLarge}`])
+      setActiveResultTab('importLog')
+      setActiveNav('report')
+      return
+    }
     let rows: Record<string, string | number>[]
     try {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
       rows = sheet ? XLSX.utils.sheet_to_json<Record<string, string | number>>(sheet) : []
     } catch (error) {
-      setImportMessages([`${t.importParseFailed}: ${error instanceof Error ? error.message : String(error)}`])
+      // xlsx@0.18.5 has known prototype-pollution / ReDoS issues; keep the catch tight and
+      // do not surface the raw error message to the user.
+      console.error('[import-excel]', error)
+      setImportMessages([`${t.importParseFailed}: ${t.importFileUnreadable}`])
       setActiveResultTab('importLog')
       setActiveNav('report')
       return

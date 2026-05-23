@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# SQLite databases must never be committed — they contain password hashes.
+server/*.db
+server/*.db-shm
+server/*.db-wal
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

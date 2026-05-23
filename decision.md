@@ -2,6 +2,30 @@
 
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
+## 2026-05-23 安全加固（审计 + 修复）
+
+- 背景：第十四轮远程部署后用户发现 `http://101.33.232.150/%EF%BC%89%EF%BC%9A**52` 返回 200。借此机会做完整安全审计。两份并行 audit（后端 + 前端）+ `npm audit` 列出 30+ 问题。
+- 决策：
+  - **JWT_SECRET**：生产强制 ≥32 字符且不等于默认 dev secret；缺失则 fail-fast。本地/dev 仍可用默认值。
+  - **JWT algorithm pinning**：sign / verify 显式 `HS256`，并校验 token 的 `iat` 不早于 `password_changed_at`，密码修改后旧 token 失效。
+  - **默认密码**：保留 `admin / admin123` 与 `testuser / testuser123` 作为种子，但 `ADMIN_PASSWORD` env 可幂等轮换；生产没设 `ADMIN_PASSWORD` 时 warning。E2E 依赖 testuser，保留；`SKIP_TESTUSER=1` 可禁。
+  - **rate limit**：login + change-password 生产 30/15min，开发/CI 300/15min；register 生产 10/h，开发 100/h；通过 env `AUTH_LIMIT_MAX` / `REGISTER_LIMIT_MAX` 配置。E2E 远程跑 50 用例需要 500 上限。
+  - **body size**：2 MB（API），nginx 3 MB（兜底）。
+  - **错误消息**：统一 `Internal server error`；细节只入服务器日志。
+  - **`/api/*` 未知路径**：返回 JSON 404，不进入 SPA fallback；nginx 静态 SPA fallback 保留（合理行为）。
+  - **xlsx@0.18.5 漏洞**：知道有 prototype pollution + ReDoS，npm 上无修复版本。本轮选择「缓解」：5 MB 文件大小限制 + try/catch 不暴露错误。完整迁移到 maintained 分支留作 follow-up。
+  - **CSP**：允许 `'unsafe-inline'` 仅 style（Tailwind 内联样式刚需）；script 严格 `'self'`，无 `unsafe-eval`、无 `unsafe-inline`。
+  - **`server/database.db` 进入历史**：本轮 `git rm --cached` 并 .gitignore；现有历史仍含 bcrypt hash，记入 follow-up（建议生产环境用 ADMIN_PASSWORD 轮换 admin 密码后通知所有用户改密码）。
+- 影响：
+  - 旧 token 在生产升级后即失效，所有客户端需要重新登录。
+  - `xlsx` 漏洞缓解而非彻底修复；如果将来出现 PoC 攻击，需要切到 maintained 分支。
+  - rate limit env 变量未配置时 prod 用 30/15min，可能影响压力测试 — 文档已写明 `AUTH_LIMIT_MAX` 调整方式。
+- 后续：
+  - 切 xlsx 到 `@e965/xlsx` fork 或迁移到 exceljs。
+  - 接入 HTTPS（需要域名 + Let's Encrypt），打开 HSTS preload。
+  - 考虑把 JWT 从 localStorage 改为 HttpOnly + SameSite=Strict cookie，需要前端 + nginx 配合改。
+  - 在 git history 中 purge `server/database.db`（`git filter-repo`）并强制所有现有用户改密码。
+
 ## 2026-05-23 第十四轮：去除 viewLocked / 重心阈值 / 多柜对比推荐 / Balance 命名
 
 - 背景：第十三轮的 viewLocked toggle 被用户实测为「无差异」；自动模式默认相机锁定违反直觉；同时需要在结果区加入运输安全 + 采购决策两个 PM 维度。
