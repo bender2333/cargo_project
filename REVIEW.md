@@ -1667,3 +1667,103 @@
 - Z 轴拖拽通过 Shift 修饰键复用现有 pointer 流程，避免引入额外 UI mode。
 - 调试面板仅展示状态、不允许直接改 state。
 - 后端日志 endpoint 必须 admin-only 且不返回敏感字段；任何泄漏风险写入 `decision.md`。
+
+---
+
+# 第十二轮 Review 与下一阶段开发计划（2026-05-23）
+
+## 背景
+
+第十一轮已修复历史恢复 3D 黑屏、引入 Shift+Z 轴拖拽与 keydown 快捷键、新增 DebugPanel 与 admin 日志接口；本地+远程 E2E 全绿，已部署到 tencent-container-layout。本轮 review 用户从产品视角重新审视手动/自动两个流程，并给出 6 条改进意见。
+
+## Review 结论
+
+### 1. 「继续手动微调」与「手动排布」的关系需要从产品思维重新设计
+
+- **现状**：自动排布完成后有「继续手动微调」按钮，进入与「直接进入手动排布」相同的 manual editable 状态；两者使用同一套 ManualDraft / undo 历史，但入口、初始 boxes、用户心智模型完全不同。
+- **问题**：
+  - 用户搞不清「自动→手动微调」与「纯手动」是同一个模式还是两个模式；
+  - 「微调」语义暗示在自动结果基础上做小调整，但当前实现允许全量删除/拖入，与「重新排布」无差别；
+  - 切回自动模式时，是否保留手动调整结果、是否丢弃，缺乏明确产品规则。
+- **要求**：以 PM 视角梳理两种入口的差异（目标用户、典型操作、退出条件），给出统一或区分的设计方案，并在 UI 上让用户明确知道自己处在哪个子流程。
+
+### 2. 手动排布时 3D 自由视角（free view）不可用
+
+- **现状**：manualEditable=true 时切换 free view 按钮，OrbitControls 仍然停留在 manual 模式（LEFT=drag，RIGHT=rotate），无法真正自由旋转；猜测是 `[manualEditable, freeView]` useEffect 的优先级判断里 manualEditable 压过 freeView。
+- **要求**：手动模式下也允许临时切换 free view 作为「只看不动」的浏览态，再切回时恢复 manual 编辑。需要明确：free view 期间是否禁用拖拽？建议禁用以避免误操作，并在 UI 上提示。
+
+### 3. Shift+Z 轴模式缺少使用说明
+
+- **现状**：第十一轮加入 Shift 拖拽切 Z 模式与 PgUp/PgDown/方向键快捷键，但页面无任何提示，用户不知道存在；只有 decision.md 记录。
+- **要求**：在手动模式工具栏 / 帮助气泡 / 空状态提示中加入快捷键说明（i18n 中英双语），并把 Shift 修饰、方向键步长（默认 10mm，Shift 100mm，Ctrl 1mm）、R 旋转、Delete 删除、Esc 取消选中都写明。
+
+### 4. 手动排布需要遵循物理规则——禁止悬空
+
+- **现状**：`validateDraft` 仅检查越界与碰撞，不检查支撑。用户可以把箱子拖到 z=500 悬空。
+- **要求**：每个箱子要么 z=0（落地），要么底面与下方箱子顶面接触且投影有重叠（支撑判定）。
+  - 拖拽时实时校验：悬空状态用 invalid 红色提示；
+  - drop 时若 invalid 则回滚到上一个合法位置（与现有越界/碰撞回滚一致）；
+  - 键盘移动同样限制；
+  - validateDraft 增加 floating issue 类型，i18n 文案补齐。
+- **边界**：堆叠角度容差、部分支撑（投影重叠 < 100%）是否允许，需要在 decision.md 记录。建议初版要求「投影重叠面积 >= 50% 底面积」，可后续放宽。
+
+### 5. 自动排布模式下更换货柜未刷新画布
+
+- **现状**：自动排布完成后切换 containerId（或修改 containerOverrides），ContainerScene 主 useEffect 依赖 `[container.length, container.width, container.height, doorGap, topGap, sideGap]` 会重建场景，但 boxes 数组依然来自旧的 PlacedBox 结果，与新柜尺寸不匹配——可能溢出新柜或留下空白。
+- **要求**：自动模式下，container 关键尺寸或 ID 变化时清空 placedBoxes 并提示用户「已更换货柜，请重新计算」，或者自动重新触发 packing。需评估两种交互的产品效果。
+
+### 6. PM 与用户视角的整体逻辑彻底梳理
+
+- **现状**：经过 11 轮迭代，功能堆叠较多（auto/manual、quantity/volume/weight/input、custom container、history、validation、debug panel...），缺乏一次完整的端到端审计。
+- **要求**：以「新用户首次打开」+「老用户保存方案后回访」+「admin 排查问题」三条用户故事走完整流程，记录每一步：入口是否清晰、文案是否一致、错误是否友好、状态是否正确恢复。产出一份《逻辑审计与改进列表》（建议存入 `docs/ux-audit-2026-05.md`），按优先级分批改进。
+
+## 下一阶段开发计划（第十二轮）
+
+### 阶段 A：自动模式更换货柜刷新（issue 5，优先级 P0）
+
+- 在 `Workbench.tsx` 监听 `selectedContainer` 关键尺寸 / containerId 变化；若当前有 placedBoxes 且非手动模式，清空并出 banner 提示。
+- 单元测试覆盖 `clearPlacementOnContainerChange` 纯函数。
+- E2E：装载 → 切换柜型 → 断言画布无旧箱、有提示。
+
+### 阶段 B：手动模式 free view 修复（issue 2，P0）
+
+- `ContainerScene` 的 OrbitControls useEffect 里，按 `freeView` 优先：freeView=true 时一律 LEFT=rotate、关闭 raycast 拖拽 listener。
+- `data-interaction-mode` 加上 `manual-free` 子状态便于断言。
+- E2E：手动模式 → 点 free view → 拖动 → 断言相机角度变化、`data-controls-enabled=true`。
+
+### 阶段 C：Shift+Z 与快捷键 UI 提示（issue 3，P1）
+
+- 在手动工具栏右侧加入「键盘帮助」popover（i18n: `manualKeyboardHelp`）。
+- 列出：拖拽（XY）、Shift+拖拽（Z）、方向键（±X/Y）、PgUp/PgDown（±Z）、修饰键（Shift=100mm/Ctrl=1mm）、R/Delete/Esc。
+- E2E：点开 popover，断言关键文案存在。
+
+### 阶段 D：物理支撑校验（issue 4，P1）
+
+- `manualPlacement.validateDraft`：新增 `findSupport(box, others) -> { z, overlapRatio }` 工具；要求 z=0 或 overlapRatio >= 0.5；返回 `floating` issue。
+- `ContainerScene.computeDragInvalid` 引入 `isFloating` 实时检测；invalid 颜色统一。
+- 键盘移动 / drop 落点不合法时回滚。
+- decision.md 记录 50% 阈值与未来放宽条件。
+- 单元测试 + E2E：构造箱 A 在地面 → 箱 B 拖到 A 上方有支撑 OK / B 拖到 A 旁边悬空 → 回滚。
+
+### 阶段 E：手动微调 vs 手动排布产品再设计（issue 1，P2）
+
+- 不直接写代码，先产出 `docs/manual-flow-redesign.md`：
+  - 用户故事、场景、目标差异；
+  - 方案 A（合并为单一手动模式 + 「以自动结果为初始值」选项）；
+  - 方案 B（保留两个入口，明确文案 + 不同退出按钮）；
+  - 推荐方案 + 迁移成本估算。
+- 与用户对齐方案后再实施。
+
+### 阶段 F：PM 视角端到端逻辑审计（issue 6，P2）
+
+- 产出 `docs/ux-audit-2026-05.md`，三条用户故事走完整流程，列出 issue + 优先级。
+- 把高优 issue 拆成下一轮的 review 输入。
+- 不在本轮立即修复全部问题。
+
+## 执行约束
+
+- 本轮聚焦阶段 A–D（修 bug + 加约束 + 加文案）。E、F 产出文档供下轮决策。
+- 不弱化任何现有测试以强行通过；新增物理校验如导致旧 fixtures 悬空，更新 fixture 而非放宽校验。
+- decision.md 必须记录支撑阈值、free view 与 manual 互斥策略、自动模式更换货柜的产品决策（清空 vs 重排）。
+- 本地 lint/test/build/E2E 全绿 + 远程部署 + 远程 E2E 全绿后才视为完成。
+- Goal 由用户在下一条消息明确，开发不在本次回复中开始。

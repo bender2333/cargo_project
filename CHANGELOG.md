@@ -2,6 +2,17 @@
 
 ## 2026-05-23
 
+- Started subtask: execute the twelfth review plan.
+  - Checklist:
+    - [ ] A: clear stale automatic placement when container dimensions or container ID change, with user-facing notice and tests.
+    - [ ] B: make manual-mode free view a read-only browse state and expose it for E2E assertions.
+    - [ ] C: add bilingual manual keyboard/Z-axis help in the UI.
+    - [ ] D: enforce physical support in manual placement, including floating-box validation and rollback.
+    - [ ] E: document manual fine-tune versus manual placement product redesign.
+    - [ ] F: document end-to-end PM/user/admin logic audit.
+    - [ ] Local verification: lint, unit tests, build, and E2E.
+    - [ ] Remote deployment and remote E2E verification.
+  - Verification: planning/documentation checkpoint only; code verification not rerun yet.
 - Completed subtask: deliver eleventh review — fix history-restore 3D blackout, add Z-axis drag + keyboard shortcuts, ship debug panel + server logs endpoint.
   - **Bug fix (root cause)**: `ContainerScene` cached `THREE.Texture` / `THREE.Material` in module-level Maps shared across all scenes. After `renderer.dispose()` (triggered by container reference change in `restorePlan`), the cached textures held stale GPU handles; a new renderer rebuilt scene reused them and the box meshes rendered as background — user reported "restoring a saved plan shows 0 boxes in 3D" (admin reproduced). Fix: caches moved to `WeakMap<SceneState, Map>` per scene; main-effect cleanup disposes all entries. Regression E2E covers pixel-level box visibility after restore.
   - **Z-axis + shortcuts**: `manualPlacement.setBoxPosition(draft, id, x, y, z?)` accepts optional z. `ContainerScene` enters Z-drag mode on Shift+pointer: locks XY, maps cursor Y delta to z mm at 0.5 px/mm. Global keydown (only when manualEditable + boxSelected, ignoring inputs/textareas): R rotate, Delete/Backspace remove, Esc clear, Arrow keys ±X/Y, PgUp/PgDown ±Z; step = 10mm default, Shift 100mm, Ctrl/Meta 1mm. Workbench wires `onManualRotate` / `onManualDelete` / `onClearSelection` / `selectedManualBoxId` props.
