@@ -20,7 +20,7 @@ import {
   undo as manualUndo,
   validateDraft as manualValidateDraft,
 } from './lib/manualPlacement'
-import type { ManualHistory } from './lib/manualPlacement'
+import type { ManualDraft, ManualHistory, ValidationIssue } from './lib/manualPlacement'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from './data/containers'
 import { buildExportPlanRows } from './lib/exportPlan'
 import type { HistoryPlan } from './lib/historyPlans'
@@ -29,6 +29,7 @@ import { parseCargoRows, parseCargoRowsWithMapping } from './lib/importCargo'
 import type { ImportCargoRow } from './lib/importCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
+import { clearPlacementOnContainerChange } from './lib/containerChange'
 import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, CustomDbContainer, DbHistoryPlan } from './types'
 import { isLoggedIn, getCurrentUser, fetchWithAuth, removeToken } from './lib/auth'
 import type { User } from './lib/auth'
@@ -186,7 +187,21 @@ const copy = {
     manualDelete: 'Delete',
     undo: 'Undo',
     redo: 'Redo',
-    manualHint: 'Drag cargo from the pool. Use R to rotate, arrows to move (Shift = 500mm), Delete to remove, Ctrl/Cmd+Z to undo.',
+    manualHint: 'Drag cargo from the pool. Open keyboard help for Z-axis and shortcut details.',
+    manualKeyboardHelp: 'Keyboard help',
+    manualKeyboardHelpItems: [
+      'Drag: move on X/Y plane',
+      'Shift + drag: move on Z axis',
+      'Arrow keys: move X/Y by 10 mm',
+      'PageUp/PageDown: move Z by 10 mm',
+      'Modifiers: Shift = 100 mm, Ctrl/Cmd = 1 mm',
+      'R: rotate, Delete: remove, Esc: clear selection',
+    ],
+    manualFreeViewNotice: 'Free view is read-only in manual mode. Switch it off to move cargo.',
+    containerChangedNotice: 'Container changed. Recalculate to refresh the automatic placement.',
+    manualIssueBoundary: 'exceeds the effective container bounds',
+    manualIssueOverlap: 'overlaps another cargo box',
+    manualIssueFloating: 'is floating and needs at least 50% base support',
     poolEmpty: 'All cargo has been placed.',
     continueManually: 'Continue manually',
     modeManual3D: '3D Review',
@@ -336,7 +351,21 @@ const copy = {
     manualDelete: '删除',
     undo: '撤销',
     redo: '重做',
-    manualHint: '从待放置池拖入货物。R 旋转，方向键移动（Shift 500mm），Delete 删除，Ctrl/Cmd+Z 撤销。',
+    manualHint: '从待放置池拖入货物。打开键盘帮助查看 Z 轴与快捷键。',
+    manualKeyboardHelp: '键盘帮助',
+    manualKeyboardHelpItems: [
+      '拖拽：在 X/Y 平面移动',
+      'Shift + 拖拽：沿 Z 轴移动',
+      '方向键：X/Y 每次移动 10 mm',
+      'PageUp/PageDown：Z 轴每次移动 10 mm',
+      '修饰键：Shift = 100 mm，Ctrl/Cmd = 1 mm',
+      'R：旋转，Delete：删除，Esc：取消选中',
+    ],
+    manualFreeViewNotice: '手动模式下自由视角为只读浏览，关闭后才能移动货物。',
+    containerChangedNotice: '已更换货柜，请重新计算以刷新自动排布。',
+    manualIssueBoundary: '超出有效货柜边界',
+    manualIssueOverlap: '与其他货物发生碰撞',
+    manualIssueFloating: '处于悬空状态，底面至少需要 50% 支撑',
     poolEmpty: '所有货物已放置完毕。',
     continueManually: '继续手动微调',
     modeManual3D: '3D 复核',
@@ -542,6 +571,26 @@ function filenameSlug(value: string) {
     .replace(/^-+|-+$/g, '')
 }
 
+function containerPlacementKey(container: ContainerSpec) {
+  const effective = effectiveContainer(container)
+  return [
+    container.id,
+    effective.length,
+    effective.width,
+    effective.height,
+    container.maxWeight,
+    container.doorGap,
+    container.topGap,
+    container.sideGap,
+  ].join(':')
+}
+
+function localizeManualIssue(issue: ValidationIssue, localeCopy: typeof copy.en) {
+  if (issue.type === 'boundary') return localeCopy.manualIssueBoundary
+  if (issue.type === 'overlap') return localeCopy.manualIssueOverlap
+  return localeCopy.manualIssueFloating
+}
+
 function Workbench() {
   const [locale, setLocale] = useState<Locale>('zh')
   const t = copy[locale]
@@ -568,6 +617,11 @@ function Workbench() {
   const [placementMode, setPlacementMode] = useState<'auto' | 'manual'>('auto')
   const [manualHistory, setManualHistory] = useState<ManualHistory>(() => manualEmptyHistory())
   const [manualSelectedId, setManualSelectedId] = useState<string | null>(null)
+  const [manualHelpOpen, setManualHelpOpen] = useState(false)
+  const [containerChangeNotice, setContainerChangeNotice] = useState('')
+  const previousContainerKeyRef = useRef<string | null>(null)
+  const previousAutoPlacedCountRef = useRef(0)
+  const suppressContainerChangeNoticeRef = useRef(false)
   
   // Backend integrated states
   const [loggedIn, setLoggedIn] = useState(() => isLoggedIn())
@@ -722,6 +776,36 @@ function Workbench() {
   const displayCargoItems = useMemo(() => normalizeCargoLabelColors(cargoItems), [cargoItems])
   const result = useMemo(() => calculatePacking(selectedContainer, displayCargoItems, { loadingMode }), [displayCargoItems, loadingMode, selectedContainer])
   const detailRows = useMemo(() => buildExportPlanRows(displayCargoItems, result), [displayCargoItems, result])
+  const currentContainerKey = useMemo(() => containerPlacementKey(selectedContainer), [selectedContainer])
+
+  const markPlacementDirty = () => {
+    setHasCalculated(false)
+    setContainerChangeNotice('')
+  }
+
+  useEffect(() => {
+    const previousKey = previousContainerKeyRef.current
+    if (suppressContainerChangeNoticeRef.current) {
+      suppressContainerChangeNoticeRef.current = false
+      previousContainerKeyRef.current = currentContainerKey
+      previousAutoPlacedCountRef.current = placementMode === 'auto' && hasCalculated ? result.placedCount : 0
+      return
+    }
+    if (clearPlacementOnContainerChange({
+      previousKey,
+      nextKey: currentContainerKey,
+      placementMode,
+      hasCalculated,
+      placedCount: previousAutoPlacedCountRef.current,
+    })) {
+      setHasCalculated(false)
+      setSelectedBoxId(null)
+      setActiveLayerId('all')
+      setContainerChangeNotice(t.containerChangedNotice)
+    }
+    previousContainerKeyRef.current = currentContainerKey
+    previousAutoPlacedCountRef.current = placementMode === 'auto' && hasCalculated ? result.placedCount : 0
+  }, [currentContainerKey, hasCalculated, placementMode, result.placedCount, t.containerChangedNotice])
 
   const manualDraft = manualHistory.present
   const manualPool = useMemo(
@@ -746,12 +830,14 @@ function Workbench() {
   const manualCanUndo = manualHistory.past.length > 0
   const manualCanRedo = manualHistory.future.length > 0
 
-  const commitManual = (nextDraft: typeof manualDraft) => {
+  const commitManual = (nextDraft: ManualDraft) => {
     setManualHistory((current) => manualCommit(current, nextDraft))
   }
 
   const handleManualMoveBox = (id: string, x: number, y: number, z?: number) => {
-    commitManual(manualSetBoxPosition(manualDraft, id, x, y, z))
+    const nextDraft = manualSetBoxPosition(manualDraft, id, x, y, z)
+    if (manualValidateDraft(nextDraft, renderingContainer).length > 0) return
+    commitManual(nextDraft)
   }
 
   const handleManualDropFromPool = (cargoId: string, dropX: number, dropY: number) => {
@@ -771,7 +857,9 @@ function Workbench() {
       x: Math.max(0, dropX - cargoItem.length / 2),
       y: Math.max(0, dropY - cargoItem.width / 2),
     })
-    commitManual(manualAddBox(manualDraft, newBox))
+    const nextDraft = manualAddBox(manualDraft, newBox)
+    if (manualValidateDraft(nextDraft, renderingContainer).length > 0) return
+    commitManual(nextDraft)
     setManualSelectedId(boxId)
   }
 
@@ -791,12 +879,25 @@ function Workbench() {
 
   const handleManualRotate = () => {
     if (!manualSelectedId) return
-    commitManual(manualRotateBox(manualDraft, manualSelectedId))
+    const nextDraft = manualRotateBox(manualDraft, manualSelectedId)
+    if (manualValidateDraft(nextDraft, renderingContainer).length > 0) return
+    commitManual(nextDraft)
+  }
+
+  const handleManualRotateBox = (boxId: string) => {
+    const nextDraft = manualRotateBox(manualDraft, boxId)
+    if (manualValidateDraft(nextDraft, renderingContainer).length > 0) return
+    commitManual(nextDraft)
   }
 
   const handleManualDelete = () => {
     if (!manualSelectedId) return
     commitManual(manualRemoveBox(manualDraft, manualSelectedId))
+    setManualSelectedId(null)
+  }
+
+  const handleManualDeleteBox = (boxId: string) => {
+    commitManual(manualRemoveBox(manualDraft, boxId))
     setManualSelectedId(null)
   }
 
@@ -854,47 +955,11 @@ function Workbench() {
         setManualSelectedId(null)
         return
       }
-
-      if (!manualSelectedId) return
-
-      if (event.key === 'r' || event.key === 'R') {
-        if (event.shiftKey) return
-        event.preventDefault()
-        setManualHistory((current) => manualCommit(current, manualRotateBox(current.present, manualSelectedId)))
-        return
-      }
-
-      if (event.key === 'Delete' || event.key === 'Backspace') {
-        event.preventDefault()
-        setManualHistory((current) => manualCommit(current, manualRemoveBox(current.present, manualSelectedId)))
-        setManualSelectedId(null)
-        return
-      }
-
-      const arrowDeltas: Record<string, { dx: number; dy: number }> = {
-        ArrowLeft: { dx: -1, dy: 0 },
-        ArrowRight: { dx: 1, dy: 0 },
-        ArrowUp: { dx: 0, dy: 1 },
-        ArrowDown: { dx: 0, dy: -1 },
-      }
-      const delta = arrowDeltas[event.key]
-      if (delta) {
-        event.preventDefault()
-        const step = event.shiftKey ? 500 : 50
-        setManualHistory((current) => {
-          const box = current.present.boxes.find((b) => b.id === manualSelectedId)
-          if (!box) return current
-          return manualCommit(
-            current,
-            manualSetBoxPosition(current.present, manualSelectedId, box.x + delta.dx * step, box.y + delta.dy * step),
-          )
-        })
-      }
     }
 
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [placementMode, manualSelectedId])
+  }, [placementMode])
 
   const activeLayer = result.layers.find((layer) => layer.id === activeLayerId)
   const visibleBoxes = hasCalculated
@@ -949,7 +1014,7 @@ function Workbench() {
       label: nextLabel(cargoItems.length + 1),
       color: colors[(cargoItems.length + 1) % colors.length],
     }))
-    setHasCalculated(false)
+    markPlacementDirty()
   }
 
   const openEditCargo = (cargo: CargoItem) => {
@@ -983,7 +1048,7 @@ function Workbench() {
     setCargoItems((items) => items.map((item) => item.id === editingCargo.id ? nextCargo : item))
     setEditingCargo(null)
     setSelectedBoxId(null)
-    setHasCalculated(false)
+    markPlacementDirty()
   }
 
   const confirmMappingImport = () => {
@@ -1019,7 +1084,7 @@ function Workbench() {
     if (imported.items.length > 0) {
       setCargoItems(imported.items)
       setSelectedBoxId(null)
-      setHasCalculated(false)
+      markPlacementDirty()
     }
     setShowMappingModal(false)
     setActiveResultTab('importLog')
@@ -1089,7 +1154,7 @@ function Workbench() {
       if (imported.items.length > 0) {
         setCargoItems(imported.items)
         setSelectedBoxId(null)
-        setHasCalculated(false)
+        markPlacementDirty()
       }
       setActiveResultTab('importLog')
       setActiveNav('report')
@@ -1180,6 +1245,7 @@ function Workbench() {
   }
 
   const restorePlan = (plan: HistoryPlan) => {
+    suppressContainerChangeNoticeRef.current = true
     setProjectName(plan.projectName || '新装箱项目')
     setShipmentName(plan.shipmentName)
     setSelectedContainerId(plan.containerId)
@@ -1198,11 +1264,13 @@ function Workbench() {
     setActiveLabelId('all')
     setSelectedBoxId(null)
     setHasCalculated(true)
+    setContainerChangeNotice('')
     setActiveResultTab('layers')
     setActiveNav('overview')
   }
 
   const handleNewProject = () => {
+    suppressContainerChangeNoticeRef.current = true
     setProjectName(locale === 'zh' ? '新装箱项目' : 'New Project')
     setShipmentName('')
     setCargoItems(initialCargo)
@@ -1213,6 +1281,7 @@ function Workbench() {
     setActiveLabelId('all')
     setSelectedBoxId(null)
     setHasCalculated(true)
+    setContainerChangeNotice('')
     setActiveResultTab('layers')
   }
 
@@ -1274,7 +1343,9 @@ function Workbench() {
         setActiveLayerId('all')
         setActiveLabelId('all')
         setSelectedBoxId(null)
+        suppressContainerChangeNoticeRef.current = true
         setHasCalculated(true)
+        setContainerChangeNotice('')
         setActiveResultTab('layers')
       } catch (err) {
         console.error('Failed to parse uploaded project file', err)
@@ -1287,7 +1358,7 @@ function Workbench() {
 
   const deleteCargo = (cargoId: string) => {
     setCargoItems((items) => items.filter((item) => item.id !== cargoId))
-    setHasCalculated(false)
+    markPlacementDirty()
     setSelectedBoxId((current) => {
       const selectedBox = result.placed.find((box) => box.id === current)
       return selectedBox?.cargoId === cargoId ? null : current
@@ -1306,7 +1377,7 @@ function Workbench() {
       items.findIndex((item) => item.id === targetCargoId),
     ))
     setSelectedBoxId(null)
-    setHasCalculated(false)
+    markPlacementDirty()
     setDraggedCargoId(null)
   }
 
@@ -1860,8 +1931,36 @@ function Workbench() {
                     >
                       {t.manualDelete}
                     </button>
+                    <div className="relative">
+                      <button
+                        className="archive-button"
+                        type="button"
+                        aria-expanded={manualHelpOpen}
+                        data-testid="manual-keyboard-help"
+                        onClick={() => setManualHelpOpen((current) => !current)}
+                      >
+                        {t.manualKeyboardHelp}
+                      </button>
+                      {manualHelpOpen && (
+                        <div
+                          className="absolute right-0 z-20 mt-2 w-72 rounded-lg border border-[#cbd5e1] bg-white p-3 text-xs text-[#334155] shadow-xl"
+                          data-testid="manual-keyboard-help-popover"
+                        >
+                          <ul className="list-inside list-disc space-y-1">
+                            {t.manualKeyboardHelpItems.map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
                     <span className="ml-auto text-xs text-[#475569]">{t.manualHint}</span>
                   </div>
+                  {freeViewEnabled && (
+                    <div className="rounded-xl border border-[#bfdbfe] bg-[#eff6ff] p-3 text-xs font-semibold text-[#1d4ed8]" data-testid="manual-free-view-notice">
+                      {t.manualFreeViewNotice}
+                    </div>
+                  )}
                   {manualIssues.length > 0 && (
                     <div
                       className="rounded-xl border border-[#fecaca] bg-[#fef2f2] p-3 text-xs text-[#991b1b]"
@@ -1870,7 +1969,7 @@ function Workbench() {
                       <div className="mb-1 font-semibold">{t.manualIssues} ({manualIssues.length})</div>
                       <ul className="list-inside list-disc space-y-0.5">
                         {manualIssues.slice(0, 10).map((issue, index) => (
-                          <li key={`${issue.boxId}-${issue.type}-${index}`}>{issue.message}</li>
+                          <li key={`${issue.boxId}-${issue.type}-${index}`}>{localizeManualIssue(issue, t)}</li>
                         ))}
                       </ul>
                     </div>
@@ -1921,10 +2020,10 @@ function Workbench() {
                           selectedManualBoxId={manualSelectedId}
                           viewMode={sceneViewMode}
                           onClearSelection={() => setManualSelectedId(null)}
-                          onManualDelete={(boxId) => commitManual(manualRemoveBox(manualDraft, boxId))}
+                          onManualDelete={handleManualDeleteBox}
                           onManualDropFromPool={handleManualDropFromPool}
                           onManualMove={handleManualMoveBox}
-                          onManualRotate={(boxId) => commitManual(manualRotateBox(manualDraft, boxId))}
+                          onManualRotate={handleManualRotateBox}
                           onSelectBox={setManualSelectedId}
                         />
                       ) : (
@@ -1943,14 +2042,31 @@ function Workbench() {
                   </div>
                 </div>
               ) : workspaceView === '3d' ? (
-                <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={hasCalculated ? result.placed : []} container={renderingContainer} freeView={freeViewEnabled} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onSelectBox={setSelectedBoxId} />
+                <>
+                  {containerChangeNotice && (
+                    <div className="absolute left-6 top-6 z-10 rounded-xl border border-[#facc15] bg-[#fefce8] px-4 py-3 text-sm font-semibold text-[#854d0e]" data-testid="container-change-notice">
+                      {containerChangeNotice}
+                    </div>
+                  )}
+                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={hasCalculated ? result.placed : []} container={renderingContainer} freeView={freeViewEnabled} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onSelectBox={setSelectedBoxId} />
+                </>
               ) : (
-                <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={result.placed} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
+                <>
+                  {containerChangeNotice && (
+                    <div className="absolute left-6 top-6 z-10 rounded-xl border border-[#facc15] bg-[#fefce8] px-4 py-3 text-sm font-semibold text-[#854d0e]" data-testid="container-change-notice">
+                      {containerChangeNotice}
+                    </div>
+                  )}
+                  <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={hasCalculated ? result.placed : []} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
+                </>
               )}
               <button
                 className="archive-button success absolute bottom-6 right-6"
                 type="button"
-                onClick={() => setHasCalculated(true)}
+                onClick={() => {
+                  setHasCalculated(true)
+                  setContainerChangeNotice('')
+                }}
               >
                 {t.load}
               </button>

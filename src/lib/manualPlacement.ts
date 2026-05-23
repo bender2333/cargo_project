@@ -23,7 +23,7 @@ export type ManualDraft = {
 }
 
 export type ValidationIssue = {
-  type: 'boundary' | 'overlap'
+  type: 'boundary' | 'overlap' | 'floating'
   message: string
   boxId: string
 }
@@ -48,6 +48,7 @@ export type ManualHistory = {
 
 const EPSILON = 0.001
 const HISTORY_LIMIT = 100
+export const MIN_SUPPORT_OVERLAP_RATIO = 0.5
 
 export function emptyDraft(): ManualDraft {
   return { boxes: [] }
@@ -135,6 +136,45 @@ function overlapsXY(a: ManualPlacedBox, b: ManualPlacedBox): boolean {
   )
 }
 
+function overlapsZ(a: ManualPlacedBox, b: ManualPlacedBox): boolean {
+  return a.z < b.z + b.height - EPSILON && b.z < a.z + a.height - EPSILON
+}
+
+function overlapAreaXY(a: ManualPlacedBox, b: ManualPlacedBox): number {
+  const xOverlap = Math.max(0, Math.min(a.x + a.length, b.x + b.length) - Math.max(a.x, b.x))
+  const yOverlap = Math.max(0, Math.min(a.y + a.width, b.y + b.width) - Math.max(a.y, b.y))
+  return xOverlap * yOverlap
+}
+
+export function findSupport(box: ManualPlacedBox, others: ManualPlacedBox[]): { boxId: string; overlapRatio: number } | null {
+  if (box.z <= EPSILON) {
+    return { boxId: 'floor', overlapRatio: 1 }
+  }
+
+  const baseArea = box.length * box.width
+  if (baseArea <= 0) return null
+
+  let supportedArea = 0
+  let strongestSupport: { boxId: string; overlapRatio: number } | null = null
+  for (const other of others) {
+    if (other.id === box.id) continue
+    const topZ = other.z + other.height
+    if (Math.abs(topZ - box.z) > EPSILON) continue
+    const overlapRatio = overlapAreaXY(box, other) / baseArea
+    if (overlapRatio <= 0) continue
+    supportedArea += overlapAreaXY(box, other)
+    if (!strongestSupport || overlapRatio > strongestSupport.overlapRatio) {
+      strongestSupport = { boxId: other.id, overlapRatio }
+    }
+  }
+
+  const combinedRatio = Math.min(1, supportedArea / baseArea)
+  if (combinedRatio >= MIN_SUPPORT_OVERLAP_RATIO) {
+    return strongestSupport ? { boxId: strongestSupport.boxId, overlapRatio: combinedRatio } : null
+  }
+  return null
+}
+
 export function validateDraft(draft: ManualDraft, container: ContainerSpec): ValidationIssue[] {
   const issues: ValidationIssue[] = []
 
@@ -152,7 +192,7 @@ export function validateDraft(draft: ManualDraft, container: ContainerSpec): Val
     for (let j = i + 1; j < draft.boxes.length; j += 1) {
       const a = draft.boxes[i]
       const b = draft.boxes[j]
-      if (overlapsXY(a, b)) {
+      if (overlapsXY(a, b) && overlapsZ(a, b)) {
         issues.push({
           type: 'overlap',
           boxId: a.id,
@@ -164,6 +204,16 @@ export function validateDraft(draft: ManualDraft, container: ContainerSpec): Val
           message: `Box ${b.label} overlaps with ${a.label}.`,
         })
       }
+    }
+  }
+
+  for (const box of draft.boxes) {
+    if (!findSupport(box, draft.boxes)) {
+      issues.push({
+        type: 'floating',
+        boxId: box.id,
+        message: `Box ${box.label} is floating and needs at least ${Math.round(MIN_SUPPORT_OVERLAP_RATIO * 100)}% base support.`,
+      })
     }
   }
 

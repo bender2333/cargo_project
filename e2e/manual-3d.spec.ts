@@ -98,6 +98,47 @@ test('手动模式 3D 暴露 manualEditable canvas，pool 项目可拖拽', asyn
   await expect(poolItems.first()).toHaveAttribute('draggable', 'true')
 })
 
+test('手动模式自由视角是只读浏览态并展示提示', async ({ page }) => {
+  await ensureChinese(page)
+  await enterManualMode(page)
+  const scene = page.getByTestId('container-scene')
+  await page.getByRole('button', { name: '自由视角' }).click()
+  await expect(scene).toHaveAttribute('data-interaction-mode', 'manual-free')
+  await expect(scene).toHaveAttribute('data-controls-enabled', 'true')
+  await expect(page.getByTestId('manual-free-view-notice')).toContainText('只读浏览')
+})
+
+test('手动模式键盘帮助展示 Z 轴与快捷键说明', async ({ page }) => {
+  await ensureChinese(page)
+  await enterManualMode(page)
+  await page.getByTestId('manual-keyboard-help').click()
+  const popover = page.getByTestId('manual-keyboard-help-popover')
+  await expect(popover).toContainText('Shift + 拖拽')
+  await expect(popover).toContainText('PageUp/PageDown')
+  await expect(popover).toContainText('Ctrl/Cmd = 1 mm')
+  await expect(popover).toContainText('Delete')
+  await expect(popover).toContainText('Esc')
+})
+
+test('手动模式阻止键盘把箱体移动到悬空位置', async ({ page }) => {
+  await ensureChinese(page)
+  await page.getByRole('button', { name: '继续手动微调' }).click()
+  await expect(page.getByTestId('manual-workspace')).toBeVisible()
+  await expect(page.getByTestId('container-scene')).toHaveAttribute('data-box-count', '18')
+
+  await page.getByRole('button', { name: '2D', exact: true }).click()
+  const firstManualBox = page.locator('[data-box-id]').first()
+  await firstManualBox.dispatchEvent('pointerdown', { pointerId: 1, clientX: 100, clientY: 100, button: 0 })
+  await expect(page.getByTestId('manual-delete')).toBeEnabled()
+  await page.getByRole('button', { name: '3D', exact: true }).click()
+
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-box-count', '18')
+  await page.keyboard.press('PageUp')
+  await expect(page.getByTestId('manual-issues')).toHaveCount(0)
+  await expect(scene).toHaveAttribute('data-box-count', '18')
+})
+
 test('自动模式默认锁定视角；点自由视角后切到 free 状态', async ({ page }) => {
   await ensureChinese(page)
   const scene = page.getByTestId('container-scene')
@@ -105,6 +146,16 @@ test('自动模式默认锁定视角；点自由视角后切到 free 状态', as
   await expect(scene).toHaveAttribute('data-interaction-mode', 'locked')
   await page.getByRole('button', { name: '自由视角' }).click()
   await expect(scene).toHaveAttribute('data-interaction-mode', 'free')
+})
+
+test('自动模式更换货柜后清空旧画布并提示重新计算', async ({ page }) => {
+  await ensureChinese(page)
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toBeVisible()
+  await page.getByLabel('货柜类型').selectOption({ index: 1 })
+  await expect(page.getByTestId('container-change-notice')).toContainText('重新计算')
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+  await expect(scene).toHaveAttribute('data-interaction-mode', 'locked')
 })
 
 test('从历史方案恢复自定义柜型后 3D 场景重建并显示新箱体', async ({ page }) => {

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { ContainerSpec, PlacedBox } from '../types'
+import { MIN_SUPPORT_OVERLAP_RATIO } from '../lib/manualPlacement'
 
 export type SceneViewMode = 'iso' | 'top' | 'front' | 'side'
 
@@ -210,6 +211,15 @@ function isOutOfBounds(x: number, y: number, l: number, w: number, container: { 
   return x < -epsilon || y < -epsilon || x + l > container.length + epsilon || y + w > container.width + epsilon
 }
 
+function overlapAreaXY(
+  ax: number, ay: number, al: number, aw: number,
+  bx: number, by: number, bl: number, bw: number,
+) {
+  const xOverlap = Math.max(0, Math.min(ax + al, bx + bl) - Math.max(ax, bx))
+  const yOverlap = Math.max(0, Math.min(ay + aw, by + bw) - Math.max(ay, by))
+  return xOverlap * yOverlap
+}
+
 export function ContainerScene({
   container,
   boxes,
@@ -406,6 +416,8 @@ export function ContainerScene({
     const computeDragInvalid = (entry: MeshEntry, x: number, y: number, z: number) => {
       if (isOutOfBounds(x, y, entry.box.length, entry.box.width, container)) return true
       if (z < -0.01 || z + entry.box.height > container.height + 0.01) return true
+      let supportedArea = z <= 0.01 ? entry.box.length * entry.box.width : 0
+      const baseArea = entry.box.length * entry.box.width
       for (const other of sceneState.meshEntries.values()) {
         if (other.box.id === entry.box.id) continue
         if (other.box.z >= z + entry.box.height || z >= other.box.z + other.box.height) continue
@@ -424,6 +436,23 @@ export function ContainerScene({
           return true
         }
       }
+      if (z > 0.01) {
+        for (const other of sceneState.meshEntries.values()) {
+          if (other.box.id === entry.box.id) continue
+          if (Math.abs(other.box.z + other.box.height - z) > 0.01) continue
+          supportedArea += overlapAreaXY(
+            x,
+            y,
+            entry.box.length,
+            entry.box.width,
+            other.box.x,
+            other.box.y,
+            other.box.length,
+            other.box.width,
+          )
+        }
+      }
+      if (baseArea <= 0 || supportedArea / baseArea < MIN_SUPPORT_OVERLAP_RATIO) return true
       return false
     }
 
@@ -442,7 +471,7 @@ export function ContainerScene({
       if (boxId) {
         onSelectBoxRef.current?.(boxId)
       }
-      if (!manualEditableRef.current || !boxId) return
+      if (!manualEditableRef.current || freeViewRef.current || !boxId) return
       const entry = sceneState.meshEntries.get(boxId)
       if (!entry) return
       raycaster.ray.intersectPlane(groundPlane, intersectionPoint)
@@ -503,17 +532,29 @@ export function ContainerScene({
         const finalXmm = (entry.mesh.position.x + length / 2) / scale - entry.box.length / 2
         const finalYmm = (entry.mesh.position.z + width / 2) / scale - entry.box.width / 2
         const finalZmm = entry.mesh.position.y / scale - entry.box.height / 2
+        const invalid = sceneState.invalidOverride.has(boxId) || computeDragInvalid(entry, finalXmm, finalYmm, finalZmm)
         sceneState.invalidOverride.delete(boxId)
         refreshEntryVisual(entry)
-        if (mode === 'z') {
-          onManualMoveRef.current?.(boxId, entry.box.x, entry.box.y, Math.max(0, finalZmm))
+        if (!invalid) {
+          if (mode === 'z') {
+            onManualMoveRef.current?.(boxId, entry.box.x, entry.box.y, Math.max(0, finalZmm))
+          } else {
+            onManualMoveRef.current?.(boxId, finalXmm, finalYmm)
+          }
         } else {
-          onManualMoveRef.current?.(boxId, finalXmm, finalYmm)
+          entry.mesh.position.set(
+            -length / 2 + (entry.box.x + entry.box.length / 2) * scale,
+            (entry.box.z + entry.box.height / 2) * scale,
+            -width / 2 + (entry.box.y + entry.box.width / 2) * scale,
+          )
+          entry.edges.position.copy(entry.mesh.position)
         }
         renderer.domElement.releasePointerCapture?.(event.pointerId)
         dragState = null
       }
-      if (manualEditableRef.current) {
+      if (freeViewRef.current) {
+        controls.enabled = true
+      } else if (manualEditableRef.current) {
         controls.enabled = true
       } else {
         controls.enabled = freeViewRef.current
@@ -521,7 +562,7 @@ export function ContainerScene({
     }
 
     const onDragOver = (event: DragEvent) => {
-      if (!manualEditableRef.current) return
+      if (!manualEditableRef.current || freeViewRef.current) return
       event.preventDefault()
       if (event.dataTransfer) {
         event.dataTransfer.dropEffect = 'copy'
@@ -529,7 +570,7 @@ export function ContainerScene({
     }
 
     const onDrop = (event: DragEvent) => {
-      if (!manualEditableRef.current) return
+      if (!manualEditableRef.current || freeViewRef.current) return
       event.preventDefault()
       const cargoId = event.dataTransfer?.getData('application/x-cargo-id') ?? event.dataTransfer?.getData('text/plain')
       if (!cargoId) return
@@ -542,6 +583,7 @@ export function ContainerScene({
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (!manualEditableRef.current) return
+      if (freeViewRef.current) return
       const target = event.target as HTMLElement | null
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
       const boxId = selectedManualBoxIdRef.current
@@ -732,19 +774,19 @@ export function ContainerScene({
   useEffect(() => {
     const state = sceneStateRef.current
     if (!state) return
-    if (manualEditable) {
-      state.controls.enabled = true
-      state.controls.mouseButtons = {
-        LEFT: null,
-        MIDDLE: THREE.MOUSE.DOLLY,
-        RIGHT: THREE.MOUSE.ROTATE,
-      }
-    } else if (freeView) {
+    if (freeView) {
       state.controls.enabled = true
       state.controls.mouseButtons = {
         LEFT: THREE.MOUSE.ROTATE,
         MIDDLE: THREE.MOUSE.DOLLY,
         RIGHT: THREE.MOUSE.PAN,
+      }
+    } else if (manualEditable) {
+      state.controls.enabled = true
+      state.controls.mouseButtons = {
+        LEFT: null,
+        MIDDLE: THREE.MOUSE.DOLLY,
+        RIGHT: THREE.MOUSE.ROTATE,
       }
     } else {
       state.controls.enabled = false
@@ -762,7 +804,7 @@ export function ContainerScene({
   }, [activeLayerId, activeLabelId, selectedBoxId, invalidBoxIds])
 
   const controlsEnabled = !!(manualEditable || freeView)
-  const interactionMode = manualEditable ? 'manual' : freeView ? 'free' : 'locked'
+  const interactionMode = manualEditable && freeView ? 'manual-free' : manualEditable ? 'manual' : freeView ? 'free' : 'locked'
 
   return (
     <div
@@ -771,6 +813,7 @@ export function ContainerScene({
       data-testid="container-scene"
       data-controls-enabled={controlsEnabled ? 'true' : 'false'}
       data-interaction-mode={interactionMode}
+      data-box-count={boxes.length}
     />
   )
 }

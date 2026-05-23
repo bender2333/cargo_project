@@ -242,6 +242,40 @@ describe('manualPlacement', () => {
     expect(overlapIssues.map((issue) => issue.boxId).sort()).toEqual(['b1', 'b2'])
   })
 
+  it('validateDraft allows xy overlap when boxes are stacked with enough support', () => {
+    let draft = emptyDraft()
+    draft = addBox(draft, makeManualBox({
+      id: 'base', cargoId: 'cargo-a', label: 'A', color: '#fff',
+      length: 400, width: 500, height: 600, x: 0, y: 0,
+    }))
+    draft = setBoxPosition(addBox(draft, makeManualBox({
+      id: 'top', cargoId: 'cargo-a', label: 'A', color: '#fff',
+      length: 400, width: 500, height: 600, x: 0, y: 0,
+    })), 'top', 0, 0, 600)
+
+    const issues = validateDraft(draft, container())
+
+    expect(issues).toHaveLength(0)
+  })
+
+  it('validateDraft flags boxes that float without at least half base support', () => {
+    let draft = emptyDraft()
+    draft = addBox(draft, makeManualBox({
+      id: 'base', cargoId: 'cargo-a', label: 'A', color: '#fff',
+      length: 400, width: 500, height: 600, x: 0, y: 0,
+    }))
+    draft = setBoxPosition(addBox(draft, makeManualBox({
+      id: 'top', cargoId: 'cargo-a', label: 'A', color: '#fff',
+      length: 400, width: 500, height: 600, x: 250, y: 0,
+    })), 'top', 250, 0, 600)
+
+    const issues = validateDraft(draft, container())
+
+    expect(issues).toEqual([
+      expect.objectContaining({ type: 'floating', boxId: 'top' }),
+    ])
+  })
+
   it('validateDraft returns no issues for non-overlapping in-bounds boxes', () => {
     let draft = emptyDraft()
     draft = addBox(draft, makeManualBox({
