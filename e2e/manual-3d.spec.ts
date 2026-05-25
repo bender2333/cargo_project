@@ -335,6 +335,23 @@ test('Balance 3D 切换在主场景显示重心 overlay', async ({ page }) => {
   await expect(scene).toHaveAttribute('data-cog-overlay', 'off')
 })
 
+test('重心场 toggle 在 3D overlay 开启时切换 data-gravity-field', async ({ page }) => {
+  await ensureChinese(page)
+  await page.getByRole('button', { name: '装载重心' }).click()
+  const scene = page.getByTestId('container-scene')
+  const gravityToggle = page.getByTestId('cog-toggle-gravity-field')
+  // overlay 关闭时按钮置灰不可用
+  await expect(gravityToggle).toBeDisabled()
+  await expect(scene).toHaveAttribute('data-gravity-field', 'off')
+  // 打开 overlay 后才能切重心场
+  await page.getByTestId('cog-toggle-3d').click()
+  await expect(gravityToggle).toBeEnabled()
+  await gravityToggle.click()
+  await expect(scene).toHaveAttribute('data-gravity-field', 'on')
+  await gravityToggle.click()
+  await expect(scene).toHaveAttribute('data-gravity-field', 'off')
+})
+
 test('手动模式剩余资源面板展示三项占用比例', async ({ page }) => {
   await ensureChinese(page)
   await enterManualMode(page)

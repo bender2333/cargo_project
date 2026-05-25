@@ -28,6 +28,9 @@ const T = {
     cautious: 'Within ±10% — keep an eye on it.',
     showIn3d: 'Show in 3D',
     hideIn3d: 'Hide 3D overlay',
+    showGravityField: 'Gravity field',
+    hideGravityField: 'Hide gravity field',
+    gravityFieldTooltip: 'Heat-map of distance from the load center over the container floor.',
     vehicle: 'Vehicle',
   },
   zh: {
@@ -47,6 +50,9 @@ const T = {
     cautious: '偏移在 ±10% 以内，请留意。',
     showIn3d: '在 3D 中显示',
     hideIn3d: '关闭 3D 显示',
+    showGravityField: '重心场',
+    hideGravityField: '关闭重心场',
+    gravityFieldTooltip: '在柜底投影出与装载重心的距离热点图。',
     vehicle: '车型',
   },
 } as const
@@ -57,6 +63,8 @@ type Props = {
   locale: Locale
   show3d: boolean
   onToggle3d: (show: boolean) => void
+  showGravityField: boolean
+  onToggleGravityField: (show: boolean) => void
   vehicleProfile: VehicleProfileId
   onVehicleProfileChange: (id: VehicleProfileId) => void
 }
@@ -71,7 +79,17 @@ function ratio(value: number, dim: number) {
   return value / dim
 }
 
-export function CenterOfGravityPanel({ result, container, locale, show3d, onToggle3d, vehicleProfile, onVehicleProfileChange }: Props) {
+export function CenterOfGravityPanel({
+  result,
+  container,
+  locale,
+  show3d,
+  onToggle3d,
+  showGravityField,
+  onToggleGravityField,
+  vehicleProfile,
+  onVehicleProfileChange,
+}: Props) {
   const t = T[locale]
   const empty = result.totalWeight <= 0
 
@@ -119,6 +137,17 @@ export function CenterOfGravityPanel({ result, container, locale, show3d, onTogg
             onClick={() => onToggle3d(!show3d)}
           >
             {show3d ? t.hideIn3d : t.showIn3d}
+          </button>
+          <button
+            type="button"
+            className={`rounded-full border px-3 py-1 text-xs font-semibold ${showGravityField ? 'border-[#f59e0b] bg-[#fef3c7] text-[#92400e]' : 'border-[#cbd5e1] bg-white text-[#475569]'} disabled:cursor-not-allowed disabled:opacity-60`}
+            data-testid="cog-toggle-gravity-field"
+            aria-pressed={showGravityField}
+            disabled={!show3d}
+            title={t.gravityFieldTooltip}
+            onClick={() => onToggleGravityField(!showGravityField)}
+          >
+            {showGravityField ? t.hideGravityField : t.showGravityField}
           </button>
           <span className="text-xs text-[#475569]" data-testid="cog-total-weight">
             {t.totalWeight}: {result.totalWeight.toFixed(1)} kg

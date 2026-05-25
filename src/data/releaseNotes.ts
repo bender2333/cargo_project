@@ -14,6 +14,25 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-05-25-r21',
+    date: '2026-05-25',
+    title: { en: 'Detailed truck silhouette + gravity field overlay', zh: '卡车轮廓重做 + 重心场可视化' },
+    items: {
+      en: [
+        'The tractor + trailer drawn beneath the container is no longer a plain box. The cab is trapezoidal (wider/taller at the back), with a slanted windshield, a grille, and a roof deflector that point in the direction of travel.',
+        'Each axle now shows a dual-wheel group with a centre-to-centre beam, plus a chassis beam and a kingpin marker — closer to a real semi-trailer profile.',
+        'Balance tab gains a "Gravity field" toggle. With the 3D overlay on, the container floor is sampled (≤80 points) and shaded green → amber → red by distance from the load center, so the bias is visible at a glance.',
+        'Cleaned up 87 leftover automated-test accounts from the production database; only operator accounts remain.',
+      ],
+      zh: [
+        '货柜下方的牵引车 + 拖挂改成更真实的轮廓：驾驶室是梯形（后高后宽），带倾斜风挡、格栅、顶部导流罩，能直接看出车头朝向。',
+        '每根车轴升级为双轮组并加横梁连接，新增车架纵梁和牵引销标记，更接近实拍半挂。',
+        '装载重心面板新增「重心场」开关：3D overlay 开启后，柜底以 ≤80 个点采样，按到装载重心的距离做绿→黄→红渐变，重心偏置一眼可见。',
+        '清理生产库残留的 87 个自动化测试账号，仅保留实际运营账号。',
+      ],
+    },
+  },
+  {
     version: '2026-05-25-r19',
     date: '2026-05-25',
     title: { en: 'Floating maximize, middle-mouse pan, admin nav', zh: '画布角最大化按钮 / 中键平移 / 管理员主导航入口' },

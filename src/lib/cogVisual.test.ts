@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { buildCogOverlay, buildTruckSilhouette, computeSafeCogBox } from './cogVisual'
+import {
+  buildCogOverlay,
+  buildGravityField,
+  buildTruckGeometry,
+  buildTruckSilhouette,
+  computeSafeCogBox,
+  GRAVITY_FIELD_MAX_POINTS,
+} from './cogVisual'
 import type { CogResult } from './centerOfGravity'
 
 const container = { length: 12000, width: 2400, height: 2600 }
@@ -77,5 +84,91 @@ describe('vehicle profile influence', () => {
       'container-only',
     )
     expect(overlay.truck).toBeNull()
+  })
+})
+
+describe('buildTruckGeometry', () => {
+  it('places the trapezoidal cab in front of the trailer with wider back than front', () => {
+    const geo = buildTruckGeometry(container)
+    expect(geo).not.toBeNull()
+    if (!geo) return
+    expect(geo.cab.frontX).toBeLessThan(geo.cab.backX)
+    expect(geo.cab.backX).toBeLessThan(0)
+    expect(geo.cab.backHeight).toBeGreaterThan(geo.cab.frontHeight)
+    expect(geo.cab.backWidth).toBeGreaterThan(geo.cab.frontWidth)
+  })
+
+  it('exposes a slanted windshield whose top is behind and above the bottom', () => {
+    const geo = buildTruckGeometry(container)
+    if (!geo) return
+    expect(geo.windshield.topX).toBeGreaterThan(geo.windshield.bottomX)
+    expect(geo.windshield.topZ).toBeGreaterThan(geo.windshield.bottomZ)
+  })
+
+  it('emits two axles with the rear one in the back portion of the trailer', () => {
+    const geo = buildTruckGeometry(container)
+    if (!geo) return
+    expect(geo.axles).toHaveLength(2)
+    expect(geo.axles[0]!.x).toBeLessThan(container.length / 2)
+    expect(geo.axles[1]!.x).toBeGreaterThan(container.length / 2)
+    expect(geo.axles[1]!.x).toBeLessThan(container.length)
+    expect(geo.axles[0]!.dualSpacing).toBeGreaterThan(0)
+    expect(geo.axles[0]!.halfTrack).toBeGreaterThan(0)
+  })
+
+  it('returns null when the profile opts out of drawing a silhouette', () => {
+    const geo = buildTruckGeometry(container, VEHICLE_PROFILES['container-only'])
+    expect(geo).toBeNull()
+  })
+})
+
+describe('buildGravityField', () => {
+  it('samples a grid with severity 0 closest to the CoG and 1 at the farthest corner', () => {
+    const cog = { x: container.length / 2, y: container.width / 2 }
+    const field = buildGravityField(container, cog)
+    const minSeverity = Math.min(...field.map((p) => p.severity))
+    const maxSeverity = Math.max(...field.map((p) => p.severity))
+    expect(minSeverity).toBeGreaterThanOrEqual(0)
+    expect(minSeverity).toBeLessThan(0.2)
+    expect(maxSeverity).toBeCloseTo(1, 5)
+  })
+
+  it('shifts the high-severity region opposite of an offset CoG', () => {
+    const offsetCog = { x: 1000, y: 600 }
+    const field = buildGravityField(container, offsetCog)
+    const leftFront = field.find((p) => p.x === 0 && p.y === 0)
+    const rightBack = field.find((p) => p.x === container.length && p.y === container.width)
+    expect(leftFront && rightBack).toBeTruthy()
+    expect((rightBack as { severity: number }).severity)
+      .toBeGreaterThan((leftFront as { severity: number }).severity)
+  })
+
+  it('caps the point count by lowering grid resolution', () => {
+    const field = buildGravityField(container, { x: 0, y: 0 }, { nx: 20, ny: 20 })
+    expect(field.length).toBeLessThanOrEqual(GRAVITY_FIELD_MAX_POINTS)
+    const customCap = buildGravityField(container, { x: 0, y: 0 }, { maxPoints: 12 })
+    expect(customCap.length).toBeLessThanOrEqual(12)
+  })
+})
+
+describe('buildCogOverlay with gravity field toggle', () => {
+  const baseCog: CogResult = {
+    cog: { x: 4000, y: 1000, z: 800 },
+    center: { x: 6000, y: 1200, z: 1300 },
+    offset: { x: -2000, y: -200, z: -500 },
+    totalWeight: 1000,
+    warning: false,
+    balanced: false,
+  }
+
+  it('omits the gravity field by default', () => {
+    const overlay = buildCogOverlay(baseCog, container)
+    expect(overlay.gravityField).toBeNull()
+  })
+
+  it('populates the gravity field when enabled', () => {
+    const overlay = buildCogOverlay(baseCog, container, 'semi-trailer', { gravityFieldOn: true })
+    expect(overlay.gravityField && overlay.gravityField.length).toBeGreaterThan(0)
+    expect(overlay.truckGeometry).not.toBeNull()
   })
 })

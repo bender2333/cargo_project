@@ -1173,42 +1173,181 @@ export function ContainerScene({
     line.computeLineDistances()
     group.add(line)
 
-    // Truck silhouette beneath the container (cab + trailer + axles). Profile may opt out.
-    const truck = cogOverlay.truck
-    if (truck) {
+    // Truck silhouette beneath the container — full geometry descriptor.
+    const geo = cogOverlay.truckGeometry
+    if (geo) {
       const truckColor = 0x475569
-      const trailerLen = (truck.trailerEnd - truck.trailerStart) * scale
-      const trailerW = truck.trailerWidth * scale
-      const trailerDeck = new THREE.LineSegments(
-        new THREE.EdgesGeometry(new THREE.BoxGeometry(trailerLen, 0.08, trailerW)),
-        new THREE.LineBasicMaterial({ color: truckColor }),
-      )
-      trailerDeck.position.set(-state.length / 2 + trailerLen / 2, -0.18, 0)
-      group.add(trailerDeck)
+      const truckMat = new THREE.LineBasicMaterial({ color: truckColor })
+      const yFloor = -0.05 // trailer deck top sits just under the container floor (world Y units)
 
-      const cabLen = (truck.cabBack - truck.cabFront) * scale
-      const cabW = truck.cabWidth * scale
-      const cabH = truck.cabHeight * scale
-      const cab = new THREE.LineSegments(
-        new THREE.EdgesGeometry(new THREE.BoxGeometry(cabLen, cabH, cabW)),
-        new THREE.LineBasicMaterial({ color: truckColor }),
-      )
-      cab.position.set(-state.length / 2 + (truck.cabFront + cabLen / 2) * scale, cabH / 2 - 0.05, 0)
-      group.add(cab)
-
-      const wheelGeom = new THREE.TorusGeometry(truck.wheelRadius * scale, 0.04, 8, 16)
-      const wheelMat = new THREE.LineBasicMaterial({ color: truckColor })
-      const addAxle = (xMm: number) => {
-        const yWorld = -0.18 - truck.wheelRadius * scale * 0.5
-        for (const sign of [-1, 1]) {
-          const wheel = new THREE.Line(new THREE.EdgesGeometry(wheelGeom), wheelMat)
-          wheel.rotation.z = Math.PI / 2
-          wheel.position.set(-state.length / 2 + xMm * scale, yWorld, sign * trailerW * 0.45)
-          group.add(wheel)
-        }
+      const addLineSegments = (positions: number[]) => {
+        const buf = new THREE.BufferGeometry()
+        buf.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+        group.add(new THREE.LineSegments(buf, truckMat))
       }
-      addAxle(truck.frontAxleX)
-      addAxle(truck.rearAxleX)
+
+      // Helper to flatten a list of [from, to] points into a flat position array.
+      const segs = (pairs: Array<[THREE.Vector3, THREE.Vector3]>) => {
+        const out: number[] = []
+        for (const [a, b] of pairs) {
+          out.push(a.x, a.y, a.z, b.x, b.y, b.z)
+        }
+        return out
+      }
+
+      // Build a trapezoidal cab as 8 corner vertices + 12 connecting edges.
+      const cabFrontHalfW = geo.cab.frontWidth / 2
+      const cabBackHalfW = geo.cab.backWidth / 2
+      const trailerCenterY = geo.trailer.width / 2
+      const cabV = {
+        fbl: toWorld(geo.cab.frontX, trailerCenterY - cabFrontHalfW, 0),
+        fbr: toWorld(geo.cab.frontX, trailerCenterY + cabFrontHalfW, 0),
+        ftl: toWorld(geo.cab.frontX, trailerCenterY - cabFrontHalfW, geo.cab.frontHeight),
+        ftr: toWorld(geo.cab.frontX, trailerCenterY + cabFrontHalfW, geo.cab.frontHeight),
+        bbl: toWorld(geo.cab.backX, trailerCenterY - cabBackHalfW, 0),
+        bbr: toWorld(geo.cab.backX, trailerCenterY + cabBackHalfW, 0),
+        btl: toWorld(geo.cab.backX, trailerCenterY - cabBackHalfW, geo.cab.backHeight),
+        btr: toWorld(geo.cab.backX, trailerCenterY + cabBackHalfW, geo.cab.backHeight),
+      }
+      addLineSegments(
+        segs([
+          // front face rectangle
+          [cabV.fbl, cabV.fbr], [cabV.fbr, cabV.ftr], [cabV.ftr, cabV.ftl], [cabV.ftl, cabV.fbl],
+          // back face rectangle
+          [cabV.bbl, cabV.bbr], [cabV.bbr, cabV.btr], [cabV.btr, cabV.btl], [cabV.btl, cabV.bbl],
+          // 4 connecting edges (the trapezoid sides)
+          [cabV.fbl, cabV.bbl], [cabV.fbr, cabV.bbr], [cabV.ftl, cabV.btl], [cabV.ftr, cabV.btr],
+        ]),
+      )
+
+      // Windshield: 4 edges defining a slanted plane on the front face of the cab.
+      const wsBL = toWorld(geo.windshield.bottomX, trailerCenterY - geo.windshield.width / 2, geo.windshield.bottomZ)
+      const wsBR = toWorld(geo.windshield.bottomX, trailerCenterY + geo.windshield.width / 2, geo.windshield.bottomZ)
+      const wsTL = toWorld(geo.windshield.topX, trailerCenterY - geo.windshield.width / 2, geo.windshield.topZ)
+      const wsTR = toWorld(geo.windshield.topX, trailerCenterY + geo.windshield.width / 2, geo.windshield.topZ)
+      addLineSegments(segs([[wsBL, wsBR], [wsBR, wsTR], [wsTR, wsTL], [wsTL, wsBL], [wsBL, wsTR], [wsBR, wsTL]]))
+
+      // Grille: vertical bars + top/bottom frame.
+      const grilleBars: Array<[THREE.Vector3, THREE.Vector3]> = []
+      const gW = geo.grille.width
+      const gY0 = trailerCenterY - gW / 2
+      grilleBars.push(
+        [toWorld(geo.grille.x, gY0, geo.grille.bottomZ), toWorld(geo.grille.x, gY0 + gW, geo.grille.bottomZ)],
+        [toWorld(geo.grille.x, gY0, geo.grille.topZ), toWorld(geo.grille.x, gY0 + gW, geo.grille.topZ)],
+      )
+      for (let i = 0; i < geo.grille.bars; i += 1) {
+        const t = geo.grille.bars === 1 ? 0.5 : i / (geo.grille.bars - 1)
+        const y = gY0 + t * gW
+        grilleBars.push([toWorld(geo.grille.x, y, geo.grille.bottomZ), toWorld(geo.grille.x, y, geo.grille.topZ)])
+      }
+      addLineSegments(segs(grilleBars))
+
+      // Roof deflector — small box on top of the cab.
+      const rd = geo.roofDeflector
+      const rdHalfW = rd.width / 2
+      const rdV = {
+        fbl: toWorld(rd.frontX, trailerCenterY - rdHalfW, rd.bottomZ),
+        fbr: toWorld(rd.frontX, trailerCenterY + rdHalfW, rd.bottomZ),
+        ftl: toWorld(rd.frontX, trailerCenterY - rdHalfW, rd.topZ),
+        ftr: toWorld(rd.frontX, trailerCenterY + rdHalfW, rd.topZ),
+        bbl: toWorld(rd.backX, trailerCenterY - rdHalfW, rd.bottomZ),
+        bbr: toWorld(rd.backX, trailerCenterY + rdHalfW, rd.bottomZ),
+        btl: toWorld(rd.backX, trailerCenterY - rdHalfW, rd.topZ),
+        btr: toWorld(rd.backX, trailerCenterY + rdHalfW, rd.topZ),
+      }
+      addLineSegments(
+        segs([
+          [rdV.fbl, rdV.fbr], [rdV.fbr, rdV.ftr], [rdV.ftr, rdV.ftl], [rdV.ftl, rdV.fbl],
+          [rdV.bbl, rdV.bbr], [rdV.bbr, rdV.btr], [rdV.btr, rdV.btl], [rdV.btl, rdV.bbl],
+          [rdV.fbl, rdV.bbl], [rdV.fbr, rdV.bbr], [rdV.ftl, rdV.btl], [rdV.ftr, rdV.btr],
+        ]),
+      )
+
+      // Trailer deck — thin box outline at the bottom of the container.
+      const trailerLen = (geo.trailer.endX - geo.trailer.startX) * scale
+      const trailerW = geo.trailer.width * scale
+      const deck = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(trailerLen, geo.trailer.deckThickness * scale, trailerW)),
+        truckMat,
+      )
+      deck.position.set(-state.length / 2 + trailerLen / 2, yFloor - geo.trailer.deckThickness * scale / 2, 0)
+      group.add(deck)
+
+      // Chassis beam — single rectangle hung beneath the deck.
+      const beam = geo.chassisBeam
+      const beamLen = (beam.toX - beam.fromX) * scale
+      const beamW = beam.width * scale
+      const beamMesh = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(beamLen, beamW * 0.4, beamW)),
+        truckMat,
+      )
+      beamMesh.position.set(-state.length / 2 + (beam.fromX + beamLen / scale / 2) * scale, beam.z * scale, 0)
+      group.add(beamMesh)
+
+      // Kingpin — torus + cross.
+      const kp = geo.kingPin
+      const kpRing = new THREE.LineLoop(
+        new THREE.RingGeometry(kp.radius * scale * 0.7, kp.radius * scale, 24),
+        truckMat,
+      )
+      kpRing.rotation.x = -Math.PI / 2
+      kpRing.position.copy(toWorld(kp.x, trailerCenterY, kp.z))
+      group.add(kpRing)
+      const crossPts: Array<[THREE.Vector3, THREE.Vector3]> = [
+        [toWorld(kp.x - kp.radius, trailerCenterY, kp.z), toWorld(kp.x + kp.radius, trailerCenterY, kp.z)],
+        [toWorld(kp.x, trailerCenterY - kp.radius, kp.z), toWorld(kp.x, trailerCenterY + kp.radius, kp.z)],
+      ]
+      addLineSegments(segs(crossPts))
+
+      // Axles with dual-wheel groups on each side.
+      for (const axle of geo.axles) {
+        const yMid = axle.z * scale
+        const wheelGeom = new THREE.TorusGeometry(axle.wheelRadius * scale, 0.05, 8, 18)
+        for (const side of [-1, 1]) {
+          for (const inner of [-1, 1]) {
+            const wheel = new THREE.LineSegments(new THREE.EdgesGeometry(wheelGeom), truckMat)
+            wheel.rotation.z = Math.PI / 2
+            const yOffset = side * (axle.halfTrack + inner * axle.dualSpacing * 0.5) * scale
+            wheel.position.set(-state.length / 2 + axle.x * scale, yMid, yOffset)
+            group.add(wheel)
+          }
+        }
+        // axle beam connecting the two sides
+        const beamPts: Array<[THREE.Vector3, THREE.Vector3]> = [
+          [
+            new THREE.Vector3(-state.length / 2 + axle.x * scale, yMid, -axle.halfTrack * scale),
+            new THREE.Vector3(-state.length / 2 + axle.x * scale, yMid, axle.halfTrack * scale),
+          ],
+        ]
+        addLineSegments(segs(beamPts))
+      }
+    }
+
+    // Gravity field — coloured spheres on the container floor showing distance from the CoG.
+    if (cogOverlay.gravityField && cogOverlay.gravityField.length > 0) {
+      const sphereRadius = Math.max(0.04, Math.min(state.length, state.width) * 0.012)
+      const sphereGeom = new THREE.SphereGeometry(sphereRadius, 10, 8)
+      // Reuse three Color instances for HSL interpolation between green → amber → red.
+      const cool = new THREE.Color(0x22c55e)
+      const warm = new THREE.Color(0xfacc15)
+      const hot = new THREE.Color(0xef4444)
+      for (const point of cogOverlay.gravityField) {
+        const color = new THREE.Color()
+        if (point.severity < 0.5) {
+          color.copy(cool).lerp(warm, point.severity * 2)
+        } else {
+          color.copy(warm).lerp(hot, (point.severity - 0.5) * 2)
+        }
+        const mat = new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0.55,
+          depthWrite: false,
+        })
+        const mesh = new THREE.Mesh(sphereGeom, mat)
+        mesh.position.copy(toWorld(point.x, point.y, point.z + 30))
+        group.add(mesh)
+      }
     }
 
     state.scene.add(group)
@@ -1237,6 +1376,7 @@ export function ContainerScene({
       data-grid-snap={gridSnap === false ? 'off' : 'on'}
       data-edge-snap={edgeSnap === false ? 'off' : 'on'}
       data-cog-overlay={cogOverlay ? 'on' : 'off'}
+      data-gravity-field={cogOverlay?.gravityField && cogOverlay.gravityField.length > 0 ? 'on' : 'off'}
       data-pool-ghost-active={poolDragInfo ? 'true' : 'false'}
       data-pool-ghost-invalid="false"
       data-box-count={boxes.length}

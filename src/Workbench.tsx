@@ -719,6 +719,7 @@ function Workbench() {
   const [resetViewTick, setResetViewTick] = useState(0)
   const [compareSelection, setCompareSelection] = useState<string[]>(() => containers.slice(0, 3).map((c) => c.id))
   const [showCogOverlay, setShowCogOverlay] = useState(false)
+  const [showGravityField, setShowGravityField] = useState(false)
   const [vehicleProfile, setVehicleProfile] = useState<VehicleProfileId>(DEFAULT_VEHICLE_PROFILE)
   const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
   const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
@@ -1127,8 +1128,10 @@ function Workbench() {
 
   const cogResult = useMemo(() => computeCenterOfGravity(visibleAutoBoxes.length > 0 ? visibleAutoBoxes : result.placed, selectedContainer), [result.placed, visibleAutoBoxes, selectedContainer])
   const cogOverlay = useMemo(
-    () => (showCogOverlay && placementMode === 'auto' ? buildCogOverlay(cogResult, selectedContainer, vehicleProfile) : null),
-    [showCogOverlay, placementMode, cogResult, selectedContainer, vehicleProfile],
+    () => (showCogOverlay && placementMode === 'auto'
+      ? buildCogOverlay(cogResult, selectedContainer, vehicleProfile, { gravityFieldOn: showGravityField })
+      : null),
+    [showCogOverlay, showGravityField, placementMode, cogResult, selectedContainer, vehicleProfile],
   )
 
   const compareCandidates = useMemo(() => {
@@ -2611,8 +2614,10 @@ function Workbench() {
                   locale={locale}
                   result={cogResult}
                   show3d={showCogOverlay}
+                  showGravityField={showGravityField}
                   vehicleProfile={vehicleProfile}
                   onToggle3d={setShowCogOverlay}
+                  onToggleGravityField={setShowGravityField}
                   onVehicleProfileChange={setVehicleProfile}
                 />
               </div>

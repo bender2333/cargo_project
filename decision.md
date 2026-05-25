@@ -451,3 +451,22 @@
 - 后续：
   - E2E 套件需要补「测试结束后清理自己创建的临时账号」的 fixture，避免再次堆积。
   - 第二十一轮其余开发任务（车型几何 + 重心场）按计划在阶段 A–C 推进。
+
+## 2026-05-25 第二十一轮：车型几何 + 重心场实现
+
+- 背景：第二十轮 review 明确了「美化卡车 + 重心场」但代码层只完成 vehicleProfile 数据 + 安全范围 box，车头仍是单个 BoxGeometry 线框；重心场未实现。第二十一轮把这两件事落地。
+- 选项：
+  1. 直接在 `ContainerScene.tsx` 拼 mesh：实现快但无法 unit-test 几何参数。
+  2. 在 `cogVisual.ts` 输出纯几何描述符，`ContainerScene` 只翻译为 Three.js mesh：可单元测试 + 与渲染解耦。
+- 决策：
+  1. 采用方案 2。新增 `buildTruckGeometry(container, profile?) -> TruckGeometry | null` + `buildGravityField(container, cog, opts?) -> GravityFieldPoint[]`，纯函数 + 单元测试。
+  2. `CogOverlay` 类型扩展为 `{ truck (legacy), truckGeometry, gravityField }`，旧 `truck` 字段保留以兼容现有测试；新代码消费 `truckGeometry`。
+  3. 重心场点数硬上限 80（常量 `GRAVITY_FIELD_MAX_POINTS`），默认 10×4 网格，maxPoints 触发时缩 nx/ny。Three.js 渲染采用 `SphereGeometry` + `MeshBasicMaterial`（HSL 绿→黄→红 lerp），全部挂到 `state.cogGroup`，cleanup 跟随 dispose。
+  4. `CenterOfGravityPanel` 新增 `cog-toggle-gravity-field` 按钮：3D overlay 关闭时该按钮 `disabled`，避免重心场在 overlay 不可见时无意义启用。
+- 影响：
+  - 车头几何可以独立 unit-test（4 个新测试覆盖 trapezoid 比例、windshield 倾斜、axle 布局、container-only 是否退出）。
+  - 重心场可视化让运输偏置一眼可见，且性能可控（≤80 个低分辨率 sphere）。
+  - 旧 `truck` 字段保留 = 旧 `buildTruckSilhouette` 测试不需要改，渐进式迁移。
+- 后续：
+  - 若用户希望场更密，可在 `BuildCogOverlayOptions` 增 `gravityFieldDensity`，由 panel 暴露。
+  - 旧 `truck` / `buildTruckSilhouette` 字段在下一轮可删除。

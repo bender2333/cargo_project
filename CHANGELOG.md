@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-05-25 (Twentieth + Twenty-first Review Completion)
+
+- Completed subtask: ship the truck-silhouette rework, gravity-field overlay, and remove leftover test accounts from the remote DB.
+  - **Truck geometry descriptor (Phase A)**: new `buildTruckGeometry()` in `src/lib/cogVisual.ts` returns a structured descriptor — trapezoidal cab (frontWidth < backWidth, frontHeight < backHeight), slanted windshield, 4-bar grille, roof deflector, trailer deck, chassis beam, kingpin marker, two axles each with dual-wheel groups. 4 new unit tests cover the cab proportions, windshield slant, axle layout, and the container-only profile opt-out. Legacy `buildTruckSilhouette` is retained for backwards compatibility.
+  - **Gravity field model (Phase C)**: new `buildGravityField()` returns up to 80 sample points (default 10×4 grid, auto-shrunk to honour `GRAVITY_FIELD_MAX_POINTS`), each carrying a normalised `severity` ∈ [0, 1] = `distanceToCoG / farthestCornerDistance`. `CogOverlay` carries `gravityField: GravityFieldPoint[] | null` and `truckGeometry`. 3 new unit tests cover (a) severity ≈ 0 near the CoG and ≈ 1 at the farthest corner, (b) severity shifts with an offset CoG, (c) the field is capped at 80 points.
+  - **3D rendering (Phase B + C)**: `ContainerScene.tsx` cogOverlay effect now consumes `truckGeometry` — it draws the trapezoidal cab as 8 corner vertices + 12 edges, a 6-edge windshield plane, the grille bars, the roof deflector box, the trailer deck, a hung chassis beam, a ring + cross kingpin, and dual-wheel torus loops with a centre-to-centre beam at each axle. When `gravityField` is populated, the effect emits small spheres (~ container.length × 0.012) coloured by an HSL lerp `#22c55e → #facc15 → #ef4444` at opacity 0.55, all hung under the same `state.cogGroup` and disposed together. New `data-gravity-field="on|off"` attribute on the canvas exposes state to E2E.
+  - **Panel (Phase C)**: `CenterOfGravityPanel` adds a `cog-toggle-gravity-field` pill button. It is disabled until the 3D overlay is on; ARIA `aria-pressed` reflects state. Tooltip + i18n in both languages.
+  - **Wiring (Phase C)**: `Workbench` adds `showGravityField` state; passes through to `buildCogOverlay({ gravityFieldOn })`.
+  - **Test-account cleanup (Phase D)**: backed up `/opt/cargo-server/server/database.db` to `/root/cargo-db-backup-20260525-230917.db`; ran `DELETE FROM users WHERE username GLOB 'u1_*' OR username GLOB 'u2_*' OR username GLOB 'u_reg_*' OR username = 'u1_8wel2'`; FK ON DELETE CASCADE auto-cleared dependent rows. 92 users → 5 (admin, testuser, dengxbin, RUIXI, 邓晓艳). decision.md records the rollback command.
+  - **Release notes**: added `2026-05-25-r21` entry summarising truck rework, gravity field, and account cleanup (en + zh).
+  - Verification: `npm run lint` passed; `npm test` passed 140 tests; `npm run build` passed with the existing Vite chunk-size warning; local `npm run test:e2e` passed 65 tests / 1 skipped / 0 failed (1 new spec: gravity-field toggle).
+
 ## 2026-05-25 (Nineteenth Review Completion)
 
 - Completed subtask: ship the nineteenth-review UX fixes — floating maximize button, middle-mouse pan, admin nav.
