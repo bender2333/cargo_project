@@ -2317,3 +2317,177 @@
 - nav 「用户管理」选项要 admin only；普通用户登录该路径 fallback 到工作台。
 - 不破坏现有 E2E；最大化 E2E 改为「报告面板隐藏 + pool 仍可见」。
 - release notes 数组首部追加一条 2026-05-25-r19 条目。
+
+---
+
+# 第二十轮 Review 与下一阶段开发计划（2026-05-25 续二）
+
+## 背景
+
+第十九轮上线后用户继续两条 review：(a) 装载重心 3D 视图里的车头 + 拖挂只是线框「示意」，且没有重心「场」的可视化，对运输安全感不强；(b) 数据库仍残留 `u1_adm_*` 之类用 `Math.random()` 生成的测试账号 ID，需要清理。
+
+## Review 结论
+
+### 1. 美化车型模型 + 添加可选「重心场」可视化
+
+- **现状**：`buildTruckSilhouette` 只画线框（trailer deck / cab / 4 个圆环轮）。重心球 + 安全范围 box 已经有，但没有「越远离重心越危险」的渐变示意。
+- **要求**：
+  - 把车头改为带顶 + 风挡 + 车头格栅的轮廓（仍线框 / 半透明，但形状更接近卡车）。
+  - 拖挂底盘加上「轮组联动梁」（连前后轴）+ 牵引销标记。
+  - 新增「重心场」可视化（可选 toggle）：在容器内画一组水平的网格点（10×4 或类似），每个点的颜色按其距离当前重心的水平距离做渐变（绿→黄→红）。视觉上像引力等值线。默认关闭。
+  - 「重心场」开关与「在 3D 中显示」并排，命名「重心场 / Gravity field」。
+
+### 2. 删除遗留测试账号
+
+- **现状**：早期版本用 `Math.random().toString(36) + Date.now().toString(36)` 生成 user.id，留下 `u1_adm_mze70s` 等不规则 ID 的账号。第十六轮安全修复改用 `randomUUID()`，但旧数据没有迁移。
+- **要求**：
+  - 在远端 SQLite 数据库直接 `DELETE` 这些异常 ID 的账号；保留 admin / testuser。
+  - 保留备份；操作前后给出 `users` 表 count。
+
+## 下一阶段开发计划（第二十轮）
+
+### 阶段 A：车型模型与重心场（review #1）
+
+- `src/lib/cogVisual.ts` 新增 `buildGravityField(container, cog)` 返回 `Array<{ x: number; y: number; z: number; severity: number }>` 用于网格点（severity 0..1 == 距离归一化）。
+- `ContainerScene` cogOverlay effect 中：
+  - 把 cab 改为 `THREE.Group` 加 cab body + cab roof + 风挡（slanted plane）+ 格栅；底盘加联动梁。
+  - 增加 `gravityFieldOn` 字段（来自 cogOverlay），开启时按场点画 Sphere + 渐变颜色。
+- CenterOfGravityPanel 增加「重心场」开关，控制是否在 overlay 中包含场点；开关与「在 3D 中显示」并列。
+
+### 阶段 B：清理遗留测试账号
+
+- ssh 远端，备份 `/opt/cargo-server/server/database.db`，列出非 admin/testuser 的非 UUID 用户，执行 DELETE。
+- 操作过程记入 `decision.md`，并在 release notes 新增条目。
+
+### 阶段 C：验证 + 部署
+
+- lint/test/build/E2E + 部署 + 远程 E2E。
+
+## 执行约束
+
+- 重心场点数控制在 ≤80 个，避免 Three.js 性能压力。
+- 车型模型仍保持轮廓 / 线框样式，不引入贴图。
+- 清账户操作必须备份；删除前 logged。
+
+---
+
+# 第二十一轮 Review 与下一阶段开发计划（2026-05-25 续三）
+
+## 背景
+
+第二十轮的 review 文档已经写下「美化车头 + 重心场可视化 + 清理 `u1_adm_*` 测试账号」三件事，但代码层面只完成了 `vehicleProfiles` + 安全范围 box，**车头实际仍是一个简单 `BoxGeometry` 线框**（`ContainerScene.tsx:1192-1197`），**`cogVisual.ts` 里也没有 `buildGravityField`**，**远程数据库仍残留 88 个测试账号**（`u1_adm_*` / `u1_iso_*` / `u2_iso_*` / `u_reg_*` / `u1_8wel2`）。本轮把这两件事从 review 文档真正落到代码 + 数据上。
+
+## Review 结论
+
+### 1. 车头模型「过于简陋」，需要看起来像「卡车 + 拖挂」
+
+**现状**（`ContainerScene.tsx:1189-1197`）：
+- 车头：单个 `BoxGeometry(cabLen, cabH, cabW)` 的 `EdgesGeometry` 线框（一个矩形盒子）。
+- 拖挂底盘：单个 `BoxGeometry(trailerLen, 0.08, trailerW)` 的 `EdgesGeometry` 薄板。
+- 车轮：`TorusGeometry` 的 `EdgesGeometry` 线圈（两个轴，每轴左右两个）。
+- 整体只是「描线条」，看不出方向（车头朝哪边、风挡在哪、轮组怎么联动）。
+
+**要求**：
+- 车头改为 `THREE.Group`，由以下子件拼装（仍保持线框 / 半透明渲染，不引入贴图与法线）：
+  - **驾驶室主体**：上窄下宽的梯形外形（前部低、后部高），代表传统欧式平头卡车驾驶室。
+  - **风挡**：驾驶室前面 30°-45° 倾斜的平面线框，明确指示「车头朝向」。
+  - **格栅**：风挡下方、车头正前方的小竖向线段（3-4 根），仅作朝向指示。
+  - **顶部导流罩（可选）**：驾驶室顶面突出 200mm 的小箱体线框，提升「卡车感」。
+- 拖挂底盘：在原 deck 基础上加 **联动梁**（连接前后轴中心的纵向线段），并在 `frontAxleX` 处加 **牵引销标记**（小圆环 + 中心点）。
+- 车轮：每轴左右轮维持 `TorusGeometry`，但 **每侧改为双轮组**（两个并列轮，间距 200mm），更接近实拍 HGV 后轴样貌。
+
+**底线**：
+- 不引入新依赖（不要 GLTF / OBJ / 卡车贴图）。
+- 不要在 `ContainerScene.tsx` 里堆几百行 mesh 拼装逻辑——所有几何构造下沉到 `src/lib/cogVisual.ts` 的纯函数（输入 container/profile，输出几何描述对象），`ContainerScene` 只负责把描述转成 Three.js Group。
+
+### 2. 「重心场」必须真正可见且可切换
+
+**现状**：
+- `cogVisual.ts` 没有 `buildGravityField` 函数。
+- `ContainerScene` cogOverlay effect 里没有处理 `gravityFieldOn` 字段。
+- `CenterOfGravityPanel` 也没有「重心场」toggle。
+- 用户感受：装载重心 3D 只有一个绿/红球 + 安全范围 box，看不出「重心 + 偏离 = 风险渐变」的直观感。
+
+**要求**：
+- 在 `src/lib/cogVisual.ts` 新增 `buildGravityField(container, cog, opts?)`：
+  - 返回 `Array<{ x: number; y: number; z: number; severity: number; weight: number }>`，severity ∈ [0, 1]。
+  - severity 算法（最简实现）：在容器底面构造 `nx × ny` 网格点（默认 10 × 4），每个点 severity = `clamp(distanceXY(point, cog) / maxRadius, 0, 1)`；`maxRadius = sqrt((L/2)² + (W/2)²)`。
+  - 边界：场点总数 ≤ 80（沿 PRD 第二十轮约束），如 container 长宽差异较大可调 nx/ny，但总数不破上限。
+  - 单元测试覆盖：(a) cog 居中时所有 severity ≈ 0 在中心、≈1 在角落；(b) cog 偏向一侧时另一侧 severity 更高。
+- `CogOverlay` 类型扩展 `gravityField?: GravityFieldPoint[]`；`buildCogOverlay` 接受 `opts.gravityFieldOn: boolean`，开启时填入，关闭时为 `undefined`。
+- `ContainerScene` cogOverlay effect 在 `cogOverlay.gravityField` 非空时绘制场点：
+  - 每个点用 **小 `SphereGeometry`**（半径 ~ container.length × 0.005，约 50-100mm）+ `MeshBasicMaterial({ color, transparent: true, opacity: 0.55 })`。
+  - 颜色从 severity 0 的 `#22c55e`（绿）渐变到 severity 0.5 的 `#facc15`（黄）到 severity 1 的 `#ef4444`（红），用 HSL 插值更顺滑。
+  - 全部场点放进 `state.cogGroup` 一起 dispose，关闭 toggle / 切柜型 / 解除 cogOverlay 时随 group 一起销毁。
+- `CenterOfGravityPanel` 新增 toggle「重心场 / Gravity field」，并列在「在 3D 中显示」旁；状态向上 hoist 到 `Workbench`，作为 cogOverlay 的输入。
+- i18n 中英文齐：`gravityFieldToggle`、`gravityFieldTooltip`。
+
+**E2E**：
+- 打开 CoG 面板 → 点「在 3D 中显示」→ 点「重心场」→ canvas 含 `data-gravity-field="on"` → 关闭 → `data-gravity-field="off"`。
+- 不强求 pixel-level 测试；attribute 切换断言即可。
+
+### 3. 清理测试账号（含 `u1_adm_mze70s` 类）
+
+**现状**（远程 `tencent-container-layout:/opt/cargo-server/server/database.db`）：
+- 共 92 个 users。
+- 命中测试账号前缀 / 命名规律的有 88 个：`u1_adm_*` / `u1_iso_*` / `u2_adm_*` / `u2_iso_*` / `u_reg_*` / `u1_8wel2`。这些是 E2E 跑出来留下来的随机用户名。
+- 保留：`admin` / `testuser` / `dengxbin` / `RUIXI` / `邓晓艳`（用户提到的或非随机命名的真实用户）。
+
+**要求**：
+- ssh 进入远程，**先备份** `database.db` 到 `/root/cargo-db-backup-<ts>.db`。
+- 删除前用 `SELECT ... FROM users WHERE username REGEXP ...` 列出待删账号到日志（已 dry-run）。
+- 使用单一 `DELETE FROM users WHERE username GLOB 'u[12]_*' OR username GLOB 'u_reg_*' OR username = 'u1_8wel2'`，外键 ON DELETE CASCADE 自动级联 history_plans / custom_containers。
+- 删除前后跑一遍 count，确保只动了预期的 88 条。
+- 决策记录到 `decision.md`：保留账号清单 + 删除范围 + 备份路径 + 回滚步骤。
+
+**E2E**：
+- 此条不需要 E2E（运维操作），但要在 `decision.md` 里写明 dry-run / 备份 / 回滚命令。
+
+## 下一阶段开发计划（第二十一轮）
+
+### 阶段 A：车型几何下沉到 `cogVisual.ts`（review #1）
+
+- `src/lib/cogVisual.ts` 新增类型 `TruckGeometryDescriptor`（含 `cabBody`, `cabRoof`, `windshield`, `grille`, `trailerDeck`, `chassisBeam`, `kingPin`, `axles[]` 子描述）。
+- 新增 `buildTruckGeometry(container, profile?) -> TruckGeometryDescriptor`：纯函数，所有尺寸用 mm，仅返回几何描述（点坐标 / 尺寸），不依赖 Three.js。
+- 单元测试覆盖：默认 container 下，cabBody 在 -2500..-200 mm 区间；axles 数量 = 2；rear axle 在 `container.length - 1500` 附近。
+
+### 阶段 B：`ContainerScene` 消费新描述符（review #1）
+
+- `ContainerScene` cogOverlay effect 改为读取 `cogOverlay.truckGeometry`（取代旧 `truck` 字段）。
+- 用 `THREE.Group` 一次性拼出 driver cab body + sloped windshield (`THREE.Shape` / 自由 `Geometry`) + grille (`LineSegments`) + axle 双轮 + chassis beam + kingPin。
+- 全部仍是 `LineSegments` / `LineBasicMaterial`，统一颜色 `#475569`，避免过度风格化。
+- 退出 cogOverlay 时仍正常 dispose（沿现有 cleanup 通道，确保 cache 不残留）。
+
+### 阶段 C：重心场实现（review #2）
+
+- `src/lib/cogVisual.ts` 新增 `GravityFieldPoint` 类型 + `buildGravityField(container, cog, opts?) -> GravityFieldPoint[]`；点数 ≤80。
+- `CogOverlay` 类型 + `buildCogOverlay` 接受 `gravityFieldOn` opt。
+- `ContainerScene` cogOverlay effect 处理 `gravityField`：绿→黄→红 HSL 渐变小球，群组挂到 `state.cogGroup`，cleanup 跟随。
+- `CenterOfGravityPanel` 加 toggle，把状态推到 `Workbench`；`Workbench` 把 `gravityFieldOn` 传入 `buildCogOverlay`。
+- i18n + E2E 覆盖 toggle 状态。
+- 单元测试：场点数 ≤80、severity 单调性、cog 居中 vs 偏移的对比。
+
+### 阶段 D：清理远程测试账号（review #3）
+
+- ssh 备份数据库到 `/root/cargo-db-backup-<ts>.db`。
+- 列出待删用户（dry-run）→ 入 `decision.md`。
+- 执行 `DELETE FROM users WHERE username GLOB 'u[12]_*' OR username GLOB 'u_reg_*' OR username = 'u1_8wel2'`。
+- count 校验：删前 92 → 删后 4（admin, testuser, dengxbin, RUIXI, 邓晓艳）= 5；理论 92-88=4，**待复核 RUIXI / 邓晓艳 是否要保留**。
+- 重启服务，确认 admin 登录正常 + 用户列表正常显示剩余账号。
+
+### 阶段 E：验证 + 部署
+
+- 本地 `npm run lint && npm test && npm run build && npm run test:e2e` 全绿。
+- 部署 dist 到 tencent-container-layout。
+- 远程冒烟：CoG 面板能开关重心场，admin 用户管理列表中无 `u1_*` 类账号。
+- 更新 `CHANGELOG.md` + `src/data/releaseNotes.ts` 新增 r21 条目。
+- `decision.md` 补充本轮决策。
+
+## 执行约束
+
+- **车型几何不允许直接在 `ContainerScene.tsx` 内拼装**——必须先在 `cogVisual.ts` 产出纯几何描述符，组件只翻译为 Three.js mesh。这样几何参数才能单元测试。
+- 重心场点数硬上限 **80**；如果 container 大可降低密度而不是放飞数量。
+- 场点用 `MeshBasicMaterial`，避免引入 Phong/PBR；颜色插值用 `THREE.Color.lerpColors` 或手写 HSL。
+- 删账号操作 **必须先备份**，且 SQL 用 `GLOB` 通配 + 列名严格匹配，不允许 `LIKE '%test%'` 这种宽松判定。
+- `RUIXI` / `邓晓艳` 等非随机命名的真实账号在动手前要再次和用户确认是否保留。
+- 删账号操作完成后写入 `decision.md`，列出最终 users 列表 + 回滚命令（`sqlite3 .restore /root/cargo-db-backup-<ts>.db`）。

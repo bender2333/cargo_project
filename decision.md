@@ -432,3 +432,22 @@
 - 后续：
   - 若用户需要更严格作业规范，把手动支撑阈值提升到 80% 并补充可视化支撑面积。
   - 手动方案历史保存需要 schema migration 后再实现，不在本轮混入。
+
+## 2026-05-25 第二十一轮：清理远程测试账号
+
+- 背景：远程数据库 `/opt/cargo-server/server/database.db` 累积了 87 个 E2E 跑出来的随机用户名账号（`u1_adm_*` / `u1_iso_*` / `u2_adm_*` / `u2_iso_*` / `u_reg_*` / `u1_8wel2`），用户在第二十一轮 review 中要求清理。
+- 选项：
+  1. 用 `LIKE '%test%'` 等宽松通配；风险：可能误伤真实账号。
+  2. 用 `GLOB` 精确前缀匹配，覆盖已知测试账号命名规律。
+- 决策：
+  1. 删除前先 `cp -a /opt/cargo-server/server/database.db /root/cargo-db-backup-20260525-230917.db`。
+  2. 在远程执行 SQL：`DELETE FROM users WHERE username GLOB 'u1_*' OR username GLOB 'u2_*' OR username GLOB 'u_reg_*' OR username = 'u1_8wel2';`
+  3. 保留账号：`admin` / `testuser` / `dengxbin` / `RUIXI` / `邓晓艳`（中文用户名 + 非随机命名一律保留）。
+- 影响：
+  - 删除 87 条 users，外键 ON DELETE CASCADE 自动级联清理 `history_plans` / `custom_containers`，无孤儿行（已验证）。
+  - 数据库总 users 数 92 → 5。
+  - 不需要重启服务，better-sqlite3 嵌入式连接立即看到新状态。
+- 回滚命令（如需）：`ssh tencent-container-layout 'systemctl stop cargo-server && cp -a /root/cargo-db-backup-20260525-230917.db /opt/cargo-server/server/database.db && systemctl start cargo-server'`。
+- 后续：
+  - E2E 套件需要补「测试结束后清理自己创建的临时账号」的 fixture，避免再次堆积。
+  - 第二十一轮其余开发任务（车型几何 + 重心场）按计划在阶段 A–C 推进。
