@@ -61,7 +61,7 @@ const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6'
 
 const copy = {
   en: {
-    nav: ['Workbench', 'History'],
+    nav: ['Workbench', 'History', 'Users'],
     title: 'Cargo loading workspace',
     shipment: 'Enter shipment name',
     savedShipment: 'Shipment name is saved with history plans',
@@ -236,7 +236,7 @@ const copy = {
       'Modifiers: Shift = 100 mm, Ctrl/Cmd = 1 mm',
       'R: rotate, Delete: remove, Esc: clear selection',
     ],
-    manualRotateHint: 'Drag with left mouse to move boxes; rotate the camera with right mouse drag.',
+    manualRotateHint: 'Drag with left mouse to move boxes; middle mouse pans the camera; right mouse drag rotates; wheel zooms.',
     containerChangedNotice: 'Container changed. Recalculate to refresh the automatic placement.',
     manualIssueBoundary: 'exceeds the effective container bounds',
     manualIssueOverlap: 'overlaps another cargo box',
@@ -246,7 +246,7 @@ const copy = {
     modeManual3D: '3D Review',
   },
   zh: {
-    nav: ['工作台', '历史方案'],
+    nav: ['工作台', '历史方案', '用户管理'],
     title: '货柜排箱装柜工作台',
     shipment: '输入装运名称',
     savedShipment: '装运名称会随历史方案保存',
@@ -421,7 +421,7 @@ const copy = {
       '修饰键：Shift = 100 mm，Ctrl/Cmd = 1 mm',
       'R：旋转，Delete：删除，Esc：取消选中',
     ],
-    manualRotateHint: '左键拖动可移动箱体；右键拖动可旋转视角。',
+    manualRotateHint: '左键拖动可移动箱体；中键平移视角；右键旋转视角；滚轮缩放。',
     containerChangedNotice: '已更换货柜，请重新计算以刷新自动排布。',
     manualIssueBoundary: '超出有效货柜边界',
     manualIssueOverlap: '与其他货物发生碰撞',
@@ -464,7 +464,7 @@ const customContainerDefaults = {
 type CargoForm = Omit<CargoItem, 'id'>
 type WorkspaceView = '3d' | '2d'
 type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback' | 'cog' | 'compare' | 'fill'
-type NavTarget = 'overview' | 'report' | 'cargo' | 'container' | 'history'
+type NavTarget = 'overview' | 'report' | 'cargo' | 'container' | 'history' | 'users'
 
 function buildRotationNotice(
   dry: ReturnType<typeof manualDryRunRotation>,
@@ -1669,7 +1669,10 @@ function Workbench() {
     setResetViewTick((t) => t + 1)
   }
 
-  const navTargets: NavTarget[] = ['overview', 'history']
+  const navTargets: NavTarget[] = currentUser?.role === 'admin'
+    ? ['overview', 'history', 'users']
+    : ['overview', 'history']
+  const navLabels = currentUser?.role === 'admin' ? t.nav : t.nav.slice(0, 2)
 
   if (!loggedIn) {
     if (showRegister) {
@@ -1705,7 +1708,7 @@ function Workbench() {
   return (
     <main className="min-h-screen bg-[#f4f7fb] text-[#1f2937]">
       <div className="mx-auto p-5 max-w-[1500px] xl:max-w-[1800px] 2xl:max-w-none 2xl:px-8">
-        <header className="mb-5 rounded-2xl bg-gradient-to-br from-[#2563eb] to-[#7c3aed] p-6 text-white">
+        <header className={`mb-5 rounded-2xl bg-gradient-to-br from-[#2563eb] to-[#7c3aed] p-6 text-white ${manualMaximized ? 'hidden' : ''}`}>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1 className="m-0 text-[30px] font-bold">{t.title}</h1>
@@ -1751,11 +1754,12 @@ function Workbench() {
 
               <div className="hidden md:block w-[1px] h-6 bg-white/20 mx-2"></div>
 
-              {t.nav.map((item, index) => (
+              {navLabels.map((item, index) => (
                 <button
                   className={`rounded-[10px] px-4 py-2 font-bold ${activeNav === navTargets[index] ? 'bg-white text-[#1d4ed8]' : 'bg-white/20 text-white hover:bg-white/30'}`}
                   key={item}
                   type="button"
+                  data-testid={`nav-${navTargets[index]}`}
                   onClick={() => activateNav(navTargets[index])}
                 >
                   {item}
@@ -1796,7 +1800,11 @@ function Workbench() {
           </div>
         </header>
 
-        {activeNav === 'history' ? (
+        {activeNav === 'users' && currentUser?.role === 'admin' ? (
+          <section className="archive-card overflow-hidden p-[18px]" data-testid="users-page">
+            <UserManagement onBack={() => activateNav('overview')} />
+          </section>
+        ) : activeNav === 'history' ? (
           <section className="archive-card overflow-hidden p-[18px]" data-testid="history-page">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -2236,15 +2244,6 @@ function Workbench() {
                         </div>
                       )}
                     </div>
-                    <button
-                      className={`archive-button ${manualMaximized ? 'success' : ''}`}
-                      type="button"
-                      data-testid="maximize-manual"
-                      aria-pressed={manualMaximized}
-                      onClick={() => setManualMaximized((current) => !current)}
-                    >
-                      {manualMaximized ? t.restoreManual : t.maximizeManual}
-                    </button>
                     <span className="ml-auto text-xs text-[#475569]">{t.manualHint}</span>
                   </div>
                   <div className="rounded-xl border border-[#bfdbfe] bg-[#eff6ff] p-3 text-xs font-semibold text-[#1d4ed8]" data-testid="manual-rotate-hint">
@@ -2299,7 +2298,7 @@ function Workbench() {
                   )}
                   <div className="flex flex-1 gap-3 overflow-hidden">
                     <aside
-                      className={`flex w-56 shrink-0 flex-col gap-2 overflow-auto rounded-xl border border-[#e5e7eb] bg-white p-3 ${manualMaximized ? 'hidden' : ''}`}
+                      className="flex w-56 shrink-0 flex-col gap-2 overflow-auto rounded-xl border border-[#e5e7eb] bg-white p-3"
                       data-testid="manual-pool"
                     >
                       <h3 className="text-sm font-bold">{t.placementPool}</h3>
@@ -2330,7 +2329,16 @@ function Workbench() {
                         ))
                       )}
                     </aside>
-                    <div className="flex-1 overflow-hidden rounded-xl border border-[#e5e7eb] bg-white" data-testid="manual-view-container">
+                    <div className="relative flex-1 overflow-hidden rounded-xl border border-[#e5e7eb] bg-white" data-testid="manual-view-container">
+                      <button
+                        type="button"
+                        className="absolute right-3 top-3 z-30 rounded-lg border border-[#cbd5e1] bg-white/95 px-3 py-1.5 text-xs font-semibold text-[#0f172a] shadow-md hover:bg-white"
+                        data-testid="maximize-manual"
+                        aria-pressed={manualMaximized}
+                        onClick={() => setManualMaximized((current) => !current)}
+                      >
+                        {manualMaximized ? t.restoreManual : t.maximizeManual}
+                      </button>
                       {workspaceView === '3d' ? (
                         <ContainerScene
                           activeLabelId={'all'}
@@ -2367,7 +2375,7 @@ function Workbench() {
                         />
                       )}
                     </div>
-                    <aside className={`flex w-72 shrink-0 flex-col gap-2 overflow-auto ${manualMaximized ? 'hidden' : ''}`}>
+                    <aside className="flex w-72 shrink-0 flex-col gap-2 overflow-auto">
                       <ManualPrecisePanel
                         container={{ length: renderingContainer.length, width: renderingContainer.width, height: renderingContainer.height }}
                         locale={locale}

@@ -2,6 +2,14 @@
 
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
+## 2026-05-25 第十九轮：浮动最大化 / 中键平移 / Admin 主导航
+
+- 决策：
+  - **最大化保留 pool 与 precise panel**：用户进入手动模式就是为了拖货物，最大化时若隐藏 pool 等于「能看不能动」。仅隐藏 site header / 主 sidebar / report panel。按钮浮动右上角不挤工具栏。
+  - **中键 PAN 优先级**：手动模式 LEFT=null(drag) / MIDDLE=PAN / RIGHT=ROTATE / WHEEL=zoom。自动模式仍然 LEFT=ROTATE / MIDDLE=DOLLY / RIGHT=PAN（与 3D 浏览习惯一致）。
+  - **Admin 主导航三入口**：在 nav 数组里追加，受 `currentUser.role === 'admin'` 条件控制。原右上角 user pill 紫色按钮保留作为冗余入口。
+  - **release notes 自维护**：每轮提交时手动在 `src/data/releaseNotes.ts` 首位追加；不从 CHANGELOG 自动抽取。
+
 ## 2026-05-25 第十八轮：最大化 / 边缘吸附 / 车型联动 / 站内通知
 
 - 背景：用户希望 3D 工作区更大、吸附更智能、Balance 与具体车型联动，并在站内推送新版本说明。

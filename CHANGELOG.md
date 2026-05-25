@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-05-25 (Nineteenth Review Completion)
+
+- Completed subtask: ship the nineteenth-review UX fixes — floating maximize button, middle-mouse pan, admin nav.
+  - **Floating maximize (A)**: `maximize-manual` moved out of the toolbar into an absolute-positioned button at the top-right of the 3D canvas, only visible in manual mode. Maximized mode now **keeps** the pool sidebar and the precise-input panel visible (so the user can still place and tune cargo); hides the site header, the left main sidebar, and the bottom report panel.
+  - **Middle-mouse pan (B)**: manual-mode `MIDDLE` switched from `DOLLY` to `PAN`; scroll wheel still zooms, right mouse still rotates. `manualRotateHint` updated in both languages.
+  - **Admin nav entry (C)**: `navTargets` now adds `users` when `currentUser.role === 'admin'`. `t.nav` carries a third "Users / 用户管理" label, gated by role. `activeNav === 'users'` renders the existing `UserManagement` component inside a `users-page` section. `data-testid="nav-users"` exposes the entry to E2E. Non-admin users do not see the entry at all.
+  - Release notes: added `2026-05-25-r19` entry summarising the three fixes (en + zh).
+  - Verification: `npm run lint` passed; `npm test` passed 131 tests; `npm run build` passed with the existing Vite chunk-size warning; local `npm run test:e2e` passed 64 tests / 1 skipped / 0 failed (3 new specs: maximize keeps pool, admin sees nav-users, non-admin does not).
+  - Deployment: `DEPLOY_SKIP_BUILD=1 npm run deploy` ran clean; remote `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ npm run test:e2e` passed 64 tests / 1 skipped / 0 failed.
+
 ## 2026-05-25 (Eighteenth Review Completion)
 
 - Completed subtask: ship workspace maximize, edge snap, vehicle profiles, and in-app release notes.

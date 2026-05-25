@@ -104,7 +104,7 @@ test('手动模式默认即可旋转视角与拖箱，显示旋转提示', async
   const scene = page.getByTestId('container-scene')
   await expect(scene).toHaveAttribute('data-interaction-mode', 'manual')
   await expect(scene).toHaveAttribute('data-controls-enabled', 'true')
-  await expect(page.getByTestId('manual-rotate-hint')).toContainText('右键拖动')
+  await expect(page.getByTestId('manual-rotate-hint')).toContainText('中键')
 })
 
 test('手动模式键盘帮助展示 Z 轴与快捷键说明', async ({ page }) => {
@@ -363,15 +363,18 @@ test('pool ghost 默认存在但无激活；data attribute 完整', async ({ pag
   await expect(scene).toHaveAttribute('data-pool-ghost-invalid', 'false')
 })
 
-test('手动模式最大化隐藏侧栏与报告面板', async ({ page }) => {
+test('手动模式最大化保留 pool 与精确数值面板，仅隐藏报告面板', async ({ page }) => {
   await ensureChinese(page)
   await enterManualMode(page)
   const workspace = page.getByTestId('manual-workspace')
   await expect(workspace).toHaveAttribute('data-manual-maximized', 'false')
   await expect(page.getByTestId('manual-pool')).toBeVisible()
+  await expect(page.getByTestId('report-panel')).toBeVisible()
   await page.getByTestId('maximize-manual').click()
   await expect(workspace).toHaveAttribute('data-manual-maximized', 'true')
-  await expect(page.getByTestId('manual-pool')).toBeHidden()
+  // Pool & precise panel must STILL be visible — users still need to place / fine-tune cargo.
+  await expect(page.getByTestId('manual-pool')).toBeVisible()
+  await expect(page.getByTestId('manual-precise-panel-empty')).toBeVisible()
   await expect(page.getByTestId('report-panel')).toBeHidden()
   await page.keyboard.press('Escape')
   await expect(workspace).toHaveAttribute('data-manual-maximized', 'false')
@@ -415,4 +418,26 @@ test('新特性按钮显示未读红点，点击后已读', async ({ page }) => 
   await page.getByTestId('release-notes-mark-read').click()
   await page.getByTestId('release-notes-close').click()
   await expect(btn).toHaveAttribute('data-release-notes-unread', 'false')
+})
+
+test('管理员主导航包含用户管理入口', async ({ page }) => {
+  // beforeEach logged in as testuser; switch to admin.
+  await page.evaluate(async () => {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+    }).then((r) => r.json())
+    window.localStorage.setItem('cargo_token', res.token)
+    window.localStorage.setItem('cargo_user', JSON.stringify(res.user))
+  })
+  await page.goto('/')
+  await expect(page.getByTestId('nav-users')).toBeVisible()
+  await page.getByTestId('nav-users').click()
+  await expect(page.getByTestId('users-page')).toBeVisible()
+})
+
+test('普通用户主导航不显示用户管理', async ({ page }) => {
+  await expect(page.getByTestId('report-panel')).toBeVisible()
+  await expect(page.getByTestId('nav-users')).toHaveCount(0)
 })

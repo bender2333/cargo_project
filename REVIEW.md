@@ -2251,3 +2251,69 @@
 - 边缘吸附阈值用常量 `EDGE_SNAP_TOLERANCE_MM = 30`，方便后续 PM 调；先 30mm 经验值。
 - 通知存储 key 必须含用户 id（已经登录），避免多用户共用浏览器互看。
 - PM 功能在用户确认方向前不要写代码。
+
+---
+
+# 第十九轮 Review 与下一阶段开发计划（2026-05-25 续）
+
+## 背景
+
+第十八轮上线最大化 / 边缘吸附 / 车型选择 / 站内通知后，用户回访发现：(a) 最大化按钮和其它工具栏按钮混在一起，最大化后连「待放置池 / 精确数值面板」也都被隐藏，反而失去了实际编辑能力；(b) 手动模式希望中键支持视角平移（左右上下移动相机）；(c) 管理员没看到「用户管理」入口（实际上有，但隐藏在右上角用户 pill 内，发现成本太高）。
+
+## Review 结论
+
+### 1. 最大化的位置与最大化后的内容需要重做
+
+- **现状**：最大化按钮和「网格吸附 / 边缘吸附 / 重置视角」一起在 3D 工具栏一行；点击后 pool sidebar + precise panel + report 一起被 `hidden` 折叠。剩下只有 3D canvas + 顶部 toolbar — 但用户进入手动模式本来就是为了拖货物，没有 pool 和 precise panel 等于「能看不能动」。
+- **要求**：
+  - 按钮浮动在 3D canvas **右上角**（absolute positioned），不挤占工具栏空间；只在手动模式显示。
+  - 最大化时：保留 pool sidebar + precise panel + 浮动 hover tooltip + manual 工具栏（旋转/删除/帮助）；隐藏：站点顶部 header / 左侧主导航 sidebar / 底部 report panel / 容器与货物表单等。
+  - 退出最大化按钮在同位置；Esc 也可退出。
+  - data-attribute 保留 `data-manual-maximized`，但语义改为「全屏可编辑」。
+
+### 2. 手动模式中键支持视角左右移动
+
+- **现状**：手动模式 mouseButtons 配置 `MIDDLE = DOLLY (zoom)`，与「中键拖动 = pan」的常见 3D 工具习惯不一致；用户希望按住中键左右拖移视角（不是 dolly）。
+- **要求**：
+  - 手动模式：`LEFT = null (拖箱)` / `MIDDLE = PAN (平移视角)` / `RIGHT = ROTATE (旋转视角)`，滚轮保持 zoom (OrbitControls 默认)。
+  - 自动模式 mouseButtons 不变（LEFT = ROTATE / MIDDLE = DOLLY / RIGHT = PAN）。
+  - i18n 提示更新 `manualRotateHint`：「左键拖箱；中键平移；右键旋转；滚轮缩放」。
+
+### 3. 管理员的用户管理入口要在主导航暴露
+
+- **现状**：admin 登录后，「用户管理」按钮在顶部右上角用户 pill 里（紫色 animate-pulse），但视觉位置偏远 + 用户 pill 在窄屏时常被截断。用户反馈「没有用户管理功能」其实是 entry 找不到。
+- **要求**：
+  - admin 登录后，在主导航（与「工作台 / 历史方案」同列）追加一个「用户管理」入口；其它角色看不到。
+  - 保留右上角 pill 入口作为冗余，确保不会丢失。
+  - 选中「用户管理」入口时，把 `activeNav` 切到 `users`；走与历史方案同样的 `activateNav` 流程；切回工作台时正常返回。
+
+## 下一阶段开发计划（第十九轮）
+
+### 阶段 A：最大化按钮浮动 + 内容保留
+
+- 把「最大化」按钮从工具栏移到 ContainerScene 容器的右上角（absolute right-3 top-3，z-30，配合现有 `container-change-notice` 不冲突）。
+- 调整 hidden 区域：保留 pool / precise / manual toolbar；隐藏 site header / sidebar / report panel / form。
+- E2E 调整：先点击 maximize 按钮，断言 manual-pool 仍可见，report-panel 隐藏。
+
+### 阶段 B：中键 PAN
+
+- ContainerScene mouseButtons effect 改 `MIDDLE = PAN`（手动模式）。
+- 更新 `manualRotateHint` 文案。
+- E2E 不易测试鼠标行为，仍靠 data-interaction-mode 间接覆盖。
+
+### 阶段 C：主导航暴露用户管理
+
+- 在 `navTargets` 数组加 `users`（仅 admin）；`t.nav` 同步增加「用户管理 / Users」标签。
+- `activateNav('users')` 把 `activeNav` 设为 `users`，渲染 UserManagement panel（覆盖工作台）。
+- E2E：admin 登录后断言「用户管理」按钮 visible；普通用户不可见。
+
+### 阶段 D：验证 + 部署
+
+- lint/test/build/E2E + 远程部署 + 远程 E2E + decision / CHANGELOG / release notes 新增条目。
+
+## 执行约束
+
+- 最大化按钮浮动定位不能挡到 container-change-notice、cog overlay、ghost label。
+- nav 「用户管理」选项要 admin only；普通用户登录该路径 fallback 到工作台。
+- 不破坏现有 E2E；最大化 E2E 改为「报告面板隐藏 + pool 仍可见」。
+- release notes 数组首部追加一条 2026-05-25-r19 条目。

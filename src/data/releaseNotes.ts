@@ -14,6 +14,23 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-05-25-r19',
+    date: '2026-05-25',
+    title: { en: 'Floating maximize, middle-mouse pan, admin nav', zh: '画布角最大化按钮 / 中键平移 / 管理员主导航入口' },
+    items: {
+      en: [
+        'The Maximize button now sits in the top-right corner of the 3D canvas. Maximized mode keeps the pool sidebar and the precise-input panel visible so you can still place and tune cargo.',
+        'In manual mode the middle mouse button pans the camera (left/right/up/down). The right mouse button still rotates and the scroll wheel still zooms.',
+        'Administrators now have a dedicated "Users" tab in the top navigation alongside Workbench and History.',
+      ],
+      zh: [
+        '「最大化」按钮浮动在 3D 画布右上角。最大化后仍保留待放置池和精确数值面板，确保仍能放置/微调货物。',
+        '手动模式下中键拖动平移视角（左右上下），右键仍是旋转，滚轮仍是缩放。',
+        '管理员主导航新增独立的「用户管理」入口，与「工作台 / 历史方案」并列。',
+      ],
+    },
+  },
+  {
     version: '2026-05-25-r18',
     date: '2026-05-25',
     title: { en: 'Maximize workspace, edge snap, vehicle profile, release notes', zh: '工作区最大化 / 边缘吸附 / 车型选择 / 新特性通知' },

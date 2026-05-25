@@ -1105,7 +1105,7 @@ export function ContainerScene({
     if (manualEditable) {
       state.controls.mouseButtons = {
         LEFT: null,
-        MIDDLE: THREE.MOUSE.DOLLY,
+        MIDDLE: THREE.MOUSE.PAN,
         RIGHT: THREE.MOUSE.ROTATE,
       }
     } else {
