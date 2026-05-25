@@ -2169,3 +2169,85 @@
 - Drop 守门是「if invalid → 不调 handler」；不要把 invalid item commit 进 draft（避免用户看到 red ghost 还放下去）。
 - `data-pool-ghost-active="true" / data-pool-ghost-invalid="true"` 都要有；E2E 断言这两个属性同时存在的情况。
 - 不弱化任何已有 E2E。
+
+---
+
+# 第十八轮 Review 与下一阶段开发计划（2026-05-25）
+
+## 背景
+
+第十七轮上线 pool drop 真正贴附到上层 + ghost 红/绿守门后，本轮聚焦工作区可用面积、吸附辅助、PM 价值功能延展、版本通知体系。
+
+## Review 结论
+
+### 1. 手动模式 3D 工作区可以最大化
+
+- **现状**：手动模式分三栏（pool sidebar 56-rem / 3D 中间 / precise sidebar 72-rem），再加顶部工具栏 + 底部 result panel。3D 区域实际宽度被各 sidebar 分掉，精细放置时拖动距离过短、深度难以判断。
+- **要求**：
+  - 工具栏新增「最大化」开关 (`maximize-manual` testid)。开启时只保留 3D 画布 + 顶部工具栏；左侧 pool / 右侧 precise / 底部 result 全部折叠；左侧主导航 sidebar 也折叠以腾空间。
+  - 再点一次或按 Esc 退出最大化；并在 maximize 状态显示「退出最大化」按钮。
+  - data attribute：`data-manual-maximized="true|false"` 给 E2E。
+
+### 2. 拖拽吸附（容器壁 + 邻箱边）
+
+- **现状**：拖拽时仅 50mm 网格吸附 + 箱顶 surface snap。沿柜内壁、靠紧已放箱体边缘时仍需手动数毫米对齐。
+- **要求**：
+  - 拖拽过程中，若候选 (x, y) 距「柜内壁 / 柜中线 / 其它箱体外边」≤ `SNAP_TOLERANCE_MM`（30mm 暂定），把它吸附到那条线。
+  - 优先级：柜壁 > 邻箱边 > 网格。
+  - 提供 toggle 关闭吸附（与 grid snap 类似）。
+  - 单元测试 `snapToEdges({ x, y, l, w }, boxes, container, tolerance)` 返回吸附后坐标。
+
+### 3. PM 视角新功能：待定
+
+- 候选：
+  - **A. 装柜配载图 PDF 导出**：补全回放 Excel 之外的 PDF 通道，适合纸质交接。
+  - **B. 用户偏好设置**：默认柜型 / 默认装载规则 / 默认语言；登录后持久化。
+  - **C. 车型选择**（半挂 / 平板挂 / 厢式）：联动重心安全范围与拖挂示意图。
+  - **D. 装柜配载图（PDF）+ 二维码**：每张作业页带二维码定位到回放某步。
+
+### 4. 网站通知系统 + 新特性发布
+
+- **现状**：每轮新功能上线后，用户感知不到「这次又改了什么」；CHANGELOG 在 repo 内不暴露给最终用户。
+- **要求**：
+  - 顶部导航增加「新特性」按钮（带红点表示未读）。
+  - 点击弹出 modal，列出最近 N 条版本说明（中英文），用户可标记「已读全部」。
+  - 已读状态写 localStorage（key 含当前用户 id，避免不同账号互相影响）。
+  - 一份 `src/data/releaseNotes.ts` 数组（版本号 + 日期 + 中文 + 英文），UI 直接消费；新增版本时手动追加。
+
+## 下一阶段开发计划（第十八轮）
+
+### 阶段 A：手动 workspace 最大化
+
+- `Workbench`：`manualMaximized` state；最大化时给 `<main>` 加 `data-manual-maximized="true"`。
+- 用 CSS class 切换隐藏 pool/precise/result 等 region；保留 toolbar + ContainerScene。
+- 工具栏按钮 + Esc 退出（keydown listener，仅在 maximized 状态生效）。
+
+### 阶段 B：边缘吸附
+
+- 新 `src/lib/snapEdges.ts`：`snapToEdges({ x, y, length, width }, others, container, tolerance)` 返回新 `{x, y}` 或不变。
+- `ContainerScene` pointer move + drag-from-pool dragover 应用：在 grid snap **之前** 或 **之后** 优先级清晰（先 edge snap 再 grid）。
+- toggle 按钮 `toggle-edge-snap`，与 grid snap 并排。
+- 单元测试覆盖：柜左壁吸附 / 邻箱右边吸附 / 远离不吸附。
+
+### 阶段 C：PM 功能（待用户选定方向后启动）
+
+- 取决于用户回答。
+
+### 阶段 D：通知 / 新特性
+
+- `src/data/releaseNotes.ts` 含历轮要点中英文（约 5-8 条）。
+- `ReleaseNotesPanel` 组件 + 弹窗，已读状态写 localStorage `cargo_release_notes_read_v1__<userId>`。
+- nav bar 顶部按钮带红点；红点条件：存在 unread 项。
+- 「已读全部」按钮把最后一条 release 版本号写入 localStorage。
+- E2E 覆盖：打开通知 → 看到至少 N 条 → 点已读 → 红点消失。
+
+### 阶段 E：本地 + 远程验证 + 部署
+
+- lint/test/build/E2E 全绿 + 远程部署 + 远程 E2E + decision / CHANGELOG。
+
+## 执行约束
+
+- 最大化必须用 CSS 隐藏（display:none / hidden class），不要 unmount 子组件，避免 3D scene rebuild。
+- 边缘吸附阈值用常量 `EDGE_SNAP_TOLERANCE_MM = 30`，方便后续 PM 调；先 30mm 经验值。
+- 通知存储 key 必须含用户 id（已经登录），避免多用户共用浏览器互看。
+- PM 功能在用户确认方向前不要写代码。

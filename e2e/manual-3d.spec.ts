@@ -362,3 +362,57 @@ test('pool ghost 默认存在但无激活；data attribute 完整', async ({ pag
   await expect(scene).toHaveAttribute('data-pool-ghost-active', 'false')
   await expect(scene).toHaveAttribute('data-pool-ghost-invalid', 'false')
 })
+
+test('手动模式最大化隐藏侧栏与报告面板', async ({ page }) => {
+  await ensureChinese(page)
+  await enterManualMode(page)
+  const workspace = page.getByTestId('manual-workspace')
+  await expect(workspace).toHaveAttribute('data-manual-maximized', 'false')
+  await expect(page.getByTestId('manual-pool')).toBeVisible()
+  await page.getByTestId('maximize-manual').click()
+  await expect(workspace).toHaveAttribute('data-manual-maximized', 'true')
+  await expect(page.getByTestId('manual-pool')).toBeHidden()
+  await expect(page.getByTestId('report-panel')).toBeHidden()
+  await page.keyboard.press('Escape')
+  await expect(workspace).toHaveAttribute('data-manual-maximized', 'false')
+})
+
+test('边缘吸附按钮切换 data-edge-snap', async ({ page }) => {
+  await ensureChinese(page)
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-edge-snap', 'on')
+  await page.getByTestId('toggle-edge-snap').click()
+  await expect(scene).toHaveAttribute('data-edge-snap', 'off')
+  await page.getByTestId('toggle-edge-snap').click()
+  await expect(scene).toHaveAttribute('data-edge-snap', 'on')
+})
+
+test('Balance 车型选择切换 overlay profile', async ({ page }) => {
+  await ensureChinese(page)
+  await page.getByRole('button', { name: '装载重心' }).click()
+  await page.getByTestId('cog-toggle-3d').click()
+  await expect(page.getByTestId('container-scene')).toHaveAttribute('data-cog-overlay', 'on')
+  await page.getByTestId('cog-vehicle-select').selectOption('flatbed')
+  // selecting a different profile rebuilds overlay; data-cog-overlay stays on
+  await expect(page.getByTestId('container-scene')).toHaveAttribute('data-cog-overlay', 'on')
+})
+
+test('新特性按钮显示未读红点，点击后已读', async ({ page }) => {
+  await ensureChinese(page)
+  // Clear release-notes marker so the user sees unread state regardless of past runs.
+  await page.evaluate(() => {
+    Object.keys(window.localStorage)
+      .filter((k) => k.startsWith('cargo_release_notes_read_v1__'))
+      .forEach((k) => window.localStorage.removeItem(k))
+  })
+  // Force the button to re-read localStorage by toggling the user via a navigation.
+  await page.getByRole('button', { name: '历史方案', exact: true }).click()
+  await page.getByRole('button', { name: '工作台', exact: true }).click()
+  const btn = page.getByTestId('release-notes-open')
+  await expect(btn).toHaveAttribute('data-release-notes-unread', 'true')
+  await btn.click()
+  await expect(page.getByTestId('release-notes-modal')).toBeVisible()
+  await page.getByTestId('release-notes-mark-read').click()
+  await page.getByTestId('release-notes-close').click()
+  await expect(btn).toHaveAttribute('data-release-notes-unread', 'false')
+})

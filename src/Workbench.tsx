@@ -19,7 +19,10 @@ import { suggestFillItems } from './lib/fillSuggestion'
 import { buildStandardCargoItem, STANDARD_BOXES, STANDARD_BOX_MAX_PER_CLICK } from './data/standardBoxes'
 import { FillSuggestionPanel } from './components/FillSuggestionPanel'
 import { ManualPrecisePanel } from './components/ManualPrecisePanel'
+import { ReleaseNotesButton } from './components/ReleaseNotesButton'
 import { buildCogOverlay } from './lib/cogVisual'
+import { DEFAULT_VEHICLE_PROFILE } from './data/vehicleProfiles'
+import type { VehicleProfileId } from './data/vehicleProfiles'
 import {
   addBox as manualAddBox,
   buildPool as manualBuildPool,
@@ -156,6 +159,8 @@ const copy = {
     playbackResetNotice: 'Playback restarted because the plan changed.',
     gridSnap: '50mm snap',
     gridSnapOff: 'Free move',
+    edgeSnap: 'Edge snap',
+    edgeSnapOff: 'No edge snap',
     hoverTooltipLabel: 'Label',
     hoverTooltipSize: 'Size',
     hoverTooltipPosition: 'Position',
@@ -209,6 +214,8 @@ const copy = {
     placementPool: 'Placement pool',
     poolRemaining: 'Remaining',
     manualIssues: 'Validation issues',
+    maximizeManual: 'Maximize workspace',
+    restoreManual: 'Restore workspace',
     dismissNotice: 'Dismiss',
     remainingVolumeLabel: 'Volume used',
     remainingWeightLabel: 'Weight used',
@@ -337,6 +344,8 @@ const copy = {
     playbackResetNotice: '方案变更，作业回放已重置。',
     gridSnap: '50mm 网格',
     gridSnapOff: '自由移动',
+    edgeSnap: '边缘吸附',
+    edgeSnapOff: '关闭边缘吸附',
     hoverTooltipLabel: '标签',
     hoverTooltipSize: '尺寸',
     hoverTooltipPosition: '位置',
@@ -390,6 +399,8 @@ const copy = {
     placementPool: '待放置池',
     poolRemaining: '剩余',
     manualIssues: '校验问题',
+    maximizeManual: '最大化工作区',
+    restoreManual: '退出最大化',
     dismissNotice: '关闭',
     remainingVolumeLabel: '体积占用',
     remainingWeightLabel: '重量占用',
@@ -701,11 +712,14 @@ function Workbench() {
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
   const [sceneViewMode, setSceneViewMode] = useState<SceneViewMode>('iso')
   const [gridSnap, setGridSnap] = useState(true)
+  const [edgeSnap, setEdgeSnap] = useState(true)
   const [hoverInfo, setHoverInfo] = useState<{ id: string; label: string; length: number; width: number; height: number; x: number; y: number; z: number; clientX: number; clientY: number } | null>(null)
   const [poolDragInfo, setPoolDragInfo] = useState<{ cargoId: string; length: number; width: number; height: number; color: string } | null>(null)
+  const [manualMaximized, setManualMaximized] = useState(false)
   const [resetViewTick, setResetViewTick] = useState(0)
   const [compareSelection, setCompareSelection] = useState<string[]>(() => containers.slice(0, 3).map((c) => c.id))
   const [showCogOverlay, setShowCogOverlay] = useState(false)
+  const [vehicleProfile, setVehicleProfile] = useState<VehicleProfileId>(DEFAULT_VEHICLE_PROFILE)
   const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
   const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
   const [placementMode, setPlacementMode] = useState<'auto' | 'manual'>('auto')
@@ -1047,6 +1061,15 @@ function Workbench() {
   }
 
   useEffect(() => {
+    if (!manualMaximized) return
+    const handle = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setManualMaximized(false)
+    }
+    window.addEventListener('keydown', handle)
+    return () => window.removeEventListener('keydown', handle)
+  }, [manualMaximized])
+
+  useEffect(() => {
     setHoverInfo(null)
   }, [placementMode])
 
@@ -1104,8 +1127,8 @@ function Workbench() {
 
   const cogResult = useMemo(() => computeCenterOfGravity(visibleAutoBoxes.length > 0 ? visibleAutoBoxes : result.placed, selectedContainer), [result.placed, visibleAutoBoxes, selectedContainer])
   const cogOverlay = useMemo(
-    () => (showCogOverlay && placementMode === 'auto' ? buildCogOverlay(cogResult, selectedContainer) : null),
-    [showCogOverlay, placementMode, cogResult, selectedContainer],
+    () => (showCogOverlay && placementMode === 'auto' ? buildCogOverlay(cogResult, selectedContainer, vehicleProfile) : null),
+    [showCogOverlay, placementMode, cogResult, selectedContainer, vehicleProfile],
   )
 
   const compareCandidates = useMemo(() => {
@@ -1765,6 +1788,7 @@ function Workbench() {
                   </button>
                 </div>
               )}
+              <ReleaseNotesButton locale={locale} userId={currentUser?.id ?? null} />
               <button className="rounded-[10px] bg-white px-4 py-2 font-bold text-[#1d4ed8]" type="button" onClick={() => setLocale(locale === 'en' ? 'zh' : 'en')}>
                 {t.language}
               </button>
@@ -1812,7 +1836,7 @@ function Workbench() {
           </section>
         ) : (
         <section className={sidebarCollapsed ? "flex gap-5 max-lg:flex-col" : "flex gap-5 max-lg:flex-col"} data-testid="workbench-layout">
-          <aside className={sidebarCollapsed ? "w-[32px] shrink-0 overflow-hidden flex flex-col items-center" : "w-[340px] lg:w-[360px] shrink-0 space-y-4 max-lg:w-full"}>
+          <aside className={`${sidebarCollapsed ? "w-[32px] shrink-0 overflow-hidden flex flex-col items-center" : "w-[340px] lg:w-[360px] shrink-0 space-y-4 max-lg:w-full"} ${manualMaximized ? 'hidden' : ''}`}>
             {sidebarCollapsed ? (
               <button
                 className="mt-4 flex h-8 w-8 items-center justify-center rounded bg-[#111827] text-white hover:bg-slate-700 font-bold"
@@ -2114,6 +2138,20 @@ function Workbench() {
                   </svg>
                   {gridSnap ? t.gridSnap : t.gridSnapOff}
                 </button>
+                <button
+                  className={`archive-tab inline-flex items-center gap-2 ${edgeSnap ? 'active' : ''}`}
+                  type="button"
+                  aria-pressed={edgeSnap}
+                  data-testid="toggle-edge-snap"
+                  onClick={() => setEdgeSnap((s) => !s)}
+                >
+                  <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
+                    <path d="M4 4h16v16H4z" />
+                    <path d="M9 4v16" />
+                    <path d="M15 4v16" />
+                  </svg>
+                  {edgeSnap ? t.edgeSnap : t.edgeSnapOff}
+                </button>
               </>
             )}
             <button className="archive-button success" type="button" onClick={exportCurrentView}>
@@ -2137,7 +2175,7 @@ function Workbench() {
               }`}
             >
               {placementMode === 'manual' ? (
-                <div className="flex h-full w-full flex-col gap-3 p-4" data-testid="manual-workspace">
+                <div className="flex h-full w-full flex-col gap-3 p-4" data-testid="manual-workspace" data-manual-maximized={manualMaximized ? 'true' : 'false'}>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       className="archive-button"
@@ -2198,6 +2236,15 @@ function Workbench() {
                         </div>
                       )}
                     </div>
+                    <button
+                      className={`archive-button ${manualMaximized ? 'success' : ''}`}
+                      type="button"
+                      data-testid="maximize-manual"
+                      aria-pressed={manualMaximized}
+                      onClick={() => setManualMaximized((current) => !current)}
+                    >
+                      {manualMaximized ? t.restoreManual : t.maximizeManual}
+                    </button>
                     <span className="ml-auto text-xs text-[#475569]">{t.manualHint}</span>
                   </div>
                   <div className="rounded-xl border border-[#bfdbfe] bg-[#eff6ff] p-3 text-xs font-semibold text-[#1d4ed8]" data-testid="manual-rotate-hint">
@@ -2252,7 +2299,7 @@ function Workbench() {
                   )}
                   <div className="flex flex-1 gap-3 overflow-hidden">
                     <aside
-                      className="flex w-56 shrink-0 flex-col gap-2 overflow-auto rounded-xl border border-[#e5e7eb] bg-white p-3"
+                      className={`flex w-56 shrink-0 flex-col gap-2 overflow-auto rounded-xl border border-[#e5e7eb] bg-white p-3 ${manualMaximized ? 'hidden' : ''}`}
                       data-testid="manual-pool"
                     >
                       <h3 className="text-sm font-bold">{t.placementPool}</h3>
@@ -2291,6 +2338,7 @@ function Workbench() {
                           boxes={manualPlacedBoxes}
                           container={renderingContainer}
                           gridSnap={gridSnap}
+                          edgeSnap={edgeSnap}
                           invalidBoxIds={manualInvalidBoxIds}
                           manualEditable
                           poolDragInfo={poolDragInfo}
@@ -2319,7 +2367,7 @@ function Workbench() {
                         />
                       )}
                     </div>
-                    <aside className="flex w-72 shrink-0 flex-col gap-2 overflow-auto">
+                    <aside className={`flex w-72 shrink-0 flex-col gap-2 overflow-auto ${manualMaximized ? 'hidden' : ''}`}>
                       <ManualPrecisePanel
                         container={{ length: renderingContainer.length, width: renderingContainer.width, height: renderingContainer.height }}
                         locale={locale}
@@ -2341,7 +2389,7 @@ function Workbench() {
                       {containerChangeNotice}
                     </div>
                   )}
-                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} cogOverlay={cogOverlay} container={renderingContainer} gridSnap={gridSnap} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
+                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} cogOverlay={cogOverlay} container={renderingContainer} edgeSnap={edgeSnap} gridSnap={gridSnap} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
                 </>
               ) : (
                 <>
@@ -2377,7 +2425,7 @@ function Workbench() {
             </div>
           </section>
 
-          <section className="archive-card overflow-hidden" ref={reportRef} data-testid="report-panel">
+          <section className={`archive-card overflow-hidden ${manualMaximized ? 'hidden' : ''}`} ref={reportRef} data-testid="report-panel">
           <div className="border-b border-[#e5e7eb] p-[18px]">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3" data-testid="import-export-toolbar">
               <h2 className="text-lg font-bold">{t.results}</h2>
@@ -2555,7 +2603,9 @@ function Workbench() {
                   locale={locale}
                   result={cogResult}
                   show3d={showCogOverlay}
+                  vehicleProfile={vehicleProfile}
                   onToggle3d={setShowCogOverlay}
+                  onVehicleProfileChange={setVehicleProfile}
                 />
               </div>
             )}

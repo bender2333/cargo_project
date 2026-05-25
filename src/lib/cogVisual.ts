@@ -1,5 +1,7 @@
 import type { ContainerSpec } from '../types'
 import type { CogResult, CogVector } from './centerOfGravity'
+import type { VehicleProfile, VehicleProfileId } from '../data/vehicleProfiles'
+import { VEHICLE_PROFILES, DEFAULT_VEHICLE_PROFILE } from '../data/vehicleProfiles'
 
 export type SafeCogBox = {
   /** Lower-corner of the safe range in container-local mm. */
@@ -11,23 +13,22 @@ export type SafeCogBox = {
 }
 
 /**
- * Build the "safe" centre-of-gravity range for the trailer the container sits on.
- *
- * Heuristic — based on common road-transport guidance:
- *  - X (along length): within ±10% of the centre. Heavy front or rear overhang risks tip.
- *  - Y (across width): within ±5%. Side-bias quickly affects lateral stability.
- *  - Z (vertical): in the lower 60% of the interior. Lower CoG is always safer.
- * These ratios match the COMFORT / CRITICAL thresholds in centerOfGravity.ts.
+ * Build the "safe" centre-of-gravity range for the chosen vehicle profile.
+ * Profile ratios drive the band size; e.g. flatbed widens X but lowers Z.
  */
-export function computeSafeCogBox(container: Pick<ContainerSpec, 'length' | 'width' | 'height'>): SafeCogBox {
+export function computeSafeCogBox(
+  container: Pick<ContainerSpec, 'length' | 'width' | 'height'>,
+  profile?: VehicleProfile,
+): SafeCogBox {
+  const cfg = profile ?? VEHICLE_PROFILES[DEFAULT_VEHICLE_PROFILE]
   const cx = container.length / 2
   const cy = container.width / 2
-  const cz = container.height * 0.4 // lower 60% is preferred → safe box bottom 10%..70%
-  const halfX = container.length * 0.1
-  const halfY = container.width * 0.05
+  const cz = (container.height * (cfg.safeZMin + cfg.safeZMax)) / 2
+  const halfX = container.length * cfg.safeRatioX
+  const halfY = container.width * cfg.safeRatioY
   return {
-    min: { x: cx - halfX, y: cy - halfY, z: container.height * 0.1 },
-    max: { x: cx + halfX, y: cy + halfY, z: container.height * 0.7 },
+    min: { x: cx - halfX, y: cy - halfY, z: container.height * cfg.safeZMin },
+    max: { x: cx + halfX, y: cy + halfY, z: container.height * cfg.safeZMax },
     center: { x: cx, y: cy, z: cz },
   }
 }
@@ -72,22 +73,26 @@ export type CogOverlay = {
   center: CogVector
   offset: CogVector
   safe: SafeCogBox
-  truck: TruckSilhouette
+  truck: TruckSilhouette | null
   warning: boolean
   balanced: boolean
+  profileId: VehicleProfileId
 }
 
 export function buildCogOverlay(
   cog: CogResult,
   container: Pick<ContainerSpec, 'length' | 'width' | 'height'>,
+  profileId: VehicleProfileId = DEFAULT_VEHICLE_PROFILE,
 ): CogOverlay {
+  const profile = VEHICLE_PROFILES[profileId] ?? VEHICLE_PROFILES[DEFAULT_VEHICLE_PROFILE]
   return {
     cog: cog.cog,
     center: cog.center,
     offset: cog.offset,
-    safe: computeSafeCogBox(container),
-    truck: buildTruckSilhouette(container),
+    safe: computeSafeCogBox(container, profile),
+    truck: profile.drawSilhouette ? buildTruckSilhouette(container) : null,
     warning: cog.warning,
     balanced: cog.balanced,
+    profileId,
   }
 }

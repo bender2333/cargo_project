@@ -1,6 +1,14 @@
 import type { Locale } from '../types'
 import type { CogResult } from '../lib/centerOfGravity'
 import { COMFORT_RATIO, CRITICAL_RATIO } from '../lib/centerOfGravity'
+import type { VehicleProfileId } from '../data/vehicleProfiles'
+
+const VEHICLE_LABELS: Record<VehicleProfileId, { en: string; zh: string }> = {
+  'semi-trailer': { en: 'Semi-trailer', zh: '半挂' },
+  'flatbed': { en: 'Flatbed', zh: '平板挂' },
+  'box-truck': { en: 'Box truck', zh: '厢式货车' },
+  'container-only': { en: 'Container only', zh: '仅货柜' },
+}
 
 const T = {
   en: {
@@ -20,6 +28,7 @@ const T = {
     cautious: 'Within ±10% — keep an eye on it.',
     showIn3d: 'Show in 3D',
     hideIn3d: 'Hide 3D overlay',
+    vehicle: 'Vehicle',
   },
   zh: {
     title: '装载重心',
@@ -38,6 +47,7 @@ const T = {
     cautious: '偏移在 ±10% 以内，请留意。',
     showIn3d: '在 3D 中显示',
     hideIn3d: '关闭 3D 显示',
+    vehicle: '车型',
   },
 } as const
 
@@ -47,6 +57,8 @@ type Props = {
   locale: Locale
   show3d: boolean
   onToggle3d: (show: boolean) => void
+  vehicleProfile: VehicleProfileId
+  onVehicleProfileChange: (id: VehicleProfileId) => void
 }
 
 function formatMm(n: number) {
@@ -59,7 +71,7 @@ function ratio(value: number, dim: number) {
   return value / dim
 }
 
-export function CenterOfGravityPanel({ result, container, locale, show3d, onToggle3d }: Props) {
+export function CenterOfGravityPanel({ result, container, locale, show3d, onToggle3d, vehicleProfile, onVehicleProfileChange }: Props) {
   const t = T[locale]
   const empty = result.totalWeight <= 0
 
@@ -86,6 +98,19 @@ export function CenterOfGravityPanel({ result, container, locale, show3d, onTogg
       <div className="flex items-baseline justify-between">
         <h3 className="text-base font-bold text-[#0f172a]">{t.title}</h3>
         <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1 text-xs text-[#475569]">
+            <span>{t.vehicle}:</span>
+            <select
+              className="rounded border border-[#cbd5e1] bg-white px-1.5 py-0.5 text-xs"
+              value={vehicleProfile}
+              data-testid="cog-vehicle-select"
+              onChange={(event) => onVehicleProfileChange(event.target.value as VehicleProfileId)}
+            >
+              {(Object.keys(VEHICLE_LABELS) as VehicleProfileId[]).map((id) => (
+                <option key={id} value={id}>{VEHICLE_LABELS[id][locale]}</option>
+              ))}
+            </select>
+          </label>
           <button
             type="button"
             className={`rounded-full border px-3 py-1 text-xs font-semibold ${show3d ? 'border-[#0ea5e9] bg-[#e0f2fe] text-[#0369a1]' : 'border-[#cbd5e1] bg-white text-[#475569]'}`}

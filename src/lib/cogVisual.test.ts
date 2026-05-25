@@ -55,7 +55,27 @@ describe('buildCogOverlay', () => {
     const overlay = buildCogOverlay(cog, container)
     expect(overlay.cog.x).toBe(5000)
     expect(overlay.safe.center.x).toBe(6000)
-    expect(overlay.truck.trailerEnd).toBe(12000)
+    expect(overlay.truck?.trailerEnd).toBe(12000)
     expect(overlay.warning).toBe(false)
+  })
+})
+
+import { buildCogOverlay as _buildCogOverlay, computeSafeCogBox as _computeSafeCogBox } from './cogVisual'
+import { VEHICLE_PROFILES } from '../data/vehicleProfiles'
+
+describe('vehicle profile influence', () => {
+  const c = { length: 12000, width: 2400, height: 2600 }
+  it('flatbed lowers the safe Z ceiling vs semi-trailer', () => {
+    const semi = _computeSafeCogBox(c, VEHICLE_PROFILES['semi-trailer'])
+    const flat = _computeSafeCogBox(c, VEHICLE_PROFILES['flatbed'])
+    expect(flat.max.z).toBeLessThan(semi.max.z)
+  })
+  it('container-only profile produces no truck silhouette', () => {
+    const overlay = _buildCogOverlay(
+      { cog: c, center: c, offset: { x: 0, y: 0, z: 0 }, totalWeight: 0, warning: false, balanced: true } as never,
+      c,
+      'container-only',
+    )
+    expect(overlay.truck).toBeNull()
   })
 })

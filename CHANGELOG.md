@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-05-25 (Eighteenth Review Completion)
+
+- Completed subtask: ship workspace maximize, edge snap, vehicle profiles, and in-app release notes.
+  - **Workspace maximize (A)**: `Workbench` keeps a `manualMaximized` boolean; the manual workspace toolbar exposes `maximize-manual` button (and Esc) to toggle. Maximized state collapses the main sidebar, the pool aside, the precise-panel aside, and the report panel via `hidden` class — the underlying 3D scene is not unmounted to avoid rebuild cost. `data-manual-maximized="true|false"` exposes state to E2E.
+  - **Edge snap (B)**: new `src/lib/snapEdges.ts` (`snapToEdges`, default tolerance 30 mm) snaps a dragged footprint to container walls, the centre line, and neighbouring box edges (left/right alignment). Applied during box drag (plane mode) and pool drag-over, ordered before grid snap. `toggle-edge-snap` button + `data-edge-snap` attribute. 8 unit tests.
+  - **PM feature — vehicle profile (C)**: new `src/data/vehicleProfiles.ts` with four presets (semi-trailer / flatbed / box-truck / container-only). `computeSafeCogBox` + `buildCogOverlay` now accept a profile; the safe range adapts (e.g. flatbed lowers the Z ceiling) and the truck silhouette is optionally suppressed (`container-only`). `CenterOfGravityPanel` adds a `cog-vehicle-select` dropdown. 2 new unit tests on top of the existing 6.
+  - **In-app release notes (D)**: new `src/data/releaseNotes.ts` (newest-first, both languages) and `ReleaseNotesButton`. Top-nav button shows a red badge with unread count when the user's last-seen version is older than the newest entry. Modal lists each release with date, title, and bullet points; "mark all as read" writes the latest version to `localStorage` keyed per user (`cargo_release_notes_read_v1__<userId>`). `data-release-notes-unread` on the trigger.
+  - Verification: `npm run lint` passed; `npm test` passed 131 tests; `npm run build` passed with the existing Vite chunk-size warning; local `npm run test:e2e` passed 62 tests / 1 skipped / 0 failed (4 new specs: maximize, edge-snap toggle, vehicle profile switch, release-notes unread cycle).
+  - Deployment: `DEPLOY_SKIP_BUILD=1 npm run deploy` ran clean; remote `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ npm run test:e2e` passed 62 tests / 1 skipped / 0 failed.
+
 ## 2026-05-24 (Seventeenth Review Completion)
 
 - Completed subtask: ship the seventeenth-review pool-drop fix and ghost legality colouring.

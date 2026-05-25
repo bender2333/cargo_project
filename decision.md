@@ -2,6 +2,22 @@
 
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
+## 2026-05-25 第十八轮：最大化 / 边缘吸附 / 车型联动 / 站内通知
+
+- 背景：用户希望 3D 工作区更大、吸附更智能、Balance 与具体车型联动，并在站内推送新版本说明。
+- 决策：
+  - **最大化用 CSS `hidden` 类**：不 unmount sidebar / report 等组件，避免 ContainerScene Three.js 场景被销毁重建。Esc + 按钮双入口退出。
+  - **边缘吸附阈值 30 mm，优先级 wall > 邻箱边 > center**：吸附应用顺序 surface-snap → edge-snap → grid-snap，让最靠物理含义的对齐胜出。Toggle 默认开启。
+  - **4 个车型 profile 阈值经验值**：semi-trailer 严格 X±10%/Y±5%，flatbed 放宽 X 但严格 Z 上限，box-truck 整体更宽容，container-only 不绘制拖挂。这些阈值不是行业标准，仅作初版默认；后续可由 PM 调整。
+  - **站内通知按用户隔离**：localStorage key 含 `userId`，避免多账号共用浏览器互相影响。匿名用户用 `anonymous` 作为后缀。
+  - **release notes 版本字串可字典序排**：用 `2026-05-25-r18` 这种 ISO 日期 + 轮次后缀。手动维护数组，新版本插到首位；不自动从 CHANGELOG 抽取（CHANGELOG 是开发视角，release notes 是用户视角）。
+- 影响：
+  - 最大化模式下 Esc 全局键盘事件可能与其它快捷键冲突；当前限定在 `manualMaximized=true` 时才挂载 listener。
+  - 边缘吸附 + 网格吸附同时开启时，边缘吸附胜出（因为更精确），用户应能感知到「贴墙优于网格」。
+- 后续：
+  - 用户偏好持久化（默认柜型 / 默认车型）下一轮做。
+  - release notes 自动从 commit 抽取需要 CI 配合，留作未来。
+
 ## 2026-05-24 第十七轮：drop 保留 z + ghost 红绿守门
 
 - 背景：第十六轮的 pool ghost 看起来工作正常，但 drop handler 仍只用 ground plane 投影 → 任何上层落点都被悄悄改回地面。Ghost 颜色固定绿色，越界/重叠/悬空无视觉反馈。

@@ -5,6 +5,7 @@ import type { ContainerSpec, PlacedBox } from '../types'
 import { MIN_SUPPORT_OVERLAP_RATIO } from '../lib/manualPlacement'
 import { snapToGrid } from '../lib/snap'
 import { resolveDropTarget } from '../lib/sceneDrop'
+import { snapToEdges } from '../lib/snapEdges'
 import type { CogOverlay } from '../lib/cogVisual'
 
 export type SceneViewMode = 'iso' | 'top' | 'front' | 'side'
@@ -29,6 +30,7 @@ type ContainerSceneProps = {
   activeLabelId: string
   viewMode: SceneViewMode
   gridSnap?: boolean
+  edgeSnap?: boolean
   resetViewTick?: number
   selectedBoxId?: string | null
   onSelectBox?: (boxId: string) => void
@@ -340,6 +342,7 @@ export function ContainerScene({
   activeLabelId,
   viewMode,
   gridSnap,
+  edgeSnap,
   resetViewTick,
   selectedBoxId,
   onSelectBox,
@@ -360,6 +363,7 @@ export function ContainerScene({
   const invalidBoxIdsRef = useRef<Set<string>>(invalidBoxIds ?? new Set())
   const manualEditableRef = useRef<boolean>(manualEditable ?? false)
   const gridSnapRef = useRef<boolean>(gridSnap ?? true)
+  const edgeSnapRef = useRef<boolean>(edgeSnap ?? true)
   const poolDragInfoRef = useRef<typeof poolDragInfo>(poolDragInfo ?? null)
   const onManualMoveRef = useRef<typeof onManualMove>(onManualMove)
   const onManualDropFromPoolRef = useRef<typeof onManualDropFromPool>(onManualDropFromPool)
@@ -382,6 +386,10 @@ export function ContainerScene({
   useEffect(() => {
     gridSnapRef.current = gridSnap ?? true
   }, [gridSnap])
+
+  useEffect(() => {
+    edgeSnapRef.current = edgeSnap ?? true
+  }, [edgeSnap])
 
   useEffect(() => {
     poolDragInfoRef.current = poolDragInfo ?? null
@@ -708,6 +716,14 @@ export function ContainerScene({
         nextZ = drop.z
       }
 
+      if (edgeSnapRef.current && dragState.mode === 'plane') {
+        const others: PlacedBox[] = []
+        sceneState.meshEntries.forEach((e) => { if (e.box.id !== entry.box.id) others.push(e.box) })
+        const snapped = snapToEdges({ x: nextX, y: nextY, length: entry.box.length, width: entry.box.width, others, container })
+        nextX = snapped.x
+        nextY = snapped.y
+      }
+
       if (gridSnapRef.current) {
         if (dragState.mode === 'plane') {
           nextX = snapToGrid(nextX)
@@ -803,17 +819,25 @@ export function ContainerScene({
         draggedSize: { length: info.length, width: info.width, height: info.height },
         container,
       })
+      let dropX = drop.x
+      let dropY = drop.y
+      const dropZ = drop.z
+      if (edgeSnapRef.current && dropZ === 0) {
+        const snapped = snapToEdges({ x: dropX, y: dropY, length: info.length, width: info.width, others, container })
+        dropX = snapped.x
+        dropY = snapped.y
+      }
       const ghostBox: PlacedBox = {
         id: '__pool_ghost__', cargoId: info.cargoId, name: 'pool', label: 'P', index: 0,
-        x: drop.x, y: drop.y, z: drop.z, length: info.length, width: info.width, height: info.height,
+        x: dropX, y: dropY, z: dropZ, length: info.length, width: info.width, height: info.height,
         orientationKey: 'LWH', labelRotationDeg: 0, weight: 0, color: info.color,
         stackable: true, physicalLayer: 1, workStep: 1, supportType: 'floor', supportedBy: [],
       }
       ensureGhost(sceneState, ghostBox, scale, length, width)
-      const invalid = computeInvalidByGeometry(null, drop.x, drop.y, drop.z, info.length, info.width, info.height)
-      sceneState.poolDrop = { x: drop.x, y: drop.y, z: drop.z, invalid }
+      const invalid = computeInvalidByGeometry(null, dropX, dropY, dropZ, info.length, info.width, info.height)
+      sceneState.poolDrop = { x: dropX, y: dropY, z: dropZ, invalid }
       mountRef.current?.setAttribute('data-pool-ghost-invalid', invalid ? 'true' : 'false')
-      positionGhost(sceneState, drop.x, drop.y, drop.z, ghostBox, invalid, scale, length, width)
+      positionGhost(sceneState, dropX, dropY, dropZ, ghostBox, invalid, scale, length, width)
     }
 
     const onDragLeave = () => {
@@ -1149,41 +1173,43 @@ export function ContainerScene({
     line.computeLineDistances()
     group.add(line)
 
-    // Truck silhouette beneath the container (cab + trailer + axles)
+    // Truck silhouette beneath the container (cab + trailer + axles). Profile may opt out.
     const truck = cogOverlay.truck
-    const truckColor = 0x475569
-    const trailerLen = (truck.trailerEnd - truck.trailerStart) * scale
-    const trailerW = truck.trailerWidth * scale
-    const trailerDeck = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.BoxGeometry(trailerLen, 0.08, trailerW)),
-      new THREE.LineBasicMaterial({ color: truckColor }),
-    )
-    trailerDeck.position.set(-state.length / 2 + trailerLen / 2, -0.18, 0)
-    group.add(trailerDeck)
+    if (truck) {
+      const truckColor = 0x475569
+      const trailerLen = (truck.trailerEnd - truck.trailerStart) * scale
+      const trailerW = truck.trailerWidth * scale
+      const trailerDeck = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(trailerLen, 0.08, trailerW)),
+        new THREE.LineBasicMaterial({ color: truckColor }),
+      )
+      trailerDeck.position.set(-state.length / 2 + trailerLen / 2, -0.18, 0)
+      group.add(trailerDeck)
 
-    const cabLen = (truck.cabBack - truck.cabFront) * scale
-    const cabW = truck.cabWidth * scale
-    const cabH = truck.cabHeight * scale
-    const cab = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.BoxGeometry(cabLen, cabH, cabW)),
-      new THREE.LineBasicMaterial({ color: truckColor }),
-    )
-    cab.position.set(-state.length / 2 + (truck.cabFront + cabLen / 2) * scale, cabH / 2 - 0.05, 0)
-    group.add(cab)
+      const cabLen = (truck.cabBack - truck.cabFront) * scale
+      const cabW = truck.cabWidth * scale
+      const cabH = truck.cabHeight * scale
+      const cab = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(cabLen, cabH, cabW)),
+        new THREE.LineBasicMaterial({ color: truckColor }),
+      )
+      cab.position.set(-state.length / 2 + (truck.cabFront + cabLen / 2) * scale, cabH / 2 - 0.05, 0)
+      group.add(cab)
 
-    const wheelGeom = new THREE.TorusGeometry(truck.wheelRadius * scale, 0.04, 8, 16)
-    const wheelMat = new THREE.LineBasicMaterial({ color: truckColor })
-    const addAxle = (xMm: number) => {
-      const yWorld = -0.18 - truck.wheelRadius * scale * 0.5
-      for (const sign of [-1, 1]) {
-        const wheel = new THREE.Line(new THREE.EdgesGeometry(wheelGeom), wheelMat)
-        wheel.rotation.z = Math.PI / 2
-        wheel.position.set(-state.length / 2 + xMm * scale, yWorld, sign * trailerW * 0.45)
-        group.add(wheel)
+      const wheelGeom = new THREE.TorusGeometry(truck.wheelRadius * scale, 0.04, 8, 16)
+      const wheelMat = new THREE.LineBasicMaterial({ color: truckColor })
+      const addAxle = (xMm: number) => {
+        const yWorld = -0.18 - truck.wheelRadius * scale * 0.5
+        for (const sign of [-1, 1]) {
+          const wheel = new THREE.Line(new THREE.EdgesGeometry(wheelGeom), wheelMat)
+          wheel.rotation.z = Math.PI / 2
+          wheel.position.set(-state.length / 2 + xMm * scale, yWorld, sign * trailerW * 0.45)
+          group.add(wheel)
+        }
       }
+      addAxle(truck.frontAxleX)
+      addAxle(truck.rearAxleX)
     }
-    addAxle(truck.frontAxleX)
-    addAxle(truck.rearAxleX)
 
     state.scene.add(group)
     state.cogGroup = group
@@ -1209,6 +1235,7 @@ export function ContainerScene({
       data-controls-enabled="true"
       data-interaction-mode={interactionMode}
       data-grid-snap={gridSnap === false ? 'off' : 'on'}
+      data-edge-snap={edgeSnap === false ? 'off' : 'on'}
       data-cog-overlay={cogOverlay ? 'on' : 'off'}
       data-pool-ghost-active={poolDragInfo ? 'true' : 'false'}
       data-pool-ghost-invalid="false"
