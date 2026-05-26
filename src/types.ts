@@ -154,3 +154,18 @@ export interface DbHistoryPlan {
     labelSummary: string
   }
 }
+
+export type ImportTemplateUnits = {
+  length: 'auto' | 'mm' | 'cm'
+  width: 'auto' | 'mm' | 'cm'
+  height: 'auto' | 'mm' | 'cm'
+}
+
+export interface ImportTemplate {
+  id: string
+  name: string
+  mapping: Record<string, string>
+  units: ImportTemplateUnits
+  createdAt: string
+  updatedAt: string
+}

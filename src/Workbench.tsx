@@ -48,13 +48,14 @@ import { containers, effectiveContainer, formatCubicMeters, getContainerVolume }
 import { buildExportPlanRows } from './lib/exportPlan'
 import type { HistoryPlan } from './lib/historyPlans'
 import { createClientId } from './lib/clientId'
-import { parseCargoRows, parseCargoRowsWithMapping } from './lib/importCargo'
+import { parseCargoRows, parseCargoRowsWithTemplate } from './lib/importCargo'
 import type { ImportCargoRow } from './lib/importCargo'
+import { readImportTemplates, saveImportTemplate } from './lib/importTemplates'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
 import { clearPlacementOnContainerChange } from './lib/containerChange'
 import { formatMeasurement, measureBoxClearance } from './lib/measurement'
-import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, CustomDbContainer, DbHistoryPlan } from './types'
+import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, CustomDbContainer, DbHistoryPlan, ImportTemplate, ImportTemplateUnits } from './types'
 import { isLoggedIn, getCurrentUser, fetchWithAuth, removeToken } from './lib/auth'
 import type { User } from './lib/auth'
 import { LoginPage } from './components/LoginPage'
@@ -146,6 +147,11 @@ const copy = {
     mappingCancel: 'Cancel',
     mappingSelectColumn: '-- Select column --',
     mappingConvertHint: 'Values will be converted to mm',
+    templateLabel: 'Import template',
+    templateNone: 'No template',
+    templateName: 'Template name',
+    templateSave: 'Save template',
+    templateSaved: 'Template saved',
     mappingFieldLabel: 'Cargo label',
     mappingFieldName: 'Cargo name',
     mappingFieldLength: 'Length',
@@ -348,6 +354,11 @@ const copy = {
     mappingCancel: '取消',
     mappingSelectColumn: '-- 请选择数据列 --',
     mappingConvertHint: '将转换为 mm',
+    templateLabel: '导入模板',
+    templateNone: '不使用模板',
+    templateName: '模板名称',
+    templateSave: '保存模板',
+    templateSaved: '模板已保存',
     mappingFieldLabel: '货物标识',
     mappingFieldName: '货物名称',
     mappingFieldLength: '长度',
@@ -851,6 +862,9 @@ function Workbench() {
     width: 'auto',
     height: 'auto',
   })
+  const [importTemplates, setImportTemplates] = useState<ImportTemplate[]>([])
+  const [selectedImportTemplateId, setSelectedImportTemplateId] = useState('')
+  const [templateName, setTemplateName] = useState('')
   const workspaceRef = useRef<HTMLElement | null>(null)
   const reportRef = useRef<HTMLElement | null>(null)
   const cargoRef = useRef<HTMLFormElement | null>(null)
@@ -916,6 +930,15 @@ function Workbench() {
     }
   }
 
+  const fetchImportTemplates = async () => {
+    if (!isLoggedIn()) return
+    try {
+      setImportTemplates(await readImportTemplates())
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const deleteHistoryPlan = async (id: string) => {
     if (!confirm(locale === 'zh' ? '确认删除该历史方案吗？' : 'Are you sure you want to delete this plan?')) {
       return
@@ -936,6 +959,7 @@ function Workbench() {
     if (loggedIn) {
       fetchHistory()
       fetchCustomContainers()
+      fetchImportTemplates()
     }
   }, [loggedIn])
 
@@ -1356,28 +1380,7 @@ function Workbench() {
   }
 
   const confirmMappingImport = () => {
-    const dimensionFields: Array<'length' | 'width' | 'height'> = ['length', 'width', 'height']
-    const effectiveMapping: Record<string, string> = { ...customMapping }
-    const effectiveRows: ImportCargoRow[] = importRows.map((row) => ({ ...row }))
-
-    dimensionFields.forEach((field) => {
-      const colName = customMapping[field]
-      const unit = customUnits[field]
-      if (!colName || unit === 'auto') return
-
-      // Build a sanitized synthetic key whose unit hint is unambiguous to the
-      // lib (which detects cm via substring match). We strip any existing cm /
-      // 厘米 markers from the original column name to avoid false positives.
-      const sanitized = colName.replace(/cm/gi, '').replace(/厘米/g, '')
-      const suffix = unit === 'cm' ? ' cm' : ' mm'
-      const syntheticKey = `${sanitized}__unit${suffix}`
-      effectiveMapping[field] = syntheticKey
-      effectiveRows.forEach((row, index) => {
-        row[syntheticKey] = importRows[index]?.[colName]
-      })
-    })
-
-    const imported = parseCargoRowsWithMapping(effectiveRows, effectiveMapping, { colors })
+    const imported = parseCargoRowsWithTemplate(importRows, { mapping: customMapping, units: customUnits }, { colors })
     setImportMessages([
       `${t.importSuccess}: ${imported.summary.importedRows}`,
       `${t.importMappedFields}: ${imported.summary.mappedFields.join(', ') || '-'}`,
@@ -1393,6 +1396,33 @@ function Workbench() {
     setShowMappingModal(false)
     setActiveResultTab('importLog')
     setActiveNav('report')
+  }
+
+  const applyImportTemplate = (templateId: string) => {
+    setSelectedImportTemplateId(templateId)
+    const template = importTemplates.find((item) => item.id === templateId)
+    if (!template) return
+    setCustomMapping((current) => ({ ...current, ...template.mapping }))
+    setCustomUnits({
+      length: template.units.length,
+      width: template.units.width,
+      height: template.units.height,
+    })
+    setTemplateName(template.name)
+  }
+
+  const handleSaveImportTemplate = async () => {
+    const name = templateName.trim()
+    if (!name) return
+    const saved = await saveImportTemplate({
+      name,
+      mapping: customMapping,
+      units: customUnits as ImportTemplateUnits,
+    })
+    if (!saved) return
+    setImportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
+    setSelectedImportTemplateId(saved.id)
+    setImportMessages((messages) => [`${t.templateSaved}: ${saved.name}`, ...messages])
   }
 
   const canAutoMap = (row: ImportCargoRow): boolean => {
@@ -1480,6 +1510,8 @@ function Workbench() {
         initialMap[fieldKey] = preSelectCol(fieldKey, rowKeys)
       })
       setCustomMapping(initialMap)
+      setSelectedImportTemplateId('')
+      setTemplateName('')
       setShowMappingModal(true)
     }
   }
@@ -2840,6 +2872,40 @@ function Workbench() {
                 <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600" data-testid="mapping-stats">
                   {t.mappingTotalRows}: {importRows.length} / {Object.keys(importRows[0] ?? {}).length} {t.mappingTotalCols}
                 </div>
+              </div>
+              <div className="mb-4 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm md:grid-cols-[1fr_1fr_auto]" data-testid="import-template-controls">
+                <label className="font-semibold text-slate-700">
+                  {t.templateLabel}
+                  <select
+                    className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                    value={selectedImportTemplateId}
+                    data-testid="import-template-select"
+                    onChange={(event) => applyImportTemplate(event.target.value)}
+                  >
+                    <option value="">{t.templateNone}</option>
+                    {importTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>{template.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="font-semibold text-slate-700">
+                  {t.templateName}
+                  <input
+                    className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                    value={templateName}
+                    data-testid="import-template-name"
+                    onChange={(event) => setTemplateName(event.target.value)}
+                  />
+                </label>
+                <button
+                  className="self-end rounded-lg border border-indigo-200 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  type="button"
+                  data-testid="save-import-template"
+                  disabled={!templateName.trim()}
+                  onClick={handleSaveImportTemplate}
+                >
+                  {t.templateSave}
+                </button>
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-3" data-testid="mapping-fields">

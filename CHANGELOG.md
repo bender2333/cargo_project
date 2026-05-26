@@ -23,6 +23,12 @@
   - Packing view keeps the 3D scene clean; CoG view reduces box opacity so the gravity field and safety range are visible; Mixed view exposes a box-opacity slider.
   - `ContainerScene` now exposes `data-cog-view-mode` and `data-box-opacity`, and applies the mode-specific box opacity without recalculating packing.
   - Verification: `npx vitest run src/lib/cogView.test.ts` passed; `npx tsc -b` passed.
+- Completed subtask: deterministic Excel import templates.
+  - Added `import_templates` SQLite table and authenticated user-scoped CRUD routes under `/api/import-templates`.
+  - Added `parseCargoRowsWithTemplate()` so saved mappings and explicit `mm/cm/auto` unit choices are applied in testable import logic rather than Workbench string rewriting.
+  - Added frontend template API helper and mapping-modal controls to select an existing template or save the current mapping as a named template.
+  - Templates are scoped by authenticated user and store only deterministic mapping/unit configuration.
+  - Verification: `npx vitest run src/lib/importCargo.test.ts` passed; `npx tsc -b` passed; `node --check server/index.mjs && node --check server/db.mjs` passed.
 
 ## 2026-05-25 (Twentieth + Twenty-first Review Completion)
 

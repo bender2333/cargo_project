@@ -185,7 +185,109 @@ app.delete('/api/containers/custom/:id', authenticate, (req, res) => {
   }
 })
 
-// 4. History Plan Management (CRUD with auto 5-item retention per user!)
+// 4. Excel import templates (user-scoped deterministic mappings)
+const TEMPLATE_FIELDS = new Set(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable'])
+const TEMPLATE_UNITS = new Set(['auto', 'mm', 'cm'])
+
+function parseTemplatePayload(body) {
+  const name = String(body?.name ?? '').trim().slice(0, 80)
+  const mapping = body?.mapping && typeof body.mapping === 'object' ? body.mapping : null
+  const units = body?.units && typeof body.units === 'object' ? body.units : {}
+  if (!name || !mapping) return null
+  const cleanMapping = {}
+  for (const [key, value] of Object.entries(mapping)) {
+    if (!TEMPLATE_FIELDS.has(key)) continue
+    cleanMapping[key] = value == null ? '' : String(value).slice(0, 120)
+  }
+  const cleanUnits = {}
+  for (const key of ['length', 'width', 'height']) {
+    const value = String(units[key] ?? 'auto')
+    cleanUnits[key] = TEMPLATE_UNITS.has(value) ? value : 'auto'
+  }
+  return { name, mapping: cleanMapping, units: cleanUnits }
+}
+
+function serializeTemplate(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    mapping: JSON.parse(row.mapping),
+    units: JSON.parse(row.units),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+app.get('/api/import-templates', authenticate, (req, res) => {
+  try {
+    const rows = db.prepare('SELECT * FROM import_templates WHERE user_id = ? ORDER BY datetime(updated_at) DESC').all(req.user.id)
+    res.json(rows.map(serializeTemplate))
+  } catch (err) {
+    sendServerError(res, req.path, err)
+  }
+})
+
+app.post('/api/import-templates', authenticate, (req, res) => {
+  const payload = parseTemplatePayload(req.body)
+  if (!payload) {
+    return res.status(400).json({ error: 'Missing template name or mapping' })
+  }
+  const id = randomUUID()
+  const now = new Date().toISOString()
+  try {
+    db.prepare(`
+      INSERT INTO import_templates (id, user_id, name, mapping, units, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, req.user.id, payload.name, JSON.stringify(payload.mapping), JSON.stringify(payload.units), now, now)
+    const created = db.prepare('SELECT * FROM import_templates WHERE id = ? AND user_id = ?').get(id, req.user.id)
+    res.status(201).json(serializeTemplate(created))
+  } catch (err) {
+    if (String(err?.message ?? '').includes('UNIQUE')) {
+      return res.status(409).json({ error: 'Template name already exists' })
+    }
+    sendServerError(res, req.path, err)
+  }
+})
+
+app.put('/api/import-templates/:id', authenticate, (req, res) => {
+  const payload = parseTemplatePayload(req.body)
+  if (!payload) {
+    return res.status(400).json({ error: 'Missing template name or mapping' })
+  }
+  try {
+    const existing = db.prepare('SELECT * FROM import_templates WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id)
+    if (!existing) {
+      return res.status(404).json({ error: 'Template not found or unauthorized' })
+    }
+    db.prepare(`
+      UPDATE import_templates
+      SET name = ?, mapping = ?, units = ?, updated_at = ?
+      WHERE id = ? AND user_id = ?
+    `).run(payload.name, JSON.stringify(payload.mapping), JSON.stringify(payload.units), new Date().toISOString(), req.params.id, req.user.id)
+    const updated = db.prepare('SELECT * FROM import_templates WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id)
+    res.json(serializeTemplate(updated))
+  } catch (err) {
+    if (String(err?.message ?? '').includes('UNIQUE')) {
+      return res.status(409).json({ error: 'Template name already exists' })
+    }
+    sendServerError(res, req.path, err)
+  }
+})
+
+app.delete('/api/import-templates/:id', authenticate, (req, res) => {
+  try {
+    const existing = db.prepare('SELECT * FROM import_templates WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id)
+    if (!existing) {
+      return res.status(404).json({ error: 'Template not found or unauthorized' })
+    }
+    db.prepare('DELETE FROM import_templates WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id)
+    res.json({ message: 'Import template deleted' })
+  } catch (err) {
+    sendServerError(res, req.path, err)
+  }
+})
+
+// 5. History Plan Management (CRUD with auto 5-item retention per user!)
 app.get('/api/history', authenticate, (req, res) => {
   try {
     const list = db.prepare('SELECT id, project_name, shipment_name, loading_mode, data, created_at FROM history_plans WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id)

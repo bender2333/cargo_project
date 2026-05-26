@@ -45,6 +45,18 @@ db.exec(`
     created_at TEXT NOT NULL,
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS import_templates (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    mapping TEXT NOT NULL,
+    units TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(user_id, name)
+  );
 `)
 
 // 1a. Schema migrations (idempotent, version-tracked via PRAGMA user_version)
@@ -75,6 +87,25 @@ const migrations = [
       if (!hasColumn('users', 'password_changed_at')) {
         db.exec('ALTER TABLE users ADD COLUMN password_changed_at TEXT')
       }
+    },
+  },
+  {
+    version: 3,
+    description: 'Add user-scoped import templates',
+    up: () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS import_templates (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          mapping TEXT NOT NULL,
+          units TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+          UNIQUE(user_id, name)
+        )
+      `)
     },
   },
 ]

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { IMPORT_CODES, parseCargoRows, parseCargoRowsWithMapping } from './importCargo'
+import { IMPORT_CODES, parseCargoRows, parseCargoRowsWithMapping, parseCargoRowsWithTemplate } from './importCargo'
 
 describe('parseCargoRows', () => {
   it('maps Chinese headers and converts centimeter dimensions to millimeters', () => {
@@ -153,5 +153,43 @@ describe('parseCargoRowsWithMapping', () => {
         stackable: true,
       },
     ])
+  })
+
+  it('uses saved template unit settings even when source column names have no unit hint', () => {
+    const result = parseCargoRowsWithTemplate(
+      [
+        {
+          Item: 'Template crate',
+          Code: 'T1',
+          L: 80,
+          W: 60,
+          H: 40,
+          Qty: 2,
+        },
+      ],
+      {
+        mapping: {
+          name: 'Item',
+          label: 'Code',
+          length: 'L',
+          width: 'W',
+          height: 'H',
+          quantity: 'Qty',
+        },
+        units: { length: 'cm', width: 'cm', height: 'cm' },
+      },
+      { createId: () => 'template-1' },
+    )
+
+    expect(result.items[0]).toMatchObject({
+      id: 'template-1',
+      name: 'Template crate',
+      label: 'T1',
+      length: 800,
+      width: 600,
+      height: 400,
+      quantity: 2,
+    })
+    expect(result.summary.convertedCentimeterRows).toBe(1)
   })
 })
