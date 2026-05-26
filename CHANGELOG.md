@@ -29,6 +29,12 @@
   - Added frontend template API helper and mapping-modal controls to select an existing template or save the current mapping as a named template.
   - Templates are scoped by authenticated user and store only deterministic mapping/unit configuration.
   - Verification: `npx vitest run src/lib/importCargo.test.ts` passed; `npx tsc -b` passed; `node --check server/index.mjs && node --check server/db.mjs` passed.
+- Completed subtask: release note and final local verification.
+  - Added in-app release note `2026-05-26-r22` for ruler measurements, six-way manual rotation, import templates, layer-view naming, and CoG display modes.
+  - Updated E2E coverage to assert the renamed `Layer view` tab after the product wording change.
+  - Opening the Balance 3D overlay or gravity field now moves the scene from Packing view to CoG view, so explicit CoG actions remain visible while the default packing scene stays clean.
+  - Verification: targeted Playwright reruns for the previously failing layer-view and CoG overlay tests passed.
+  - Final local verification: `npm run lint` passed; `npm test` passed 154 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 65 tests / 1 skipped / 0 failed.
 
 ## 2026-05-25 (Twentieth + Twenty-first Review Completion)
 

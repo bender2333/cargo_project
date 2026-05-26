@@ -253,7 +253,7 @@ test('adds cargo and recalculates utilization', async ({ page }) => {
   await expect(page.getByText(/Volume utilization: \d+\.\d%/)).toBeVisible()
   await expect(page.getByText(/Weight utilization: \d+\.\d%/)).toBeVisible()
   await expect(page.getByText('Cargo types: 2')).toBeVisible()
-  await expect(page.getByText('Layer-by-layer placement')).toBeVisible()
+  await expect(page.getByText('Layer view')).toBeVisible()
 })
 
 test('adds cargo from the default Chinese workspace', async ({ page }) => {

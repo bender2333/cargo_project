@@ -14,6 +14,27 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-05-26-r22',
+    date: '2026-05-26',
+    title: { en: 'Ruler, six-way manual rotation, import templates', zh: '尺规 / 六向手动旋转 / 导入模板' },
+    items: {
+      en: [
+        'Layer wording is now "Layer view" so review/filtering is not confused with manual layer editing.',
+        'Manual placement can choose all six orientations, with visible orientation controls and Shift+R cycling.',
+        'The ruler overlay shows selected-box clearance to walls, ceiling, door side, and nearest neighbors.',
+        'Excel import mappings can be saved as user-scoped templates and reused later.',
+        'Balance view now has Packing / CoG / Mixed display modes so the gravity field does not hide the packing result.',
+      ],
+      zh: [
+        '「逐层添加」统一改为「分层查看」，避免把复核过滤误解为按层编辑。',
+        '手动排布支持六种朝向，新增可见朝向控件，Shift+R 可循环切换。',
+        '新增尺规 overlay，选中箱体后显示到柜壁、顶部、门口和最近邻箱的余量。',
+        'Excel 字段映射可保存为用户自己的导入模板，下次导入可复用。',
+        '装载重心新增「装箱 / 重心 / 混合」显示模式，避免重心场遮挡自动排布结果。',
+      ],
+    },
+  },
+  {
     version: '2026-05-25-r21',
     date: '2026-05-25',
     title: { en: 'Detailed truck silhouette + gravity field overlay', zh: '卡车轮廓重做 + 重心场可视化' },

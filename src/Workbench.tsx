@@ -1254,6 +1254,21 @@ function Workbench() {
       : null),
     [cogViewState.showOverlay, cogViewState.showGravityField, placementMode, cogResult, selectedContainer, vehicleProfile],
   )
+  const toggleCogOverlay = (show: boolean) => {
+    setShowCogOverlay(show)
+    if (show && cogViewMode === 'packing') {
+      setCogViewMode('cog')
+    }
+  }
+  const toggleGravityField = (show: boolean) => {
+    setShowGravityField(show)
+    if (show) {
+      setShowCogOverlay(true)
+      if (cogViewMode === 'packing') {
+        setCogViewMode('cog')
+      }
+    }
+  }
 
   const compareCandidates = useMemo(() => {
     const allCustom = customContainers.filter((c) => !!c)
@@ -2786,8 +2801,8 @@ function Workbench() {
                   cogViewMode={cogViewMode}
                   mixedBoxOpacity={mixedBoxOpacity}
                   vehicleProfile={vehicleProfile}
-                  onToggle3d={setShowCogOverlay}
-                  onToggleGravityField={setShowGravityField}
+                  onToggle3d={toggleCogOverlay}
+                  onToggleGravityField={toggleGravityField}
                   onCogViewModeChange={(mode) => {
                     setCogViewMode(mode)
                     if (mode !== 'packing') setShowCogOverlay(true)
