@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-05-26 (Twenty-second Review In Progress)
+
+- Completed subtask: PM/design review and layer-view naming cleanup.
+  - Added `docs/pm-design-review-2026-05-26.md`, defining the round 22 product boundaries for measurement, six-orientation manual rotation, Excel import templates, layer-view naming, and CoG/gravity-field display modes.
+  - Renamed the UI result tab from "Layer-by-layer placement / 逐层添加货物" to "Layer view / 分层查看" to avoid implying a layer-based editing workflow.
+  - Updated E2E coverage to assert the Chinese UI shows "分层查看" and no longer shows "逐层添加货物".
+
 ## 2026-05-25 (Twentieth + Twenty-first Review Completion)
 
 - Completed subtask: ship the truck-silhouette rework, gravity-field overlay, and remove leftover test accounts from the remote DB.
