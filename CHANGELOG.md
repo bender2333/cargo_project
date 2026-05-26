@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-05-26 (Twenty-second Review In Progress)
+## 2026-05-26 (Twenty-second Review Completion)
 
 - Completed subtask: PM/design review and layer-view naming cleanup.
   - Added `docs/pm-design-review-2026-05-26.md`, defining the round 22 product boundaries for measurement, six-orientation manual rotation, Excel import templates, layer-view naming, and CoG/gravity-field display modes.
@@ -35,6 +35,10 @@
   - Opening the Balance 3D overlay or gravity field now moves the scene from Packing view to CoG view, so explicit CoG actions remain visible while the default packing scene stays clean.
   - Verification: targeted Playwright reruns for the previously failing layer-view and CoG overlay tests passed.
   - Final local verification: `npm run lint` passed; `npm test` passed 154 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 65 tests / 1 skipped / 0 failed.
+- Completed subtask: deploy and remote verification.
+  - Deployed the local `dist/` build with `DEPLOY_SKIP_BUILD=1 npm run deploy`.
+  - Remote backup created at `/root/cargo_project-backup-20260526-150421`; remote HTTP health check passed.
+  - Remote verification: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ npm run test:e2e` passed 65 tests / 1 skipped / 0 failed.
 
 ## 2026-05-25 (Twentieth + Twenty-first Review Completion)
 
