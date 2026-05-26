@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { ContainerSpec, PlacedBox } from '../types'
 import { MIN_SUPPORT_OVERLAP_RATIO } from '../lib/manualPlacement'
+import type { CogViewMode } from '../lib/cogView'
 import { snapToGrid } from '../lib/snap'
 import { resolveDropTarget } from '../lib/sceneDrop'
 import { snapToEdges } from '../lib/snapEdges'
@@ -45,6 +46,8 @@ type ContainerSceneProps = {
   onClearSelection?: () => void
   onHoverBox?: (info: HoverBoxInfo | null) => void
   cogOverlay?: CogOverlay | null
+  cogViewMode?: CogViewMode
+  boxOpacityOverride?: number | null
   /** Size/color of the cargo currently being dragged from the pool — drives the dragover ghost. */
   poolDragInfo?: { cargoId: string; length: number; width: number; height: number; color: string } | null
 }
@@ -197,9 +200,13 @@ function applyBoxVisualState(
   activeLabelId: string,
   selectedBoxId: string | null | undefined,
   invalid: boolean,
+  opacityOverride?: number | null,
 ) {
   const visual = boxVisualState(entry.box, activeLayerId, activeLabelId, selectedBoxId, invalid)
-  entry.mesh.material = getCachedBoxMaterial(state, entry.box, visual.selected, visual.opacity, visual.invalid)
+  const opacity = opacityOverride === null || opacityOverride === undefined
+    ? visual.opacity
+    : Math.min(1, Math.max(0.12, visual.selected ? Math.max(opacityOverride, 0.75) : opacityOverride))
+  entry.mesh.material = getCachedBoxMaterial(state, entry.box, visual.selected, opacity, visual.invalid)
   const material = entry.edges.material
   if (material instanceof THREE.LineBasicMaterial) {
     material.color.setHex(visual.edgeColor)
@@ -357,6 +364,8 @@ export function ContainerScene({
   onClearSelection,
   onHoverBox,
   cogOverlay,
+  cogViewMode = 'packing',
+  boxOpacityOverride = null,
   poolDragInfo,
 }: ContainerSceneProps) {
   const mountRef = useRef<HTMLDivElement | null>(null)
@@ -374,7 +383,7 @@ export function ContainerScene({
   const onClearSelectionRef = useRef<typeof onClearSelection>(onClearSelection)
   const onHoverBoxRef = useRef<typeof onHoverBox>(onHoverBox)
   const selectedManualBoxIdRef = useRef<string | null>(selectedManualBoxId ?? null)
-  const visualPropsRef = useRef({ activeLayerId, activeLabelId, selectedBoxId })
+  const visualPropsRef = useRef({ activeLayerId, activeLabelId, selectedBoxId, boxOpacityOverride })
 
   useEffect(() => {
     invalidBoxIdsRef.current = invalidBoxIds ?? new Set()
@@ -432,8 +441,8 @@ export function ContainerScene({
   }, [onSelectBox])
 
   useEffect(() => {
-    visualPropsRef.current = { activeLayerId, activeLabelId, selectedBoxId }
-  }, [activeLayerId, activeLabelId, selectedBoxId])
+    visualPropsRef.current = { activeLayerId, activeLabelId, selectedBoxId, boxOpacityOverride }
+  }, [activeLayerId, activeLabelId, selectedBoxId, boxOpacityOverride])
 
   useEffect(() => {
     const mount = mountRef.current
@@ -592,9 +601,9 @@ export function ContainerScene({
       computeInvalidByGeometry(entry.box.id, x, y, z, entry.box.length, entry.box.width, entry.box.height)
 
     const refreshEntryVisual = (entry: MeshEntry) => {
-      const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb } = visualPropsRef.current
+      const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb, boxOpacityOverride: opacityOverride } = visualPropsRef.current
       const invalid = sceneState.invalidOverride.has(entry.box.id) || invalidBoxIdsRef.current.has(entry.box.id)
-      applyBoxVisualState(sceneState, entry, la, lb, sb, invalid)
+      applyBoxVisualState(sceneState, entry, la, lb, sb, invalid, opacityOverride)
     }
 
     const onPointerDown = (event: PointerEvent) => {
@@ -1040,7 +1049,7 @@ export function ContainerScene({
       }
     }
 
-    const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb } = visualPropsRef.current
+    const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb, boxOpacityOverride: opacityOverride } = visualPropsRef.current
     boxes.forEach((box) => {
       const existing = meshEntries.get(box.id)
       const invalid = state.invalidOverride.has(box.id) || invalidBoxIdsRef.current.has(box.id)
@@ -1060,12 +1069,15 @@ export function ContainerScene({
         )
         existing.edges.position.copy(existing.mesh.position)
         existing.box = box
-        applyBoxVisualState(state, existing, la, lb, sb, invalid)
+        applyBoxVisualState(state, existing, la, lb, sb, invalid, opacityOverride)
         return
       }
       const geometry = new THREE.BoxGeometry(box.length * scale, box.height * scale, box.width * scale)
       const visualState = boxVisualState(box, la, lb, sb, invalid)
-      const material = getCachedBoxMaterial(state, box, visualState.selected, visualState.opacity, invalid)
+      const opacity = opacityOverride === null || opacityOverride === undefined
+        ? visualState.opacity
+        : Math.min(1, Math.max(0.12, visualState.selected ? Math.max(opacityOverride, 0.75) : opacityOverride))
+      const material = getCachedBoxMaterial(state, box, visualState.selected, opacity, invalid)
       const mesh = new THREE.Mesh(geometry, material)
       mesh.position.set(
         -length / 2 + (box.x + box.length / 2) * scale,
@@ -1360,12 +1372,12 @@ export function ContainerScene({
   useEffect(() => {
     const state = sceneStateRef.current
     if (!state) return
-    const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb } = visualPropsRef.current
+    const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb, boxOpacityOverride: opacityOverride } = visualPropsRef.current
     state.meshEntries.forEach((entry) => {
       const invalid = state.invalidOverride.has(entry.box.id) || invalidBoxIdsRef.current.has(entry.box.id)
-      applyBoxVisualState(state, entry, la, lb, sb, invalid)
+      applyBoxVisualState(state, entry, la, lb, sb, invalid, opacityOverride)
     })
-  }, [activeLayerId, activeLabelId, selectedBoxId, invalidBoxIds])
+  }, [activeLayerId, activeLabelId, selectedBoxId, invalidBoxIds, boxOpacityOverride])
 
   const interactionMode = manualEditable ? 'manual' : 'auto'
 
@@ -1379,6 +1391,8 @@ export function ContainerScene({
       data-grid-snap={gridSnap === false ? 'off' : 'on'}
       data-edge-snap={edgeSnap === false ? 'off' : 'on'}
       data-cog-overlay={cogOverlay ? 'on' : 'off'}
+      data-cog-view-mode={cogViewMode}
+      data-box-opacity={boxOpacityOverride ?? 'normal'}
       data-gravity-field={cogOverlay?.gravityField && cogOverlay.gravityField.length > 0 ? 'on' : 'off'}
       data-pool-ghost-active={poolDragInfo ? 'true' : 'false'}
       data-pool-ghost-invalid="false"

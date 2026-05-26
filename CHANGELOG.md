@@ -17,6 +17,12 @@
   - Workbench adds a `Ruler / 尺规` toggle; when enabled and a box is selected, a non-mutating overlay shows front/door/left/right/floor/top clearance plus nearest neighbor gaps.
   - The measurement overlay works for auto placement and manual placement because it consumes the rendered `PlacedBox` set, not DOM pixels.
   - Verification: `npx vitest run src/lib/measurement.test.ts` passed; `npx tsc -b` passed.
+- Completed subtask: CoG/gravity-field view strategy.
+  - Added `src/lib/cogView.ts` with `deriveCogViewState()` for `packing | cog | mixed` modes.
+  - Balance panel now exposes Packing / CoG / Mixed 3D view modes; switching to CoG or Mixed automatically enables the overlay.
+  - Packing view keeps the 3D scene clean; CoG view reduces box opacity so the gravity field and safety range are visible; Mixed view exposes a box-opacity slider.
+  - `ContainerScene` now exposes `data-cog-view-mode` and `data-box-opacity`, and applies the mode-specific box opacity without recalculating packing.
+  - Verification: `npx vitest run src/lib/cogView.test.ts` passed; `npx tsc -b` passed.
 
 ## 2026-05-25 (Twentieth + Twenty-first Review Completion)
 

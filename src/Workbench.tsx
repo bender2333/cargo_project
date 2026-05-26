@@ -21,6 +21,8 @@ import { FillSuggestionPanel } from './components/FillSuggestionPanel'
 import { ManualPrecisePanel } from './components/ManualPrecisePanel'
 import { ReleaseNotesButton } from './components/ReleaseNotesButton'
 import { buildCogOverlay } from './lib/cogVisual'
+import { deriveCogViewState } from './lib/cogView'
+import type { CogViewMode } from './lib/cogView'
 import { DEFAULT_VEHICLE_PROFILE } from './data/vehicleProfiles'
 import type { VehicleProfileId } from './data/vehicleProfiles'
 import {
@@ -773,6 +775,8 @@ function Workbench() {
   const [compareSelection, setCompareSelection] = useState<string[]>(() => containers.slice(0, 3).map((c) => c.id))
   const [showCogOverlay, setShowCogOverlay] = useState(false)
   const [showGravityField, setShowGravityField] = useState(false)
+  const [cogViewMode, setCogViewMode] = useState<CogViewMode>('packing')
+  const [mixedBoxOpacity, setMixedBoxOpacity] = useState(0.62)
   const [vehicleProfile, setVehicleProfile] = useState<VehicleProfileId>(DEFAULT_VEHICLE_PROFILE)
   const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
   const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
@@ -1211,11 +1215,20 @@ function Workbench() {
     : []
 
   const cogResult = useMemo(() => computeCenterOfGravity(visibleAutoBoxes.length > 0 ? visibleAutoBoxes : result.placed, selectedContainer), [result.placed, visibleAutoBoxes, selectedContainer])
+  const cogViewState = useMemo(
+    () => deriveCogViewState({
+      mode: cogViewMode,
+      overlayEnabled: showCogOverlay,
+      gravityFieldEnabled: showGravityField,
+      mixedBoxOpacity,
+    }),
+    [cogViewMode, showCogOverlay, showGravityField, mixedBoxOpacity],
+  )
   const cogOverlay = useMemo(
-    () => (showCogOverlay && placementMode === 'auto'
-      ? buildCogOverlay(cogResult, selectedContainer, vehicleProfile, { gravityFieldOn: showGravityField })
+    () => (cogViewState.showOverlay && placementMode === 'auto'
+      ? buildCogOverlay(cogResult, selectedContainer, vehicleProfile, { gravityFieldOn: cogViewState.showGravityField })
       : null),
-    [showCogOverlay, showGravityField, placementMode, cogResult, selectedContainer, vehicleProfile],
+    [cogViewState.showOverlay, cogViewState.showGravityField, placementMode, cogResult, selectedContainer, vehicleProfile],
   )
 
   const compareCandidates = useMemo(() => {
@@ -2503,7 +2516,7 @@ function Workbench() {
                       {containerChangeNotice}
                     </div>
                   )}
-                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} cogOverlay={cogOverlay} container={renderingContainer} edgeSnap={edgeSnap} gridSnap={gridSnap} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
+                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} boxOpacityOverride={cogViewState.boxOpacity} cogOverlay={cogOverlay} cogViewMode={cogViewState.mode} container={renderingContainer} edgeSnap={edgeSnap} gridSnap={gridSnap} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
                 </>
               ) : (
                 <>
@@ -2738,9 +2751,16 @@ function Workbench() {
                   result={cogResult}
                   show3d={showCogOverlay}
                   showGravityField={showGravityField}
+                  cogViewMode={cogViewMode}
+                  mixedBoxOpacity={mixedBoxOpacity}
                   vehicleProfile={vehicleProfile}
                   onToggle3d={setShowCogOverlay}
                   onToggleGravityField={setShowGravityField}
+                  onCogViewModeChange={(mode) => {
+                    setCogViewMode(mode)
+                    if (mode !== 'packing') setShowCogOverlay(true)
+                  }}
+                  onMixedBoxOpacityChange={setMixedBoxOpacity}
                   onVehicleProfileChange={setVehicleProfile}
                 />
               </div>
