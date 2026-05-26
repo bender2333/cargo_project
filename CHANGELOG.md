@@ -12,6 +12,11 @@
   - Manual precise panel exposes a six-orientation picker; `R` remains horizontal rotation while `Shift+R` cycles all orientations through `ContainerScene`.
   - Hover tooltip and 2D manual SVG expose orientation metadata for E2E/visual verification.
   - Verification: `npx vitest run src/lib/manualPlacement.test.ts src/components/ManualPlacement2D.test.tsx` passed; `npx tsc -b` passed.
+- Completed subtask: selected-box ruler/clearance measurements.
+  - Added `src/lib/measurement.ts` with model-space clearance, point-distance, and locale-aware formatting helpers.
+  - Workbench adds a `Ruler / 尺规` toggle; when enabled and a box is selected, a non-mutating overlay shows front/door/left/right/floor/top clearance plus nearest neighbor gaps.
+  - The measurement overlay works for auto placement and manual placement because it consumes the rendered `PlacedBox` set, not DOM pixels.
+  - Verification: `npx vitest run src/lib/measurement.test.ts` passed; `npx tsc -b` passed.
 
 ## 2026-05-25 (Twentieth + Twenty-first Review Completion)
 

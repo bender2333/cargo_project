@@ -51,6 +51,7 @@ import type { ImportCargoRow } from './lib/importCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
 import { clearPlacementOnContainerChange } from './lib/containerChange'
+import { formatMeasurement, measureBoxClearance } from './lib/measurement'
 import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, CustomDbContainer, DbHistoryPlan } from './types'
 import { isLoggedIn, getCurrentUser, fetchWithAuth, removeToken } from './lib/auth'
 import type { User } from './lib/auth'
@@ -164,6 +165,18 @@ const copy = {
     gridSnapOff: 'Free move',
     edgeSnap: 'Edge snap',
     edgeSnapOff: 'No edge snap',
+    ruler: 'Ruler',
+    rulerOff: 'Ruler off',
+    clearanceTitle: 'Clearance',
+    clearanceFront: 'Front',
+    clearanceDoor: 'Door',
+    clearanceLeft: 'Left',
+    clearanceRight: 'Right',
+    clearanceFloor: 'Floor',
+    clearanceTop: 'Top',
+    clearanceNearestX: 'Nearest length gap',
+    clearanceNearestY: 'Nearest width gap',
+    clearanceNearestZ: 'Nearest height gap',
     hoverTooltipLabel: 'Label',
     hoverTooltipSize: 'Size',
     hoverTooltipPosition: 'Position',
@@ -354,6 +367,18 @@ const copy = {
     gridSnapOff: '自由移动',
     edgeSnap: '边缘吸附',
     edgeSnapOff: '关闭边缘吸附',
+    ruler: '尺规',
+    rulerOff: '关闭尺规',
+    clearanceTitle: '余量测量',
+    clearanceFront: '前端',
+    clearanceDoor: '门口',
+    clearanceLeft: '左侧',
+    clearanceRight: '右侧',
+    clearanceFloor: '底部',
+    clearanceTop: '顶部',
+    clearanceNearestX: '最近长度间距',
+    clearanceNearestY: '最近宽度间距',
+    clearanceNearestZ: '最近高度间距',
     hoverTooltipLabel: '标签',
     hoverTooltipSize: '尺寸',
     hoverTooltipPosition: '位置',
@@ -740,6 +765,7 @@ function Workbench() {
   const [sceneViewMode, setSceneViewMode] = useState<SceneViewMode>('iso')
   const [gridSnap, setGridSnap] = useState(true)
   const [edgeSnap, setEdgeSnap] = useState(true)
+  const [rulerEnabled, setRulerEnabled] = useState(false)
   const [hoverInfo, setHoverInfo] = useState<{ id: string; label: string; length: number; width: number; height: number; orientationKey: OrientationKey; x: number; y: number; z: number; clientX: number; clientY: number } | null>(null)
   const [poolDragInfo, setPoolDragInfo] = useState<{ cargoId: string; length: number; width: number; height: number; color: string } | null>(null)
   const [manualMaximized, setManualMaximized] = useState(false)
@@ -1171,6 +1197,14 @@ function Workbench() {
     if (playbackActive) return visibleBoxesAt(playbackSequence, playback.cursor)
     return hasCalculated ? result.placed : []
   }, [playbackActive, playbackSequence, playback.cursor, hasCalculated, result.placed])
+  const measurementBoxes = placementMode === 'manual' ? manualPlacedBoxes : visibleAutoBoxes
+  const measurementBoxId = placementMode === 'manual' ? manualSelectedId : selectedBoxId
+  const clearance = useMemo(() => {
+    if (!rulerEnabled || !measurementBoxId) return null
+    const box = measurementBoxes.find((entry) => entry.id === measurementBoxId)
+    if (!box) return null
+    return measureBoxClearance(box, renderingContainer, measurementBoxes)
+  }, [rulerEnabled, measurementBoxId, measurementBoxes, renderingContainer])
 
   const visibleBoxes = hasCalculated
     ? result.placed.filter((box) => (activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId) && (activeLabelId === 'all' || box.label === activeLabelId))
@@ -2215,6 +2249,21 @@ function Workbench() {
                 </button>
               </>
             )}
+            <button
+              className={`archive-tab inline-flex items-center gap-2 ${rulerEnabled ? 'active' : ''}`}
+              type="button"
+              aria-pressed={rulerEnabled}
+              data-testid="toggle-ruler"
+              onClick={() => setRulerEnabled((enabled) => !enabled)}
+            >
+              <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
+                <path d="M4 17 17 4l3 3L7 20z" />
+                <path d="m14 7 3 3" />
+                <path d="m11 10 2 2" />
+                <path d="m8 13 3 3" />
+              </svg>
+              {rulerEnabled ? t.ruler : t.rulerOff}
+            </button>
             <button className="archive-button success" type="button" onClick={exportCurrentView}>
               {t.exportView}
             </button>
@@ -2465,6 +2514,25 @@ function Workbench() {
                   )}
                   <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
                 </>
+              )}
+              {clearance && (
+                <div
+                  className="absolute left-6 top-6 z-20 max-w-[min(720px,calc(100%-3rem))] rounded-xl border border-[#93c5fd] bg-white/95 p-3 text-xs text-[#0f172a] shadow-lg"
+                  data-testid="clearance-overlay"
+                >
+                  <div className="mb-2 font-bold">{t.clearanceTitle}</div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+                    <span>{t.clearanceFront}: <strong>{formatMeasurement(clearance.front, locale)}</strong></span>
+                    <span>{t.clearanceDoor}: <strong>{formatMeasurement(clearance.door, locale)}</strong></span>
+                    <span>{t.clearanceLeft}: <strong>{formatMeasurement(clearance.left, locale)}</strong></span>
+                    <span>{t.clearanceRight}: <strong>{formatMeasurement(clearance.right, locale)}</strong></span>
+                    <span>{t.clearanceFloor}: <strong>{formatMeasurement(clearance.floor, locale)}</strong></span>
+                    <span>{t.clearanceTop}: <strong>{formatMeasurement(clearance.top, locale)}</strong></span>
+                    <span>{t.clearanceNearestX}: <strong>{formatMeasurement(clearance.nearestX, locale)}</strong></span>
+                    <span>{t.clearanceNearestY}: <strong>{formatMeasurement(clearance.nearestY, locale)}</strong></span>
+                    <span>{t.clearanceNearestZ}: <strong>{formatMeasurement(clearance.nearestZ, locale)}</strong></span>
+                  </div>
+                </div>
               )}
               <button
                 className="archive-button success absolute bottom-6 right-6"
