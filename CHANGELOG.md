@@ -6,6 +6,12 @@
   - Added `docs/pm-design-review-2026-05-26.md`, defining the round 22 product boundaries for measurement, six-orientation manual rotation, Excel import templates, layer-view naming, and CoG/gravity-field display modes.
   - Renamed the UI result tab from "Layer-by-layer placement / 逐层添加货物" to "Layer view / 分层查看" to avoid implying a layer-based editing workflow.
   - Updated E2E coverage to assert the Chinese UI shows "分层查看" and no longer shows "逐层添加货物".
+- Completed subtask: manual six-orientation rotation model.
+  - `ManualPlacedBox` now keeps original cargo dimensions plus weight/rotation/stackability metadata, so manual boxes can be remapped to all six `LWH/WLH/LHW/HLW/WHL/HWL` orientations instead of only swapping length/width.
+  - Added `setManualBoxOrientation`, `cycleBoxOrientation`, `dryRunOrientation`, and orientation/label-rotation helpers; validation now rejects rotation-disabled cargo and stacking on non-stackable support cargo.
+  - Manual precise panel exposes a six-orientation picker; `R` remains horizontal rotation while `Shift+R` cycles all orientations through `ContainerScene`.
+  - Hover tooltip and 2D manual SVG expose orientation metadata for E2E/visual verification.
+  - Verification: `npx vitest run src/lib/manualPlacement.test.ts src/components/ManualPlacement2D.test.tsx` passed; `npx tsc -b` passed.
 
 ## 2026-05-25 (Twentieth + Twenty-first Review Completion)
 

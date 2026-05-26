@@ -16,6 +16,7 @@ export type HoverBoxInfo = {
   length: number
   width: number
   height: number
+  orientationKey: PlacedBox['orientationKey']
   x: number
   y: number
   z: number
@@ -38,7 +39,7 @@ type ContainerSceneProps = {
   manualEditable?: boolean
   onManualMove?: (boxId: string, x: number, y: number, z?: number) => void
   onManualDropFromPool?: (cargoId: string, x: number, y: number, z?: number) => void
-  onManualRotate?: (boxId: string) => void
+  onManualRotate?: (boxId: string, cycleAll?: boolean) => void
   onManualDelete?: (boxId: string) => void
   selectedManualBoxId?: string | null
   onClearSelection?: () => void
@@ -645,6 +646,7 @@ export function ContainerScene({
                 length: entry.box.length,
                 width: entry.box.width,
                 height: entry.box.height,
+                orientationKey: entry.box.orientationKey,
                 x: entry.box.x,
                 y: entry.box.y,
                 z: entry.box.z,
@@ -664,6 +666,7 @@ export function ContainerScene({
               length: entry.box.length,
               width: entry.box.width,
               height: entry.box.height,
+              orientationKey: entry.box.orientationKey,
               x: entry.box.x,
               y: entry.box.y,
               z: entry.box.z,
@@ -905,7 +908,7 @@ export function ContainerScene({
       switch (event.key) {
         case 'r':
         case 'R':
-          onManualRotateRef.current?.(boxId)
+          onManualRotateRef.current?.(boxId, event.shiftKey)
           break
         case 'Delete':
         case 'Backspace':

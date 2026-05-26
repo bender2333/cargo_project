@@ -8,6 +8,9 @@ export type ManualPlacedBox = {
   cargoId: string
   label: string
   color: string
+  baseLength?: number
+  baseWidth?: number
+  baseHeight?: number
   x: number
   y: number
   z: number
@@ -16,6 +19,9 @@ export type ManualPlacedBox = {
   height: number
   orientationKey: OrientationKey
   labelRotationDeg: LabelRotationDeg
+  weight?: number
+  canRotate?: boolean
+  stackable?: boolean
 }
 
 export type ManualDraft = {
@@ -23,7 +29,7 @@ export type ManualDraft = {
 }
 
 export type ValidationIssue = {
-  type: 'boundary' | 'overlap' | 'floating'
+  type: 'boundary' | 'overlap' | 'floating' | 'rotation-disabled' | 'stacking'
   message: string
   boxId: string
 }
@@ -91,6 +97,8 @@ const HORIZONTAL_ROTATION_NEXT: Record<OrientationKey, OrientationKey> = {
   HWL: 'WHL',
 }
 
+const ALL_ORIENTATIONS: OrientationKey[] = ['LWH', 'WLH', 'LHW', 'HLW', 'WHL', 'HWL']
+
 const LABEL_ROTATION_FOR_ORIENTATION: Record<OrientationKey, LabelRotationDeg> = {
   LWH: 0,
   WLH: 90,
@@ -100,20 +108,72 @@ const LABEL_ROTATION_FOR_ORIENTATION: Record<OrientationKey, LabelRotationDeg> =
   HWL: 180,
 }
 
-export function rotateBox(draft: ManualDraft, id: string): ManualDraft {
+export function labelRotationForManualOrientation(orientationKey: OrientationKey): LabelRotationDeg {
+  return LABEL_ROTATION_FOR_ORIENTATION[orientationKey]
+}
+
+function baseDimensionsFor(box: ManualPlacedBox) {
+  return {
+    length: box.baseLength ?? box.length,
+    width: box.baseWidth ?? box.width,
+    height: box.baseHeight ?? box.height,
+  }
+}
+
+export function dimensionsForManualOrientation(
+  base: { length: number; width: number; height: number },
+  orientationKey: OrientationKey,
+) {
+  const byAxis = {
+    L: base.length,
+    W: base.width,
+    H: base.height,
+  }
+  const [l, w, h] = orientationKey.split('') as Array<'L' | 'W' | 'H'>
+  return {
+    length: byAxis[l],
+    width: byAxis[w],
+    height: byAxis[h],
+  }
+}
+
+export function nextManualOrientation(orientationKey: OrientationKey): OrientationKey {
+  const index = ALL_ORIENTATIONS.indexOf(orientationKey)
+  return ALL_ORIENTATIONS[(index + 1) % ALL_ORIENTATIONS.length]
+}
+
+export function setManualBoxOrientation(
+  draft: ManualDraft,
+  id: string,
+  orientationKey: OrientationKey,
+): ManualDraft {
   return {
     boxes: draft.boxes.map((box) => {
       if (box.id !== id) return box
-      const nextOrientation = HORIZONTAL_ROTATION_NEXT[box.orientationKey]
+      const base = baseDimensionsFor(box)
       return {
         ...box,
-        length: box.width,
-        width: box.length,
-        orientationKey: nextOrientation,
-        labelRotationDeg: LABEL_ROTATION_FOR_ORIENTATION[nextOrientation],
+        ...dimensionsForManualOrientation(base, orientationKey),
+        baseLength: base.length,
+        baseWidth: base.width,
+        baseHeight: base.height,
+        orientationKey,
+        labelRotationDeg: LABEL_ROTATION_FOR_ORIENTATION[orientationKey],
       }
     }),
   }
+}
+
+export function rotateBox(draft: ManualDraft, id: string): ManualDraft {
+  const target = draft.boxes.find((box) => box.id === id)
+  if (!target) return draft
+  return setManualBoxOrientation(draft, id, HORIZONTAL_ROTATION_NEXT[target.orientationKey])
+}
+
+export function cycleBoxOrientation(draft: ManualDraft, id: string): ManualDraft {
+  const target = draft.boxes.find((box) => box.id === id)
+  if (!target) return draft
+  return setManualBoxOrientation(draft, id, nextManualOrientation(target.orientationKey))
 }
 
 /**
@@ -129,6 +189,35 @@ export function dryRunRotation(draft: ManualDraft, id: string, container: Contai
   const target = draft.boxes.find((b) => b.id === id)
   if (!target) return { ok: false, rotatedBox: null, issues: [] }
   const rotated = rotateBox(draft, id)
+  const rotatedBox = rotated.boxes.find((b) => b.id === id) ?? null
+  const issues = validateDraft(rotated, container).filter((issue) => issue.boxId === id)
+  return { ok: issues.length === 0, rotatedBox, issues }
+}
+
+export function dryRunOrientation(
+  draft: ManualDraft,
+  id: string,
+  orientationKey: OrientationKey,
+  container: ContainerSpec,
+): {
+  ok: boolean
+  rotatedBox: ManualPlacedBox | null
+  issues: ValidationIssue[]
+} {
+  const target = draft.boxes.find((b) => b.id === id)
+  if (!target) return { ok: false, rotatedBox: null, issues: [] }
+  if (target.canRotate === false && orientationKey !== target.orientationKey) {
+    return {
+      ok: false,
+      rotatedBox: target,
+      issues: [{
+        type: 'rotation-disabled',
+        boxId: id,
+        message: `Box ${target.label} cannot be rotated.`,
+      }],
+    }
+  }
+  const rotated = setManualBoxOrientation(draft, id, orientationKey)
   const rotatedBox = rotated.boxes.find((b) => b.id === id) ?? null
   const issues = validateDraft(rotated, container).filter((issue) => issue.boxId === id)
   return { ok: issues.length === 0, rotatedBox, issues }
@@ -235,6 +324,22 @@ export function validateDraft(draft: ManualDraft, container: ContainerSpec): Val
     }
   }
 
+  for (const box of draft.boxes) {
+    if (box.z <= EPSILON) continue
+    for (const support of draft.boxes) {
+      if (support.id === box.id || support.stackable !== false) continue
+      const supportTop = support.z + support.height
+      if (Math.abs(supportTop - box.z) > EPSILON) continue
+      if (overlapAreaXY(box, support) <= 0) continue
+      issues.push({
+        type: 'stacking',
+        boxId: box.id,
+        message: `Box ${box.label} is stacked on non-stackable cargo ${support.label}.`,
+      })
+      break
+    }
+  }
+
   return issues
 }
 
@@ -307,6 +412,9 @@ export function makeManualBox(params: {
   length: number
   width: number
   height: number
+  weight?: number
+  canRotate?: boolean
+  stackable?: boolean
   x: number
   y: number
   z?: number
@@ -316,6 +424,9 @@ export function makeManualBox(params: {
     cargoId: params.cargoId,
     label: params.label,
     color: params.color,
+    baseLength: params.length,
+    baseWidth: params.width,
+    baseHeight: params.height,
     x: params.x,
     y: params.y,
     z: params.z ?? 0,
@@ -324,6 +435,9 @@ export function makeManualBox(params: {
     height: params.height,
     orientationKey: 'LWH',
     labelRotationDeg: 0,
+    weight: params.weight ?? 0,
+    canRotate: params.canRotate ?? true,
+    stackable: params.stackable ?? true,
   }
 }
 
@@ -354,9 +468,9 @@ export function toPlacedBoxes(
     height: box.height,
     orientationKey: box.orientationKey,
     labelRotationDeg: box.labelRotationDeg,
-    weight: 0,
+    weight: box.weight ?? 0,
     color: box.color,
-    stackable: true,
+    stackable: box.stackable ?? true,
     physicalLayer: 1,
     workStep: 1,
     supportType: 'floor',

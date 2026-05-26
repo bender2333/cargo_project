@@ -28,17 +28,20 @@ import {
   buildPool as manualBuildPool,
   commit as manualCommit,
   dryRunRotation as manualDryRunRotation,
+  dryRunOrientation as manualDryRunOrientation,
   emptyHistory as manualEmptyHistory,
   makeManualBox,
   redo as manualRedo,
   removeBox as manualRemoveBox,
   rotateBox as manualRotateBox,
+  cycleBoxOrientation as manualCycleBoxOrientation,
+  setManualBoxOrientation,
   setBoxPosition as manualSetBoxPosition,
   toPlacedBoxes as manualToPlacedBoxes,
   undo as manualUndo,
   validateDraft as manualValidateDraft,
 } from './lib/manualPlacement'
-import type { ManualDraft, ManualHistory, ValidationIssue } from './lib/manualPlacement'
+import type { ManualDraft, ManualHistory, OrientationKey, ValidationIssue } from './lib/manualPlacement'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from './data/containers'
 import { buildExportPlanRows } from './lib/exportPlan'
 import type { HistoryPlan } from './lib/historyPlans'
@@ -164,6 +167,7 @@ const copy = {
     hoverTooltipLabel: 'Label',
     hoverTooltipSize: 'Size',
     hoverTooltipPosition: 'Position',
+    hoverTooltipOrientation: 'Orientation',
     topView: 'Top',
     frontView: 'Front',
     sideView: 'Side',
@@ -223,6 +227,7 @@ const copy = {
     remainingLabel: 'left',
     manualNoIssues: 'No validation issues',
     manualRotate: 'Rotate 90°',
+    manualRotateAll: 'Cycle orientation',
     manualDelete: 'Delete',
     undo: 'Undo',
     redo: 'Redo',
@@ -234,13 +239,16 @@ const copy = {
       'Arrow keys: move X/Y by 10 mm',
       'PageUp/PageDown: move Z by 10 mm',
       'Modifiers: Shift = 100 mm, Ctrl/Cmd = 1 mm',
-      'R: rotate, Delete: remove, Esc: clear selection',
+      'R: rotate horizontally, Shift + R: cycle all six orientations',
+      'Delete: remove, Esc: clear selection',
     ],
     manualRotateHint: 'Drag with left mouse to move boxes; middle mouse pans the camera; right mouse drag rotates; wheel zooms.',
     containerChangedNotice: 'Container changed. Recalculate to refresh the automatic placement.',
     manualIssueBoundary: 'exceeds the effective container bounds',
     manualIssueOverlap: 'overlaps another cargo box',
     manualIssueFloating: 'is floating and needs at least 50% base support',
+    manualIssueRotationDisabled: 'rotation is disabled for this cargo',
+    manualIssueStacking: 'is stacked on non-stackable cargo',
     poolEmpty: 'All cargo has been placed.',
     continueManually: 'Continue manually',
     modeManual3D: '3D Review',
@@ -349,6 +357,7 @@ const copy = {
     hoverTooltipLabel: '标签',
     hoverTooltipSize: '尺寸',
     hoverTooltipPosition: '位置',
+    hoverTooltipOrientation: '朝向',
     topView: '俯视',
     frontView: '正视',
     sideView: '侧视',
@@ -408,6 +417,7 @@ const copy = {
     remainingLabel: '剩余',
     manualNoIssues: '当前无校验问题',
     manualRotate: '旋转 90°',
+    manualRotateAll: '切换六向',
     manualDelete: '删除',
     undo: '撤销',
     redo: '重做',
@@ -419,13 +429,16 @@ const copy = {
       '方向键：X/Y 每次移动 10 mm',
       'PageUp/PageDown：Z 轴每次移动 10 mm',
       '修饰键：Shift = 100 mm，Ctrl/Cmd = 1 mm',
-      'R：旋转，Delete：删除，Esc：取消选中',
+      'R：水平旋转，Shift + R：循环六种朝向',
+      'Delete：删除，Esc：取消选中',
     ],
     manualRotateHint: '左键拖动可移动箱体；中键平移视角；右键旋转视角；滚轮缩放。',
     containerChangedNotice: '已更换货柜，请重新计算以刷新自动排布。',
     manualIssueBoundary: '超出有效货柜边界',
     manualIssueOverlap: '与其他货物发生碰撞',
     manualIssueFloating: '处于悬空状态，底面至少需要 50% 支撑',
+    manualIssueRotationDisabled: '该货物禁止旋转',
+    manualIssueStacking: '堆叠在不可堆叠货物上',
     poolEmpty: '所有货物已放置完毕。',
     continueManually: '继续手动微调',
     modeManual3D: '3D 复核',
@@ -467,7 +480,7 @@ type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback'
 type NavTarget = 'overview' | 'report' | 'cargo' | 'container' | 'history' | 'users'
 
 function buildRotationNotice(
-  dry: ReturnType<typeof manualDryRunRotation>,
+  dry: ReturnType<typeof manualDryRunRotation> | ReturnType<typeof manualDryRunOrientation>,
   container: ContainerSpec,
   locale: Locale,
 ): string {
@@ -502,6 +515,18 @@ function buildRotationNotice(
     return locale === 'zh'
       ? '旋转后底面支撑不足（需要 ≥50%）'
       : 'Rotated box has insufficient base support (≥50% required)'
+  }
+  const rotationDisabled = dry.issues.find((i) => i.type === 'rotation-disabled')
+  if (rotationDisabled) {
+    return locale === 'zh'
+      ? '该货物不允许旋转'
+      : 'This cargo cannot be rotated'
+  }
+  const stacking = dry.issues.find((i) => i.type === 'stacking')
+  if (stacking) {
+    return locale === 'zh'
+      ? '旋转后会压在不可堆叠货物上'
+      : 'Rotated box would rest on non-stackable cargo'
   }
   return locale === 'zh' ? '旋转后不满足校验，已撤销' : 'Rotation rejected by validation'
 }
@@ -688,7 +713,9 @@ function containerPlacementKey(container: ContainerSpec) {
 function localizeManualIssue(issue: ValidationIssue, localeCopy: typeof copy.en) {
   if (issue.type === 'boundary') return localeCopy.manualIssueBoundary
   if (issue.type === 'overlap') return localeCopy.manualIssueOverlap
-  return localeCopy.manualIssueFloating
+  if (issue.type === 'floating') return localeCopy.manualIssueFloating
+  if (issue.type === 'rotation-disabled') return localeCopy.manualIssueRotationDisabled
+  return localeCopy.manualIssueStacking
 }
 
 function Workbench() {
@@ -713,7 +740,7 @@ function Workbench() {
   const [sceneViewMode, setSceneViewMode] = useState<SceneViewMode>('iso')
   const [gridSnap, setGridSnap] = useState(true)
   const [edgeSnap, setEdgeSnap] = useState(true)
-  const [hoverInfo, setHoverInfo] = useState<{ id: string; label: string; length: number; width: number; height: number; x: number; y: number; z: number; clientX: number; clientY: number } | null>(null)
+  const [hoverInfo, setHoverInfo] = useState<{ id: string; label: string; length: number; width: number; height: number; orientationKey: OrientationKey; x: number; y: number; z: number; clientX: number; clientY: number } | null>(null)
   const [poolDragInfo, setPoolDragInfo] = useState<{ cargoId: string; length: number; width: number; height: number; color: string } | null>(null)
   const [manualMaximized, setManualMaximized] = useState(false)
   const [resetViewTick, setResetViewTick] = useState(0)
@@ -974,6 +1001,9 @@ function Workbench() {
       length: cargoItem.length,
       width: cargoItem.width,
       height: cargoItem.height,
+      weight: cargoItem.weight,
+      canRotate: cargoItem.canRotate,
+      stackable: cargoItem.stackable,
       x,
       y,
       z: supplyZ ? dropZ : 0,
@@ -1005,25 +1035,36 @@ function Workbench() {
     setManualHistory((current) => manualRedo(current))
   }
 
-  const handleManualRotate = () => {
-    if (!manualSelectedId) return
-    const dry = manualDryRunRotation(manualDraft, manualSelectedId, renderingContainer)
+  const commitManualOrientation = (boxId: string, orientationKey: OrientationKey) => {
+    const dry = manualDryRunOrientation(manualDraft, boxId, orientationKey, renderingContainer)
     if (!dry.ok) {
       setRotationNotice(buildRotationNotice(dry, renderingContainer, locale))
       return
     }
-    const nextDraft = manualRotateBox(manualDraft, manualSelectedId)
+    const nextDraft = setManualBoxOrientation(manualDraft, boxId, orientationKey)
     setRotationNotice('')
     commitManual(nextDraft)
   }
 
-  const handleManualRotateBox = (boxId: string) => {
-    const dry = manualDryRunRotation(manualDraft, boxId, renderingContainer)
+  const handleManualRotate = (cycleAll = false) => {
+    if (!manualSelectedId) return
+    handleManualRotateBox(manualSelectedId, cycleAll)
+  }
+
+  const handleManualRotateBox = (boxId: string, cycleAll = false) => {
+    const nextOrientation = cycleAll
+      ? manualCycleBoxOrientation(manualDraft, boxId).boxes.find((box) => box.id === boxId)?.orientationKey
+      : null
+    const dry = nextOrientation
+      ? manualDryRunOrientation(manualDraft, boxId, nextOrientation, renderingContainer)
+      : manualDryRunRotation(manualDraft, boxId, renderingContainer)
     if (!dry.ok) {
       setRotationNotice(buildRotationNotice(dry, renderingContainer, locale))
       return
     }
-    const nextDraft = manualRotateBox(manualDraft, boxId)
+    const nextDraft = cycleAll
+      ? manualCycleBoxOrientation(manualDraft, boxId)
+      : manualRotateBox(manualDraft, boxId)
     setRotationNotice('')
     commitManual(nextDraft)
   }
@@ -1041,20 +1082,29 @@ function Workbench() {
 
   const handleContinueManually = () => {
     const nextDraft = {
-      boxes: result.placed.map((box) => ({
-        id: `manual-${box.id}`,
-        cargoId: box.cargoId,
-        label: box.label,
-        color: box.color,
-        x: box.x,
-        y: box.y,
-        z: box.z,
-        length: box.length,
-        width: box.width,
-        height: box.height,
-        orientationKey: box.orientationKey,
-        labelRotationDeg: box.labelRotationDeg,
-      })),
+      boxes: result.placed.map((box) => {
+        const cargo = displayCargoItems.find((item) => item.id === box.cargoId)
+        return {
+          id: `manual-${box.id}`,
+          cargoId: box.cargoId,
+          label: box.label,
+          color: box.color,
+          x: box.x,
+          y: box.y,
+          z: box.z,
+          length: box.length,
+          width: box.width,
+          height: box.height,
+          baseLength: cargo?.length ?? box.length,
+          baseWidth: cargo?.width ?? box.width,
+          baseHeight: cargo?.height ?? box.height,
+          orientationKey: box.orientationKey,
+          labelRotationDeg: box.labelRotationDeg,
+          weight: box.weight,
+          canRotate: cargo?.canRotate ?? true,
+          stackable: cargo?.stackable ?? box.stackable,
+        }
+      }),
     }
     setManualHistory((current) => manualCommit(current, nextDraft))
     setManualSelectedId(null)
@@ -2209,7 +2259,7 @@ function Workbench() {
                     <button
                       className="archive-button"
                       type="button"
-                      onClick={handleManualRotate}
+                      onClick={() => handleManualRotate(false)}
                       disabled={!manualSelectedId}
                       data-testid="manual-rotate"
                     >
@@ -2388,7 +2438,11 @@ function Workbench() {
                           if (!manualSelectedId) return
                           handleManualMoveBox(manualSelectedId, x, y, z)
                         }}
-                        onRotate={handleManualRotate}
+                        onRotate={() => handleManualRotate(false)}
+                        onSetOrientation={(orientationKey) => {
+                          if (!manualSelectedId) return
+                          commitManualOrientation(manualSelectedId, orientationKey)
+                        }}
                       />
                     </aside>
                   </div>
@@ -2430,6 +2484,7 @@ function Workbench() {
                 >
                   <div className="font-bold">{t.hoverTooltipLabel}: {hoverInfo.label}</div>
                   <div>{t.hoverTooltipSize}: {hoverInfo.length} × {hoverInfo.width} × {hoverInfo.height} mm</div>
+                  <div>{t.hoverTooltipOrientation}: {hoverInfo.orientationKey}</div>
                   <div>{t.hoverTooltipPosition}: ({Math.round(hoverInfo.x)}, {Math.round(hoverInfo.y)}, {Math.round(hoverInfo.z)})</div>
                 </div>
               )}

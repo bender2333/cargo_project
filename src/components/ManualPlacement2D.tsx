@@ -199,6 +199,8 @@ export function ManualPlacement2D({
             key={box.id}
             data-box-id={box.id}
             data-has-issue={hasIssue ? 'true' : 'false'}
+            data-orientation={box.orientationKey}
+            data-label-rotation={box.labelRotationDeg}
             onPointerDown={(event) => handlePointerDown(event, box.id)}
             style={{ cursor: projection.editable ? 'grab' : 'pointer' }}
           >

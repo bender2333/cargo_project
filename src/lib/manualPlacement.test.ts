@@ -4,13 +4,18 @@ import {
   addBox,
   buildPool,
   commit,
+  cycleBoxOrientation,
+  dimensionsForManualOrientation,
+  dryRunOrientation,
   emptyDraft,
   emptyHistory,
+  labelRotationForManualOrientation,
   makeManualBox,
   moveBox,
   redo,
   removeBox,
   rotateBox,
+  setManualBoxOrientation,
   setBoxPosition,
   toPlacedBoxes,
   undo,
@@ -188,6 +193,89 @@ describe('manualPlacement', () => {
     })
   })
 
+  it('setManualBoxOrientation maps all six orientations from the original dimensions', () => {
+    const draft = addBox(emptyDraft(), makeManualBox({
+      id: 'box-1',
+      cargoId: 'cargo-a',
+      label: 'A',
+      color: '#fff',
+      length: 400,
+      width: 500,
+      height: 600,
+      x: 0,
+      y: 0,
+    }))
+
+    const expected = {
+      LWH: { length: 400, width: 500, height: 600, labelRotationDeg: 0 },
+      WLH: { length: 500, width: 400, height: 600, labelRotationDeg: 90 },
+      LHW: { length: 400, width: 600, height: 500, labelRotationDeg: 90 },
+      HLW: { length: 600, width: 400, height: 500, labelRotationDeg: 180 },
+      WHL: { length: 500, width: 600, height: 400, labelRotationDeg: 270 },
+      HWL: { length: 600, width: 500, height: 400, labelRotationDeg: 180 },
+    } as const
+
+    Object.entries(expected).forEach(([orientationKey, dimensions]) => {
+      const next = setManualBoxOrientation(draft, 'box-1', orientationKey as keyof typeof expected)
+      expect(next.boxes[0]).toMatchObject({
+        ...dimensions,
+        orientationKey,
+        baseLength: 400,
+        baseWidth: 500,
+        baseHeight: 600,
+      })
+    })
+  })
+
+  it('cycleBoxOrientation advances through all six canonical orientations', () => {
+    let draft = addBox(emptyDraft(), makeManualBox({
+      id: 'box-1',
+      cargoId: 'cargo-a',
+      label: 'A',
+      color: '#fff',
+      length: 400,
+      width: 500,
+      height: 600,
+      x: 0,
+      y: 0,
+    }))
+
+    const seen = []
+    for (let i = 0; i < 6; i += 1) {
+      draft = cycleBoxOrientation(draft, 'box-1')
+      seen.push(draft.boxes[0].orientationKey)
+    }
+
+    expect(seen).toEqual(['WLH', 'LHW', 'HLW', 'WHL', 'HWL', 'LWH'])
+  })
+
+  it('dryRunOrientation rejects changes for non-rotatable cargo', () => {
+    const draft = addBox(emptyDraft(), makeManualBox({
+      id: 'box-1',
+      cargoId: 'cargo-a',
+      label: 'A',
+      color: '#fff',
+      length: 400,
+      width: 500,
+      height: 600,
+      canRotate: false,
+      x: 0,
+      y: 0,
+    }))
+
+    const result = dryRunOrientation(draft, 'box-1', 'WLH', container())
+
+    expect(result.ok).toBe(false)
+    expect(result.issues).toEqual([
+      expect.objectContaining({ type: 'rotation-disabled', boxId: 'box-1' }),
+    ])
+  })
+
+  it('exports orientation helpers for UI labels and tests', () => {
+    expect(dimensionsForManualOrientation({ length: 400, width: 500, height: 600 }, 'HWL')).toEqual({ length: 600, width: 500, height: 400 })
+    expect(labelRotationForManualOrientation('WHL')).toBe(270)
+  })
+
   it('buildPool reports remaining cargo per type after subtracting placed boxes', () => {
     const items = [
       cargo({ id: 'cargo-a', quantity: 4 }),
@@ -273,6 +361,24 @@ describe('manualPlacement', () => {
 
     expect(issues).toEqual([
       expect.objectContaining({ type: 'floating', boxId: 'top' }),
+    ])
+  })
+
+  it('validateDraft flags boxes stacked on non-stackable cargo', () => {
+    let draft = emptyDraft()
+    draft = addBox(draft, makeManualBox({
+      id: 'base', cargoId: 'cargo-a', label: 'A', color: '#fff',
+      length: 400, width: 500, height: 600, x: 0, y: 0, stackable: false,
+    }))
+    draft = setBoxPosition(addBox(draft, makeManualBox({
+      id: 'top', cargoId: 'cargo-a', label: 'A', color: '#fff',
+      length: 400, width: 500, height: 600, x: 0, y: 0,
+    })), 'top', 0, 0, 600)
+
+    const issues = validateDraft(draft, container())
+
+    expect(issues).toEqual([
+      expect.objectContaining({ type: 'stacking', boxId: 'top' }),
     ])
   })
 
@@ -370,6 +476,17 @@ describe('manualPlacement', () => {
       orientationKey: 'LWH',
       labelRotationDeg: 0,
     })
+  })
+
+  it('toPlacedBoxes preserves manual weight and stackability', () => {
+    const draft = addBox(emptyDraft(), makeManualBox({
+      id: 'b1', cargoId: 'cargo-a', label: 'A', color: '#f59e0b',
+      length: 400, width: 500, height: 600, weight: 24, stackable: false, x: 100, y: 200,
+    }))
+
+    const placed = toPlacedBoxes(draft, new Set())
+
+    expect(placed[0]).toMatchObject({ weight: 24, stackable: false })
   })
 
   it('toPlacedBoxes returns an empty array for an empty draft without throwing', () => {

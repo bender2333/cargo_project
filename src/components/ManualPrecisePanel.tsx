@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { Locale } from '../types'
-import type { ManualPlacedBox } from '../lib/manualPlacement'
+import type { ManualPlacedBox, OrientationKey } from '../lib/manualPlacement'
+
+const ORIENTATION_OPTIONS: OrientationKey[] = ['LWH', 'WLH', 'LHW', 'HLW', 'WHL', 'HWL']
 
 const T = {
   en: {
@@ -17,6 +19,8 @@ const T = {
     pinRight: 'Pin to right wall',
     grounded: 'Drop to floor',
     rotate: 'Rotate',
+    orientation: 'Orientation',
+    rotationLocked: 'Rotation locked',
     delete: 'Delete',
   },
   zh: {
@@ -33,6 +37,8 @@ const T = {
     pinRight: '靠右',
     grounded: '落到地面',
     rotate: '旋转',
+    orientation: '朝向',
+    rotationLocked: '禁止旋转',
     delete: '删除',
   },
 } as const
@@ -43,10 +49,11 @@ type Props = {
   locale: Locale
   onMove: (x: number, y: number, z: number) => void
   onRotate: () => void
+  onSetOrientation: (orientationKey: OrientationKey) => void
   onDelete: () => void
 }
 
-export function ManualPrecisePanel({ selected, container, locale, onMove, onRotate, onDelete }: Props) {
+export function ManualPrecisePanel({ selected, container, locale, onMove, onRotate, onSetOrientation, onDelete }: Props) {
   const t = T[locale]
   const [draft, setDraft] = useState<{ x: string; y: string; z: string }>({ x: '0', y: '0', z: '0' })
 
@@ -89,6 +96,31 @@ export function ManualPrecisePanel({ selected, container, locale, onMove, onRota
         <h3 className="text-sm font-bold text-[#0f172a]">{t.title}: <span className="inline-block rounded bg-[#222] px-1.5 py-0.5 text-[10px] text-white">{selected.label}</span></h3>
         <span className="text-[10px]">{t.size}: {selected.length}×{selected.width}×{selected.height}</span>
       </div>
+      <div className="mb-2">
+        <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wider text-[#94a3b8]">
+          <span>{t.orientation}</span>
+          {selected.canRotate === false && <span className="text-[#b45309]">{t.rotationLocked}</span>}
+        </div>
+        <div className="grid grid-cols-3 gap-1" data-testid="manual-orientation-picker">
+          {ORIENTATION_OPTIONS.map((orientation) => (
+            <button
+              key={orientation}
+              type="button"
+              className={`rounded border px-2 py-1 font-mono text-[11px] ${
+                selected.orientationKey === orientation
+                  ? 'border-[#2563eb] bg-[#dbeafe] text-[#1d4ed8]'
+                  : 'border-[#cbd5e1] bg-white text-[#334155]'
+              }`}
+              data-testid={`manual-orientation-${orientation}`}
+              disabled={selected.canRotate === false}
+              aria-pressed={selected.orientationKey === orientation}
+              onClick={() => onSetOrientation(orientation)}
+            >
+              {orientation}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="mb-2 grid grid-cols-3 gap-2" data-testid="manual-precise-fields">
         {(['x', 'y', 'z'] as const).map((axis) => (
           <label key={axis} className="flex flex-col gap-0.5">
@@ -119,7 +151,7 @@ export function ManualPrecisePanel({ selected, container, locale, onMove, onRota
         <button type="button" className="archive-button" onClick={grounded}>{t.grounded}</button>
       </div>
       <div className="flex gap-2">
-        <button type="button" className="archive-button" data-testid="manual-precise-rotate" onClick={onRotate}>{t.rotate}</button>
+        <button type="button" className="archive-button" data-testid="manual-precise-rotate" onClick={onRotate} disabled={selected.canRotate === false}>{t.rotate}</button>
         <button type="button" className="archive-button" data-testid="manual-precise-delete" onClick={onDelete}>{t.delete}</button>
       </div>
     </div>
