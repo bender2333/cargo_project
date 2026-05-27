@@ -40,9 +40,10 @@
 
 import { execSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 
-const PROJECT_ROOT = resolve(new URL('..', import.meta.url).pathname)
+const PROJECT_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 
 const CONFIG = Object.freeze({
   sshTarget: process.env.DEPLOY_REMOTE_USER || process.env.DEPLOY_SSH_HOST || 'tencent-container-layout',
