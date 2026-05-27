@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-05-27 (Round 22 Re-review Plan)
+
+- Completed subtask: re-reviewed the second-twenty-second-round implementation and recorded a replacement refactor plan.
+  - Added `REVIEW.md` section “第二十二轮重审 Review 与下一阶段重构计划（2026-05-27）” with code-level issue locations for manual drag/drop feedback, ruler measurement, orientation labels, rotation shortcuts, Excel templates, and CoG/gravity-field behavior.
+  - Updated `decision.md` to lock the product decisions: explicit manual-operation feedback, fixed measurement lines instead of a popup ruler, `R` = right 90 degrees / `Shift+R` = downward 90 degrees, visible orientation markers on labels, full template-management entry, gravity-field and CoG view-mode removal, and a new review-checklist feature direction.
+  - This is planning/review work only; no runtime feature code was changed in this entry.
+
 ## 2026-05-26 (Twenty-second Review Completion)
 
 - Completed subtask: PM/design review and layer-view naming cleanup.
