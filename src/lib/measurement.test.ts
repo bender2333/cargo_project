@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { ContainerSpec, PlacedBox } from '../types'
-import { formatMeasurement, measureBoxClearance, measureDistance } from './measurement'
+import {
+  createMeasurementAnnotation,
+  deleteMeasurementAnnotation,
+  formatMeasurement,
+  measureBoxClearance,
+  measureDistance,
+  renameMeasurementAnnotation,
+} from './measurement'
 
 const container: ContainerSpec = {
   id: 'c',
@@ -77,5 +84,47 @@ describe('measurement', () => {
     expect(formatMeasurement(245, 'zh')).toBe('245 mm')
     expect(formatMeasurement(1500, 'en')).toBe('1.50 m')
     expect(formatMeasurement(null, 'zh')).toBe('无')
+  })
+
+  it('creates fixed measurement annotations with calculated distance and axis', () => {
+    const annotation = createMeasurementAnnotation({
+      id: 'm-1',
+      from: { x: 0, y: 0, z: 0 },
+      to: { x: 300, y: 400, z: 0 },
+      label: 'door gap',
+      axis: 'spatial',
+    })
+
+    expect(annotation).toMatchObject({
+      id: 'm-1',
+      axis: 'spatial',
+      distance: 500,
+      locked: true,
+      label: 'door gap',
+      hidden: false,
+    })
+  })
+
+  it('renames and deletes measurement annotations without mutating the original list', () => {
+    const first = createMeasurementAnnotation({
+      id: 'm-1',
+      from: { x: 0, y: 0, z: 0 },
+      to: { x: 100, y: 0, z: 0 },
+      axis: 'x',
+    })
+    const second = createMeasurementAnnotation({
+      id: 'm-2',
+      from: { x: 0, y: 0, z: 0 },
+      to: { x: 0, y: 250, z: 0 },
+      axis: 'y',
+    })
+    const list = [first, second]
+
+    const renamed = renameMeasurementAnnotation(list, 'm-2', 'side clearance')
+    const deleted = deleteMeasurementAnnotation(renamed, 'm-1')
+
+    expect(list[1].label).not.toBe('side clearance')
+    expect(renamed[1]).toMatchObject({ id: 'm-2', label: 'side clearance' })
+    expect(deleted).toEqual([expect.objectContaining({ id: 'm-2' })])
   })
 })

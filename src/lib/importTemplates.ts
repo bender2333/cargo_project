@@ -1,10 +1,14 @@
-import type { ImportTemplate, ImportTemplateUnits } from '../types'
+import type { ImportTemplate, ImportTemplateDefaults, ImportTemplateUnits } from '../types'
 import { fetchWithAuth } from './auth'
 
 export type ImportTemplatePayload = {
   name: string
   mapping: Record<string, string>
   units: ImportTemplateUnits
+  headerRow?: number
+  startRow?: number
+  mergeRows?: ImportTemplate['mergeRows']
+  defaultValues?: ImportTemplateDefaults
 }
 
 export async function readImportTemplates(): Promise<ImportTemplate[]> {

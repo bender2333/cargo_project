@@ -6,6 +6,7 @@ import {
   commit,
   cycleBoxOrientation,
   dimensionsForManualOrientation,
+  dryRunRotation,
   dryRunOrientation,
   emptyDraft,
   emptyHistory,
@@ -15,6 +16,8 @@ import {
   redo,
   removeBox,
   rotateBox,
+  rotateBoxDown90,
+  rotateBoxRight90,
   setManualBoxOrientation,
   setBoxPosition,
   toPlacedBoxes,
@@ -191,6 +194,59 @@ describe('manualPlacement', () => {
       orientationKey: 'WLH',
       labelRotationDeg: 90,
     })
+  })
+
+  it('maps R to right 90 degrees and Shift+R to down 90 degrees for every orientation', () => {
+    const baseDraft = addBox(emptyDraft(), makeManualBox({
+      id: 'box-1',
+      cargoId: 'cargo-a',
+      label: 'A',
+      color: '#fff',
+      length: 400,
+      width: 500,
+      height: 600,
+      x: 0,
+      y: 0,
+    }))
+    const right90 = {
+      LWH: 'WLH',
+      WLH: 'LWH',
+      LHW: 'HLW',
+      HLW: 'LHW',
+      WHL: 'HWL',
+      HWL: 'WHL',
+    } as const
+    const down90 = {
+      LWH: 'LHW',
+      LHW: 'LWH',
+      WLH: 'WHL',
+      WHL: 'WLH',
+      HLW: 'HWL',
+      HWL: 'HLW',
+    } as const
+
+    Object.keys(right90).forEach((orientationKey) => {
+      const oriented = setManualBoxOrientation(baseDraft, 'box-1', orientationKey as keyof typeof right90)
+      expect(rotateBoxRight90(oriented, 'box-1').boxes[0].orientationKey).toBe(right90[orientationKey as keyof typeof right90])
+      expect(rotateBoxDown90(oriented, 'box-1').boxes[0].orientationKey).toBe(down90[orientationKey as keyof typeof down90])
+    })
+  })
+
+  it('dryRunRotation validates the requested spatial rotation direction', () => {
+    const draft = addBox(emptyDraft(), makeManualBox({
+      id: 'box-1',
+      cargoId: 'cargo-a',
+      label: 'A',
+      color: '#fff',
+      length: 400,
+      width: 500,
+      height: 600,
+      x: 0,
+      y: 0,
+    }))
+
+    expect(dryRunRotation(draft, 'box-1', container(), 'right').rotatedBox?.orientationKey).toBe('WLH')
+    expect(dryRunRotation(draft, 'box-1', container(), 'down').rotatedBox?.orientationKey).toBe('LHW')
   })
 
   it('setManualBoxOrientation maps all six orientations from the original dimensions', () => {

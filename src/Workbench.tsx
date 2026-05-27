@@ -21,8 +21,7 @@ import { FillSuggestionPanel } from './components/FillSuggestionPanel'
 import { ManualPrecisePanel } from './components/ManualPrecisePanel'
 import { ReleaseNotesButton } from './components/ReleaseNotesButton'
 import { buildCogOverlay } from './lib/cogVisual'
-import { deriveCogViewState } from './lib/cogView'
-import type { CogViewMode } from './lib/cogView'
+import { deriveCogOverlayState } from './lib/cogView'
 import { DEFAULT_VEHICLE_PROFILE } from './data/vehicleProfiles'
 import type { VehicleProfileId } from './data/vehicleProfiles'
 import {
@@ -35,8 +34,8 @@ import {
   makeManualBox,
   redo as manualRedo,
   removeBox as manualRemoveBox,
-  rotateBox as manualRotateBox,
-  cycleBoxOrientation as manualCycleBoxOrientation,
+  rotateBoxDown90 as manualRotateBoxDown90,
+  rotateBoxRight90 as manualRotateBoxRight90,
   setManualBoxOrientation,
   setBoxPosition as manualSetBoxPosition,
   toPlacedBoxes as manualToPlacedBoxes,
@@ -54,8 +53,17 @@ import { readImportTemplates, saveImportTemplate } from './lib/importTemplates'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
 import { clearPlacementOnContainerChange } from './lib/containerChange'
-import { formatMeasurement, measureBoxClearance } from './lib/measurement'
-import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, CustomDbContainer, DbHistoryPlan, ImportTemplate, ImportTemplateUnits } from './types'
+import {
+  createMeasurementAnnotation,
+  deleteMeasurementAnnotation,
+  formatMeasurement,
+} from './lib/measurement'
+import type { MeasurementAnnotation, Point3D } from './lib/measurement'
+import { buildReviewChecklist } from './lib/reviewChecklist'
+import type { ReviewChecklist } from './lib/reviewChecklist'
+import { createManualOperationNotice } from './lib/manualFeedback'
+import type { ManualOperationNotice } from './lib/manualFeedback'
+import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, CustomDbContainer, DbHistoryPlan, ImportTemplate, ImportTemplateUnits, ImportTemplateDefaults } from './types'
 import { isLoggedIn, getCurrentUser, fetchWithAuth, removeToken } from './lib/auth'
 import type { User } from './lib/auth'
 import { LoginPage } from './components/LoginPage'
@@ -147,11 +155,19 @@ const copy = {
     mappingCancel: 'Cancel',
     mappingSelectColumn: '-- Select column --',
     mappingConvertHint: 'Values will be converted to mm',
+    templateManager: 'Template manager',
     templateLabel: 'Import template',
     templateNone: 'No template',
     templateName: 'Template name',
     templateSave: 'Save template',
     templateSaved: 'Template saved',
+    templateHeaderRow: 'Header row',
+    templateStartRow: 'Start row',
+    templateDefaultLabel: 'Default label',
+    templateDefaultQuantity: 'Default quantity',
+    templateDefaultColor: 'Default color',
+    templateDefaultRotate: 'Default rotatable',
+    templateDefaultStackable: 'Default stackable',
     mappingFieldLabel: 'Cargo label',
     mappingFieldName: 'Cargo name',
     mappingFieldLength: 'Length',
@@ -168,6 +184,7 @@ const copy = {
     cogTab: 'Balance',
     compareTab: 'Compare',
     fillTab: 'Fill',
+    reviewChecklistTab: 'Review checklist',
     playbackResetNotice: 'Playback restarted because the plan changed.',
     gridSnap: '50mm snap',
     gridSnapOff: 'Free move',
@@ -175,6 +192,10 @@ const copy = {
     edgeSnapOff: 'No edge snap',
     ruler: 'Ruler',
     rulerOff: 'Ruler off',
+    measurementList: 'Measurements',
+    measurementEmpty: 'Turn on ruler and click two points in top view.',
+    measurementDelete: 'Delete',
+    measurementPending: 'Select the second point to lock the line.',
     clearanceTitle: 'Clearance',
     clearanceFront: 'Front',
     clearanceDoor: 'Door',
@@ -260,7 +281,7 @@ const copy = {
       'Arrow keys: move X/Y by 10 mm',
       'PageUp/PageDown: move Z by 10 mm',
       'Modifiers: Shift = 100 mm, Ctrl/Cmd = 1 mm',
-      'R: rotate horizontally, Shift + R: cycle all six orientations',
+      'R: rotate right 90°, Shift + R: rotate down 90°',
       'Delete: remove, Esc: clear selection',
     ],
     manualRotateHint: 'Drag with left mouse to move boxes; middle mouse pans the camera; right mouse drag rotates; wheel zooms.',
@@ -270,6 +291,10 @@ const copy = {
     manualIssueFloating: 'is floating and needs at least 50% base support',
     manualIssueRotationDisabled: 'rotation is disabled for this cargo',
     manualIssueStacking: 'is stacked on non-stackable cargo',
+    orientationDiagram: 'Orientation',
+    reviewChecklistEmpty: 'No review items.',
+    reviewChecklistExportJson: 'Export JSON',
+    reviewChecklistExportExcel: 'Export XLSX',
     poolEmpty: 'All cargo has been placed.',
     continueManually: 'Continue manually',
     modeManual3D: '3D Review',
@@ -354,11 +379,19 @@ const copy = {
     mappingCancel: '取消',
     mappingSelectColumn: '-- 请选择数据列 --',
     mappingConvertHint: '将转换为 mm',
+    templateManager: '导入模板管理',
     templateLabel: '导入模板',
     templateNone: '不使用模板',
     templateName: '模板名称',
     templateSave: '保存模板',
     templateSaved: '模板已保存',
+    templateHeaderRow: '表头行',
+    templateStartRow: '数据起始行',
+    templateDefaultLabel: '默认标识',
+    templateDefaultQuantity: '默认数量',
+    templateDefaultColor: '默认颜色',
+    templateDefaultRotate: '默认可旋转',
+    templateDefaultStackable: '默认可堆叠',
     mappingFieldLabel: '货物标识',
     mappingFieldName: '货物名称',
     mappingFieldLength: '长度',
@@ -375,6 +408,7 @@ const copy = {
     cogTab: '装载重心',
     compareTab: '柜型对比',
     fillTab: '补装建议',
+    reviewChecklistTab: '复核清单',
     playbackResetNotice: '方案变更，作业回放已重置。',
     gridSnap: '50mm 网格',
     gridSnapOff: '自由移动',
@@ -382,6 +416,10 @@ const copy = {
     edgeSnapOff: '关闭边缘吸附',
     ruler: '尺规',
     rulerOff: '关闭尺规',
+    measurementList: '测量线',
+    measurementEmpty: '开启尺规后在俯视图点击两个点生成固定测量线。',
+    measurementDelete: '删除',
+    measurementPending: '请选择第二个点以固定测量线。',
     clearanceTitle: '余量测量',
     clearanceFront: '前端',
     clearanceDoor: '门口',
@@ -467,7 +505,7 @@ const copy = {
       '方向键：X/Y 每次移动 10 mm',
       'PageUp/PageDown：Z 轴每次移动 10 mm',
       '修饰键：Shift = 100 mm，Ctrl/Cmd = 1 mm',
-      'R：水平旋转，Shift + R：循环六种朝向',
+      'R：向右旋转 90°，Shift + R：向下旋转 90°',
       'Delete：删除，Esc：取消选中',
     ],
     manualRotateHint: '左键拖动可移动箱体；中键平移视角；右键旋转视角；滚轮缩放。',
@@ -477,6 +515,10 @@ const copy = {
     manualIssueFloating: '处于悬空状态，底面至少需要 50% 支撑',
     manualIssueRotationDisabled: '该货物禁止旋转',
     manualIssueStacking: '堆叠在不可堆叠货物上',
+    orientationDiagram: '朝向示意',
+    reviewChecklistEmpty: '暂无复核事项。',
+    reviewChecklistExportJson: '导出 JSON',
+    reviewChecklistExportExcel: '导出 XLSX',
     poolEmpty: '所有货物已放置完毕。',
     continueManually: '继续手动微调',
     modeManual3D: '3D 复核',
@@ -514,7 +556,7 @@ const customContainerDefaults = {
 
 type CargoForm = Omit<CargoItem, 'id'>
 type WorkspaceView = '3d' | '2d'
-type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback' | 'cog' | 'compare' | 'fill'
+type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback' | 'cog' | 'compare' | 'fill' | 'reviewChecklist'
 type NavTarget = 'overview' | 'report' | 'cargo' | 'container' | 'history' | 'users'
 
 function buildRotationNotice(
@@ -785,9 +827,6 @@ function Workbench() {
   const [resetViewTick, setResetViewTick] = useState(0)
   const [compareSelection, setCompareSelection] = useState<string[]>(() => containers.slice(0, 3).map((c) => c.id))
   const [showCogOverlay, setShowCogOverlay] = useState(false)
-  const [showGravityField, setShowGravityField] = useState(false)
-  const [cogViewMode, setCogViewMode] = useState<CogViewMode>('packing')
-  const [mixedBoxOpacity, setMixedBoxOpacity] = useState(0.62)
   const [vehicleProfile, setVehicleProfile] = useState<VehicleProfileId>(DEFAULT_VEHICLE_PROFILE)
   const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
   const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
@@ -795,6 +834,9 @@ function Workbench() {
   const [manualHistory, setManualHistory] = useState<ManualHistory>(() => manualEmptyHistory())
   const [manualSelectedId, setManualSelectedId] = useState<string | null>(null)
   const [manualHelpOpen, setManualHelpOpen] = useState(false)
+  const [manualNotice, setManualNotice] = useState<ManualOperationNotice | null>(null)
+  const [measurements, setMeasurements] = useState<MeasurementAnnotation[]>([])
+  const [measurementDraftPoint, setMeasurementDraftPoint] = useState<Point3D | null>(null)
   const [containerChangeNotice, setContainerChangeNotice] = useState('')
   const [rotationNotice, setRotationNotice] = useState('')
   const previousContainerKeyRef = useRef<string | null>(null)
@@ -855,6 +897,9 @@ function Workbench() {
     height: '',
     weight: '',
     quantity: '',
+    color: '',
+    canRotate: '',
+    stackable: '',
   })
   type DimensionUnit = 'auto' | 'mm' | 'cm'
   const [customUnits, setCustomUnits] = useState<Record<'length' | 'width' | 'height', DimensionUnit>>({
@@ -865,6 +910,10 @@ function Workbench() {
   const [importTemplates, setImportTemplates] = useState<ImportTemplate[]>([])
   const [selectedImportTemplateId, setSelectedImportTemplateId] = useState('')
   const [templateName, setTemplateName] = useState('')
+  const [templateHeaderRow, setTemplateHeaderRow] = useState(1)
+  const [templateStartRow, setTemplateStartRow] = useState(2)
+  const [templateDefaults, setTemplateDefaults] = useState<ImportTemplateDefaults>({ quantity: 1, canRotate: true, stackable: true })
+  const [templateSaveNotice, setTemplateSaveNotice] = useState('')
   const workspaceRef = useRef<HTMLElement | null>(null)
   const reportRef = useRef<HTMLElement | null>(null)
   const cargoRef = useRef<HTMLFormElement | null>(null)
@@ -1029,9 +1078,31 @@ function Workbench() {
     setManualHistory((current) => manualCommit(current, nextDraft))
   }
 
+  const notifyManualRejected = (
+    operation: 'move' | 'drop' | 'rotate',
+    boxId?: string,
+    cargoId?: string,
+    issues?: ValidationIssue[],
+    reasonCode?: ManualOperationNotice['reasonCode'],
+  ) => {
+    setManualNotice(createManualOperationNotice({
+      operation,
+      boxId,
+      cargoId,
+      issues,
+      reasonCode,
+      locale,
+    }))
+  }
+
   const handleManualMoveBox = (id: string, x: number, y: number, z?: number) => {
     const nextDraft = manualSetBoxPosition(manualDraft, id, x, y, z)
-    if (manualValidateDraft(nextDraft, renderingContainer).length > 0) return
+    const issues = manualValidateDraft(nextDraft, renderingContainer).filter((issue) => issue.boxId === id)
+    if (issues.length > 0) {
+      notifyManualRejected('move', id, undefined, issues)
+      return
+    }
+    setManualNotice(null)
     commitManual(nextDraft)
   }
 
@@ -1039,7 +1110,10 @@ function Workbench() {
     const cargoItem = displayCargoItems.find((item) => item.id === cargoId)
     if (!cargoItem) return
     const used = manualDraft.boxes.filter((box) => box.cargoId === cargoId).length
-    if (used >= cargoItem.quantity) return
+    if (used >= cargoItem.quantity) {
+      notifyManualRejected('drop', undefined, cargoId, undefined, 'quantity-limit')
+      return
+    }
     const boxId = `manual-${cargoId}-${Date.now()}-${used + 1}`
     // ContainerScene's onDrop already produces top-left corner via resolveDropTarget; the legacy
     // ManualPlacement2D drop path passes the cursor centre, so we centre-shift only when no z
@@ -1063,7 +1137,12 @@ function Workbench() {
       z: supplyZ ? dropZ : 0,
     })
     const nextDraft = manualAddBox(manualDraft, newBox)
-    if (manualValidateDraft(nextDraft, renderingContainer).length > 0) return
+    const issues = manualValidateDraft(nextDraft, renderingContainer).filter((issue) => issue.boxId === boxId)
+    if (issues.length > 0) {
+      notifyManualRejected('drop', boxId, cargoId, issues)
+      return
+    }
+    setManualNotice(null)
     commitManual(nextDraft)
     setManualSelectedId(boxId)
   }
@@ -1093,6 +1172,7 @@ function Workbench() {
     const dry = manualDryRunOrientation(manualDraft, boxId, orientationKey, renderingContainer)
     if (!dry.ok) {
       setRotationNotice(buildRotationNotice(dry, renderingContainer, locale))
+      notifyManualRejected('rotate', boxId, undefined, dry.issues)
       return
     }
     const nextDraft = setManualBoxOrientation(manualDraft, boxId, orientationKey)
@@ -1100,26 +1180,23 @@ function Workbench() {
     commitManual(nextDraft)
   }
 
-  const handleManualRotate = (cycleAll = false) => {
+  const handleManualRotate = (direction: 'right' | 'down' = 'right') => {
     if (!manualSelectedId) return
-    handleManualRotateBox(manualSelectedId, cycleAll)
+    handleManualRotateBox(manualSelectedId, direction)
   }
 
-  const handleManualRotateBox = (boxId: string, cycleAll = false) => {
-    const nextOrientation = cycleAll
-      ? manualCycleBoxOrientation(manualDraft, boxId).boxes.find((box) => box.id === boxId)?.orientationKey
-      : null
-    const dry = nextOrientation
-      ? manualDryRunOrientation(manualDraft, boxId, nextOrientation, renderingContainer)
-      : manualDryRunRotation(manualDraft, boxId, renderingContainer)
+  const handleManualRotateBox = (boxId: string, direction: 'right' | 'down' = 'right') => {
+    const dry = manualDryRunRotation(manualDraft, boxId, renderingContainer, direction)
     if (!dry.ok) {
       setRotationNotice(buildRotationNotice(dry, renderingContainer, locale))
+      notifyManualRejected('rotate', boxId, undefined, dry.issues)
       return
     }
-    const nextDraft = cycleAll
-      ? manualCycleBoxOrientation(manualDraft, boxId)
-      : manualRotateBox(manualDraft, boxId)
+    const nextDraft = direction === 'down'
+      ? manualRotateBoxDown90(manualDraft, boxId)
+      : manualRotateBoxRight90(manualDraft, boxId)
     setRotationNotice('')
+    setManualNotice(null)
     commitManual(nextDraft)
   }
 
@@ -1206,6 +1283,29 @@ function Workbench() {
         return
       }
 
+      if ((event.key === 'r' || event.key === 'R') && manualSelectedId) {
+        event.preventDefault()
+        const direction = event.shiftKey ? 'down' : 'right'
+        const dry = manualDryRunRotation(manualDraft, manualSelectedId, renderingContainer, direction)
+        if (!dry.ok) {
+          setRotationNotice(buildRotationNotice(dry, renderingContainer, locale))
+          setManualNotice(createManualOperationNotice({
+            operation: 'rotate',
+            boxId: manualSelectedId,
+            issues: dry.issues,
+            locale,
+          }))
+          return
+        }
+        const nextDraft = direction === 'down'
+          ? manualRotateBoxDown90(manualDraft, manualSelectedId)
+          : manualRotateBoxRight90(manualDraft, manualSelectedId)
+        setRotationNotice('')
+        setManualNotice(null)
+        setManualHistory((current) => manualCommit(current, nextDraft))
+        return
+      }
+
       if (event.key === 'Escape') {
         setManualSelectedId(null)
         return
@@ -1214,7 +1314,33 @@ function Workbench() {
 
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [placementMode])
+  }, [placementMode, manualSelectedId, manualDraft, renderingContainer, locale])
+
+  useEffect(() => {
+    if (!manualNotice) return
+    const timer = window.setTimeout(() => setManualNotice(null), 5000)
+    return () => window.clearTimeout(timer)
+  }, [manualNotice])
+
+  const handleMeasurementPoint = (point: Point3D) => {
+    if (!rulerEnabled) return
+    if (!measurementDraftPoint) {
+      setMeasurementDraftPoint(point)
+      return
+    }
+    const next = createMeasurementAnnotation({
+      id: `measure-${Date.now()}`,
+      from: measurementDraftPoint,
+      to: point,
+      axis: 'spatial',
+    })
+    setMeasurements((current) => [...current, next])
+    setMeasurementDraftPoint(null)
+  }
+
+  const deleteMeasurement = (id: string) => {
+    setMeasurements((current) => deleteMeasurementAnnotation(current, id))
+  }
 
   const activeLayer = result.layers.find((layer) => layer.id === activeLayerId)
   const playbackSequence = useMemo(() => buildPlaybackSequence(hasCalculated ? result : null), [result, hasCalculated])
@@ -1225,49 +1351,27 @@ function Workbench() {
     if (playbackActive) return visibleBoxesAt(playbackSequence, playback.cursor)
     return hasCalculated ? result.placed : []
   }, [playbackActive, playbackSequence, playback.cursor, hasCalculated, result.placed])
-  const measurementBoxes = placementMode === 'manual' ? manualPlacedBoxes : visibleAutoBoxes
-  const measurementBoxId = placementMode === 'manual' ? manualSelectedId : selectedBoxId
-  const clearance = useMemo(() => {
-    if (!rulerEnabled || !measurementBoxId) return null
-    const box = measurementBoxes.find((entry) => entry.id === measurementBoxId)
-    if (!box) return null
-    return measureBoxClearance(box, renderingContainer, measurementBoxes)
-  }, [rulerEnabled, measurementBoxId, measurementBoxes, renderingContainer])
-
   const visibleBoxes = hasCalculated
     ? result.placed.filter((box) => (activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId) && (activeLabelId === 'all' || box.label === activeLabelId))
     : []
 
   const cogResult = useMemo(() => computeCenterOfGravity(visibleAutoBoxes.length > 0 ? visibleAutoBoxes : result.placed, selectedContainer), [result.placed, visibleAutoBoxes, selectedContainer])
   const cogViewState = useMemo(
-    () => deriveCogViewState({
-      mode: cogViewMode,
+    () => deriveCogOverlayState({
+      activeResultTab,
+      placementMode,
       overlayEnabled: showCogOverlay,
-      gravityFieldEnabled: showGravityField,
-      mixedBoxOpacity,
     }),
-    [cogViewMode, showCogOverlay, showGravityField, mixedBoxOpacity],
+    [activeResultTab, placementMode, showCogOverlay],
   )
   const cogOverlay = useMemo(
     () => (cogViewState.showOverlay && placementMode === 'auto'
-      ? buildCogOverlay(cogResult, selectedContainer, vehicleProfile, { gravityFieldOn: cogViewState.showGravityField })
+      ? buildCogOverlay(cogResult, selectedContainer, vehicleProfile)
       : null),
-    [cogViewState.showOverlay, cogViewState.showGravityField, placementMode, cogResult, selectedContainer, vehicleProfile],
+    [cogViewState.showOverlay, placementMode, cogResult, selectedContainer, vehicleProfile],
   )
   const toggleCogOverlay = (show: boolean) => {
     setShowCogOverlay(show)
-    if (show && cogViewMode === 'packing') {
-      setCogViewMode('cog')
-    }
-  }
-  const toggleGravityField = (show: boolean) => {
-    setShowGravityField(show)
-    if (show) {
-      setShowCogOverlay(true)
-      if (cogViewMode === 'packing') {
-        setCogViewMode('cog')
-      }
-    }
   }
 
   const compareCandidates = useMemo(() => {
@@ -1282,6 +1386,16 @@ function Workbench() {
   const fillSuggestions = useMemo(
     () => suggestFillItems(hasCalculated ? result : null, selectedContainer),
     [hasCalculated, result, selectedContainer],
+  )
+  const reviewChecklist: ReviewChecklist = useMemo(
+    () => buildReviewChecklist({
+      result,
+      measurements,
+      cog: cogResult,
+      manualIssues,
+      locale,
+    }),
+    [result, measurements, cogResult, manualIssues, locale],
   )
 
   const handleAddFillCargo = (presetId: string, quantity: number) => {
@@ -1395,7 +1509,14 @@ function Workbench() {
   }
 
   const confirmMappingImport = () => {
-    const imported = parseCargoRowsWithTemplate(importRows, { mapping: customMapping, units: customUnits }, { colors })
+    const imported = parseCargoRowsWithTemplate(importRows, {
+      mapping: customMapping,
+      units: customUnits,
+      headerRow: templateHeaderRow,
+      startRow: templateStartRow,
+      mergeRows: 'none',
+      defaultValues: templateDefaults,
+    }, { colors })
     setImportMessages([
       `${t.importSuccess}: ${imported.summary.importedRows}`,
       `${t.importMappedFields}: ${imported.summary.mappedFields.join(', ') || '-'}`,
@@ -1423,6 +1544,9 @@ function Workbench() {
       width: template.units.width,
       height: template.units.height,
     })
+    setTemplateHeaderRow(template.headerRow ?? 1)
+    setTemplateStartRow(template.startRow ?? 2)
+    setTemplateDefaults(template.defaultValues ?? { quantity: 1, canRotate: true, stackable: true })
     setTemplateName(template.name)
   }
 
@@ -1433,10 +1557,15 @@ function Workbench() {
       name,
       mapping: customMapping,
       units: customUnits as ImportTemplateUnits,
+      headerRow: templateHeaderRow,
+      startRow: templateStartRow,
+      mergeRows: 'none',
+      defaultValues: templateDefaults,
     })
     if (!saved) return
     setImportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
     setSelectedImportTemplateId(saved.id)
+    setTemplateSaveNotice(`${t.templateSaved}: ${saved.name}`)
     setImportMessages((messages) => [`${t.templateSaved}: ${saved.name}`, ...messages])
   }
 
@@ -1464,7 +1593,7 @@ function Workbench() {
       name: ['name', '名称', '品名', '名称', '货物名称', 'description'],
       label: ['label', '标签', '代码', '代号', '托盘'],
     }[fieldKey] || []
-    return columns.find(col => candidates.some(cand => col.toLowerCase().includes(cand.toLowerCase()))) || columns[0] || ''
+    return columns.find(col => candidates.some(cand => col.toLowerCase().includes(cand.toLowerCase()))) || ''
   }
 
   const importExcel = async (file: File | null) => {
@@ -1519,14 +1648,29 @@ function Workbench() {
       setActiveNav('report')
     } else {
       setImportRows(rows)
-      const initialMap: Record<string, string> = {}
-      const requiredFields = ['label', 'name', 'length', 'width', 'height', 'weight', 'quantity']
+      const initialMap: Record<string, string> = {
+        label: '',
+        name: '',
+        length: '',
+        width: '',
+        height: '',
+        weight: '',
+        quantity: '',
+        color: '',
+        canRotate: '',
+        stackable: '',
+      }
+      const requiredFields = ['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable']
       requiredFields.forEach((fieldKey) => {
         initialMap[fieldKey] = preSelectCol(fieldKey, rowKeys)
       })
       setCustomMapping(initialMap)
       setSelectedImportTemplateId('')
       setTemplateName('')
+      setTemplateSaveNotice('')
+      setTemplateHeaderRow(1)
+      setTemplateStartRow(2)
+      setTemplateDefaults({ quantity: 1, canRotate: true, stackable: true })
       setShowMappingModal(true)
     }
   }
@@ -1578,6 +1722,28 @@ function Workbench() {
     XLSX.utils.book_append_sheet(workbook, sheet, 'Loading Steps')
     const prefix = filenameSlug(shipmentName)
     XLSX.writeFile(workbook, `${prefix ? `${prefix}-` : ''}loading-instructions.xlsx`)
+  }
+
+  const exportReviewChecklistJson = () => {
+    const prefix = filenameSlug(shipmentName)
+    downloadBlob(
+      new Blob([JSON.stringify(reviewChecklist, null, 2)], { type: 'application/json;charset=utf-8' }),
+      `${prefix ? `${prefix}-` : ''}review-checklist.json`,
+    )
+  }
+
+  const exportReviewChecklistExcel = () => {
+    const rows = reviewChecklist.items.map((item) => ({
+      source: item.source,
+      severity: item.severity,
+      title: item.title,
+      detail: item.detail,
+    }))
+    const sheet = XLSX.utils.json_to_sheet(rows)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Review Checklist')
+    const prefix = filenameSlug(shipmentName)
+    XLSX.writeFile(workbook, `${prefix ? `${prefix}-` : ''}review-checklist.xlsx`)
   }
 
   const exportCurrentView = () => {
@@ -2314,7 +2480,10 @@ function Workbench() {
               type="button"
               aria-pressed={rulerEnabled}
               data-testid="toggle-ruler"
-              onClick={() => setRulerEnabled((enabled) => !enabled)}
+              onClick={() => {
+                setRulerEnabled((enabled) => !enabled)
+                setMeasurementDraftPoint(null)
+              }}
             >
               <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
                 <path d="M4 17 17 4l3 3L7 20z" />
@@ -2368,7 +2537,7 @@ function Workbench() {
                     <button
                       className="archive-button"
                       type="button"
-                      onClick={() => handleManualRotate(false)}
+                      onClick={() => handleManualRotate('right')}
                       disabled={!manualSelectedId}
                       data-testid="manual-rotate"
                     >
@@ -2411,6 +2580,20 @@ function Workbench() {
                   <div className="rounded-xl border border-[#bfdbfe] bg-[#eff6ff] p-3 text-xs font-semibold text-[#1d4ed8]" data-testid="manual-rotate-hint">
                     {t.manualRotateHint}
                   </div>
+                  {manualNotice && (
+                    <div
+                      className="rounded-xl border border-[#fbbf24] bg-[#fffbeb] p-3 text-xs font-semibold text-[#92400e]"
+                      data-testid="manual-operation-notice"
+                    >
+                      <button
+                        className="float-right text-base font-bold leading-none"
+                        type="button"
+                        aria-label={t.dismissNotice}
+                        onClick={() => setManualNotice(null)}
+                      >×</button>
+                      {manualNotice.message}
+                    </div>
+                  )}
                   {rotationNotice && (
                     <div
                       className="rounded-xl border border-[#fbbf24] bg-[#fffbeb] p-3 text-xs font-semibold text-[#92400e]"
@@ -2521,6 +2704,7 @@ function Workbench() {
                           onManualDelete={handleManualDeleteBox}
                           onManualDropFromPool={handleManualDropFromPool}
                           onManualMove={handleManualMoveBox}
+                          onManualOperationRejected={(operation, boxId, cargoId) => notifyManualRejected(operation, boxId, cargoId)}
                           onManualRotate={handleManualRotateBox}
                           onSelectBox={setManualSelectedId}
                         />
@@ -2530,7 +2714,11 @@ function Workbench() {
                           draft={manualDraft}
                           selectedBoxId={manualSelectedId}
                           issues={manualIssues}
+                          measurements={measurements}
+                          measurementDraftPoint={measurementDraftPoint}
+                          rulerEnabled={rulerEnabled}
                           viewMode={planViewMode}
+                          onMeasurementPoint={handleMeasurementPoint}
                           onSelectBox={setManualSelectedId}
                           onMoveBox={handleManualMoveBox}
                           onDropFromPool={handleManualDropFromPool}
@@ -2547,12 +2735,33 @@ function Workbench() {
                           if (!manualSelectedId) return
                           handleManualMoveBox(manualSelectedId, x, y, z)
                         }}
-                        onRotate={() => handleManualRotate(false)}
+                        onRotate={() => handleManualRotate('right')}
                         onSetOrientation={(orientationKey) => {
                           if (!manualSelectedId) return
                           commitManualOrientation(manualSelectedId, orientationKey)
                         }}
                       />
+                      <div className="rounded-xl border border-[#e5e7eb] bg-white p-3 text-xs text-[#475569]" data-testid="measurement-list">
+                        <div className="mb-2 flex items-center justify-between">
+                          <h3 className="text-sm font-bold text-[#0f172a]">{t.measurementList}</h3>
+                          {measurementDraftPoint && <span className="text-[#2563eb]">{t.measurementPending}</span>}
+                        </div>
+                        {measurements.length === 0 ? (
+                          <p>{t.measurementEmpty}</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {measurements.map((line, index) => (
+                              <div key={line.id} className="flex items-center gap-2 rounded border border-[#e5e7eb] p-2" data-testid="measurement-list-item">
+                                <span className="font-mono font-bold">{line.label || `M${index + 1}`}</span>
+                                <span className="ml-auto font-mono">{formatMeasurement(line.distance, locale)}</span>
+                                <button className="archive-button px-2 py-1 text-[11px]" type="button" onClick={() => deleteMeasurement(line.id)}>
+                                  {t.measurementDelete}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </aside>
                   </div>
                 </div>
@@ -2563,7 +2772,7 @@ function Workbench() {
                       {containerChangeNotice}
                     </div>
                   )}
-                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} boxOpacityOverride={cogViewState.boxOpacity} cogOverlay={cogOverlay} cogViewMode={cogViewState.mode} container={renderingContainer} edgeSnap={edgeSnap} gridSnap={gridSnap} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
+                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} boxOpacityOverride={cogViewState.boxOpacity} cogOverlay={cogOverlay} container={renderingContainer} edgeSnap={edgeSnap} gridSnap={gridSnap} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
                 </>
               ) : (
                 <>
@@ -2574,25 +2783,6 @@ function Workbench() {
                   )}
                   <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
                 </>
-              )}
-              {clearance && (
-                <div
-                  className="absolute left-6 top-6 z-20 max-w-[min(720px,calc(100%-3rem))] rounded-xl border border-[#93c5fd] bg-white/95 p-3 text-xs text-[#0f172a] shadow-lg"
-                  data-testid="clearance-overlay"
-                >
-                  <div className="mb-2 font-bold">{t.clearanceTitle}</div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
-                    <span>{t.clearanceFront}: <strong>{formatMeasurement(clearance.front, locale)}</strong></span>
-                    <span>{t.clearanceDoor}: <strong>{formatMeasurement(clearance.door, locale)}</strong></span>
-                    <span>{t.clearanceLeft}: <strong>{formatMeasurement(clearance.left, locale)}</strong></span>
-                    <span>{t.clearanceRight}: <strong>{formatMeasurement(clearance.right, locale)}</strong></span>
-                    <span>{t.clearanceFloor}: <strong>{formatMeasurement(clearance.floor, locale)}</strong></span>
-                    <span>{t.clearanceTop}: <strong>{formatMeasurement(clearance.top, locale)}</strong></span>
-                    <span>{t.clearanceNearestX}: <strong>{formatMeasurement(clearance.nearestX, locale)}</strong></span>
-                    <span>{t.clearanceNearestY}: <strong>{formatMeasurement(clearance.nearestY, locale)}</strong></span>
-                    <span>{t.clearanceNearestZ}: <strong>{formatMeasurement(clearance.nearestZ, locale)}</strong></span>
-                  </div>
-                </div>
               )}
               <button
                 className="archive-button success absolute bottom-6 right-6"
@@ -2624,7 +2814,25 @@ function Workbench() {
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3" data-testid="import-export-toolbar">
               <h2 className="text-lg font-bold">{t.results}</h2>
               <div className="flex flex-wrap gap-2 text-xs">
-                <label className="cursor-pointer border border-[#b8b8b8] bg-white px-3 py-2 font-semibold">{t.importExcel}<input className="hidden" accept=".xlsx,.xls,.csv" type="file" onChange={(event) => void importExcel(event.target.files?.[0] ?? null)} /></label>
+                <label className="cursor-pointer border border-[#b8b8b8] bg-white px-3 py-2 font-semibold">{t.importExcel}<input className="hidden" accept=".xlsx,.xls,.csv" type="file" onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null
+                  event.currentTarget.value = ''
+                  void importExcel(file)
+                }} /></label>
+                <button
+                  className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold"
+                  type="button"
+                  data-testid="open-template-manager"
+                    onClick={() => {
+                      setImportRows([{}])
+                      setSelectedImportTemplateId('')
+                      setTemplateName('')
+                      setTemplateSaveNotice('')
+                      setShowMappingModal(true)
+                    }}
+                  >
+                  {t.templateManager}
+                </button>
                 <button className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold" type="button" onClick={exportExcel}>{t.exportExcel}</button>
                 <button className="border border-[#9b9b9b] bg-white px-3 py-2 font-semibold" type="button" onClick={saveCurrentPlan}>{t.savePlan}</button>
               </div>
@@ -2639,6 +2847,7 @@ function Workbench() {
                 { id: 'cog' as const, label: t.cogTab },
                 { id: 'compare' as const, label: t.compareTab },
                 { id: 'fill' as const, label: t.fillTab },
+                { id: 'reviewChecklist' as const, label: t.reviewChecklistTab },
               ].map((tab) => (
                 <button className={`archive-tab ${activeResultTab === tab.id ? 'active' : ''}`} key={tab.id} type="button" onClick={() => setActiveResultTab(tab.id)}>
                   {tab.label}
@@ -2797,17 +3006,8 @@ function Workbench() {
                   locale={locale}
                   result={cogResult}
                   show3d={showCogOverlay}
-                  showGravityField={showGravityField}
-                  cogViewMode={cogViewMode}
-                  mixedBoxOpacity={mixedBoxOpacity}
                   vehicleProfile={vehicleProfile}
                   onToggle3d={toggleCogOverlay}
-                  onToggleGravityField={toggleGravityField}
-                  onCogViewModeChange={(mode) => {
-                    setCogViewMode(mode)
-                    if (mode !== 'packing') setShowCogOverlay(true)
-                  }}
-                  onMixedBoxOpacityChange={setMixedBoxOpacity}
                   onVehicleProfileChange={setVehicleProfile}
                 />
               </div>
@@ -2846,6 +3046,39 @@ function Workbench() {
                   onAdd={handleAddFillCargo}
                   onAddAll={handleAddAllFillCargo}
                 />
+              </div>
+            )}
+
+            {activeResultTab === 'reviewChecklist' && (
+              <div className="mt-3 space-y-3 text-xs" data-testid="review-checklist-panel">
+                <div className="flex flex-wrap items-center gap-2">
+                  <strong>{t.reviewChecklistTab}: {reviewChecklist.summary.total}</strong>
+                  <span className="text-[#991b1b]">errors {reviewChecklist.summary.errorCount}</span>
+                  <span className="text-[#92400e]">warnings {reviewChecklist.summary.warningCount}</span>
+                  <button className="archive-button ml-auto" type="button" data-testid="export-review-json" onClick={exportReviewChecklistJson}>
+                    {t.reviewChecklistExportJson}
+                  </button>
+                  <button className="archive-button" type="button" data-testid="export-review-excel" onClick={exportReviewChecklistExcel}>
+                    {t.reviewChecklistExportExcel}
+                  </button>
+                </div>
+                {reviewChecklist.items.length === 0 ? (
+                  <p className="border border-[#c6c6c6] bg-white p-2">{t.reviewChecklistEmpty}</p>
+                ) : (
+                  reviewChecklist.items.map((item) => (
+                    <div
+                      className={`border bg-white p-2 ${item.severity === 'error' ? 'border-[#fecaca]' : item.severity === 'warning' ? 'border-[#fde68a]' : 'border-[#c6c6c6]'}`}
+                      key={item.id}
+                      data-testid="review-checklist-item"
+                      data-source={item.source}
+                      data-severity={item.severity}
+                    >
+                      <strong className="uppercase">{item.source} · {item.severity}</strong>
+                      <p className="font-semibold">{item.title}</p>
+                      <p>{item.detail}</p>
+                    </div>
+                  ))
+                )}
               </div>
             )}
           </div>
@@ -2921,6 +3154,83 @@ function Workbench() {
                 >
                   {t.templateSave}
                 </button>
+                {templateSaveNotice && (
+                  <div className="md:col-span-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800" data-testid="template-save-status">
+                    {templateSaveNotice}
+                  </div>
+                )}
+              </div>
+              <div className="mb-4 grid gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm md:grid-cols-4" data-testid="import-template-manager">
+                <label className="font-semibold text-slate-700">
+                  {t.templateHeaderRow}
+                  <input
+                    className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                    type="number"
+                    min={1}
+                    value={templateHeaderRow}
+                    data-testid="template-header-row"
+                    onChange={(event) => setTemplateHeaderRow(Math.max(1, Number(event.target.value) || 1))}
+                  />
+                </label>
+                <label className="font-semibold text-slate-700">
+                  {t.templateStartRow}
+                  <input
+                    className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                    type="number"
+                    min={2}
+                    value={templateStartRow}
+                    data-testid="template-start-row"
+                    onChange={(event) => setTemplateStartRow(Math.max(2, Number(event.target.value) || 2))}
+                  />
+                </label>
+                <label className="font-semibold text-slate-700">
+                  {t.templateDefaultLabel}
+                  <input
+                    className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                    value={templateDefaults.label ?? ''}
+                    data-testid="template-default-label"
+                    onChange={(event) => setTemplateDefaults((current) => ({ ...current, label: event.target.value }))}
+                  />
+                </label>
+                <label className="font-semibold text-slate-700">
+                  {t.templateDefaultQuantity}
+                  <input
+                    className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                    type="number"
+                    min={1}
+                    value={templateDefaults.quantity ?? 1}
+                    data-testid="template-default-quantity"
+                    onChange={(event) => setTemplateDefaults((current) => ({ ...current, quantity: Math.max(1, Number(event.target.value) || 1) }))}
+                  />
+                </label>
+                <label className="font-semibold text-slate-700">
+                  {t.templateDefaultColor}
+                  <input
+                    className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white"
+                    type="color"
+                    value={templateDefaults.color ?? '#f59e0b'}
+                    data-testid="template-default-color"
+                    onChange={(event) => setTemplateDefaults((current) => ({ ...current, color: event.target.value }))}
+                  />
+                </label>
+                <label className="flex items-center gap-2 font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={templateDefaults.canRotate ?? true}
+                    data-testid="template-default-rotate"
+                    onChange={(event) => setTemplateDefaults((current) => ({ ...current, canRotate: event.target.checked }))}
+                  />
+                  {t.templateDefaultRotate}
+                </label>
+                <label className="flex items-center gap-2 font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={templateDefaults.stackable ?? true}
+                    data-testid="template-default-stackable"
+                    onChange={(event) => setTemplateDefaults((current) => ({ ...current, stackable: event.target.checked }))}
+                  />
+                  {t.templateDefaultStackable}
+                </label>
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-3" data-testid="mapping-fields">
@@ -2933,6 +3243,9 @@ function Workbench() {
                       height: t.mappingFieldHeight,
                       weight: t.mappingFieldWeight,
                       quantity: t.mappingFieldQuantity,
+                      color: t.color,
+                      canRotate: t.rotate,
+                      stackable: t.stackable,
                     }
                     const excelColumns = Object.keys(importRows[0] ?? {})
                     const isDimension = fieldKey === 'length' || fieldKey === 'width' || fieldKey === 'height'

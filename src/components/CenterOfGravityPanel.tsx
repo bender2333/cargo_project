@@ -1,7 +1,6 @@
 import type { Locale } from '../types'
 import type { CogResult } from '../lib/centerOfGravity'
 import { COMFORT_RATIO, CRITICAL_RATIO } from '../lib/centerOfGravity'
-import type { CogViewMode } from '../lib/cogView'
 import type { VehicleProfileId } from '../data/vehicleProfiles'
 
 const VEHICLE_LABELS: Record<VehicleProfileId, { en: string; zh: string }> = {
@@ -29,14 +28,6 @@ const T = {
     cautious: 'Within ±10% — keep an eye on it.',
     showIn3d: 'Show in 3D',
     hideIn3d: 'Hide 3D overlay',
-    showGravityField: 'Gravity field',
-    hideGravityField: 'Hide gravity field',
-    gravityFieldTooltip: 'Heat-map of distance from the load center over the container floor.',
-    viewMode: '3D view',
-    packingView: 'Packing',
-    cogView: 'CoG',
-    mixedView: 'Mixed',
-    boxOpacity: 'Box opacity',
     vehicle: 'Vehicle',
   },
   zh: {
@@ -56,14 +47,6 @@ const T = {
     cautious: '偏移在 ±10% 以内，请留意。',
     showIn3d: '在 3D 中显示',
     hideIn3d: '关闭 3D 显示',
-    showGravityField: '重心场',
-    hideGravityField: '关闭重心场',
-    gravityFieldTooltip: '在柜底投影出与装载重心的距离热点图。',
-    viewMode: '3D 视图',
-    packingView: '装箱',
-    cogView: '重心',
-    mixedView: '混合',
-    boxOpacity: '箱体透明度',
     vehicle: '车型',
   },
 } as const
@@ -74,12 +57,6 @@ type Props = {
   locale: Locale
   show3d: boolean
   onToggle3d: (show: boolean) => void
-  showGravityField: boolean
-  onToggleGravityField: (show: boolean) => void
-  cogViewMode: CogViewMode
-  onCogViewModeChange: (mode: CogViewMode) => void
-  mixedBoxOpacity: number
-  onMixedBoxOpacityChange: (opacity: number) => void
   vehicleProfile: VehicleProfileId
   onVehicleProfileChange: (id: VehicleProfileId) => void
 }
@@ -100,12 +77,6 @@ export function CenterOfGravityPanel({
   locale,
   show3d,
   onToggle3d,
-  showGravityField,
-  onToggleGravityField,
-  cogViewMode,
-  onCogViewModeChange,
-  mixedBoxOpacity,
-  onMixedBoxOpacityChange,
   vehicleProfile,
   onVehicleProfileChange,
 }: Props) {
@@ -157,49 +128,6 @@ export function CenterOfGravityPanel({
           >
             {show3d ? t.hideIn3d : t.showIn3d}
           </button>
-          <button
-            type="button"
-            className={`rounded-full border px-3 py-1 text-xs font-semibold ${showGravityField ? 'border-[#f59e0b] bg-[#fef3c7] text-[#92400e]' : 'border-[#cbd5e1] bg-white text-[#475569]'} disabled:cursor-not-allowed disabled:opacity-60`}
-            data-testid="cog-toggle-gravity-field"
-            aria-pressed={showGravityField}
-            disabled={!show3d}
-            title={t.gravityFieldTooltip}
-            onClick={() => onToggleGravityField(!showGravityField)}
-          >
-            {showGravityField ? t.hideGravityField : t.showGravityField}
-          </button>
-          <div className="flex items-center gap-1 rounded-full border border-[#cbd5e1] bg-white p-0.5 text-xs" data-testid="cog-view-mode">
-            {([
-              ['packing', t.packingView],
-              ['cog', t.cogView],
-              ['mixed', t.mixedView],
-            ] as Array<[CogViewMode, string]>).map(([mode, label]) => (
-              <button
-                key={mode}
-                type="button"
-                className={`rounded-full px-2 py-0.5 font-semibold ${cogViewMode === mode ? 'bg-[#1d4ed8] text-white' : 'text-[#475569]'}`}
-                aria-pressed={cogViewMode === mode}
-                data-testid={`cog-view-${mode}`}
-                onClick={() => onCogViewModeChange(mode)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {cogViewMode === 'mixed' && (
-            <label className="flex items-center gap-1 text-xs text-[#475569]">
-              <span>{t.boxOpacity}</span>
-              <input
-                type="range"
-                min="0.15"
-                max="1"
-                step="0.05"
-                value={mixedBoxOpacity}
-                data-testid="cog-box-opacity"
-                onChange={(event) => onMixedBoxOpacityChange(Number(event.target.value))}
-              />
-            </label>
-          )}
           <span className="text-xs text-[#475569]" data-testid="cog-total-weight">
             {t.totalWeight}: {result.totalWeight.toFixed(1)} kg
           </span>

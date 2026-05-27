@@ -18,6 +18,25 @@ export type Point3D = {
   z: number
 }
 
+export type MeasurementAxis = 'x' | 'y' | 'z' | 'spatial'
+
+export type MeasurementAnchor = {
+  kind: 'point'
+  point: Point3D
+}
+
+export type MeasurementAnnotation = {
+  id: string
+  from: MeasurementAnchor
+  to: MeasurementAnchor
+  axis: MeasurementAxis
+  distance: number
+  locked: boolean
+  label: string
+  hidden: boolean
+  stale?: boolean
+}
+
 const clampClearance = (value: number) => Math.max(0, value)
 
 function overlap1d(a0: number, a1: number, b0: number, b1: number) {
@@ -44,6 +63,50 @@ function nearestPositiveGap(values: number[]) {
 
 export function measureDistance(a: Point3D, b: Point3D) {
   return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
+}
+
+function anchorFromPoint(point: Point3D): MeasurementAnchor {
+  return { kind: 'point', point: { ...point } }
+}
+
+export function createMeasurementAnnotation(input: {
+  id: string
+  from: Point3D
+  to: Point3D
+  axis?: MeasurementAxis
+  label?: string
+}): MeasurementAnnotation {
+  const axis = input.axis ?? 'spatial'
+  const distance = axis === 'x'
+    ? Math.abs(input.to.x - input.from.x)
+    : axis === 'y'
+      ? Math.abs(input.to.y - input.from.y)
+      : axis === 'z'
+        ? Math.abs(input.to.z - input.from.z)
+        : measureDistance(input.from, input.to)
+
+  return {
+    id: input.id,
+    from: anchorFromPoint(input.from),
+    to: anchorFromPoint(input.to),
+    axis,
+    distance,
+    locked: true,
+    label: input.label ?? '',
+    hidden: false,
+  }
+}
+
+export function renameMeasurementAnnotation(
+  annotations: MeasurementAnnotation[],
+  id: string,
+  label: string,
+): MeasurementAnnotation[] {
+  return annotations.map((annotation) => annotation.id === id ? { ...annotation, label } : annotation)
+}
+
+export function deleteMeasurementAnnotation(annotations: MeasurementAnnotation[], id: string): MeasurementAnnotation[] {
+  return annotations.filter((annotation) => annotation.id !== id)
 }
 
 export function measureBoxClearance(

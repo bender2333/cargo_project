@@ -3,7 +3,6 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { ContainerSpec, PlacedBox } from '../types'
 import { MIN_SUPPORT_OVERLAP_RATIO } from '../lib/manualPlacement'
-import type { CogViewMode } from '../lib/cogView'
 import { snapToGrid } from '../lib/snap'
 import { resolveDropTarget } from '../lib/sceneDrop'
 import { snapToEdges } from '../lib/snapEdges'
@@ -40,13 +39,13 @@ type ContainerSceneProps = {
   manualEditable?: boolean
   onManualMove?: (boxId: string, x: number, y: number, z?: number) => void
   onManualDropFromPool?: (cargoId: string, x: number, y: number, z?: number) => void
-  onManualRotate?: (boxId: string, cycleAll?: boolean) => void
+  onManualRotate?: (boxId: string, direction?: 'right' | 'down') => void
   onManualDelete?: (boxId: string) => void
+  onManualOperationRejected?: (operation: 'move' | 'drop', boxId?: string, cargoId?: string) => void
   selectedManualBoxId?: string | null
   onClearSelection?: () => void
   onHoverBox?: (info: HoverBoxInfo | null) => void
   cogOverlay?: CogOverlay | null
-  cogViewMode?: CogViewMode
   boxOpacityOverride?: number | null
   /** Size/color of the cargo currently being dragged from the pool — drives the dragover ghost. */
   poolDragInfo?: { cargoId: string; length: number; width: number; height: number; color: string } | null
@@ -205,7 +204,7 @@ function applyBoxVisualState(
   const visual = boxVisualState(entry.box, activeLayerId, activeLabelId, selectedBoxId, invalid)
   const opacity = opacityOverride === null || opacityOverride === undefined
     ? visual.opacity
-    : Math.min(1, Math.max(0.12, visual.selected ? Math.max(opacityOverride, 0.75) : opacityOverride))
+    : Math.min(1, Math.max(0.45, visual.selected ? Math.max(opacityOverride, 0.75) : opacityOverride))
   entry.mesh.material = getCachedBoxMaterial(state, entry.box, visual.selected, opacity, visual.invalid)
   const material = entry.edges.material
   if (material instanceof THREE.LineBasicMaterial) {
@@ -360,11 +359,11 @@ export function ContainerScene({
   onManualDropFromPool,
   onManualRotate,
   onManualDelete,
+  onManualOperationRejected,
   selectedManualBoxId,
   onClearSelection,
   onHoverBox,
   cogOverlay,
-  cogViewMode = 'packing',
   boxOpacityOverride = null,
   poolDragInfo,
 }: ContainerSceneProps) {
@@ -379,6 +378,7 @@ export function ContainerScene({
   const onManualDropFromPoolRef = useRef<typeof onManualDropFromPool>(onManualDropFromPool)
   const onManualRotateRef = useRef<typeof onManualRotate>(onManualRotate)
   const onManualDeleteRef = useRef<typeof onManualDelete>(onManualDelete)
+  const onManualOperationRejectedRef = useRef<typeof onManualOperationRejected>(onManualOperationRejected)
   const onSelectBoxRef = useRef<typeof onSelectBox>(onSelectBox)
   const onClearSelectionRef = useRef<typeof onClearSelection>(onClearSelection)
   const onHoverBoxRef = useRef<typeof onHoverBox>(onHoverBox)
@@ -423,6 +423,10 @@ export function ContainerScene({
   useEffect(() => {
     onManualDeleteRef.current = onManualDelete
   }, [onManualDelete])
+
+  useEffect(() => {
+    onManualOperationRejectedRef.current = onManualOperationRejected
+  }, [onManualOperationRejected])
 
   useEffect(() => {
     onClearSelectionRef.current = onClearSelection
@@ -786,6 +790,7 @@ export function ContainerScene({
             onManualMoveRef.current?.(boxId, finalXmm, finalYmm)
           }
         } else {
+          onManualOperationRejectedRef.current?.('move', boxId)
           entry.mesh.position.set(
             -length / 2 + (entry.box.x + entry.box.length / 2) * scale,
             (entry.box.z + entry.box.height / 2) * scale,
@@ -898,7 +903,10 @@ export function ContainerScene({
       clearGhost(sceneState)
       sceneState.poolDrop = null
       if (!cargoId) return
-      if (!finalDrop || finalDrop.invalid) return
+      if (!finalDrop || finalDrop.invalid) {
+        onManualOperationRejectedRef.current?.('drop', undefined, cargoId)
+        return
+      }
       const snappedX = gridSnapRef.current && finalDrop.z === 0 ? snapToGrid(finalDrop.x) : finalDrop.x
       const snappedY = gridSnapRef.current && finalDrop.z === 0 ? snapToGrid(finalDrop.y) : finalDrop.y
       onManualDropFromPoolRef.current?.(cargoId, snappedX, snappedY, finalDrop.z)
@@ -917,7 +925,7 @@ export function ContainerScene({
       switch (event.key) {
         case 'r':
         case 'R':
-          onManualRotateRef.current?.(boxId, event.shiftKey)
+          onManualRotateRef.current?.(boxId, event.shiftKey ? 'down' : 'right')
           break
         case 'Delete':
         case 'Backspace':
@@ -1338,33 +1346,6 @@ export function ContainerScene({
       }
     }
 
-    // Gravity field — coloured spheres on the container floor showing distance from the CoG.
-    if (cogOverlay.gravityField && cogOverlay.gravityField.length > 0) {
-      const sphereRadius = Math.max(0.04, Math.min(state.length, state.width) * 0.012)
-      const sphereGeom = new THREE.SphereGeometry(sphereRadius, 10, 8)
-      // Reuse three Color instances for HSL interpolation between green → amber → red.
-      const cool = new THREE.Color(0x22c55e)
-      const warm = new THREE.Color(0xfacc15)
-      const hot = new THREE.Color(0xef4444)
-      for (const point of cogOverlay.gravityField) {
-        const color = new THREE.Color()
-        if (point.severity < 0.5) {
-          color.copy(cool).lerp(warm, point.severity * 2)
-        } else {
-          color.copy(warm).lerp(hot, (point.severity - 0.5) * 2)
-        }
-        const mat = new THREE.MeshBasicMaterial({
-          color,
-          transparent: true,
-          opacity: 0.55,
-          depthWrite: false,
-        })
-        const mesh = new THREE.Mesh(sphereGeom, mat)
-        mesh.position.copy(toWorld(point.x, point.y, point.z + 30))
-        group.add(mesh)
-      }
-    }
-
     state.scene.add(group)
     state.cogGroup = group
   }, [cogOverlay])
@@ -1391,9 +1372,8 @@ export function ContainerScene({
       data-grid-snap={gridSnap === false ? 'off' : 'on'}
       data-edge-snap={edgeSnap === false ? 'off' : 'on'}
       data-cog-overlay={cogOverlay ? 'on' : 'off'}
-      data-cog-view-mode={cogViewMode}
       data-box-opacity={boxOpacityOverride ?? 'normal'}
-      data-gravity-field={cogOverlay?.gravityField && cogOverlay.gravityField.length > 0 ? 'on' : 'off'}
+      data-gravity-field="off"
       data-pool-ghost-active={poolDragInfo ? 'true' : 'false'}
       data-pool-ghost-invalid="false"
       data-box-count={boxes.length}

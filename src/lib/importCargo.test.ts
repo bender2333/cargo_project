@@ -192,4 +192,78 @@ describe('parseCargoRowsWithMapping', () => {
     })
     expect(result.summary.convertedCentimeterRows).toBe(1)
   })
+
+  it('applies complete template metadata: start row, defaults, and units', () => {
+    const result = parseCargoRowsWithTemplate(
+      [
+        { Item: 'ignored intro', Code: 'SKIP', L: 1, W: 1, H: 1 },
+        { Item: 'Template crate', Code: '', L: 80, W: 60, H: 40 },
+      ],
+      {
+        mapping: {
+          name: 'Item',
+          label: 'Code',
+          length: 'L',
+          width: 'W',
+          height: 'H',
+        },
+        units: { length: 'cm', width: 'cm', height: 'cm' },
+        headerRow: 1,
+        startRow: 3,
+        defaultValues: {
+          label: 'TPL',
+          quantity: 2,
+          color: '#123456',
+          canRotate: false,
+          stackable: false,
+        },
+      },
+      { createId: () => 'template-meta-1' },
+    )
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: 'template-meta-1',
+        label: 'TP',
+        name: 'Template crate',
+        length: 800,
+        width: 600,
+        height: 400,
+        quantity: 2,
+        color: '#123456',
+        canRotate: false,
+        stackable: false,
+      }),
+    ])
+  })
+
+  it('applies default quantity when no quantity column is mapped', () => {
+    const result = parseCargoRowsWithTemplate(
+      [{ Item: 'Template crate', L: 80, W: 60, H: 40 }],
+      {
+        mapping: {
+          name: 'Item',
+          length: 'L',
+          width: 'W',
+          height: 'H',
+        },
+        units: { length: 'cm', width: 'cm', height: 'cm' },
+        defaultValues: { label: 'TP', quantity: 3 },
+      },
+      { createId: () => 'template-default-quantity' },
+    )
+
+    expect(result.errors).toHaveLength(0)
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: 'template-default-quantity',
+        label: 'TP',
+        name: 'Template crate',
+        length: 800,
+        width: 600,
+        height: 400,
+        quantity: 3,
+      }),
+    ])
+  })
 })

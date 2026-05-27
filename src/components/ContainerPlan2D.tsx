@@ -94,6 +94,28 @@ export function ContainerPlan2D({ container, boxes, activeLayerId, activeLabelId
             >
               {box.label}
             </text>
+            <g pointerEvents="none" data-testid="plan-orientation-marker" data-orientation={box.orientationKey}>
+              <rect
+                fill="#0f172a"
+                height={Math.max(70, projected.height * 0.18)}
+                opacity={0.9}
+                rx={14}
+                width={Math.max(110, projected.width * 0.2)}
+                x={padding + projected.x + 20}
+                y={padding + size.height - projected.y - projected.height + 20}
+              />
+              <text
+                dominantBaseline="middle"
+                fill="#fff"
+                fontSize={Math.max(38, Math.min(projected.width, projected.height) * 0.13)}
+                fontWeight="800"
+                textAnchor="middle"
+                x={padding + projected.x + 20 + Math.max(110, projected.width * 0.2) / 2}
+                y={padding + size.height - projected.y - projected.height + 20 + Math.max(70, projected.height * 0.18) / 2}
+              >
+                {box.orientationKey}
+              </text>
+            </g>
           </g>
         )
       })}

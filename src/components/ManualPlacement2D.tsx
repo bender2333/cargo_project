@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, DragEvent as ReactDragEvent } from 'react'
 import type { ContainerSpec } from '../types'
+import type { MeasurementAnnotation, Point3D } from '../lib/measurement'
 import type { ManualDraft, ManualPlacedBox, ValidationIssue } from '../lib/manualPlacement'
 
 export type ManualViewMode = 'top' | 'front' | 'side'
@@ -14,6 +15,10 @@ type ManualPlacement2DProps = {
   onMoveBox: (id: string, x: number, y: number) => void
   onDropFromPool: (cargoId: string, x: number, y: number) => void
   viewMode?: ManualViewMode
+  rulerEnabled?: boolean
+  measurementDraftPoint?: Point3D | null
+  measurements?: MeasurementAnnotation[]
+  onMeasurementPoint?: (point: Point3D) => void
 }
 
 const padding = 28
@@ -91,6 +96,10 @@ export function ManualPlacement2D({
   onMoveBox,
   onDropFromPool,
   viewMode = 'top',
+  rulerEnabled = false,
+  measurementDraftPoint = null,
+  measurements = [],
+  onMeasurementPoint,
 }: ManualPlacement2DProps) {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const [dragState, setDragState] = useState<DragState | null>(null)
@@ -104,12 +113,41 @@ export function ManualPlacement2D({
     issuesByBoxId.set(issue.boxId, existing)
   }
 
+  const pointFromEvent = (event: { clientX: number; clientY: number }) => {
+    const svg = svgRef.current
+    if (!svg) return null
+    const raw = svgPoint(svg, event.clientX, event.clientY)
+    const point = projection.toMm(raw.x, raw.y)
+    return { x: Math.max(0, point.x), y: Math.max(0, point.y), z: 0 }
+  }
+
   const handleBackgroundClick = () => {
+    if (rulerEnabled && viewMode === 'top') {
+      return
+    }
     onSelectBox(null)
+  }
+
+  const handleSvgPointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (rulerEnabled && viewMode === 'top') {
+      const point = pointFromEvent(event)
+      if (point) onMeasurementPoint?.(point)
+    }
+  }
+
+  const handleMeasurementCapture = (event: ReactPointerEvent<SVGRectElement>) => {
+    event.stopPropagation()
+    const point = pointFromEvent(event)
+    if (point) onMeasurementPoint?.(point)
   }
 
   const handlePointerDown = (event: ReactPointerEvent<SVGGElement>, boxId: string) => {
     event.stopPropagation()
+    if (rulerEnabled && viewMode === 'top') {
+      const point = pointFromEvent(event)
+      if (point) onMeasurementPoint?.(point)
+      return
+    }
     onSelectBox(boxId)
     if (!projection.editable) return
     const svg = svgRef.current
@@ -165,6 +203,7 @@ export function ManualPlacement2D({
       role="img"
       viewBox={viewBox}
       onClick={handleBackgroundClick}
+      onPointerDown={handleSvgPointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
@@ -229,9 +268,81 @@ export function ManualPlacement2D({
             >
               {box.label}
             </text>
+            <g pointerEvents="none" data-testid="manual-orientation-marker" data-orientation={box.orientationKey}>
+              <rect
+                fill="#0f172a"
+                height={Math.max(90, rectHeight * 0.2)}
+                opacity={0.9}
+                rx={18}
+                width={Math.max(130, rectWidth * 0.22)}
+                x={rectX + 24}
+                y={rectY + 24}
+              />
+              <text
+                dominantBaseline="middle"
+                fill="#fff"
+                fontSize={Math.max(44, Math.min(rectWidth, rectHeight) * 0.14)}
+                fontWeight="800"
+                textAnchor="middle"
+                x={rectX + 24 + Math.max(130, rectWidth * 0.22) / 2}
+                y={rectY + 24 + Math.max(90, rectHeight * 0.2) / 2}
+              >
+                {box.orientationKey}
+              </text>
+            </g>
           </g>
         )
       })}
+      {measurements.filter((line) => !line.hidden).map((line) => {
+        const from = line.from.point
+        const to = line.to.point
+        const x1 = padding + from.x
+        const y1 = padding + container.width - from.y
+        const x2 = padding + to.x
+        const y2 = padding + container.width - to.y
+        return (
+          <g key={line.id} data-testid="measurement-line" data-measurement-id={line.id} pointerEvents="none">
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#0f172a" strokeWidth={10} strokeLinecap="round" />
+            <circle cx={x1} cy={y1} r={20} fill="#0f172a" />
+            <circle cx={x2} cy={y2} r={20} fill="#0f172a" />
+            <text
+              x={(x1 + x2) / 2}
+              y={(y1 + y2) / 2 - 28}
+              textAnchor="middle"
+              fontSize={70}
+              fontWeight="800"
+              fill="#0f172a"
+              paintOrder="stroke"
+              stroke="#fff"
+              strokeWidth={12}
+            >
+              {Math.round(line.distance)} mm
+            </text>
+          </g>
+        )
+      })}
+      {measurementDraftPoint && viewMode === 'top' && (
+        <circle
+          cx={padding + measurementDraftPoint.x}
+          cy={padding + container.width - measurementDraftPoint.y}
+          r={24}
+          fill="#2563eb"
+          data-testid="measurement-draft-point"
+        />
+      )}
+      {rulerEnabled && viewMode === 'top' && (
+        <rect
+          data-testid="measurement-capture"
+          fill="#2563eb"
+          height={projection.verticalSpan + padding * 2}
+          opacity={0.001}
+          pointerEvents="all"
+          width={projection.horizontalSpan + padding * 2}
+          x={0}
+          y={0}
+          onPointerDown={handleMeasurementCapture}
+        />
+      )}
     </svg>
   )
 }

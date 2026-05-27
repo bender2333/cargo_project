@@ -255,78 +255,6 @@ export function buildTruckGeometry(
   }
 }
 
-export type GravityFieldPoint = {
-  /** Container-local mm. y is the cross-width axis, z is the vertical floor of the container. */
-  x: number
-  y: number
-  z: number
-  /** Normalised distance from the (x,y) CoG projection. 0 = right at CoG, 1 = farthest corner. */
-  severity: number
-}
-
-export type GravityFieldOptions = {
-  /** Grid resolution along container.length / container.width. Defaults pick small but legible counts. */
-  nx?: number
-  ny?: number
-  /** Hard upper bound on the total points emitted; the resolution is reduced to honor this. */
-  maxPoints?: number
-}
-
-/** Default upper bound on rendered field points to keep Three.js comfortable. */
-export const GRAVITY_FIELD_MAX_POINTS = 80
-
-/**
- * Sample a 2D field of "how far is this floor point from the load's CoG", suitable
- * for a heat-map-style overlay in the 3D scene. Severity is normalised so a point
- * sitting right under the CoG projection is 0 and the farthest container corner
- * from the CoG is 1.
- *
- * The function caps the total point count to `maxPoints` (default 80) by shrinking
- * grid resolution; this keeps the Three.js draw call cheap.
- */
-export function buildGravityField(
-  container: Pick<ContainerSpec, 'length' | 'width' | 'height'>,
-  cog: Pick<CogVector, 'x' | 'y'>,
-  opts: GravityFieldOptions = {},
-): GravityFieldPoint[] {
-  const cap = Math.max(4, opts.maxPoints ?? GRAVITY_FIELD_MAX_POINTS)
-  let nx = Math.max(2, opts.nx ?? 10)
-  let ny = Math.max(2, opts.ny ?? 4)
-  while (nx * ny > cap) {
-    if (nx >= ny) nx -= 1
-    else ny -= 1
-    if (nx < 2 || ny < 2) {
-      nx = Math.max(nx, 2)
-      ny = Math.max(ny, 2)
-      break
-    }
-  }
-  // Worst-case distance: from the CoG projection to the farthest container corner.
-  const corners = [
-    { x: 0, y: 0 },
-    { x: container.length, y: 0 },
-    { x: 0, y: container.width },
-    { x: container.length, y: container.width },
-  ]
-  const maxRadius = Math.max(
-    1,
-    ...corners.map((c) => Math.hypot(c.x - cog.x, c.y - cog.y)),
-  )
-  const points: GravityFieldPoint[] = []
-  const stepX = container.length / (nx - 1)
-  const stepY = container.width / (ny - 1)
-  for (let ix = 0; ix < nx; ix += 1) {
-    for (let iy = 0; iy < ny; iy += 1) {
-      const x = ix * stepX
-      const y = iy * stepY
-      const dist = Math.hypot(x - cog.x, y - cog.y)
-      const severity = Math.min(1, dist / maxRadius)
-      points.push({ x, y, z: 0, severity })
-    }
-  }
-  return points
-}
-
 export type CogOverlay = {
   cog: CogVector
   center: CogVector
@@ -336,23 +264,15 @@ export type CogOverlay = {
   truck: TruckSilhouette | null
   /** Rich geometry descriptor used by the new scene rendering. */
   truckGeometry: TruckGeometry | null
-  /** Gravity field samples; populated only when `gravityFieldOn` is true. */
-  gravityField: GravityFieldPoint[] | null
   warning: boolean
   balanced: boolean
   profileId: VehicleProfileId
-}
-
-export type BuildCogOverlayOptions = {
-  /** When true, populate `gravityField` with sampled severity points. */
-  gravityFieldOn?: boolean
 }
 
 export function buildCogOverlay(
   cog: CogResult,
   container: Pick<ContainerSpec, 'length' | 'width' | 'height'>,
   profileId: VehicleProfileId = DEFAULT_VEHICLE_PROFILE,
-  opts: BuildCogOverlayOptions = {},
 ): CogOverlay {
   const profile = VEHICLE_PROFILES[profileId] ?? VEHICLE_PROFILES[DEFAULT_VEHICLE_PROFILE]
   return {
@@ -362,7 +282,6 @@ export function buildCogOverlay(
     safe: computeSafeCogBox(container, profile),
     truck: profile.drawSilhouette ? buildTruckSilhouette(container) : null,
     truckGeometry: buildTruckGeometry(container, profile),
-    gravityField: opts.gravityFieldOn ? buildGravityField(container, cog.cog) : null,
     warning: cog.warning,
     balanced: cog.balanced,
     profileId,

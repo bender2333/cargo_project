@@ -14,23 +14,46 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-05-27-r22-rework',
+    date: '2026-05-27',
+    title: { en: 'Round 22 rework: manual feedback, fixed ruler lines, checklist', zh: '第二十二轮重构：手动反馈 / 固定测量线 / 复核清单' },
+    items: {
+      en: [
+        'Manual placement failures now surface a non-blocking notice instead of silently snapping back.',
+        'R rotates right 90 degrees, Shift+R rotates down 90 degrees, and selected cargo shows an orientation diagram.',
+        'Ruler mode now creates fixed 2D measurement lines with a measurement list instead of a clearance popup.',
+        'Import templates have a visible manager entry plus header row, start row, defaults, mapping, and unit metadata.',
+        'Balance removes the gravity field and Packing / CoG / Mixed modes; the 3D overlay only lives while the Balance tab is active.',
+        'A Review checklist tab collects fixed measurements, CoG risk, manual issues, unplaced cargo, and diagnostics for export.',
+      ],
+      zh: [
+        '手动排布失败现在显示非阻塞提示，不再只是无声回弹。',
+        'R 为向右 90°，Shift+R 为向下 90°，选中货物新增朝向示意图。',
+        '尺规模式改为在 2D 中创建固定测量线和测量列表，不再显示遮挡按钮的余量弹窗。',
+        '导入模板新增明确管理入口，并保存表头行、起始行、默认值、字段映射和单位策略。',
+        '装载重心下线重心场和「装箱 / 重心 / 混合」三模式；3D overlay 只在装载重心页签激活时存在。',
+        '新增「复核清单」页签，汇总测量线、重心风险、手动问题、未装货物和诊断，并支持导出。',
+      ],
+    },
+  },
+  {
     version: '2026-05-26-r22',
     date: '2026-05-26',
     title: { en: 'Ruler, six-way manual rotation, import templates', zh: '尺规 / 六向手动旋转 / 导入模板' },
     items: {
       en: [
         'Layer wording is now "Layer view" so review/filtering is not confused with manual layer editing.',
-        'Manual placement can choose all six orientations, with visible orientation controls and Shift+R cycling.',
-        'The ruler overlay shows selected-box clearance to walls, ceiling, door side, and nearest neighbors.',
+        'Manual placement can choose all six orientations, with visible orientation controls.',
+        'The ruler initially showed selected-box clearance to walls, ceiling, door side, and nearest neighbors.',
         'Excel import mappings can be saved as user-scoped templates and reused later.',
-        'Balance view now has Packing / CoG / Mixed display modes so the gravity field does not hide the packing result.',
+        'This behavior was superseded by the 2026-05-27 rework.',
       ],
       zh: [
         '「逐层添加」统一改为「分层查看」，避免把复核过滤误解为按层编辑。',
-        '手动排布支持六种朝向，新增可见朝向控件，Shift+R 可循环切换。',
-        '新增尺规 overlay，选中箱体后显示到柜壁、顶部、门口和最近邻箱的余量。',
+        '手动排布支持六种朝向，新增可见朝向控件。',
+        '初版尺规 overlay 可在选中箱体后显示到柜壁、顶部、门口和最近邻箱的余量。',
         'Excel 字段映射可保存为用户自己的导入模板，下次导入可复用。',
-        '装载重心新增「装箱 / 重心 / 混合」显示模式，避免重心场遮挡自动排布结果。',
+        '该行为已被 2026-05-27 重构替代。',
       ],
     },
   },

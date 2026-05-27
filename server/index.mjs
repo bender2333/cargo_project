@@ -188,11 +188,13 @@ app.delete('/api/containers/custom/:id', authenticate, (req, res) => {
 // 4. Excel import templates (user-scoped deterministic mappings)
 const TEMPLATE_FIELDS = new Set(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable'])
 const TEMPLATE_UNITS = new Set(['auto', 'mm', 'cm'])
+const TEMPLATE_MERGE_ROWS = new Set(['none', 'by-label'])
 
 function parseTemplatePayload(body) {
   const name = String(body?.name ?? '').trim().slice(0, 80)
   const mapping = body?.mapping && typeof body.mapping === 'object' ? body.mapping : null
   const units = body?.units && typeof body.units === 'object' ? body.units : {}
+  const defaults = body?.defaultValues && typeof body.defaultValues === 'object' ? body.defaultValues : {}
   if (!name || !mapping) return null
   const cleanMapping = {}
   for (const [key, value] of Object.entries(mapping)) {
@@ -204,7 +206,17 @@ function parseTemplatePayload(body) {
     const value = String(units[key] ?? 'auto')
     cleanUnits[key] = TEMPLATE_UNITS.has(value) ? value : 'auto'
   }
-  return { name, mapping: cleanMapping, units: cleanUnits }
+  const headerRow = Math.max(1, Math.min(50, Math.floor(Number(body?.headerRow ?? 1))))
+  const startRow = Math.max(headerRow + 1, Math.min(500, Math.floor(Number(body?.startRow ?? 2))))
+  const mergeRows = TEMPLATE_MERGE_ROWS.has(String(body?.mergeRows ?? 'none')) ? String(body?.mergeRows ?? 'none') : 'none'
+  const cleanDefaults = {}
+  if (defaults.label != null) cleanDefaults.label = String(defaults.label).trim().slice(0, 12)
+  if (defaults.name != null) cleanDefaults.name = String(defaults.name).trim().slice(0, 120)
+  if (defaults.quantity != null && Number.isFinite(Number(defaults.quantity))) cleanDefaults.quantity = Math.max(1, Math.floor(Number(defaults.quantity)))
+  if (defaults.color != null) cleanDefaults.color = String(defaults.color).trim().slice(0, 40)
+  if (defaults.canRotate != null) cleanDefaults.canRotate = Boolean(defaults.canRotate)
+  if (defaults.stackable != null) cleanDefaults.stackable = Boolean(defaults.stackable)
+  return { name, mapping: cleanMapping, units: cleanUnits, headerRow, startRow, mergeRows, defaultValues: cleanDefaults }
 }
 
 function serializeTemplate(row) {
@@ -213,6 +225,10 @@ function serializeTemplate(row) {
     name: row.name,
     mapping: JSON.parse(row.mapping),
     units: JSON.parse(row.units),
+    headerRow: row.header_row ?? 1,
+    startRow: row.start_row ?? 2,
+    mergeRows: row.merge_rows ?? 'none',
+    defaultValues: row.defaults ? JSON.parse(row.defaults) : {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -236,9 +252,9 @@ app.post('/api/import-templates', authenticate, (req, res) => {
   const now = new Date().toISOString()
   try {
     db.prepare(`
-      INSERT INTO import_templates (id, user_id, name, mapping, units, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, req.user.id, payload.name, JSON.stringify(payload.mapping), JSON.stringify(payload.units), now, now)
+      INSERT INTO import_templates (id, user_id, name, mapping, units, header_row, start_row, merge_rows, defaults, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, req.user.id, payload.name, JSON.stringify(payload.mapping), JSON.stringify(payload.units), payload.headerRow, payload.startRow, payload.mergeRows, JSON.stringify(payload.defaultValues), now, now)
     const created = db.prepare('SELECT * FROM import_templates WHERE id = ? AND user_id = ?').get(id, req.user.id)
     res.status(201).json(serializeTemplate(created))
   } catch (err) {
@@ -261,9 +277,9 @@ app.put('/api/import-templates/:id', authenticate, (req, res) => {
     }
     db.prepare(`
       UPDATE import_templates
-      SET name = ?, mapping = ?, units = ?, updated_at = ?
+      SET name = ?, mapping = ?, units = ?, header_row = ?, start_row = ?, merge_rows = ?, defaults = ?, updated_at = ?
       WHERE id = ? AND user_id = ?
-    `).run(payload.name, JSON.stringify(payload.mapping), JSON.stringify(payload.units), new Date().toISOString(), req.params.id, req.user.id)
+    `).run(payload.name, JSON.stringify(payload.mapping), JSON.stringify(payload.units), payload.headerRow, payload.startRow, payload.mergeRows, JSON.stringify(payload.defaultValues), new Date().toISOString(), req.params.id, req.user.id)
     const updated = db.prepare('SELECT * FROM import_templates WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id)
     res.json(serializeTemplate(updated))
   } catch (err) {

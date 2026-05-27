@@ -97,6 +97,15 @@ const HORIZONTAL_ROTATION_NEXT: Record<OrientationKey, OrientationKey> = {
   HWL: 'WHL',
 }
 
+const DOWN_ROTATION_NEXT: Record<OrientationKey, OrientationKey> = {
+  LWH: 'LHW',
+  LHW: 'LWH',
+  WLH: 'WHL',
+  WHL: 'WLH',
+  HLW: 'HWL',
+  HWL: 'HLW',
+}
+
 const ALL_ORIENTATIONS: OrientationKey[] = ['LWH', 'WLH', 'LHW', 'HLW', 'WHL', 'HWL']
 
 const LABEL_ROTATION_FOR_ORIENTATION: Record<OrientationKey, LabelRotationDeg> = {
@@ -165,9 +174,19 @@ export function setManualBoxOrientation(
 }
 
 export function rotateBox(draft: ManualDraft, id: string): ManualDraft {
+  return rotateBoxRight90(draft, id)
+}
+
+export function rotateBoxRight90(draft: ManualDraft, id: string): ManualDraft {
   const target = draft.boxes.find((box) => box.id === id)
   if (!target) return draft
   return setManualBoxOrientation(draft, id, HORIZONTAL_ROTATION_NEXT[target.orientationKey])
+}
+
+export function rotateBoxDown90(draft: ManualDraft, id: string): ManualDraft {
+  const target = draft.boxes.find((box) => box.id === id)
+  if (!target) return draft
+  return setManualBoxOrientation(draft, id, DOWN_ROTATION_NEXT[target.orientationKey])
 }
 
 export function cycleBoxOrientation(draft: ManualDraft, id: string): ManualDraft {
@@ -181,14 +200,14 @@ export function cycleBoxOrientation(draft: ManualDraft, id: string): ManualDraft
  * mutating the draft. Used to surface a specific reason ("rotated width exceeds container
  * width by 100 mm" / "overlaps box B") before the user actually rotates.
  */
-export function dryRunRotation(draft: ManualDraft, id: string, container: ContainerSpec): {
+export function dryRunRotation(draft: ManualDraft, id: string, container: ContainerSpec, direction: 'right' | 'down' = 'right'): {
   ok: boolean
   rotatedBox: ManualPlacedBox | null
   issues: ValidationIssue[]
 } {
   const target = draft.boxes.find((b) => b.id === id)
   if (!target) return { ok: false, rotatedBox: null, issues: [] }
-  const rotated = rotateBox(draft, id)
+  const rotated = direction === 'down' ? rotateBoxDown90(draft, id) : rotateBoxRight90(draft, id)
   const rotatedBox = rotated.boxes.find((b) => b.id === id) ?? null
   const issues = validateDraft(rotated, container).filter((issue) => issue.boxId === id)
   return { ok: issues.length === 0, rotatedBox, issues }

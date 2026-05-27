@@ -1,43 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { deriveCogViewState } from './cogView'
+import { deriveCogOverlayState } from './cogView'
 
-describe('deriveCogViewState', () => {
-  it('keeps packing view clean even when toggles are on', () => {
-    expect(deriveCogViewState({
-      mode: 'packing',
+describe('deriveCogOverlayState', () => {
+  it('shows the 3D overlay only while the CoG tab is active in auto mode', () => {
+    expect(deriveCogOverlayState({
+      activeResultTab: 'cog',
+      placementMode: 'auto',
       overlayEnabled: true,
-      gravityFieldEnabled: true,
     })).toMatchObject({
-      showOverlay: false,
-      showGravityField: false,
-      boxOpacity: null,
+      showOverlay: true,
+      boxOpacity: 0.45,
     })
   })
 
-  it('emphasizes gravity field in cog view by reducing box opacity', () => {
-    expect(deriveCogViewState({
-      mode: 'cog',
-      overlayEnabled: true,
-      gravityFieldEnabled: true,
-    })).toMatchObject({
-      showOverlay: true,
-      showGravityField: true,
-      boxOpacity: 0.24,
-    })
-  })
-
-  it('allows mixed view opacity to be controlled within safe bounds', () => {
-    expect(deriveCogViewState({
-      mode: 'mixed',
-      overlayEnabled: true,
-      gravityFieldEnabled: true,
-      mixedBoxOpacity: 0.8,
-      fieldOpacity: 2,
-    })).toMatchObject({
-      showOverlay: true,
-      showGravityField: true,
-      boxOpacity: 0.8,
-      fieldOpacity: 1,
-    })
+  it('stops the overlay outside the CoG tab or in manual mode', () => {
+    expect(deriveCogOverlayState({ activeResultTab: 'layers', placementMode: 'auto', overlayEnabled: true }).showOverlay).toBe(false)
+    expect(deriveCogOverlayState({ activeResultTab: 'cog', placementMode: 'manual', overlayEnabled: true }).showOverlay).toBe(false)
+    expect(deriveCogOverlayState({ activeResultTab: 'cog', placementMode: 'auto', overlayEnabled: false }).showOverlay).toBe(false)
   })
 })

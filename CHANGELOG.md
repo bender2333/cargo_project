@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-05-27 (Round 22 Re-review Implementation)
+
+- Completed subtask: implemented the “第二十二轮重审 Review 与下一阶段重构计划（2026-05-27）” core refactor.
+  - Manual placement failures now create `ManualOperationNotice` feedback for move/drop/rotate rejection paths instead of silently returning.
+  - `R` and `Shift+R` are split into right-90 and down-90 rotation functions with unit coverage for all six orientations.
+  - 2D/3D labels now expose explicit orientation markers/diagrams, so rotated and stood-up boxes are distinguishable without relying on text rotation alone.
+  - Ruler mode now creates fixed 2D measurement annotations and a measurement list; the old clearance popup is removed from the primary ruler interaction.
+  - Import templates now include visible template management, header row, start row, default values, mapping, and unit metadata; server schema/API were expanded.
+  - CoG gravity field and Packing/CoG/Mixed modes were removed; CoG overlay is gated to the active Balance tab and uses a safer box opacity floor.
+  - Added Review checklist tab and export actions for measurements, CoG risk, manual issues, unplaced cargo, and diagnostics.
+  - Local verification: `npm run lint` passed; `npm test` passed 25 files / 157 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 69 tests / 1 skipped / 0 failed.
+
 ## 2026-05-27 (Round 22 Re-review Plan)
 
 - Completed subtask: re-reviewed the second-twenty-second-round implementation and recorded a replacement refactor plan.

@@ -161,11 +161,24 @@ export type ImportTemplateUnits = {
   height: 'auto' | 'mm' | 'cm'
 }
 
+export type ImportTemplateDefaults = {
+  label?: string
+  name?: string
+  quantity?: number
+  color?: string
+  canRotate?: boolean
+  stackable?: boolean
+}
+
 export interface ImportTemplate {
   id: string
   name: string
   mapping: Record<string, string>
   units: ImportTemplateUnits
+  headerRow: number
+  startRow: number
+  mergeRows: 'none' | 'by-label'
+  defaultValues: ImportTemplateDefaults
   createdAt: string
   updatedAt: string
 }

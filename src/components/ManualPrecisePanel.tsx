@@ -96,6 +96,21 @@ export function ManualPrecisePanel({ selected, container, locale, onMove, onRota
         <h3 className="text-sm font-bold text-[#0f172a]">{t.title}: <span className="inline-block rounded bg-[#222] px-1.5 py-0.5 text-[10px] text-white">{selected.label}</span></h3>
         <span className="text-[10px]">{t.size}: {selected.length}×{selected.width}×{selected.height}</span>
       </div>
+      <div
+        className="mb-2 rounded-lg border border-[#cbd5e1] bg-[#f8fafc] p-2"
+        data-testid="manual-orientation-diagram"
+        data-orientation={selected.orientationKey}
+      >
+        <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wider text-[#94a3b8]">
+          <span>{t.orientation}</span>
+          <span className="font-mono text-[#0f172a]">{selected.orientationKey}</span>
+        </div>
+        <div className="grid grid-cols-3 gap-1 text-center font-mono text-[11px] font-bold">
+          <span className="rounded bg-[#dbeafe] px-1 py-0.5 text-[#1d4ed8]">X:{selected.orientationKey[0]}</span>
+          <span className="rounded bg-[#dcfce7] px-1 py-0.5 text-[#166534]">Y:{selected.orientationKey[1]}</span>
+          <span className="rounded bg-[#fee2e2] px-1 py-0.5 text-[#991b1b]">Z:{selected.orientationKey[2]}</span>
+        </div>
+      </div>
       <div className="mb-2">
         <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wider text-[#94a3b8]">
           <span>{t.orientation}</span>

@@ -52,6 +52,10 @@ db.exec(`
     name TEXT NOT NULL,
     mapping TEXT NOT NULL,
     units TEXT NOT NULL,
+    header_row INTEGER DEFAULT 1,
+    start_row INTEGER DEFAULT 2,
+    merge_rows TEXT DEFAULT 'none',
+    defaults TEXT DEFAULT '{}',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -106,6 +110,24 @@ const migrations = [
           UNIQUE(user_id, name)
         )
       `)
+    },
+  },
+  {
+    version: 4,
+    description: 'Add complete import template metadata',
+    up: () => {
+      if (!hasColumn('import_templates', 'header_row')) {
+        db.exec('ALTER TABLE import_templates ADD COLUMN header_row INTEGER DEFAULT 1')
+      }
+      if (!hasColumn('import_templates', 'start_row')) {
+        db.exec('ALTER TABLE import_templates ADD COLUMN start_row INTEGER DEFAULT 2')
+      }
+      if (!hasColumn('import_templates', 'merge_rows')) {
+        db.exec("ALTER TABLE import_templates ADD COLUMN merge_rows TEXT DEFAULT 'none'")
+      }
+      if (!hasColumn('import_templates', 'defaults')) {
+        db.exec("ALTER TABLE import_templates ADD COLUMN defaults TEXT DEFAULT '{}'")
+      }
     },
   },
 ]

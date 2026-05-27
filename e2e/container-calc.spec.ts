@@ -78,6 +78,24 @@ async function createEmptyWorkbookFile() {
   return filePath
 }
 
+async function createTemplateWorkbookFile() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cargo-calc-template-'))
+  const filePath = path.join(dir, 'cargo-template.xlsx')
+  const sheet = XLSX.utils.json_to_sheet([
+    {
+      Goods: 'Template only crate',
+      Code: '',
+      L: 80,
+      W: 60,
+      H: 40,
+    },
+  ])
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Template Cargo')
+  XLSX.writeFile(workbook, filePath)
+  return filePath
+}
+
 async function openEnglish(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: 'English' }).click()
@@ -695,6 +713,42 @@ test('supports Excel import/export affordance and Chinese mode', async ({ page }
   await expect(page.getByText(/数量 2/)).toBeVisible()
   await page.getByRole('button', { name: '合规与诊断' }).click()
   await expect(page.getByText('边界检查通过：所有已装箱体都在有效货柜内。')).toBeVisible()
+})
+
+test('creates an import template from the visible manager and reuses it for Excel import', async ({ page }) => {
+  await openEnglish(page)
+  const filePath = await createTemplateWorkbookFile()
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await expect(page.getByTestId('import-template-manager')).toBeVisible()
+  const templateName = `Template ${Date.now()}`
+  await page.getByTestId('import-template-name').fill(templateName)
+  await page.getByTestId('template-start-row').fill('2')
+  await page.getByTestId('template-default-label').fill('TP')
+  await page.getByTestId('template-default-quantity').fill('3')
+  await page.getByTestId('map-select-name').selectOption('Goods')
+  await page.getByTestId('map-select-length').selectOption('L')
+  await page.getByTestId('map-select-width').selectOption('W')
+  await page.getByTestId('map-select-height').selectOption('H')
+  await page.getByTestId('map-unit-length').selectOption('cm')
+  await page.getByTestId('map-unit-width').selectOption('cm')
+  await page.getByTestId('map-unit-height').selectOption('cm')
+  await page.getByTestId('save-import-template').click()
+  await expect(page.getByTestId('template-save-status')).toContainText(templateName)
+  await page.getByRole('button', { name: 'Cancel' }).click()
+
+  await page.getByTestId('open-template-manager').click()
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await expect(page.getByTestId('import-template-manager')).toBeVisible()
+  await page.getByRole('button', { name: 'Cancel' }).click()
+
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await page.getByTestId('import-template-select').selectOption({ label: templateName })
+  await page.getByTestId('confirm-mapping').click()
+  await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Template only crate/ }).first()).toBeVisible()
+  await expect(page.getByText(/800 x 600 x 400 mm/)).toBeVisible()
 })
 
 test('shows localized failure reasons in Chinese mode', async ({ page }) => {
