@@ -7,6 +7,7 @@ import { snapToGrid } from '../lib/snap'
 import { resolveDropTarget } from '../lib/sceneDrop'
 import { snapToEdges } from '../lib/snapEdges'
 import type { CogOverlay } from '../lib/cogVisual'
+import { DEFAULT_PLACEMENT_SETTINGS, type PlacementSettings } from '../lib/placementSettings'
 
 export type SceneViewMode = 'iso' | 'top' | 'front' | 'side'
 
@@ -32,6 +33,7 @@ type ContainerSceneProps = {
   viewMode: SceneViewMode
   gridSnap?: boolean
   edgeSnap?: boolean
+  placementSettings?: PlacementSettings
   resetViewTick?: number
   selectedBoxId?: string | null
   onSelectBox?: (boxId: string) => void
@@ -98,7 +100,7 @@ function getMaterialCache(state: SceneState) {
   return cache
 }
 
-function makeFaceLabelTexture(label: string, color: string, selected: boolean, rotationDeg: number) {
+function makeFaceLabelTexture(label: string, color: string, selected: boolean, rotationDeg: number, orientationLabel: string) {
   const canvas = document.createElement('canvas')
   canvas.width = 256
   canvas.height = 256
@@ -125,6 +127,10 @@ function makeFaceLabelTexture(label: string, color: string, selected: boolean, r
   context.rotate((rotationDeg * Math.PI) / 180)
   context.fillText(label, 0, 0, 142)
   context.restore()
+  context.fillStyle = '#0f172a'
+  context.font = 'bold 28px Verdana, sans-serif'
+  context.textAlign = 'center'
+  context.fillText(orientationLabel, 128, 222, 170)
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
@@ -153,10 +159,11 @@ function makeBoxMaterial(texture: THREE.Texture, selected: boolean, opacity: num
 function getCachedBoxMaterial(state: SceneState, box: PlacedBox, selected: boolean, opacity: number, invalid: boolean) {
   const tCache = getTextureCache(state)
   const mCache = getMaterialCache(state)
-  const textureKey = `${box.label}:${box.color}:${selected}:${box.labelRotationDeg}`
+  const orientationLabel = box.orientationLabel ?? box.orientationKey
+  const textureKey = `${box.label}:${box.color}:${selected}:${box.labelRotationDeg}:${orientationLabel}`
   let texture = tCache.get(textureKey)
   if (!texture) {
-    texture = makeFaceLabelTexture(box.label, box.color, selected, box.labelRotationDeg)
+    texture = makeFaceLabelTexture(box.label, box.color, selected, box.labelRotationDeg, orientationLabel)
     tCache.set(textureKey, texture)
   }
 
@@ -350,6 +357,7 @@ export function ContainerScene({
   viewMode,
   gridSnap,
   edgeSnap,
+  placementSettings,
   resetViewTick,
   selectedBoxId,
   onSelectBox,
@@ -373,6 +381,11 @@ export function ContainerScene({
   const manualEditableRef = useRef<boolean>(manualEditable ?? false)
   const gridSnapRef = useRef<boolean>(gridSnap ?? true)
   const edgeSnapRef = useRef<boolean>(edgeSnap ?? true)
+  const placementSettingsRef = useRef<PlacementSettings>(placementSettings ?? {
+    ...DEFAULT_PLACEMENT_SETTINGS,
+    gridSnapEnabled: gridSnap ?? DEFAULT_PLACEMENT_SETTINGS.gridSnapEnabled,
+    edgeSnapEnabled: edgeSnap ?? DEFAULT_PLACEMENT_SETTINGS.edgeSnapEnabled,
+  })
   const poolDragInfoRef = useRef<typeof poolDragInfo>(poolDragInfo ?? null)
   const onManualMoveRef = useRef<typeof onManualMove>(onManualMove)
   const onManualDropFromPoolRef = useRef<typeof onManualDropFromPool>(onManualDropFromPool)
@@ -400,6 +413,16 @@ export function ContainerScene({
   useEffect(() => {
     edgeSnapRef.current = edgeSnap ?? true
   }, [edgeSnap])
+
+  useEffect(() => {
+    placementSettingsRef.current = placementSettings ?? {
+      ...DEFAULT_PLACEMENT_SETTINGS,
+      gridSnapEnabled: gridSnap ?? DEFAULT_PLACEMENT_SETTINGS.gridSnapEnabled,
+      edgeSnapEnabled: edgeSnap ?? DEFAULT_PLACEMENT_SETTINGS.edgeSnapEnabled,
+    }
+    gridSnapRef.current = placementSettingsRef.current.gridSnapEnabled
+    edgeSnapRef.current = placementSettingsRef.current.edgeSnapEnabled
+  }, [placementSettings, gridSnap, edgeSnap])
 
   useEffect(() => {
     poolDragInfoRef.current = poolDragInfo ?? null
@@ -579,6 +602,7 @@ export function ContainerScene({
       w: number,
       h: number,
     ) => {
+      const settings = placementSettingsRef.current
       if (isOutOfBounds(x, y, l, w, container)) return true
       if (z < -0.01 || z + h > container.height + 0.01) return true
       let supportedArea = z <= 0.01 ? l * w : 0
@@ -597,7 +621,10 @@ export function ContainerScene({
           supportedArea += overlapAreaXY(x, y, l, w, other.box.x, other.box.y, other.box.length, other.box.width)
         }
       }
-      if (baseArea <= 0 || supportedArea / baseArea < MIN_SUPPORT_OVERLAP_RATIO) return true
+      const minSupportRatio = settings.supportPolicy.allowPartialOverhang
+        ? settings.supportPolicy.minSupportRatio
+        : MIN_SUPPORT_OVERLAP_RATIO
+      if (baseArea <= 0 || supportedArea / baseArea < minSupportRatio) return true
       return false
     }
 
@@ -726,6 +753,8 @@ export function ContainerScene({
           draggedBoxId: entry.box.id,
           draggedSize: { length: entry.box.length, width: entry.box.width, height: entry.box.height },
           container,
+          supportPolicy: placementSettingsRef.current.supportPolicy,
+          surfaceSnapEnabled: placementSettingsRef.current.surfaceSnapEnabled,
         })
         nextX = drop.x
         nextY = drop.y
@@ -735,17 +764,17 @@ export function ContainerScene({
       if (edgeSnapRef.current && dragState.mode === 'plane') {
         const others: PlacedBox[] = []
         sceneState.meshEntries.forEach((e) => { if (e.box.id !== entry.box.id) others.push(e.box) })
-        const snapped = snapToEdges({ x: nextX, y: nextY, length: entry.box.length, width: entry.box.width, others, container })
+        const snapped = snapToEdges({ x: nextX, y: nextY, length: entry.box.length, width: entry.box.width, others, container, tolerance: placementSettingsRef.current.edgeToleranceMm })
         nextX = snapped.x
         nextY = snapped.y
       }
 
       if (gridSnapRef.current) {
         if (dragState.mode === 'plane') {
-          nextX = snapToGrid(nextX)
-          nextY = snapToGrid(nextY)
-        } else {
-          nextZ = snapToGrid(nextZ)
+          nextX = snapToGrid(nextX, placementSettingsRef.current.gridStepMm)
+          nextY = snapToGrid(nextY, placementSettingsRef.current.gridStepMm)
+        } else if (placementSettingsRef.current.zSnapEnabled) {
+          nextZ = snapToGrid(nextZ, placementSettingsRef.current.zStepMm)
         }
       }
 
@@ -773,10 +802,10 @@ export function ContainerScene({
         let finalZmm = entry.mesh.position.y / scale - entry.box.height / 2
         if (gridSnapRef.current) {
           if (mode === 'plane') {
-            finalXmm = snapToGrid(finalXmm)
-            finalYmm = snapToGrid(finalYmm)
-          } else {
-            finalZmm = snapToGrid(finalZmm)
+            finalXmm = snapToGrid(finalXmm, placementSettingsRef.current.gridStepMm)
+            finalYmm = snapToGrid(finalYmm, placementSettingsRef.current.gridStepMm)
+          } else if (placementSettingsRef.current.zSnapEnabled) {
+            finalZmm = snapToGrid(finalZmm, placementSettingsRef.current.zStepMm)
           }
         }
         const invalid = sceneState.invalidOverride.has(boxId) || computeDragInvalid(entry, finalXmm, finalYmm, finalZmm)
@@ -835,12 +864,14 @@ export function ContainerScene({
         draggedBoxId: null,
         draggedSize: { length: info.length, width: info.width, height: info.height },
         container,
+        supportPolicy: placementSettingsRef.current.supportPolicy,
+        surfaceSnapEnabled: placementSettingsRef.current.surfaceSnapEnabled,
       })
       let dropX = drop.x
       let dropY = drop.y
       const dropZ = drop.z
       if (edgeSnapRef.current && dropZ === 0) {
-        const snapped = snapToEdges({ x: dropX, y: dropY, length: info.length, width: info.width, others, container })
+        const snapped = snapToEdges({ x: dropX, y: dropY, length: info.length, width: info.width, others, container, tolerance: placementSettingsRef.current.edgeToleranceMm })
         dropX = snapped.x
         dropY = snapped.y
       }
@@ -895,9 +926,18 @@ export function ContainerScene({
             draggedBoxId: null,
             draggedSize: { length: info.length, width: info.width, height: info.height },
             container,
+            supportPolicy: placementSettingsRef.current.supportPolicy,
+            surfaceSnapEnabled: placementSettingsRef.current.surfaceSnapEnabled,
           })
-          const invalid = computeInvalidByGeometry(null, target.x, target.y, target.z, info.length, info.width, info.height)
-          finalDrop = { x: target.x, y: target.y, z: target.z, invalid }
+          let targetX = target.x
+          let targetY = target.y
+          if (edgeSnapRef.current && target.z === 0) {
+            const snapped = snapToEdges({ x: targetX, y: targetY, length: info.length, width: info.width, others, container, tolerance: placementSettingsRef.current.edgeToleranceMm })
+            targetX = snapped.x
+            targetY = snapped.y
+          }
+          const invalid = computeInvalidByGeometry(null, targetX, targetY, target.z, info.length, info.width, info.height)
+          finalDrop = { x: targetX, y: targetY, z: target.z, invalid }
         }
       }
       clearGhost(sceneState)
@@ -907,8 +947,8 @@ export function ContainerScene({
         onManualOperationRejectedRef.current?.('drop', undefined, cargoId)
         return
       }
-      const snappedX = gridSnapRef.current && finalDrop.z === 0 ? snapToGrid(finalDrop.x) : finalDrop.x
-      const snappedY = gridSnapRef.current && finalDrop.z === 0 ? snapToGrid(finalDrop.y) : finalDrop.y
+      const snappedX = gridSnapRef.current && finalDrop.z === 0 ? snapToGrid(finalDrop.x, placementSettingsRef.current.gridStepMm) : finalDrop.x
+      const snappedY = gridSnapRef.current && finalDrop.z === 0 ? snapToGrid(finalDrop.y, placementSettingsRef.current.gridStepMm) : finalDrop.y
       onManualDropFromPoolRef.current?.(cargoId, snappedX, snappedY, finalDrop.z)
     }
 

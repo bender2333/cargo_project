@@ -1,5 +1,6 @@
 import type { PlacedBox, ContainerSpec } from '../types'
 import { MIN_SUPPORT_OVERLAP_RATIO } from './manualPlacement'
+import { DEFAULT_PLACEMENT_SETTINGS, type SupportPolicy } from './placementSettings'
 
 export type DropSize = { length: number; width: number; height: number }
 export type DropTarget = {
@@ -8,6 +9,8 @@ export type DropTarget = {
   z: number // mm — bottom Z of dragged box
   /** id of the box whose top surface we snapped to, or null when landing on the floor */
   surfaceBoxId: string | null
+  supportRatio: number
+  supportSeverity: 'ok' | 'warning'
 }
 
 function overlapArea(ax: number, ay: number, al: number, aw: number, bx: number, by: number, bl: number, bw: number) {
@@ -36,23 +39,31 @@ export function resolveDropTarget(params: {
   draggedBoxId: string | null
   draggedSize: DropSize
   container: Pick<ContainerSpec, 'length' | 'width' | 'height'>
+  supportPolicy?: SupportPolicy
+  surfaceSnapEnabled?: boolean
 }): DropTarget {
   const { rayOrigin, rayDirection, boxes, draggedBoxId, draggedSize, container } = params
+  const supportPolicy = params.supportPolicy ?? DEFAULT_PLACEMENT_SETTINGS.supportPolicy
+  const minSupportRatio = supportPolicy.allowPartialOverhang
+    ? supportPolicy.minSupportRatio
+    : MIN_SUPPORT_OVERLAP_RATIO
   const baseArea = draggedSize.length * draggedSize.width
 
   let bestHit: { t: number; box: PlacedBox } | null = null
-  for (const other of boxes) {
-    if (other.id === draggedBoxId) continue
-    const topZ = other.z + other.height
-    if (topZ + draggedSize.height > container.height + 0.5) continue
-    if (Math.abs(rayDirection.z) < 1e-6) continue
-    const t = (topZ - rayOrigin.z) / rayDirection.z
-    if (t <= 0) continue
-    const hx = rayOrigin.x + rayDirection.x * t
-    const hy = rayOrigin.y + rayDirection.y * t
-    if (hx < other.x || hx > other.x + other.length) continue
-    if (hy < other.y || hy > other.y + other.width) continue
-    if (!bestHit || t < bestHit.t) bestHit = { t, box: other }
+  if (params.surfaceSnapEnabled !== false) {
+    for (const other of boxes) {
+      if (other.id === draggedBoxId) continue
+      const topZ = other.z + other.height
+      if (topZ + draggedSize.height > container.height + 0.5) continue
+      if (Math.abs(rayDirection.z) < 1e-6) continue
+      const t = (topZ - rayOrigin.z) / rayDirection.z
+      if (t <= 0) continue
+      const hx = rayOrigin.x + rayDirection.x * t
+      const hy = rayOrigin.y + rayDirection.y * t
+      if (hx < other.x || hx > other.x + other.length) continue
+      if (hy < other.y || hy > other.y + other.width) continue
+      if (!bestHit || t < bestHit.t) bestHit = { t, box: other }
+    }
   }
 
   if (bestHit) {
@@ -69,8 +80,16 @@ export function resolveDropTarget(params: {
     ]
     for (const cand of candidates) {
       const overlap = overlapArea(cand.x, cand.y, draggedSize.length, draggedSize.width, surface.x, surface.y, surface.length, surface.width)
-      if (baseArea > 0 && overlap / baseArea >= MIN_SUPPORT_OVERLAP_RATIO) {
-        return { x: cand.x, y: cand.y, z: surfaceTopZ, surfaceBoxId: surface.id }
+      const supportRatio = baseArea > 0 ? overlap / baseArea : 0
+      if (supportRatio >= minSupportRatio) {
+        return {
+          x: cand.x,
+          y: cand.y,
+          z: surfaceTopZ,
+          surfaceBoxId: surface.id,
+          supportRatio,
+          supportSeverity: supportRatio < supportPolicy.warningSupportRatio ? 'warning' : 'ok',
+        }
       }
     }
     // Surface is too small; fall through to ground.
@@ -85,5 +104,7 @@ export function resolveDropTarget(params: {
     y: cursorY - draggedSize.width / 2,
     z: 0,
     surfaceBoxId: null,
+    supportRatio: 1,
+    supportSeverity: 'ok',
   }
 }

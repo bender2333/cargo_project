@@ -10,6 +10,7 @@ import {
   dryRunOrientation,
   emptyDraft,
   emptyHistory,
+  isBlockingManualIssue,
   labelRotationForManualOrientation,
   makeManualBox,
   moveBox,
@@ -24,6 +25,7 @@ import {
   undo,
   validateDraft,
 } from './manualPlacement'
+import type { SupportPolicy } from './placementSettings'
 
 function container(overrides: Partial<ContainerSpec> = {}): ContainerSpec {
   return {
@@ -173,7 +175,7 @@ describe('manualPlacement', () => {
     expect(result.boxes[0].id).toBe('box-2')
   })
 
-  it('rotateBox swaps length and width for a horizontal 90 degree rotation', () => {
+  it('rotateBox swaps length and width for a horizontal 90 degree rotation while keeping the label readable', () => {
     const draft = addBox(emptyDraft(), makeManualBox({
       id: 'box-1',
       cargoId: 'cargo-a',
@@ -192,12 +194,14 @@ describe('manualPlacement', () => {
       length: 500,
       width: 400,
       orientationKey: 'WLH',
-      labelRotationDeg: 90,
+      labelRotationDeg: 0,
+      yawQuarterTurn: 1,
+      pitchQuarterTurn: 0,
     })
   })
 
-  it('maps R to right 90 degrees and Shift+R to down 90 degrees for every orientation', () => {
-    const baseDraft = addBox(emptyDraft(), makeManualBox({
+  it('cycles R through four horizontal quarter turns without changing top and bottom', () => {
+    let draft = addBox(emptyDraft(), makeManualBox({
       id: 'box-1',
       cargoId: 'cargo-a',
       label: 'A',
@@ -208,28 +212,100 @@ describe('manualPlacement', () => {
       x: 0,
       y: 0,
     }))
-    const right90 = {
-      LWH: 'WLH',
-      WLH: 'LWH',
-      LHW: 'HLW',
-      HLW: 'LHW',
-      WHL: 'HWL',
-      HWL: 'WHL',
-    } as const
-    const down90 = {
-      LWH: 'LHW',
-      LHW: 'LWH',
-      WLH: 'WHL',
-      WHL: 'WLH',
-      HLW: 'HWL',
-      HWL: 'HLW',
-    } as const
 
-    Object.keys(right90).forEach((orientationKey) => {
-      const oriented = setManualBoxOrientation(baseDraft, 'box-1', orientationKey as keyof typeof right90)
-      expect(rotateBoxRight90(oriented, 'box-1').boxes[0].orientationKey).toBe(right90[orientationKey as keyof typeof right90])
-      expect(rotateBoxDown90(oriented, 'box-1').boxes[0].orientationKey).toBe(down90[orientationKey as keyof typeof down90])
+    const seen = []
+    for (let i = 0; i < 4; i += 1) {
+      draft = rotateBoxRight90(draft, 'box-1')
+      const box = draft.boxes[0]
+      seen.push({
+        orientationKey: box.orientationKey,
+        yawQuarterTurn: box.yawQuarterTurn,
+        pitchQuarterTurn: box.pitchQuarterTurn,
+        height: box.height,
+        labelRotationDeg: box.labelRotationDeg,
+        orientationLabel: box.orientationLabel,
+      })
+    }
+
+    expect(seen).toEqual([
+      expect.objectContaining({ orientationKey: 'WLH', yawQuarterTurn: 1, pitchQuarterTurn: 0, height: 600, labelRotationDeg: 0, orientationLabel: 'H90 I0' }),
+      expect.objectContaining({ orientationKey: 'LWH', yawQuarterTurn: 2, pitchQuarterTurn: 0, height: 600, labelRotationDeg: 0, orientationLabel: 'H180 I0' }),
+      expect.objectContaining({ orientationKey: 'WLH', yawQuarterTurn: 3, pitchQuarterTurn: 0, height: 600, labelRotationDeg: 0, orientationLabel: 'H270 I0' }),
+      expect.objectContaining({ orientationKey: 'LWH', yawQuarterTurn: 0, pitchQuarterTurn: 0, height: 600, labelRotationDeg: 0, orientationLabel: 'H0 I0' }),
+    ])
+  })
+
+  it('keeps the current vertical axis fixed when R is pressed after a downward rotation', () => {
+    let draft = addBox(emptyDraft(), makeManualBox({
+      id: 'box-1',
+      cargoId: 'cargo-a',
+      label: 'G',
+      color: '#fff',
+      length: 400,
+      width: 500,
+      height: 600,
+      x: 0,
+      y: 0,
+    }))
+
+    draft = rotateBoxDown90(draft, 'box-1')
+    const afterDown = draft.boxes[0]
+    expect(afterDown).toMatchObject({ orientationKey: 'LHW', height: 500, orientationLabel: 'H0 I90' })
+
+    draft = rotateBoxRight90(draft, 'box-1')
+    expect(draft.boxes[0]).toMatchObject({
+      orientationKey: 'HLW',
+      height: 500,
+      labelRotationDeg: 0,
+      yawQuarterTurn: 1,
+      pitchQuarterTurn: 1,
+      orientationLabel: 'H90 I90',
     })
+
+    draft = rotateBoxRight90(draft, 'box-1')
+    expect(draft.boxes[0]).toMatchObject({
+      orientationKey: 'LHW',
+      height: 500,
+      yawQuarterTurn: 2,
+      pitchQuarterTurn: 1,
+      orientationLabel: 'H180 I90',
+    })
+  })
+
+  it('cycles Shift+R through four downward quarter turns', () => {
+    let draft = addBox(emptyDraft(), makeManualBox({
+      id: 'box-1',
+      cargoId: 'cargo-a',
+      label: 'A',
+      color: '#fff',
+      length: 400,
+      width: 500,
+      height: 600,
+      x: 0,
+      y: 0,
+    }))
+
+    const seen = []
+    for (let i = 0; i < 4; i += 1) {
+      draft = rotateBoxDown90(draft, 'box-1')
+      const box = draft.boxes[0]
+      seen.push({
+        orientationKey: box.orientationKey,
+        yawQuarterTurn: box.yawQuarterTurn,
+        pitchQuarterTurn: box.pitchQuarterTurn,
+        width: box.width,
+        height: box.height,
+        labelRotationDeg: box.labelRotationDeg,
+        orientationLabel: box.orientationLabel,
+      })
+    }
+
+    expect(seen).toEqual([
+      expect.objectContaining({ orientationKey: 'LHW', yawQuarterTurn: 0, pitchQuarterTurn: 1, width: 600, height: 500, labelRotationDeg: 0, orientationLabel: 'H0 I90' }),
+      expect.objectContaining({ orientationKey: 'LWH', yawQuarterTurn: 0, pitchQuarterTurn: 2, width: 500, height: 600, labelRotationDeg: 0, orientationLabel: 'H0 I180' }),
+      expect.objectContaining({ orientationKey: 'LHW', yawQuarterTurn: 0, pitchQuarterTurn: 3, width: 600, height: 500, labelRotationDeg: 0, orientationLabel: 'H0 I270' }),
+      expect.objectContaining({ orientationKey: 'LWH', yawQuarterTurn: 0, pitchQuarterTurn: 0, width: 500, height: 600, labelRotationDeg: 0, orientationLabel: 'H0 I0' }),
+    ])
   })
 
   it('dryRunRotation validates the requested spatial rotation direction', () => {
@@ -264,11 +340,20 @@ describe('manualPlacement', () => {
 
     const expected = {
       LWH: { length: 400, width: 500, height: 600, labelRotationDeg: 0 },
-      WLH: { length: 500, width: 400, height: 600, labelRotationDeg: 90 },
-      LHW: { length: 400, width: 600, height: 500, labelRotationDeg: 90 },
-      HLW: { length: 600, width: 400, height: 500, labelRotationDeg: 180 },
-      WHL: { length: 500, width: 600, height: 400, labelRotationDeg: 270 },
-      HWL: { length: 600, width: 500, height: 400, labelRotationDeg: 180 },
+      WLH: { length: 500, width: 400, height: 600, labelRotationDeg: 0 },
+      LHW: { length: 400, width: 600, height: 500, labelRotationDeg: 0 },
+      HLW: { length: 600, width: 400, height: 500, labelRotationDeg: 0 },
+      WHL: { length: 500, width: 600, height: 400, labelRotationDeg: 0 },
+      HWL: { length: 600, width: 500, height: 400, labelRotationDeg: 0 },
+    } as const
+
+    const expectedLabels = {
+      LWH: 'H0 I0',
+      WLH: 'H90 I0',
+      LHW: 'H0 I90',
+      HLW: 'H90 I90',
+      WHL: 'H90 I90',
+      HWL: 'H0 I90',
     } as const
 
     Object.entries(expected).forEach(([orientationKey, dimensions]) => {
@@ -276,6 +361,7 @@ describe('manualPlacement', () => {
       expect(next.boxes[0]).toMatchObject({
         ...dimensions,
         orientationKey,
+        orientationLabel: expectedLabels[orientationKey as keyof typeof expectedLabels],
         baseLength: 400,
         baseWidth: 500,
         baseHeight: 600,
@@ -329,7 +415,7 @@ describe('manualPlacement', () => {
 
   it('exports orientation helpers for UI labels and tests', () => {
     expect(dimensionsForManualOrientation({ length: 400, width: 500, height: 600 }, 'HWL')).toEqual({ length: 600, width: 500, height: 400 })
-    expect(labelRotationForManualOrientation('WHL')).toBe(270)
+    expect(labelRotationForManualOrientation('WHL')).toBe(0)
   })
 
   it('buildPool reports remaining cargo per type after subtracting placed boxes', () => {
@@ -418,6 +504,31 @@ describe('manualPlacement', () => {
     expect(issues).toEqual([
       expect.objectContaining({ type: 'floating', boxId: 'top' }),
     ])
+  })
+
+  it('validateDraft allows configured partial overhang as a warning instead of a blocking error', () => {
+    const policy: SupportPolicy = {
+      allowPartialOverhang: true,
+      minSupportRatio: 0.25,
+      warningSupportRatio: 0.5,
+      supportMode: 'field-review',
+    }
+    let draft = emptyDraft()
+    draft = addBox(draft, makeManualBox({
+      id: 'base', cargoId: 'cargo-a', label: 'A', color: '#fff',
+      length: 400, width: 500, height: 600, x: 0, y: 0,
+    }))
+    draft = setBoxPosition(addBox(draft, makeManualBox({
+      id: 'top', cargoId: 'cargo-a', label: 'A', color: '#fff',
+      length: 400, width: 500, height: 600, x: 250, y: 0,
+    })), 'top', 250, 0, 600)
+
+    const issues = validateDraft(draft, container(), policy)
+
+    expect(issues).toEqual([
+      expect.objectContaining({ type: 'floating', boxId: 'top', severity: 'warning', supportRatio: 0.375 }),
+    ])
+    expect(issues.some(isBlockingManualIssue)).toBe(false)
   })
 
   it('validateDraft flags boxes stacked on non-stackable cargo', () => {
@@ -518,7 +629,10 @@ describe('manualPlacement', () => {
       name: 'A',
       color: '#f59e0b',
       orientationKey: 'WLH',
-      labelRotationDeg: 90,
+      labelRotationDeg: 0,
+      yawQuarterTurn: 1,
+      pitchQuarterTurn: 0,
+      orientationLabel: 'H90 I0',
       physicalLayer: 1,
       workStep: 1,
       supportType: 'floor',

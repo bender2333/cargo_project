@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { resolveDropTarget } from './sceneDrop'
 import type { ContainerSpec, PlacedBox } from '../types'
+import type { SupportPolicy } from './placementSettings'
 
 function makeContainer(): ContainerSpec {
   return { id: 't', label: 'T', description: '', length: 6000, width: 2400, height: 2600, maxWeight: 28000, doorGap: 0, topGap: 0, sideGap: 0 }
@@ -138,6 +139,30 @@ describe('resolveDropTarget', () => {
     })
     expect(target.surfaceBoxId).toBe('big')
     expect(target.z).toBe(500)
+  })
+
+  it('uses the configured support policy for partial-overhang surface snaps', () => {
+    const policy: SupportPolicy = {
+      allowPartialOverhang: true,
+      minSupportRatio: 0.3,
+      warningSupportRatio: 0.5,
+      supportMode: 'field-review',
+    }
+    const boxes = [makeBox({ id: 'small', x: 500, y: 500, z: 0, length: 600, width: 600, height: 500 })]
+    const target = resolveDropTarget({
+      rayOrigin: { x: 800, y: 800, z: 3000 },
+      rayDirection: { x: 0, y: 0, z: -1 },
+      boxes,
+      draggedBoxId: null,
+      draggedSize: { length: 1000, width: 1000, height: 400 },
+      container: makeContainer(),
+      supportPolicy: policy,
+    })
+
+    expect(target.surfaceBoxId).toBe('small')
+    expect(target.z).toBe(500)
+    expect(target.supportRatio).toBeCloseTo(0.36)
+    expect(target.supportSeverity).toBe('warning')
   })
 
   it('falls back to surface-centred placement when cursor placement would underflow 50% but surface is large enough', () => {

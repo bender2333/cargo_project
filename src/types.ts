@@ -39,6 +39,9 @@ export type PlacedBox = {
   height: number
   orientationKey: 'LWH' | 'WLH' | 'LHW' | 'HLW' | 'WHL' | 'HWL'
   labelRotationDeg: 0 | 90 | 180 | 270
+  yawQuarterTurn?: 0 | 1 | 2 | 3
+  pitchQuarterTurn?: 0 | 1 | 2 | 3
+  orientationLabel?: string
   weight: number
   color: string
   stackable: boolean

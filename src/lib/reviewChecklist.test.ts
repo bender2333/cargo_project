@@ -19,7 +19,7 @@ const baseResult: PackingResult = {
 }
 
 describe('buildReviewChecklist', () => {
-  it('collects measurements, CoG state, manual issues, unplaced cargo, and diagnostics', () => {
+  it('collects field review action items without duplicating compliance diagnostics', () => {
     const checklist = buildReviewChecklist({
       result: {
         ...baseResult,
@@ -46,8 +46,14 @@ describe('buildReviewChecklist', () => {
       'cog',
       'manual',
       'unplaced',
-      'diagnostic',
     ])
-    expect(checklist.summary.errorCount).toBe(4)
+    expect(checklist.items.some((item) => item.source === 'diagnostic')).toBe(false)
+    expect(checklist.items.find((item) => item.source === 'unplaced')).toEqual(
+      expect.objectContaining({
+        action: expect.stringContaining('Review'),
+        linkedDiagnosticIds: ['weight-check'],
+      }),
+    )
+    expect(checklist.summary.errorCount).toBe(3)
   })
 })

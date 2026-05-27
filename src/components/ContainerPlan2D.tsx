@@ -65,9 +65,17 @@ export function ContainerPlan2D({ container, boxes, activeLayerId, activeLabelId
         const textX = padding + projected.x + projected.width / 2
         const textY = padding + size.height - projected.y - projected.height / 2
         const rotation = box.labelRotationDeg
+        const orientationLabel = box.orientationLabel ?? box.orientationKey
 
         return (
-          <g data-orientation={box.orientationKey} data-label-rotation={rotation} key={box.id} opacity={opacity}>
+          <g
+            data-orientation={box.orientationKey}
+            data-label-rotation={rotation}
+            data-yaw-quarter-turn={box.yawQuarterTurn ?? 0}
+            data-pitch-quarter-turn={box.pitchQuarterTurn ?? 0}
+            key={box.id}
+            opacity={opacity}
+          >
             <rect
               aria-label={`${box.label} ${box.name} ${mode} layer ${box.physicalLayer}`}
               fill={box.color}
@@ -113,7 +121,7 @@ export function ContainerPlan2D({ container, boxes, activeLayerId, activeLabelId
                 x={padding + projected.x + 20 + Math.max(110, projected.width * 0.2) / 2}
                 y={padding + size.height - projected.y - projected.height + 20 + Math.max(70, projected.height * 0.18) / 2}
               >
-                {box.orientationKey}
+                {orientationLabel}
               </text>
             </g>
           </g>

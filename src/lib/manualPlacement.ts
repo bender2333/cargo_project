@@ -1,7 +1,9 @@
 import type { CargoItem, ContainerSpec, PlacedBox } from '../types'
+import { DEFAULT_PLACEMENT_SETTINGS, type SupportPolicy } from './placementSettings'
 
 export type OrientationKey = 'LWH' | 'WLH' | 'LHW' | 'HLW' | 'WHL' | 'HWL'
 export type LabelRotationDeg = 0 | 90 | 180 | 270
+export type QuarterTurn = 0 | 1 | 2 | 3
 
 export type ManualPlacedBox = {
   id: string
@@ -19,6 +21,9 @@ export type ManualPlacedBox = {
   height: number
   orientationKey: OrientationKey
   labelRotationDeg: LabelRotationDeg
+  yawQuarterTurn?: QuarterTurn
+  pitchQuarterTurn?: QuarterTurn
+  orientationLabel?: string
   weight?: number
   canRotate?: boolean
   stackable?: boolean
@@ -30,8 +35,10 @@ export type ManualDraft = {
 
 export type ValidationIssue = {
   type: 'boundary' | 'overlap' | 'floating' | 'rotation-disabled' | 'stacking'
+  severity?: 'warning' | 'error'
   message: string
   boxId: string
+  supportRatio?: number
 }
 
 export type PoolEntry = {
@@ -88,6 +95,8 @@ export function removeBox(draft: ManualDraft, id: string): ManualDraft {
   return { boxes: draft.boxes.filter((box) => box.id !== id) }
 }
 
+const ALL_ORIENTATIONS: OrientationKey[] = ['LWH', 'WLH', 'LHW', 'HLW', 'WHL', 'HWL']
+
 const HORIZONTAL_ROTATION_NEXT: Record<OrientationKey, OrientationKey> = {
   LWH: 'WLH',
   WLH: 'LWH',
@@ -106,15 +115,13 @@ const DOWN_ROTATION_NEXT: Record<OrientationKey, OrientationKey> = {
   HWL: 'HLW',
 }
 
-const ALL_ORIENTATIONS: OrientationKey[] = ['LWH', 'WLH', 'LHW', 'HLW', 'WHL', 'HWL']
-
 const LABEL_ROTATION_FOR_ORIENTATION: Record<OrientationKey, LabelRotationDeg> = {
   LWH: 0,
-  WLH: 90,
-  LHW: 90,
-  HLW: 180,
-  WHL: 270,
-  HWL: 180,
+  WLH: 0,
+  LHW: 0,
+  HLW: 0,
+  WHL: 0,
+  HWL: 0,
 }
 
 export function labelRotationForManualOrientation(orientationKey: OrientationKey): LabelRotationDeg {
@@ -126,6 +133,49 @@ function baseDimensionsFor(box: ManualPlacedBox) {
     length: box.baseLength ?? box.length,
     width: box.baseWidth ?? box.width,
     height: box.baseHeight ?? box.height,
+  }
+}
+
+function quarterTurn(value: number): QuarterTurn {
+  return (((value % 4) + 4) % 4) as QuarterTurn
+}
+
+function orientationLabel(yawQuarterTurn: QuarterTurn, pitchQuarterTurn: QuarterTurn) {
+  return `H${yawQuarterTurn * 90} I${pitchQuarterTurn * 90}`
+}
+
+function inferTurnsForOrientation(orientationKey: OrientationKey): { yawQuarterTurn: QuarterTurn; pitchQuarterTurn: QuarterTurn } {
+  const mapping: Record<OrientationKey, { yawQuarterTurn: QuarterTurn; pitchQuarterTurn: QuarterTurn }> = {
+    LWH: { yawQuarterTurn: 0, pitchQuarterTurn: 0 },
+    WLH: { yawQuarterTurn: 1, pitchQuarterTurn: 0 },
+    LHW: { yawQuarterTurn: 0, pitchQuarterTurn: 1 },
+    HLW: { yawQuarterTurn: 1, pitchQuarterTurn: 1 },
+    WHL: { yawQuarterTurn: 1, pitchQuarterTurn: 1 },
+    HWL: { yawQuarterTurn: 0, pitchQuarterTurn: 1 },
+  }
+  return mapping[orientationKey]
+}
+
+function applyOrientation(
+  box: ManualPlacedBox,
+  orientationKey: OrientationKey,
+  turns: { yawQuarterTurn?: QuarterTurn; pitchQuarterTurn?: QuarterTurn } = {},
+) {
+  const base = baseDimensionsFor(box)
+  const inferred = inferTurnsForOrientation(orientationKey)
+  const yawQuarterTurn = turns.yawQuarterTurn ?? inferred.yawQuarterTurn
+  const pitchQuarterTurn = turns.pitchQuarterTurn ?? inferred.pitchQuarterTurn
+  return {
+    ...box,
+    ...dimensionsForManualOrientation(base, orientationKey),
+    baseLength: base.length,
+    baseWidth: base.width,
+    baseHeight: base.height,
+    orientationKey,
+    labelRotationDeg: LABEL_ROTATION_FOR_ORIENTATION[orientationKey],
+    yawQuarterTurn,
+    pitchQuarterTurn,
+    orientationLabel: orientationLabel(yawQuarterTurn, pitchQuarterTurn),
   }
 }
 
@@ -159,16 +209,7 @@ export function setManualBoxOrientation(
   return {
     boxes: draft.boxes.map((box) => {
       if (box.id !== id) return box
-      const base = baseDimensionsFor(box)
-      return {
-        ...box,
-        ...dimensionsForManualOrientation(base, orientationKey),
-        baseLength: base.length,
-        baseWidth: base.width,
-        baseHeight: base.height,
-        orientationKey,
-        labelRotationDeg: LABEL_ROTATION_FOR_ORIENTATION[orientationKey],
-      }
+      return applyOrientation(box, orientationKey)
     }),
   }
 }
@@ -180,13 +221,28 @@ export function rotateBox(draft: ManualDraft, id: string): ManualDraft {
 export function rotateBoxRight90(draft: ManualDraft, id: string): ManualDraft {
   const target = draft.boxes.find((box) => box.id === id)
   if (!target) return draft
-  return setManualBoxOrientation(draft, id, HORIZONTAL_ROTATION_NEXT[target.orientationKey])
+  const yawQuarterTurn = quarterTurn((target.yawQuarterTurn ?? inferTurnsForOrientation(target.orientationKey).yawQuarterTurn) + 1)
+  const pitchQuarterTurn = target.pitchQuarterTurn ?? inferTurnsForOrientation(target.orientationKey).pitchQuarterTurn
+  const orientationKey = HORIZONTAL_ROTATION_NEXT[target.orientationKey]
+  return {
+    boxes: draft.boxes.map((box) =>
+      box.id === id ? applyOrientation(box, orientationKey, { yawQuarterTurn, pitchQuarterTurn }) : box,
+    ),
+  }
 }
 
 export function rotateBoxDown90(draft: ManualDraft, id: string): ManualDraft {
   const target = draft.boxes.find((box) => box.id === id)
   if (!target) return draft
-  return setManualBoxOrientation(draft, id, DOWN_ROTATION_NEXT[target.orientationKey])
+  const inferred = inferTurnsForOrientation(target.orientationKey)
+  const yawQuarterTurn = target.yawQuarterTurn ?? inferred.yawQuarterTurn
+  const pitchQuarterTurn = quarterTurn((target.pitchQuarterTurn ?? inferred.pitchQuarterTurn) + 1)
+  const orientationKey = DOWN_ROTATION_NEXT[target.orientationKey]
+  return {
+    boxes: draft.boxes.map((box) =>
+      box.id === id ? applyOrientation(box, orientationKey, { yawQuarterTurn, pitchQuarterTurn }) : box,
+    ),
+  }
 }
 
 export function cycleBoxOrientation(draft: ManualDraft, id: string): ManualDraft {
@@ -200,7 +256,7 @@ export function cycleBoxOrientation(draft: ManualDraft, id: string): ManualDraft
  * mutating the draft. Used to surface a specific reason ("rotated width exceeds container
  * width by 100 mm" / "overlaps box B") before the user actually rotates.
  */
-export function dryRunRotation(draft: ManualDraft, id: string, container: ContainerSpec, direction: 'right' | 'down' = 'right'): {
+export function dryRunRotation(draft: ManualDraft, id: string, container: ContainerSpec, direction: 'right' | 'down' = 'right', supportPolicy?: SupportPolicy): {
   ok: boolean
   rotatedBox: ManualPlacedBox | null
   issues: ValidationIssue[]
@@ -209,8 +265,8 @@ export function dryRunRotation(draft: ManualDraft, id: string, container: Contai
   if (!target) return { ok: false, rotatedBox: null, issues: [] }
   const rotated = direction === 'down' ? rotateBoxDown90(draft, id) : rotateBoxRight90(draft, id)
   const rotatedBox = rotated.boxes.find((b) => b.id === id) ?? null
-  const issues = validateDraft(rotated, container).filter((issue) => issue.boxId === id)
-  return { ok: issues.length === 0, rotatedBox, issues }
+  const issues = validateDraft(rotated, container, supportPolicy).filter((issue) => issue.boxId === id)
+  return { ok: !issues.some(isBlockingManualIssue), rotatedBox, issues }
 }
 
 export function dryRunOrientation(
@@ -218,6 +274,7 @@ export function dryRunOrientation(
   id: string,
   orientationKey: OrientationKey,
   container: ContainerSpec,
+  supportPolicy?: SupportPolicy,
 ): {
   ok: boolean
   rotatedBox: ManualPlacedBox | null
@@ -231,6 +288,7 @@ export function dryRunOrientation(
       rotatedBox: target,
       issues: [{
         type: 'rotation-disabled',
+        severity: 'error',
         boxId: id,
         message: `Box ${target.label} cannot be rotated.`,
       }],
@@ -238,8 +296,8 @@ export function dryRunOrientation(
   }
   const rotated = setManualBoxOrientation(draft, id, orientationKey)
   const rotatedBox = rotated.boxes.find((b) => b.id === id) ?? null
-  const issues = validateDraft(rotated, container).filter((issue) => issue.boxId === id)
-  return { ok: issues.length === 0, rotatedBox, issues }
+  const issues = validateDraft(rotated, container, supportPolicy).filter((issue) => issue.boxId === id)
+  return { ok: !issues.some(isBlockingManualIssue), rotatedBox, issues }
 }
 
 function isOutOfBounds(box: ManualPlacedBox, container: ContainerSpec): boolean {
@@ -272,7 +330,7 @@ function overlapAreaXY(a: ManualPlacedBox, b: ManualPlacedBox): number {
   return xOverlap * yOverlap
 }
 
-export function findSupport(box: ManualPlacedBox, others: ManualPlacedBox[]): { boxId: string; overlapRatio: number } | null {
+export function findSupport(box: ManualPlacedBox, others: ManualPlacedBox[], minSupportRatio: number = MIN_SUPPORT_OVERLAP_RATIO): { boxId: string; overlapRatio: number } | null {
   if (box.z <= EPSILON) {
     return { boxId: 'floor', overlapRatio: 1 }
   }
@@ -295,19 +353,24 @@ export function findSupport(box: ManualPlacedBox, others: ManualPlacedBox[]): { 
   }
 
   const combinedRatio = Math.min(1, supportedArea / baseArea)
-  if (combinedRatio >= MIN_SUPPORT_OVERLAP_RATIO) {
+  if (combinedRatio >= minSupportRatio) {
     return strongestSupport ? { boxId: strongestSupport.boxId, overlapRatio: combinedRatio } : null
   }
   return null
 }
 
-export function validateDraft(draft: ManualDraft, container: ContainerSpec): ValidationIssue[] {
+export function isBlockingManualIssue(issue: ValidationIssue) {
+  return issue.severity !== 'warning'
+}
+
+export function validateDraft(draft: ManualDraft, container: ContainerSpec, supportPolicy: SupportPolicy = DEFAULT_PLACEMENT_SETTINGS.supportPolicy): ValidationIssue[] {
   const issues: ValidationIssue[] = []
 
   for (const box of draft.boxes) {
     if (isOutOfBounds(box, container)) {
       issues.push({
         type: 'boundary',
+        severity: 'error',
         boxId: box.id,
         message: `Box ${box.label} exceeds the effective container bounds.`,
       })
@@ -321,11 +384,13 @@ export function validateDraft(draft: ManualDraft, container: ContainerSpec): Val
       if (overlapsXY(a, b) && overlapsZ(a, b)) {
         issues.push({
           type: 'overlap',
+          severity: 'error',
           boxId: a.id,
           message: `Box ${a.label} overlaps with ${b.label}.`,
         })
         issues.push({
           type: 'overlap',
+          severity: 'error',
           boxId: b.id,
           message: `Box ${b.label} overlaps with ${a.label}.`,
         })
@@ -334,11 +399,23 @@ export function validateDraft(draft: ManualDraft, container: ContainerSpec): Val
   }
 
   for (const box of draft.boxes) {
-    if (!findSupport(box, draft.boxes)) {
+    const support = findSupport(box, draft.boxes, supportPolicy.allowPartialOverhang ? supportPolicy.minSupportRatio : MIN_SUPPORT_OVERLAP_RATIO)
+    const supportRatio = support?.overlapRatio ?? 0
+    if (!support || supportRatio < supportPolicy.minSupportRatio) {
       issues.push({
         type: 'floating',
+        severity: 'error',
         boxId: box.id,
-        message: `Box ${box.label} is floating and needs at least ${Math.round(MIN_SUPPORT_OVERLAP_RATIO * 100)}% base support.`,
+        supportRatio,
+        message: `Box ${box.label} is floating and needs at least ${Math.round(supportPolicy.minSupportRatio * 100)}% base support.`,
+      })
+    } else if (supportPolicy.allowPartialOverhang && supportRatio < supportPolicy.warningSupportRatio) {
+      issues.push({
+        type: 'floating',
+        severity: 'warning',
+        boxId: box.id,
+        supportRatio,
+        message: `Box ${box.label} has partial support (${Math.round(supportRatio * 100)}%) and needs field review.`,
       })
     }
   }
@@ -352,6 +429,7 @@ export function validateDraft(draft: ManualDraft, container: ContainerSpec): Val
       if (overlapAreaXY(box, support) <= 0) continue
       issues.push({
         type: 'stacking',
+        severity: 'error',
         boxId: box.id,
         message: `Box ${box.label} is stacked on non-stackable cargo ${support.label}.`,
       })
@@ -454,6 +532,9 @@ export function makeManualBox(params: {
     height: params.height,
     orientationKey: 'LWH',
     labelRotationDeg: 0,
+    yawQuarterTurn: 0,
+    pitchQuarterTurn: 0,
+    orientationLabel: orientationLabel(0, 0),
     weight: params.weight ?? 0,
     canRotate: params.canRotate ?? true,
     stackable: params.stackable ?? true,
@@ -487,6 +568,9 @@ export function toPlacedBoxes(
     height: box.height,
     orientationKey: box.orientationKey,
     labelRotationDeg: box.labelRotationDeg,
+    yawQuarterTurn: box.yawQuarterTurn ?? 0,
+    pitchQuarterTurn: box.pitchQuarterTurn ?? 0,
+    orientationLabel: box.orientationLabel ?? orientationLabel(box.yawQuarterTurn ?? 0, box.pitchQuarterTurn ?? 0),
     weight: box.weight ?? 0,
     color: box.color,
     stackable: box.stackable ?? true,

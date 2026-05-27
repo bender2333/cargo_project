@@ -400,6 +400,7 @@ test('复核清单汇总测量线并支持 JSON 导出', async ({ page }) => {
   await page.getByRole('button', { name: '复核清单' }).click()
   await expect(page.getByTestId('review-checklist-panel')).toBeVisible()
   await expect(page.getByTestId('review-checklist-item').filter({ hasText: 'measurement' }).first()).toBeVisible()
+  await expect(page.locator('[data-testid="review-checklist-item"][data-source="diagnostic"]')).toHaveCount(0)
   const downloadPromise = page.waitForEvent('download')
   await page.getByTestId('export-review-json').click()
   const download = await downloadPromise
@@ -459,6 +460,23 @@ test('边缘吸附按钮切换 data-edge-snap', async ({ page }) => {
   await expect(scene).toHaveAttribute('data-edge-snap', 'off')
   await page.getByTestId('toggle-edge-snap').click()
   await expect(scene).toHaveAttribute('data-edge-snap', 'on')
+})
+
+test('排布设置面板支持用户级保存并恢复吸附参数', async ({ page }) => {
+  await ensureChinese(page)
+  await page.getByTestId('placement-settings-toggle').click()
+  const panel = page.getByTestId('placement-settings-panel')
+  await expect(panel).toBeVisible()
+  await panel.getByLabel('边缘容差 (mm)').fill('80')
+  await panel.getByLabel('允许部分悬空').check()
+  await panel.getByLabel('最低支撑').fill('30')
+  await page.reload()
+  await ensureChinese(page)
+  await page.getByTestId('placement-settings-toggle').click()
+  const reloadedPanel = page.getByTestId('placement-settings-panel')
+  await expect(reloadedPanel.getByLabel('边缘容差 (mm)')).toHaveValue('80')
+  await expect(reloadedPanel.getByLabel('允许部分悬空')).toBeChecked()
+  await expect(reloadedPanel.getByLabel('最低支撑')).toHaveValue('30')
 })
 
 test('Balance 车型选择切换 overlay profile', async ({ page }) => {

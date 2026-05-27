@@ -64,4 +64,19 @@ describe('snapToEdges', () => {
   it('uses the documented 30mm default tolerance', () => {
     expect(EDGE_SNAP_TOLERANCE_MM).toBe(30)
   })
+
+  it('uses a caller supplied edge tolerance from placement settings', () => {
+    const r = snapToEdges({
+      x: 1950,
+      y: 200,
+      length: 600,
+      width: 400,
+      others: [makeBox({ id: 'n', x: 2000, y: 0, length: 1000, width: 1000 })],
+      container,
+      tolerance: 60,
+    })
+
+    expect(r.x).toBe(2000)
+    expect(r.snappedAxes).toContain('x')
+  })
 })

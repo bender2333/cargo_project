@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Locale } from '../types'
 import type { ManualPlacedBox, OrientationKey } from '../lib/manualPlacement'
+import type { PlacementSettings } from '../lib/placementSettings'
 
 const ORIENTATION_OPTIONS: OrientationKey[] = ['LWH', 'WLH', 'LHW', 'HLW', 'WHL', 'HWL']
 
@@ -20,6 +21,8 @@ const T = {
     grounded: 'Drop to floor',
     rotate: 'Rotate',
     orientation: 'Orientation',
+    facing: 'Facing',
+    supportPolicy: 'Support',
     rotationLocked: 'Rotation locked',
     delete: 'Delete',
   },
@@ -38,6 +41,8 @@ const T = {
     grounded: '落到地面',
     rotate: '旋转',
     orientation: '朝向',
+    facing: '方向',
+    supportPolicy: '支撑',
     rotationLocked: '禁止旋转',
     delete: '删除',
   },
@@ -47,13 +52,14 @@ type Props = {
   selected: ManualPlacedBox | null
   container: { length: number; width: number; height: number }
   locale: Locale
+  placementSettings?: PlacementSettings
   onMove: (x: number, y: number, z: number) => void
   onRotate: () => void
   onSetOrientation: (orientationKey: OrientationKey) => void
   onDelete: () => void
 }
 
-export function ManualPrecisePanel({ selected, container, locale, onMove, onRotate, onSetOrientation, onDelete }: Props) {
+export function ManualPrecisePanel({ selected, container, locale, placementSettings, onMove, onRotate, onSetOrientation, onDelete }: Props) {
   const t = T[locale]
   const [draft, setDraft] = useState<{ x: string; y: string; z: string }>({ x: '0', y: '0', z: '0' })
 
@@ -103,13 +109,23 @@ export function ManualPrecisePanel({ selected, container, locale, onMove, onRota
       >
         <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wider text-[#94a3b8]">
           <span>{t.orientation}</span>
-          <span className="font-mono text-[#0f172a]">{selected.orientationKey}</span>
+          <span className="font-mono text-[#0f172a]">{selected.orientationLabel ?? selected.orientationKey}</span>
         </div>
         <div className="grid grid-cols-3 gap-1 text-center font-mono text-[11px] font-bold">
           <span className="rounded bg-[#dbeafe] px-1 py-0.5 text-[#1d4ed8]">X:{selected.orientationKey[0]}</span>
           <span className="rounded bg-[#dcfce7] px-1 py-0.5 text-[#166534]">Y:{selected.orientationKey[1]}</span>
           <span className="rounded bg-[#fee2e2] px-1 py-0.5 text-[#991b1b]">Z:{selected.orientationKey[2]}</span>
         </div>
+        <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] font-semibold">
+          <span className="rounded bg-white px-2 py-1 text-[#334155]">{t.facing}: H{(selected.yawQuarterTurn ?? 0) * 90}</span>
+          <span className="rounded bg-white px-2 py-1 text-[#334155]">I{(selected.pitchQuarterTurn ?? 0) * 90}</span>
+        </div>
+        {placementSettings && (
+          <p className="mt-2 text-[11px] text-[#64748b]">
+            {t.supportPolicy}: {Math.round(placementSettings.supportPolicy.minSupportRatio * 100)}%
+            {placementSettings.supportPolicy.allowPartialOverhang ? ' partial' : ''}
+          </p>
+        )}
       </div>
       <div className="mb-2">
         <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wider text-[#94a3b8]">

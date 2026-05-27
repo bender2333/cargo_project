@@ -232,6 +232,7 @@ export function ManualPlacement2D({
         const textX = rectX + rectWidth / 2
         const textY = rectY + rectHeight / 2
         const rotation = viewMode === 'top' ? box.labelRotationDeg : 0
+        const orientationLabel = box.orientationLabel ?? box.orientationKey
 
         return (
           <g
@@ -240,6 +241,8 @@ export function ManualPlacement2D({
             data-has-issue={hasIssue ? 'true' : 'false'}
             data-orientation={box.orientationKey}
             data-label-rotation={box.labelRotationDeg}
+            data-yaw-quarter-turn={box.yawQuarterTurn ?? 0}
+            data-pitch-quarter-turn={box.pitchQuarterTurn ?? 0}
             onPointerDown={(event) => handlePointerDown(event, box.id)}
             style={{ cursor: projection.editable ? 'grab' : 'pointer' }}
           >
@@ -287,7 +290,7 @@ export function ManualPlacement2D({
                 x={rectX + 24 + Math.max(130, rectWidth * 0.22) / 2}
                 y={rectY + 24 + Math.max(90, rectHeight * 0.2) / 2}
               >
-                {box.orientationKey}
+                {orientationLabel}
               </text>
             </g>
           </g>

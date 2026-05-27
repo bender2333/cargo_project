@@ -419,3 +419,12 @@
   - Added a supplemental review section to `REVIEW.md` covering the current two-state rotation mappings, missing 90/180/270/360 cycles, hard-coded 50% support threshold, non-persistent snap toggles, dragover/drop snap mismatch, and overlap between the review checklist and compliance diagnostics.
   - Planned the next refactor phases: orientation state model, configurable support policy, user-level placement settings, and a field-review checklist that no longer duplicates diagnostics.
 - Verification: documentation-only change; code verification not rerun.
+
+## 2026-05-27 (Second Round 22 Follow-up Refactor)
+
+- Completed subtask: implement the rotation, support-policy, snap-setting, and review-checklist refactor from the supplemental review.
+  - Reworked manual placement rotation so `R` cycles horizontal quarter turns while preserving the current vertical axis, `Shift+R` cycles downward turns, and labels remain readable with `H/I` orientation markers.
+  - Added user-level placement settings for grid, edge, Z, surface snap, and partial-overhang support policy; manual validation, 3D preview, and final drop now read the same policy.
+  - Split floating support issues into blocking errors and field-review warnings when partial overhang is allowed.
+  - Changed the review checklist into field action items and stopped duplicating compliance diagnostics, while keeping diagnostic IDs as links for unplaced-cargo follow-up.
+- Verification: `npm run lint` passed; `npm test` passed 27 test files / 167 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 70 tests with 1 existing responsive 3D test skipped.

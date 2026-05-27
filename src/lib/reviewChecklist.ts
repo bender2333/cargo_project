@@ -12,6 +12,8 @@ export type ReviewChecklistItem = {
   severity: ReviewChecklistSeverity
   title: string
   detail: string
+  action?: string
+  linkedDiagnosticIds?: string[]
 }
 
 export type ReviewChecklist = {
@@ -35,6 +37,9 @@ export function buildReviewChecklist(input: {
   locale: Locale
 }): ReviewChecklist {
   const items: ReviewChecklistItem[] = []
+  const blockingDiagnosticIds = input.result.diagnostics
+    .filter((diagnostic) => diagnostic.severity !== 'info')
+    .map((diagnostic) => diagnostic.id)
 
   input.measurements.filter((item) => !item.hidden).forEach((measurement) => {
     items.push({
@@ -43,6 +48,7 @@ export function buildReviewChecklist(input: {
       severity: measurement.stale ? 'warning' : 'info',
       title: measurement.label || text(input.locale, '固定测量线', 'Fixed measurement'),
       detail: `${Math.round(measurement.distance)} mm`,
+      action: text(input.locale, '现场按固定测量线复核尺寸。', 'Review this fixed measurement in the field.'),
     })
   })
 
@@ -57,6 +63,7 @@ export function buildReviewChecklist(input: {
         : input.cog.balanced
           ? text(input.locale, '重心处于舒适范围。', 'Load center is within the comfort range.')
           : text(input.locale, '重心接近边界，现场装柜需复核。', 'Load center is close to the limit and needs field review.'),
+      action: text(input.locale, '复核重货位置和车辆轴荷风险。', 'Review heavy cargo position and axle-load risk.'),
     })
   }
 
@@ -67,6 +74,7 @@ export function buildReviewChecklist(input: {
       severity: 'error',
       title: text(input.locale, '手动排布问题', 'Manual placement issue'),
       detail: issue.message,
+      action: text(input.locale, '调整该箱体位置或确认现场允许。', 'Adjust this box or confirm the field exception.'),
     })
   })
 
@@ -77,20 +85,10 @@ export function buildReviewChecklist(input: {
       severity: 'error',
       title: text(input.locale, `未装货物 ${entry.label}`, `Unplaced cargo ${entry.label}`),
       detail: `${entry.name} x ${entry.quantity}: ${entry.reason}`,
+      action: text(input.locale, '复核是否换柜、拆分装运或调整优先级。', 'Review whether to change container, split shipment, or adjust priority.'),
+      linkedDiagnosticIds: blockingDiagnosticIds,
     })
   })
-
-  input.result.diagnostics
-    .filter((diagnostic) => diagnostic.severity !== 'info')
-    .forEach((diagnostic) => {
-      items.push({
-        id: `diagnostic-${diagnostic.id}`,
-        source: 'diagnostic',
-        severity: diagnostic.severity,
-        title: text(input.locale, '合规诊断', 'Compliance diagnostic'),
-        detail: diagnostic.message,
-      })
-    })
 
   const errorCount = items.filter((item) => item.severity === 'error').length
   const warningCount = items.filter((item) => item.severity === 'warning').length

@@ -31,6 +31,7 @@ import {
   dryRunRotation as manualDryRunRotation,
   dryRunOrientation as manualDryRunOrientation,
   emptyHistory as manualEmptyHistory,
+  isBlockingManualIssue,
   makeManualBox,
   redo as manualRedo,
   removeBox as manualRemoveBox,
@@ -63,6 +64,12 @@ import { buildReviewChecklist } from './lib/reviewChecklist'
 import type { ReviewChecklist } from './lib/reviewChecklist'
 import { createManualOperationNotice } from './lib/manualFeedback'
 import type { ManualOperationNotice } from './lib/manualFeedback'
+import {
+  DEFAULT_PLACEMENT_SETTINGS,
+  loadPlacementSettings,
+  savePlacementSettings,
+  type PlacementSettings,
+} from './lib/placementSettings'
 import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, CustomDbContainer, DbHistoryPlan, ImportTemplate, ImportTemplateUnits, ImportTemplateDefaults } from './types'
 import { isLoggedIn, getCurrentUser, fetchWithAuth, removeToken } from './lib/auth'
 import type { User } from './lib/auth'
@@ -190,6 +197,18 @@ const copy = {
     gridSnapOff: 'Free move',
     edgeSnap: 'Edge snap',
     edgeSnapOff: 'No edge snap',
+    placementSettings: 'Placement settings',
+    placementSettingsClose: 'Close settings',
+    surfaceSnap: 'Surface snap',
+    zSnap: 'Z snap',
+    gridStep: 'Grid step',
+    edgeTolerance: 'Edge tolerance',
+    zStep: 'Z step',
+    allowOverhang: 'Allow partial overhang',
+    minSupport: 'Minimum support',
+    warnSupport: 'Warn below',
+    settingsStored: 'Saved for current user/browser.',
+    resetPlacementSettings: 'Reset settings',
     ruler: 'Ruler',
     rulerOff: 'Ruler off',
     measurementList: 'Measurements',
@@ -414,6 +433,18 @@ const copy = {
     gridSnapOff: '自由移动',
     edgeSnap: '边缘吸附',
     edgeSnapOff: '关闭边缘吸附',
+    placementSettings: '排布设置',
+    placementSettingsClose: '关闭设置',
+    surfaceSnap: '上表面吸附',
+    zSnap: 'Z 轴吸附',
+    gridStep: '网格步长',
+    edgeTolerance: '边缘容差',
+    zStep: 'Z 轴步长',
+    allowOverhang: '允许部分悬空',
+    minSupport: '最低支撑',
+    warnSupport: '低于提示',
+    settingsStored: '已按当前用户/浏览器保存。',
+    resetPlacementSettings: '重置配置',
     ruler: '尺规',
     rulerOff: '关闭尺规',
     measurementList: '测量线',
@@ -818,8 +849,10 @@ function Workbench() {
   const [activeLabelId, setActiveLabelId] = useState('all')
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
   const [sceneViewMode, setSceneViewMode] = useState<SceneViewMode>('iso')
-  const [gridSnap, setGridSnap] = useState(true)
-  const [edgeSnap, setEdgeSnap] = useState(true)
+  const [placementSettings, setPlacementSettings] = useState<PlacementSettings>(() => loadPlacementSettings(getCurrentUser()?.id ?? null))
+  const [placementSettingsOpen, setPlacementSettingsOpen] = useState(false)
+  const gridSnap = placementSettings.gridSnapEnabled
+  const edgeSnap = placementSettings.edgeSnapEnabled
   const [rulerEnabled, setRulerEnabled] = useState(false)
   const [hoverInfo, setHoverInfo] = useState<{ id: string; label: string; length: number; width: number; height: number; orientationKey: OrientationKey; x: number; y: number; z: number; clientX: number; clientY: number } | null>(null)
   const [poolDragInfo, setPoolDragInfo] = useState<{ cargoId: string; length: number; width: number; height: number; color: string } | null>(null)
@@ -852,6 +885,14 @@ function Workbench() {
   const [showCustomContainerDialog, setShowCustomContainerDialog] = useState(false)
   const [historyPlans, setHistoryPlans] = useState<HistoryPlan[]>([])
   const [recentErrors, setRecentErrors] = useState<string[]>([])
+
+  useEffect(() => {
+    setPlacementSettings(loadPlacementSettings(currentUser?.id ?? null))
+  }, [currentUser?.id])
+
+  useEffect(() => {
+    savePlacementSettings(currentUser?.id ?? null, placementSettings)
+  }, [currentUser?.id, placementSettings])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -1053,13 +1094,13 @@ function Workbench() {
     [displayCargoItems, manualDraft],
   )
   const manualIssues = useMemo(
-    () => manualValidateDraft(manualDraft, renderingContainer),
-    [manualDraft, renderingContainer],
+    () => manualValidateDraft(manualDraft, renderingContainer, placementSettings.supportPolicy),
+    [manualDraft, renderingContainer, placementSettings.supportPolicy],
   )
   const manualInvalidBoxIds = useMemo(() => {
     const ids = new Set<string>()
     for (const issue of manualIssues) {
-      ids.add(issue.boxId)
+      if (isBlockingManualIssue(issue)) ids.add(issue.boxId)
     }
     return ids
   }, [manualIssues])
@@ -1097,8 +1138,8 @@ function Workbench() {
 
   const handleManualMoveBox = (id: string, x: number, y: number, z?: number) => {
     const nextDraft = manualSetBoxPosition(manualDraft, id, x, y, z)
-    const issues = manualValidateDraft(nextDraft, renderingContainer).filter((issue) => issue.boxId === id)
-    if (issues.length > 0) {
+    const issues = manualValidateDraft(nextDraft, renderingContainer, placementSettings.supportPolicy).filter((issue) => issue.boxId === id)
+    if (issues.some(isBlockingManualIssue)) {
       notifyManualRejected('move', id, undefined, issues)
       return
     }
@@ -1137,8 +1178,8 @@ function Workbench() {
       z: supplyZ ? dropZ : 0,
     })
     const nextDraft = manualAddBox(manualDraft, newBox)
-    const issues = manualValidateDraft(nextDraft, renderingContainer).filter((issue) => issue.boxId === boxId)
-    if (issues.length > 0) {
+    const issues = manualValidateDraft(nextDraft, renderingContainer, placementSettings.supportPolicy).filter((issue) => issue.boxId === boxId)
+    if (issues.some(isBlockingManualIssue)) {
       notifyManualRejected('drop', boxId, cargoId, issues)
       return
     }
@@ -1169,7 +1210,7 @@ function Workbench() {
   }
 
   const commitManualOrientation = (boxId: string, orientationKey: OrientationKey) => {
-    const dry = manualDryRunOrientation(manualDraft, boxId, orientationKey, renderingContainer)
+    const dry = manualDryRunOrientation(manualDraft, boxId, orientationKey, renderingContainer, placementSettings.supportPolicy)
     if (!dry.ok) {
       setRotationNotice(buildRotationNotice(dry, renderingContainer, locale))
       notifyManualRejected('rotate', boxId, undefined, dry.issues)
@@ -1186,7 +1227,7 @@ function Workbench() {
   }
 
   const handleManualRotateBox = (boxId: string, direction: 'right' | 'down' = 'right') => {
-    const dry = manualDryRunRotation(manualDraft, boxId, renderingContainer, direction)
+    const dry = manualDryRunRotation(manualDraft, boxId, renderingContainer, direction, placementSettings.supportPolicy)
     if (!dry.ok) {
       setRotationNotice(buildRotationNotice(dry, renderingContainer, locale))
       notifyManualRejected('rotate', boxId, undefined, dry.issues)
@@ -1286,7 +1327,7 @@ function Workbench() {
       if ((event.key === 'r' || event.key === 'R') && manualSelectedId) {
         event.preventDefault()
         const direction = event.shiftKey ? 'down' : 'right'
-        const dry = manualDryRunRotation(manualDraft, manualSelectedId, renderingContainer, direction)
+        const dry = manualDryRunRotation(manualDraft, manualSelectedId, renderingContainer, direction, placementSettings.supportPolicy)
         if (!dry.ok) {
           setRotationNotice(buildRotationNotice(dry, renderingContainer, locale))
           setManualNotice(createManualOperationNotice({
@@ -1314,7 +1355,7 @@ function Workbench() {
 
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [placementMode, manualSelectedId, manualDraft, renderingContainer, locale])
+  }, [placementMode, manualSelectedId, manualDraft, renderingContainer, locale, placementSettings.supportPolicy])
 
   useEffect(() => {
     if (!manualNotice) return
@@ -1738,6 +1779,8 @@ function Workbench() {
       severity: item.severity,
       title: item.title,
       detail: item.detail,
+      action: item.action ?? '',
+      linkedDiagnostics: item.linkedDiagnosticIds?.join(', ') ?? '',
     }))
     const sheet = XLSX.utils.json_to_sheet(rows)
     const workbook = XLSX.utils.book_new()
@@ -2449,7 +2492,7 @@ function Workbench() {
                   type="button"
                   aria-pressed={gridSnap}
                   data-testid="toggle-grid-snap"
-                  onClick={() => setGridSnap((s) => !s)}
+                  onClick={() => setPlacementSettings((s) => ({ ...s, gridSnapEnabled: !s.gridSnapEnabled }))}
                 >
                   <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
                     <rect x="3" y="3" width="7" height="7" />
@@ -2464,7 +2507,7 @@ function Workbench() {
                   type="button"
                   aria-pressed={edgeSnap}
                   data-testid="toggle-edge-snap"
-                  onClick={() => setEdgeSnap((s) => !s)}
+                  onClick={() => setPlacementSettings((s) => ({ ...s, edgeSnapEnabled: !s.edgeSnapEnabled }))}
                 >
                   <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
                     <path d="M4 4h16v16H4z" />
@@ -2475,6 +2518,26 @@ function Workbench() {
                 </button>
               </>
             )}
+            <button
+              className={`archive-tab inline-flex items-center gap-2 ${placementSettingsOpen ? 'active' : ''}`}
+              type="button"
+              aria-expanded={placementSettingsOpen}
+              data-testid="placement-settings-toggle"
+              onClick={() => setPlacementSettingsOpen((open) => !open)}
+            >
+              <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
+                <path d="M12 3v3" />
+                <path d="M12 18v3" />
+                <path d="M3 12h3" />
+                <path d="M18 12h3" />
+                <circle cx="12" cy="12" r="3" />
+                <path d="m5.6 5.6 2.1 2.1" />
+                <path d="m16.3 16.3 2.1 2.1" />
+                <path d="m18.4 5.6-2.1 2.1" />
+                <path d="m7.7 16.3-2.1 2.1" />
+              </svg>
+              {placementSettingsOpen ? t.placementSettingsClose : t.placementSettings}
+            </button>
             <button
               className={`archive-tab inline-flex items-center gap-2 ${rulerEnabled ? 'active' : ''}`}
               type="button"
@@ -2505,6 +2568,113 @@ function Workbench() {
                 {renderingContainer.length.toLocaleString()} × {renderingContainer.width.toLocaleString()} × {renderingContainer.height.toLocaleString()} mm
               </span>
             </div>
+            {placementSettingsOpen && (
+              <div className="w-full border border-[#cbd5e1] bg-white px-3 py-2 text-xs text-[#334155] shadow-sm" data-testid="placement-settings-panel">
+                <div className="grid gap-3 md:grid-cols-4">
+                  <label className="flex items-center gap-2 font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={placementSettings.surfaceSnapEnabled}
+                      onChange={(event) => setPlacementSettings((s) => ({ ...s, surfaceSnapEnabled: event.target.checked }))}
+                    />
+                    {t.surfaceSnap}
+                  </label>
+                  <label className="flex items-center gap-2 font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={placementSettings.zSnapEnabled}
+                      onChange={(event) => setPlacementSettings((s) => ({ ...s, zSnapEnabled: event.target.checked }))}
+                    />
+                    {t.zSnap}
+                  </label>
+                  <label className="flex items-center gap-2 font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={placementSettings.supportPolicy.allowPartialOverhang}
+                      onChange={(event) => setPlacementSettings((s) => ({
+                        ...s,
+                        supportPolicy: {
+                          ...s.supportPolicy,
+                          allowPartialOverhang: event.target.checked,
+                          supportMode: event.target.checked ? 'field-review' : 'strict',
+                        },
+                      }))}
+                    />
+                    {t.allowOverhang}
+                  </label>
+                  <span className="text-[#64748b]">{t.settingsStored}</span>
+                  {[
+                    ['gridStepMm', t.gridStep, 1, 1000],
+                    ['edgeToleranceMm', t.edgeTolerance, 0, 1000],
+                    ['zStepMm', t.zStep, 1, 1000],
+                  ].map(([key, label, min, max]) => (
+                    <label key={String(key)} className="flex flex-col gap-1">
+                      <span className="font-semibold">{label} (mm)</span>
+                      <input
+                        className="rounded border border-[#cbd5e1] px-2 py-1"
+                        type="number"
+                        min={Number(min)}
+                        max={Number(max)}
+                        value={Number(placementSettings[key as keyof Pick<PlacementSettings, 'gridStepMm' | 'edgeToleranceMm' | 'zStepMm'>])}
+                        onChange={(event) => {
+                          const value = Number(event.target.value)
+                          if (!Number.isFinite(value)) return
+                          setPlacementSettings((s) => ({ ...s, [key]: value }))
+                        }}
+                      />
+                    </label>
+                  ))}
+                  <label className="flex flex-col gap-1">
+                    <span className="font-semibold">{t.minSupport}</span>
+                    <input
+                      className="rounded border border-[#cbd5e1] px-2 py-1"
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={Math.round(placementSettings.supportPolicy.minSupportRatio * 100)}
+                      onChange={(event) => {
+                        const next = Math.max(0, Math.min(100, Number(event.target.value))) / 100
+                        setPlacementSettings((s) => ({
+                          ...s,
+                          supportPolicy: {
+                            ...s.supportPolicy,
+                            minSupportRatio: next,
+                            warningSupportRatio: Math.max(next, s.supportPolicy.warningSupportRatio),
+                          },
+                        }))
+                      }}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="font-semibold">{t.warnSupport}</span>
+                    <input
+                      className="rounded border border-[#cbd5e1] px-2 py-1"
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={Math.round(placementSettings.supportPolicy.warningSupportRatio * 100)}
+                      onChange={(event) => {
+                        const next = Math.max(0, Math.min(100, Number(event.target.value))) / 100
+                        setPlacementSettings((s) => ({
+                          ...s,
+                          supportPolicy: {
+                            ...s.supportPolicy,
+                            warningSupportRatio: Math.max(s.supportPolicy.minSupportRatio, next),
+                          },
+                        }))
+                      }}
+                    />
+                  </label>
+                  <button
+                    className="archive-button"
+                    type="button"
+                    onClick={() => setPlacementSettings(DEFAULT_PLACEMENT_SETTINGS)}
+                  >
+                    {t.resetPlacementSettings}
+                  </button>
+                </div>
+              </div>
+            )}
             </div>
             <div
               className={`relative w-full bg-gradient-to-b from-[#eef6ff] to-[#f8fafc] ${
@@ -2692,6 +2862,7 @@ function Workbench() {
                           container={renderingContainer}
                           gridSnap={gridSnap}
                           edgeSnap={edgeSnap}
+                          placementSettings={placementSettings}
                           invalidBoxIds={manualInvalidBoxIds}
                           manualEditable
                           poolDragInfo={poolDragInfo}
@@ -2726,10 +2897,11 @@ function Workbench() {
                       )}
                     </div>
                     <aside className="flex w-72 shrink-0 flex-col gap-2 overflow-auto">
-                      <ManualPrecisePanel
-                        container={{ length: renderingContainer.length, width: renderingContainer.width, height: renderingContainer.height }}
-                        locale={locale}
-                        selected={manualDraft.boxes.find((b) => b.id === manualSelectedId) ?? null}
+                        <ManualPrecisePanel
+                          container={{ length: renderingContainer.length, width: renderingContainer.width, height: renderingContainer.height }}
+                          locale={locale}
+                          placementSettings={placementSettings}
+                          selected={manualDraft.boxes.find((b) => b.id === manualSelectedId) ?? null}
                         onDelete={handleManualDelete}
                         onMove={(x, y, z) => {
                           if (!manualSelectedId) return
@@ -2772,7 +2944,7 @@ function Workbench() {
                       {containerChangeNotice}
                     </div>
                   )}
-                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} boxOpacityOverride={cogViewState.boxOpacity} cogOverlay={cogOverlay} container={renderingContainer} edgeSnap={edgeSnap} gridSnap={gridSnap} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
+                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} boxOpacityOverride={cogViewState.boxOpacity} cogOverlay={cogOverlay} container={renderingContainer} edgeSnap={edgeSnap} gridSnap={gridSnap} placementSettings={placementSettings} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
                 </>
               ) : (
                 <>
