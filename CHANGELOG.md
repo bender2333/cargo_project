@@ -428,3 +428,9 @@
   - Split floating support issues into blocking errors and field-review warnings when partial overhang is allowed.
   - Changed the review checklist into field action items and stopped duplicating compliance diagnostics, while keeping diagnostic IDs as links for unplaced-cargo follow-up.
 - Verification: `npm run lint` passed; `npm test` passed 27 test files / 167 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 70 tests with 1 existing responsive 3D test skipped.
+
+## 2026-05-27 (Deploy Alias Correction)
+
+- Completed subtask: align deployment documentation and script defaults with the working SSH alias.
+  - Changed the default deploy SSH host from the stale `tencent-container-layout` alias to `cargo-server`, matching the current `~/.ssh/config` entry used for the successful deployment.
+- Verification: `npm run deploy -- --dry-run` printed `Target: cargo-server` and all remote commands using `cargo-server`; `npm run lint` passed.

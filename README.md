@@ -122,11 +122,11 @@ server {
 
 ### 当前远端服务器
 
-当前生产静态站点部署在 `tencent-container-layout`：
+当前生产静态站点部署在 `cargo-server`：
 
 | 项目 | 值 |
 | --- | --- |
-| SSH 主机别名 | `tencent-container-layout` |
+| SSH 主机别名 | `cargo-server` |
 | 服务器 | `VM-0-12-opencloudos` |
 | 部署用户 | `root` |
 | 访问地址 | `http://101.33.232.150/` |
@@ -151,13 +151,13 @@ npm run deploy -- --dry-run
 npm run deploy -- --help
 ```
 
-脚本不会硬编码任何密码或私钥，SSH 鉴权完全复用本机的 SSH agent 或 `~/.ssh/config` 中 `tencent-container-layout` 主机别名对应的私钥。
+脚本不会硬编码任何密码或私钥，SSH 鉴权完全复用本机的 SSH agent 或 `~/.ssh/config` 中 `cargo-server` 主机别名对应的私钥。
 
 常用环境变量（全部带默认值，平时无需设置）：
 
 | 变量 | 作用 | 默认值 |
 | --- | --- | --- |
-| `DEPLOY_SSH_HOST` | SSH 主机别名 | `tencent-container-layout` |
+| `DEPLOY_SSH_HOST` | SSH 主机别名 | `cargo-server` |
 | `DEPLOY_REMOTE_USER` | 显式的 `user@host`，覆盖主机别名 | 未设置 |
 | `DEPLOY_SITE_ROOT` | 远端站点目录 | `/usr/share/nginx/html` |
 | `DEPLOY_BACKUP_BASE` | 远端备份目录前缀 | `/root/cargo_project-backup` |
@@ -182,11 +182,11 @@ Deployment complete. Backup: /root/cargo_project-backup-20260520-192916
 ```bash
 npm run build
 
-ssh tencent-container-layout 'set -e; ts=$(date +%Y%m%d-%H%M%S); backup=/root/cargo_project-backup-$ts; mkdir -p "$backup"; cp -a /usr/share/nginx/html/. "$backup"/; echo "$backup"'
-ssh tencent-container-layout 'rm -rf /tmp/cargo-dist && mkdir -p /tmp/cargo-dist'
-scp -r dist/* tencent-container-layout:/tmp/cargo-dist/
-ssh tencent-container-layout 'rsync -a --delete /tmp/cargo-dist/ /usr/share/nginx/html/ && chown -R root:root /usr/share/nginx/html && chmod -R a+rX /usr/share/nginx/html'
-ssh tencent-container-layout 'curl -fsS http://127.0.0.1/ >/dev/null && echo deployed'
+ssh cargo-server 'set -e; ts=$(date +%Y%m%d-%H%M%S); backup=/root/cargo_project-backup-$ts; mkdir -p "$backup"; cp -a /usr/share/nginx/html/. "$backup"/; echo "$backup"'
+ssh cargo-server 'rm -rf /tmp/cargo-dist && mkdir -p /tmp/cargo-dist'
+scp -r dist/* cargo-server:/tmp/cargo-dist/
+ssh cargo-server 'rsync -a --delete /tmp/cargo-dist/ /usr/share/nginx/html/ && chown -R root:root /usr/share/nginx/html && chmod -R a+rX /usr/share/nginx/html'
+ssh cargo-server 'curl -fsS http://127.0.0.1/ >/dev/null && echo deployed'
 ```
 
 部署后从本机验证公网访问：
@@ -202,20 +202,20 @@ curl -I http://101.33.232.150/
 如果新版本上线后发现回归，可以快速回滚到任意一次备份。先在远端列出可用备份：
 
 ```bash
-ssh tencent-container-layout 'ls -1dt /root/cargo_project-backup-* | head -n 5'
+ssh cargo-server 'ls -1dt /root/cargo_project-backup-* | head -n 5'
 ```
 
 确认目标备份目录后，按以下步骤恢复站点：
 
 ```bash
 # 1) 把当前线上目录另存为应急备份，便于事后排查
-ssh tencent-container-layout 'set -e; ts=$(date +%Y%m%d-%H%M%S); incident=/root/cargo_project-incident-$ts; mkdir -p "$incident"; cp -a /usr/share/nginx/html/. "$incident"/; echo "$incident"'
+ssh cargo-server 'set -e; ts=$(date +%Y%m%d-%H%M%S); incident=/root/cargo_project-incident-$ts; mkdir -p "$incident"; cp -a /usr/share/nginx/html/. "$incident"/; echo "$incident"'
 
 # 2) 用 rsync 把备份目录覆盖回站点根目录，并修正权限
-ssh tencent-container-layout 'rsync -a --delete /root/cargo_project-backup-20260520-192916/ /usr/share/nginx/html/ && chown -R root:root /usr/share/nginx/html && chmod -R a+rX /usr/share/nginx/html'
+ssh cargo-server 'rsync -a --delete /root/cargo_project-backup-20260520-192916/ /usr/share/nginx/html/ && chown -R root:root /usr/share/nginx/html && chmod -R a+rX /usr/share/nginx/html'
 
 # 3) 远端健康检查
-ssh tencent-container-layout 'curl -fsS http://127.0.0.1/ >/dev/null && echo rolled-back'
+ssh cargo-server 'curl -fsS http://127.0.0.1/ >/dev/null && echo rolled-back'
 
 # 4) 本机验证公网访问
 curl -I http://101.33.232.150/
@@ -229,20 +229,20 @@ curl -I http://101.33.232.150/
 
 ```bash
 # 查看备份目录内容
-ssh tencent-container-layout 'ls -la /root/cargo_project-backup-20260520-192916/'
+ssh cargo-server 'ls -la /root/cargo_project-backup-20260520-192916/'
 
 # 把备份打成 tarball 拉到本机审查
-ssh tencent-container-layout 'tar -C /root/cargo_project-backup-20260520-192916 -czf /tmp/cargo-backup.tgz .'
-scp tencent-container-layout:/tmp/cargo-backup.tgz ./cargo-backup-20260520-192916.tgz
+ssh cargo-server 'tar -C /root/cargo_project-backup-20260520-192916 -czf /tmp/cargo-backup.tgz .'
+scp cargo-server:/tmp/cargo-backup.tgz ./cargo-backup-20260520-192916.tgz
 
 # 把单个文件恢复回线上目录
-ssh tencent-container-layout 'install -m 0644 /root/cargo_project-backup-20260520-192916/index.html /usr/share/nginx/html/index.html && chown root:root /usr/share/nginx/html/index.html'
+ssh cargo-server 'install -m 0644 /root/cargo_project-backup-20260520-192916/index.html /usr/share/nginx/html/index.html && chown root:root /usr/share/nginx/html/index.html'
 ```
 
 清理过旧的备份（保留最近 5 份）：
 
 ```bash
-ssh tencent-container-layout "ls -1dt /root/cargo_project-backup-* | tail -n +6 | xargs -r rm -rf"
+ssh cargo-server "ls -1dt /root/cargo_project-backup-* | tail -n +6 | xargs -r rm -rf"
 ```
 
 注意事项：

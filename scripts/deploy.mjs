@@ -14,7 +14,7 @@
  *
  * Configuration is read from environment variables, all with safe defaults:
  *   DEPLOY_SSH_HOST     SSH host alias to deploy to.
- *                       Default: `tencent-container-layout`.
+ *                       Default: `cargo-server`.
  *   DEPLOY_REMOTE_USER  Optional user@host override. If set, used verbatim
  *                       and DEPLOY_SSH_HOST is ignored.
  *   DEPLOY_SITE_ROOT    Live site directory on the remote host.
@@ -53,7 +53,7 @@ import { createScpInvocation, createSshInvocation, shellQuote } from './deployCo
 const PROJECT_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 
 const CONFIG = Object.freeze({
-  sshTarget: process.env.DEPLOY_REMOTE_USER || process.env.DEPLOY_SSH_HOST || 'tencent-container-layout',
+  sshTarget: process.env.DEPLOY_REMOTE_USER || process.env.DEPLOY_SSH_HOST || 'cargo-server',
   siteRoot: process.env.DEPLOY_SITE_ROOT || '/usr/share/nginx/html',
   backupBase: process.env.DEPLOY_BACKUP_BASE || '/root/cargo_project-backup',
   stagingDir: process.env.DEPLOY_STAGING_DIR || '/tmp/cargo-dist',
@@ -71,7 +71,7 @@ Options:
   --help, -h   Show this help text.
 
 Environment variables (all optional):
-  DEPLOY_SSH_HOST       SSH host alias (default: tencent-container-layout)
+  DEPLOY_SSH_HOST       SSH host alias (default: cargo-server)
   DEPLOY_REMOTE_USER    Explicit user@host override
   DEPLOY_SITE_ROOT      Remote live directory (default: /usr/share/nginx/html)
   DEPLOY_BACKUP_BASE    Remote backup directory prefix (default: /root/cargo_project-backup)
