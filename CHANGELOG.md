@@ -428,6 +428,8 @@
   - Split floating support issues into blocking errors and field-review warnings when partial overhang is allowed.
   - Changed the review checklist into field action items and stopped duplicating compliance diagnostics, while keeping diagnostic IDs as links for unplaced-cargo follow-up.
 - Verification: `npm run lint` passed; `npm test` passed 27 test files / 167 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 70 tests with 1 existing responsive 3D test skipped.
+- Deployment and remote verification: deployed to `cargo-server` with backup `/root/cargo_project-backup-20260527-072510`; public `http://101.33.232.150/` returned HTTP 200; `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ npm run test:e2e` passed 70 tests with 1 existing responsive 3D test skipped.
+- Remote performance check: `nginx` and `cargo-server.service` were active; load average stayed around `0.05, 0.06, 0.01`; available memory was about 2 GB; local remote curl returned HTTP 200 in roughly 0.00025-0.00035 s; 20 public homepage samples all returned HTTP 200 with average about 182 ms. Nginx error tail only showed external `/v1/models` scan 404s, not app errors.
 
 ## 2026-05-27 (Deploy Alias Correction)
 
