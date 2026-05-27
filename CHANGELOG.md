@@ -10,7 +10,13 @@
   - Import templates now include visible template management, header row, start row, default values, mapping, and unit metadata; server schema/API were expanded.
   - CoG gravity field and Packing/CoG/Mixed modes were removed; CoG overlay is gated to the active Balance tab and uses a safer box opacity floor.
   - Added Review checklist tab and export actions for measurements, CoG risk, manual issues, unplaced cargo, and diagnostics.
-  - Local verification: `npm run lint` passed; `npm test` passed 25 files / 157 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 69 tests / 1 skipped / 0 failed.
+  - Local verification: `npm run lint` passed; `npm test` passed 26 files / 159 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 69 tests / 1 skipped / 0 failed.
+- Completed subtask: deployed the Round 22 re-review implementation and verified it on the public host.
+  - Fixed the deploy script's Windows SSH quoting bug by switching SSH/SCP calls to argument-array invocations and by uploading concrete `dist/` entries instead of relying on shell glob expansion.
+  - Extended deployment to sync `server/*.mjs` and `package*.json` into `/opt/cargo-server`, restart `cargo-server.service`, and verify `/api/import-templates` returns the expected unauthenticated 401 instead of leaving the public API on an older backend.
+  - Deployment completed against `cargo-server`; remote backup created at `/root/cargo_project-backup-20260527-043152`.
+  - Public verification: `http://101.33.232.150/` returned HTTP 200 with title `container-calc`; `/api/import-templates` returned HTTP 401 with `Authentication token missing`.
+  - Remote verification: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npm run test:e2e` passed 69 tests / 1 skipped / 0 failed.
 
 ## 2026-05-27 (Round 22 Re-review Plan)
 

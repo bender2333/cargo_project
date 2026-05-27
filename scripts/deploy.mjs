@@ -8,8 +8,9 @@
  *   2. Backup the current site directory on the remote host.
  *   3. Upload `dist/*` to a temporary staging directory on the remote host.
  *   4. Sync staging into the live site directory with `rsync --delete`.
- *   5. Reset ownership and permissions on the live site directory.
- *   6. Run a local HTTP health check on the remote host.
+ *   5. Sync backend server modules and restart the systemd service.
+ *   6. Reset ownership and permissions on the live site directory.
+ *   7. Run local HTTP and API route health checks on the remote host.
  *
  * Configuration is read from environment variables, all with safe defaults:
  *   DEPLOY_SSH_HOST     SSH host alias to deploy to.
@@ -26,6 +27,10 @@
  *                       Default: `http://127.0.0.1/`.
  *   DEPLOY_OWNER        chown target for the live site directory.
  *                       Default: `root:root`.
+ *   DEPLOY_APP_ROOT     Remote backend app directory.
+ *                       Default: `/opt/cargo-server`.
+ *   DEPLOY_SERVICE      systemd service to restart after backend sync.
+ *                       Default: `cargo-server.service`.
  *   DEPLOY_SKIP_BUILD   When set to `1`, skip the local `npm run build` step.
  *
  * CLI flags:
@@ -38,10 +43,12 @@
  *     resolved via the SSH host alias.
  */
 
-import { execSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { execFileSync, execSync } from 'node:child_process'
+import { existsSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
+
+import { createScpInvocation, createSshInvocation, shellQuote } from './deployCommands.mjs'
 
 const PROJECT_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 
@@ -52,6 +59,8 @@ const CONFIG = Object.freeze({
   stagingDir: process.env.DEPLOY_STAGING_DIR || '/tmp/cargo-dist',
   healthcheckUrl: process.env.DEPLOY_HEALTHCHECK || 'http://127.0.0.1/',
   owner: process.env.DEPLOY_OWNER || 'root:root',
+  appRoot: process.env.DEPLOY_APP_ROOT || '/opt/cargo-server',
+  serviceName: process.env.DEPLOY_SERVICE || 'cargo-server.service',
   skipBuild: process.env.DEPLOY_SKIP_BUILD === '1',
 })
 
@@ -69,6 +78,8 @@ Environment variables (all optional):
   DEPLOY_STAGING_DIR    Remote staging directory (default: /tmp/cargo-dist)
   DEPLOY_HEALTHCHECK    Remote health-check URL (default: http://127.0.0.1/)
   DEPLOY_OWNER          chown target (default: root:root)
+  DEPLOY_APP_ROOT       Remote backend app directory (default: /opt/cargo-server)
+  DEPLOY_SERVICE        systemd service to restart (default: cargo-server.service)
   DEPLOY_SKIP_BUILD     Set to 1 to skip 'npm run build'
 `
 
@@ -99,24 +110,25 @@ function formatTimestamp(date) {
   return `${yyyy}${mm}${dd}-${HH}${MM}${SS}`
 }
 
-function shellQuote(value) {
-  if (value === '') {
-    return "''"
+function formatInvocation(command) {
+  return typeof command === 'string' ? command : command.display
+}
+
+function executeCommand(command, options) {
+  if (typeof command === 'string') {
+    return execSync(command, options)
   }
-  if (/^[A-Za-z0-9_\-./:=@%+,]+$/.test(value)) {
-    return value
-  }
-  return `'${String(value).replace(/'/g, `'\\''`)}'`
+  return execFileSync(command.file, command.args, options)
 }
 
 function runCommand(command, { dryRun, label, cwd }) {
   const prefix = dryRun ? '[dry-run] $' : '$'
-  console.log(`${prefix} ${label ?? command}`)
+  console.log(`${prefix} ${label ?? formatInvocation(command)}`)
   if (dryRun) {
     return ''
   }
   try {
-    const output = execSync(command, {
+    const output = executeCommand(command, {
       cwd: cwd ?? PROJECT_ROOT,
       stdio: ['ignore', 'pipe', 'inherit'],
       encoding: 'utf8',
@@ -124,29 +136,25 @@ function runCommand(command, { dryRun, label, cwd }) {
     return output.trim()
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    throw new Error(`Command failed: ${label ?? command}\n${message}`)
+    throw new Error(`Command failed: ${label ?? formatInvocation(command)}\n${message}`)
   }
 }
 
 function runStreamingCommand(command, { dryRun, label, cwd }) {
   const prefix = dryRun ? '[dry-run] $' : '$'
-  console.log(`${prefix} ${label ?? command}`)
+  console.log(`${prefix} ${label ?? formatInvocation(command)}`)
   if (dryRun) {
     return
   }
   try {
-    execSync(command, {
+    executeCommand(command, {
       cwd: cwd ?? PROJECT_ROOT,
       stdio: 'inherit',
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    throw new Error(`Command failed: ${label ?? command}\n${message}`)
+    throw new Error(`Command failed: ${label ?? formatInvocation(command)}\n${message}`)
   }
-}
-
-function buildSshCommand(sshTarget, remoteScript) {
-  return `ssh ${shellQuote(sshTarget)} ${shellQuote(remoteScript)}`
 }
 
 function ensureDistExists() {
@@ -155,6 +163,30 @@ function ensureDistExists() {
     throw new Error(`Build output not found at ${distPath}. Run 'npm run build' first.`)
   }
   return distPath
+}
+
+function listDistSources(distPath, { dryRun }) {
+  if (!existsSync(distPath)) {
+    return dryRun ? ['dist/*'] : []
+  }
+
+  const sources = readdirSync(distPath).map((name) => `dist/${name}`)
+  if (!dryRun && sources.length === 0) {
+    throw new Error(`Build output is empty at ${distPath}. Run 'npm run build' again.`)
+  }
+  return sources
+}
+
+function listServerModuleSources() {
+  const serverDir = resolve(PROJECT_ROOT, 'server')
+  return readdirSync(serverDir)
+    .filter((name) => name.endsWith('.mjs'))
+    .map((name) => `server/${name}`)
+    .sort()
+}
+
+function listPackageSources() {
+  return ['package.json', 'package-lock.json'].filter((name) => existsSync(resolve(PROJECT_ROOT, name)))
 }
 
 async function main() {
@@ -171,6 +203,8 @@ async function main() {
   console.log('=== container-calc deploy ===')
   console.log(`Target:        ${CONFIG.sshTarget}`)
   console.log(`Site root:     ${CONFIG.siteRoot}`)
+  console.log(`App root:      ${CONFIG.appRoot}`)
+  console.log(`Service:       ${CONFIG.serviceName}`)
   console.log(`Backup dir:    ${backupDir}`)
   console.log(`Staging dir:   ${CONFIG.stagingDir}`)
   console.log(`Health check:  ${CONFIG.healthcheckUrl}`)
@@ -179,26 +213,26 @@ async function main() {
 
   // Step 1: local build
   if (CONFIG.skipBuild) {
-    console.log('Step 1/6 Skipping local build (DEPLOY_SKIP_BUILD=1)')
+    console.log('Step 1/7 Skipping local build (DEPLOY_SKIP_BUILD=1)')
   } else {
-    console.log('Step 1/6 Building locally with npm run build')
+    console.log('Step 1/7 Building locally with npm run build')
     runStreamingCommand('npm run build', { dryRun, label: 'npm run build' })
   }
 
-  if (!dryRun) {
-    ensureDistExists()
-  }
+  const distPath = dryRun ? resolve(PROJECT_ROOT, 'dist') : ensureDistExists()
 
   // Step 2: remote backup
-  console.log('Step 2/6 Creating remote backup')
+  console.log('Step 2/7 Creating remote backup')
   const backupScript = [
     'set -e',
     `backup=${shellQuote(backupDir)}`,
     `mkdir -p "$backup"`,
     `( [ -d ${shellQuote(CONFIG.siteRoot)} ] && [ -n "$(ls -A ${shellQuote(CONFIG.siteRoot)} 2>/dev/null)" ] && cp -a ${shellQuote(CONFIG.siteRoot)}/. "$backup"/ ) || echo "Warning: ${CONFIG.siteRoot} is empty; skipping copy"`,
+    `mkdir -p "$backup/server"`,
+    `( [ -d ${shellQuote(`${CONFIG.appRoot}/server`)} ] && cp -a ${shellQuote(`${CONFIG.appRoot}/server`)}/*.mjs "$backup/server"/ 2>/dev/null ) || echo "Warning: ${CONFIG.appRoot}/server has no .mjs files; skipping server backup"`,
     'echo "$backup"',
   ].join('; ')
-  const createdBackup = runCommand(buildSshCommand(CONFIG.sshTarget, backupScript), {
+  const createdBackup = runCommand(createSshInvocation(CONFIG.sshTarget, backupScript), {
     dryRun,
     label: `ssh ${CONFIG.sshTarget} 'backup -> ${backupDir}'`,
   })
@@ -207,45 +241,79 @@ async function main() {
   }
 
   // Step 3: prepare staging and scp dist
-  console.log('Step 3/6 Uploading dist to remote staging directory')
+  console.log('Step 3/7 Uploading dist to remote staging directory')
   const prepStaging = [
     'set -e',
     `rm -rf ${shellQuote(CONFIG.stagingDir)}`,
     `mkdir -p ${shellQuote(CONFIG.stagingDir)}`,
   ].join('; ')
-  runCommand(buildSshCommand(CONFIG.sshTarget, prepStaging), {
+  runCommand(createSshInvocation(CONFIG.sshTarget, prepStaging), {
     dryRun,
     label: `ssh ${CONFIG.sshTarget} 'prepare ${CONFIG.stagingDir}'`,
   })
-  runStreamingCommand(
-    `scp -r dist/* ${shellQuote(`${CONFIG.sshTarget}:${CONFIG.stagingDir}/`)}`,
-    { dryRun, label: `scp -r dist/* ${CONFIG.sshTarget}:${CONFIG.stagingDir}/` },
-  )
+  const distSources = listDistSources(distPath, { dryRun })
+  runStreamingCommand(createScpInvocation(CONFIG.sshTarget, distSources, CONFIG.stagingDir), {
+    dryRun,
+    label: `scp -r dist/* ${CONFIG.sshTarget}:${CONFIG.stagingDir}/`,
+  })
 
   // Step 4: rsync staging -> live
-  console.log('Step 4/6 Syncing staging into live site directory')
+  console.log('Step 4/7 Syncing staging into live site directory')
   const rsyncScript = `rsync -a --delete ${shellQuote(`${CONFIG.stagingDir}/`)} ${shellQuote(`${CONFIG.siteRoot}/`)}`
-  runStreamingCommand(buildSshCommand(CONFIG.sshTarget, rsyncScript), {
+  runStreamingCommand(createSshInvocation(CONFIG.sshTarget, rsyncScript), {
     dryRun,
     label: `ssh ${CONFIG.sshTarget} 'rsync staging -> live'`,
   })
 
-  // Step 5: ownership + permissions
-  console.log('Step 5/6 Resetting ownership and permissions on live site')
+  // Step 5: backend sync + service restart
+  console.log('Step 5/7 Syncing backend server modules and restarting service')
+  const prepBackend = [
+    'set -e',
+    `mkdir -p ${shellQuote(CONFIG.appRoot)}`,
+    `mkdir -p ${shellQuote(`${CONFIG.appRoot}/server`)}`,
+  ].join('; ')
+  runCommand(createSshInvocation(CONFIG.sshTarget, prepBackend), {
+    dryRun,
+    label: `ssh ${CONFIG.sshTarget} 'prepare backend ${CONFIG.appRoot}'`,
+  })
+  runStreamingCommand(createScpInvocation(CONFIG.sshTarget, listServerModuleSources(), `${CONFIG.appRoot}/server`), {
+    dryRun,
+    label: `scp server/*.mjs ${CONFIG.sshTarget}:${CONFIG.appRoot}/server/`,
+  })
+  const packageSources = listPackageSources()
+  if (packageSources.length > 0) {
+    runStreamingCommand(createScpInvocation(CONFIG.sshTarget, packageSources, CONFIG.appRoot), {
+      dryRun,
+      label: `scp package*.json ${CONFIG.sshTarget}:${CONFIG.appRoot}/`,
+    })
+  }
+  runStreamingCommand(createSshInvocation(CONFIG.sshTarget, `systemctl restart ${shellQuote(CONFIG.serviceName)}`), {
+    dryRun,
+    label: `ssh ${CONFIG.sshTarget} 'systemctl restart ${CONFIG.serviceName}'`,
+  })
+
+  // Step 6: ownership + permissions
+  console.log('Step 6/7 Resetting ownership and permissions on live site')
   const permsScript = [
     'set -e',
     `chown -R ${shellQuote(CONFIG.owner)} ${shellQuote(CONFIG.siteRoot)}`,
     `chmod -R a+rX ${shellQuote(CONFIG.siteRoot)}`,
   ].join(' && ')
-  runStreamingCommand(buildSshCommand(CONFIG.sshTarget, permsScript), {
+  runStreamingCommand(createSshInvocation(CONFIG.sshTarget, permsScript), {
     dryRun,
     label: `ssh ${CONFIG.sshTarget} 'chown/chmod ${CONFIG.siteRoot}'`,
   })
 
-  // Step 6: healthcheck
-  console.log('Step 6/6 Running remote HTTP health check')
-  const healthScript = `curl -fsS ${shellQuote(CONFIG.healthcheckUrl)} >/dev/null && echo deployed`
-  const healthOutput = runCommand(buildSshCommand(CONFIG.sshTarget, healthScript), {
+  // Step 7: healthcheck
+  console.log('Step 7/7 Running remote HTTP and API health checks')
+  const healthScript = [
+    'set -e',
+    `curl -fsS ${shellQuote(CONFIG.healthcheckUrl)} >/dev/null`,
+    'api_status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1/api/import-templates)',
+    '[ "$api_status" = "401" ]',
+    'echo deployed',
+  ].join('; ')
+  const healthOutput = runCommand(createSshInvocation(CONFIG.sshTarget, healthScript), {
     dryRun,
     label: `ssh ${CONFIG.sshTarget} 'curl ${CONFIG.healthcheckUrl}'`,
   })
