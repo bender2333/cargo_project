@@ -131,6 +131,8 @@ Do not say "feature works" if you didn't verify the edge cases you were asked to
 Default to surfacing uncertainty. If you're not sure something succeeded, say so.
 
 Silent failures — functions that run but return wrong data, migrations that skip rows, assertions that never actually assert — are the hardest bugs to find and the most avoidable.
+
+# 
 ## 长任务规则
 1. 每个子任务完成后：git commit + 更新 CHANGELOG.md
 2. Context > 50% 时：主动 /compact
@@ -140,6 +142,7 @@ Silent failures — functions that run but return wrong data, migrations that sk
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, clarifying questions come before implementation rather than after mistakes, and failures are visible the moment they happen rather than days later.
 
 5. 对于小的独立的任务，尽量让subagent去完成做。保持合理的上下文
+
 ## 重构目标
 
 本项目正在按 `PRD.md` 进行货柜装箱计算系统重构。目标是在保留当前 Vite + React + TypeScript 架构的基础上，参考 `archive/` 旧版工作台的样式、布局和功能组织方式，重建前端体验。
@@ -210,6 +213,7 @@ Silent failures — functions that run but return wrong data, migrations that sk
 - `npm run test:e2e`
 
 若测试暂时无法运行，必须在提交或交付说明中写明原因、影响范围和后续补救。
+execel导入导出测试需要满足test-data\excel中数据
 
 ## Git 工作纪律
 
