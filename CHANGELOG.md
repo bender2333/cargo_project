@@ -412,3 +412,10 @@
   - `npm test` passed 39 unit tests (100% green).
   - `npm run build` completed successfully with the correct production bundle output.
   - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3333 npm run test:e2e` passed all 32 Playwright E2E tests cleanly (100% green).
+
+## 2026-05-27 (Second Round 22 Follow-up Review)
+
+- Completed subtask: review rotation loops, partial overhang, snap settings, and review checklist conflict.
+  - Added a supplemental review section to `REVIEW.md` covering the current two-state rotation mappings, missing 90/180/270/360 cycles, hard-coded 50% support threshold, non-persistent snap toggles, dragover/drop snap mismatch, and overlap between the review checklist and compliance diagnostics.
+  - Planned the next refactor phases: orientation state model, configurable support policy, user-level placement settings, and a field-review checklist that no longer duplicates diagnostics.
+- Verification: documentation-only change; code verification not rerun.
