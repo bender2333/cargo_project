@@ -15,6 +15,10 @@
   - `maximize-workspace` moved from the toolbar to the top-right of `visual-workspace-canvas`, so automatic 2D/3D and manual 2D/3D expose it in the same canvas position.
   - Target verification passed: `npx vitest run src/lib/manualMoveCommit.test.ts src/lib/manualPlacementSnap.test.ts src/components/ManualPlacement2D.test.tsx`; `npx tsc -b`; targeted Playwright grep for snap settings and maximize.
   - Local verification: `npm run lint` passed; `npm test` passed 30 files / 174 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 72 tests / 1 skipped / 0 failed.
+- Completed subtask: deployed and verified the Round 24 fixes on the public host.
+  - Deployment completed with `npm run deploy`; remote backup created at `/root/cargo_project-backup-20260528-040816`.
+  - Remote health check passed during deploy.
+  - Remote verification: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npm run test:e2e` passed 72 tests / 1 skipped / 0 failed.
 
 ## 2026-05-28 (Round 23 Review Fixes)
 
