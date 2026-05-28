@@ -2,6 +2,82 @@
 
 日期：2026-05-28
 
+## 第二十五轮 Review 与旋转/标签/通知栏/画布按钮修复计划
+
+本轮 review 聚焦四个明确问题：双轴旋转仍不符合用户意图、标签无法从当前状态识别真实旋转、站内“新特性”应改名为“通知栏”并随每次改动更新、最大化按钮仍未放到真正画布内且遮挡文字。
+
+### 1. `R` / `Shift+R` 必须是两个方向的连续四步旋转
+
+问题定位：
+
+- `src/lib/manualPlacement.ts` 目前仍用 `HORIZONTAL_ROTATION_NEXT` / `DOWN_ROTATION_NEXT` 做尺寸排列跳转。
+- 这只能描述 `L/W/H` 三个尺寸轴在世界 `X/Y/Z` 上的排列，无法描述同一尺寸排列下的正反朝向。
+- 连续按 `R` 时，第二步和第四步都回到 `LWH` 尺寸，但它们不是同一个姿态；当前模型只靠 `yawQuarterTurn` 计数补充，标签和其他模块仍主要看 `orientationKey`，所以用户无法判断“转了一圈”是否真正回到原样。
+- `Shift+R` 同样只靠二态尺寸切换，缺少完整 signed orientation 状态；后续组合旋转也会丢失顺序信息。
+
+修复目标：
+
+- 引入 signed orientation axes：记录 `L/W/H` 三个货物本体轴分别朝向世界 `+X/-X/+Y/-Y/+Z/-Z`。
+- `orientationKey` 改为从 signed axes 派生，仅用于尺寸、碰撞和边界。
+- `R` = 绕世界 Z 轴向右 90 度；连续四次必须回到完全相同的 signed axes。
+- `Shift+R` = 绕世界 X 轴向下 90 度；连续四次必须回到完全相同的 signed axes。
+- 单元测试覆盖四步循环、组合旋转、尺寸派生和回到原样。
+
+### 2. 标签必须直接表达当前识别效果，不再使用 `H/I`
+
+问题定位：
+
+- 当前 `orientationLabel` 是 `H0 I0` / `H90 I90` 这类角度字符串。
+- 用户反馈 `H/I` 本身看不出差异，也不能通过任一当前标签判断箱体究竟怎么转了。
+- 3D/2D/精确面板只是显示这个字符串或 `orientationKey`，没有表达“长边/宽边/高边现在分别朝哪一个世界方向”。
+
+修复目标：
+
+- 废除 `H/I` 角度标签。
+- 标签改为 signed axes 摘要，例如 `X:L+ Y:W- Z:H+`：从单个标签即可知道当前 X/Y/Z 三个方向分别对应货物的哪个本体轴以及正反。
+- 精确面板展示更完整的三轴识别信息；2D/3D 小标签保持货物字母可读，朝向作为角标/底部标记显示。
+- E2E 覆盖连续旋转后 `manual-orientation-marker` 和精确面板不再出现 `H/I` 字符串。
+
+### 3. “新特性”改名为“通知栏”，且每次改动都必须更新
+
+问题定位：
+
+- `src/components/ReleaseNotesButton.tsx` 的中文入口和弹窗标题仍叫“新特性”。
+- `src/data/releaseNotes.ts` 是面向用户的通知源，但第二十四轮改动没有追加通知条目。
+
+修复目标：
+
+- 中文入口和弹窗标题改为“通知栏”；英文改为 `Notifications`。
+- 本轮在 `releaseNotes` 顶部追加 2026-05-28 通知，说明旋转、标签、通知栏命名和最大化按钮修复。
+- E2E 改名为“通知栏按钮显示未读红点，点击后已读”，并断言按钮文本。
+
+### 4. 最大化按钮必须放到真正画布内，不能遮挡工具条文字
+
+问题定位：
+
+- 第二十四轮把 `maximize-workspace` 放到 `visual-workspace-canvas` 右上角。
+- 但手动模式下 `visual-workspace-canvas` 仍包含手动工具条、待放置池和精确面板，按钮实际覆盖的是工作区外壳，不是真正的 `ContainerScene` / `ManualPlacement2D` 画布。
+- 因此按钮仍可能与手动工具条文字重叠，违背“放画布上”的要求。
+
+修复目标：
+
+- 删除外层 `visual-workspace-canvas` 上的最大化按钮。
+- 在真正渲染区域内放置：
+  - 手动模式：`manual-view-container` 右上角。
+  - 自动 3D：`ContainerScene` 所在画布区域右上角。
+  - 自动 2D：`ContainerPlan2D` 所在 SVG 区域右上角。
+- E2E 断言按钮位于 `manual-view-container` / 自动画布区域右上，而不是外层工具条或工作区外壳。
+
+### 本轮验收清单
+
+1. `REVIEW.md` 记录本轮问题、根因和拆解。
+2. 单元测试覆盖 signed axes 双轴四步旋转和标签识别。
+3. E2E 覆盖通知栏命名、最大化按钮真正位于画布内、标签不再显示 `H/I`。
+4. `src/data/releaseNotes.ts` 顶部追加本轮通知。
+5. 本地验证：`npm run lint`、`npm test`、`npm run build`、`npm run test:e2e`。
+
+---
+
 ## 第二十四轮 Review 与视图一致性修复计划
 
 本轮 review 聚焦“所有视图行为一致”、用户提供 debug 快照中的 D 箱体拖到地面失败、最大化入口位置，以及吸附配置入口归位。

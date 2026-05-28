@@ -34,6 +34,8 @@ const draft: ManualDraft = {
       height: 500,
       orientationKey: 'LWH',
       labelRotationDeg: 0,
+      orientationAxes: { x: 'L+', y: 'W+', z: 'H+' },
+      orientationLabel: 'X:L+ Y:W+ Z:T+',
     },
   ],
 }
@@ -66,6 +68,7 @@ describe('ManualPlacement2D viewMode projection', () => {
     const group = node.querySelector('[data-box-id="box-1"]')
     expect(group?.getAttribute('data-orientation')).toBe('LWH')
     expect(group?.getAttribute('data-label-rotation')).toBe('0')
+    expect(node.querySelector('[data-testid="manual-orientation-marker"]')?.textContent).toBe('X:L+ Y:W+ Z:T+')
     const rect = node.querySelector('[data-box-id="box-1"] rect[aria-label="A manual placement"]')
     expect(rect?.getAttribute('width')).toBe('400')
     expect(rect?.getAttribute('height')).toBe('300')

@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-05-28 (Round 25 Rotation, Labels, Notification Bar, Canvas Button)
+
+- Completed subtask: recorded the new review and fix plan in `REVIEW.md`.
+  - Root cause: manual rotation only tracked unsigned `orientationKey`, so repeated `R`/`Shift+R` could not express the signed pose the user expects.
+  - Root cause: the UI still communicated orientation with weak H/I-style angle text or bare `LWH` keys, so a single label did not explain the current rotated pose.
+  - Root cause: `maximize-workspace` was placed on the visual workspace shell, not the actual canvas/SVG region, so it could overlap toolbar text.
+- Completed subtask: rebuilt manual rotation around signed axis mappings.
+  - `ManualPlacedBox` and `PlacedBox` now carry `orientationAxes` plus labels such as `X:W+ Y:L- Z:T+`.
+  - `R` rotates around the vertical world axis in a four-step cycle and preserves the current top/bottom axis; `Shift+R` rotates downward in a four-step cycle.
+  - Removed label text rotation as the signal for pose recognition; readable X/Y/Z mappings identify the current pose without using H/I.
+- Completed subtask: moved UI controls and renamed release notes.
+  - “新特性” is now “通知栏” / `Notifications`, and the latest release note documents this round’s changes.
+  - `maximize-workspace` now renders inside `manual-view-container` or `auto-view-container`, covering manual 2D/3D and automatic 2D/3D without sitting on the outer workspace shell.
+  - Manual 2D now receives the shared placement settings prop, keeping snap behavior wired consistently with the 3D path.
+- Verification: `npx vitest run src/lib/manualPlacement.test.ts src/lib/debugSnapshot.test.ts src/components/ManualPlacement2D.test.tsx` passed; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "R 与 Shift|最大化|通知栏"` passed 4 tests; `npm run lint` passed; `npm test` passed 30 files / 174 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 72 tests / 1 skipped / 0 failed.
+
 ## 2026-05-28 (Round 24 View Consistency Review Fixes)
 
 - Completed subtask: recorded the new review and root-cause analysis in `REVIEW.md`.

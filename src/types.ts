@@ -41,6 +41,11 @@ export type PlacedBox = {
   labelRotationDeg: 0 | 90 | 180 | 270
   yawQuarterTurn?: 0 | 1 | 2 | 3
   pitchQuarterTurn?: 0 | 1 | 2 | 3
+  orientationAxes?: {
+    x: 'L+' | 'L-' | 'W+' | 'W-' | 'H+' | 'H-'
+    y: 'L+' | 'L-' | 'W+' | 'W-' | 'H+' | 'H-'
+    z: 'L+' | 'L-' | 'W+' | 'W-' | 'H+' | 'H-'
+  }
   orientationLabel?: string
   weight: number
   color: string

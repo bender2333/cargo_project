@@ -2762,15 +2762,6 @@ function Workbench() {
               }`}
               data-testid="visual-workspace-canvas"
             >
-              <button
-                className={`archive-tab absolute right-4 top-4 z-30 inline-flex items-center gap-2 bg-white/95 shadow-lg ${workspaceMaximized ? 'active' : ''}`}
-                type="button"
-                data-testid="maximize-workspace"
-                aria-pressed={workspaceMaximized}
-                onClick={() => setWorkspaceMaximized((current) => !current)}
-              >
-                {workspaceMaximized ? t.restoreManual : t.maximizeManual}
-              </button>
               {placementMode === 'manual' ? (
                 <div className="flex h-full w-full flex-col gap-3 p-4" data-testid="manual-workspace" data-workspace-maximized={workspaceMaximized ? 'true' : 'false'}>
                   <div className="flex flex-wrap items-center gap-2">
@@ -2933,6 +2924,15 @@ function Workbench() {
                       )}
                     </aside>
                     <div className="relative flex-1 overflow-hidden rounded-xl border border-[#e5e7eb] bg-white" data-testid="manual-view-container">
+                      <button
+                        className={`archive-tab absolute right-3 top-3 z-30 inline-flex items-center gap-2 bg-white/95 shadow-lg ${workspaceMaximized ? 'active' : ''}`}
+                        type="button"
+                        data-testid="maximize-workspace"
+                        aria-pressed={workspaceMaximized}
+                        onClick={() => setWorkspaceMaximized((current) => !current)}
+                      >
+                        {workspaceMaximized ? t.restoreManual : t.maximizeManual}
+                      </button>
                       {workspaceView === '3d' ? (
                         <ContainerScene
                           activeLabelId={'all'}
@@ -2968,6 +2968,7 @@ function Workbench() {
                           measurementDraftPoint={measurementDraftPoint}
                           rulerEnabled={rulerEnabled}
                           viewMode={planViewMode}
+                          placementSettings={placementSettings}
                           onMeasurementPoint={handleMeasurementPoint}
                           onSelectBox={setManualSelectedId}
                           onMoveBox={handleManualMoveBox}
@@ -3023,7 +3024,18 @@ function Workbench() {
                       {containerChangeNotice}
                     </div>
                   )}
-                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} boxOpacityOverride={cogViewState.boxOpacity} cogOverlay={cogOverlay} container={renderingContainer} edgeSnap={edgeSnap} gridSnap={gridSnap} placementSettings={placementSettings} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
+                  <div className="relative h-full w-full" data-testid="auto-view-container">
+                    <button
+                      className={`archive-tab absolute right-3 top-3 z-30 inline-flex items-center gap-2 bg-white/95 shadow-lg ${workspaceMaximized ? 'active' : ''}`}
+                      type="button"
+                      data-testid="maximize-workspace"
+                      aria-pressed={workspaceMaximized}
+                      onClick={() => setWorkspaceMaximized((current) => !current)}
+                    >
+                      {workspaceMaximized ? t.restoreManual : t.maximizeManual}
+                    </button>
+                    <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} boxOpacityOverride={cogViewState.boxOpacity} cogOverlay={cogOverlay} container={renderingContainer} edgeSnap={edgeSnap} gridSnap={gridSnap} placementSettings={placementSettings} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
+                  </div>
                 </>
               ) : (
                 <>
@@ -3032,7 +3044,18 @@ function Workbench() {
                       {containerChangeNotice}
                     </div>
                   )}
-                  <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
+                  <div className="relative h-full w-full" data-testid="auto-view-container">
+                    <button
+                      className={`archive-tab absolute right-3 top-3 z-30 inline-flex items-center gap-2 bg-white/95 shadow-lg ${workspaceMaximized ? 'active' : ''}`}
+                      type="button"
+                      data-testid="maximize-workspace"
+                      aria-pressed={workspaceMaximized}
+                      onClick={() => setWorkspaceMaximized((current) => !current)}
+                    >
+                      {workspaceMaximized ? t.restoreManual : t.maximizeManual}
+                    </button>
+                    <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
+                  </div>
                 </>
               )}
               <button

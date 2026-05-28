@@ -59,6 +59,10 @@ type Props = {
   onDelete: () => void
 }
 
+function displayAxis(axis: string | undefined, fallback: string) {
+  return (axis ?? fallback).replace('H', 'T')
+}
+
 export function ManualPrecisePanel({ selected, container, locale, placementSettings, onMove, onRotate, onSetOrientation, onDelete }: Props) {
   const t = T[locale]
   const [draft, setDraft] = useState<{ x: string; y: string; z: string }>({ x: '0', y: '0', z: '0' })
@@ -112,13 +116,14 @@ export function ManualPrecisePanel({ selected, container, locale, placementSetti
           <span className="font-mono text-[#0f172a]">{selected.orientationLabel ?? selected.orientationKey}</span>
         </div>
         <div className="grid grid-cols-3 gap-1 text-center font-mono text-[11px] font-bold">
-          <span className="rounded bg-[#dbeafe] px-1 py-0.5 text-[#1d4ed8]">X:{selected.orientationKey[0]}</span>
-          <span className="rounded bg-[#dcfce7] px-1 py-0.5 text-[#166534]">Y:{selected.orientationKey[1]}</span>
-          <span className="rounded bg-[#fee2e2] px-1 py-0.5 text-[#991b1b]">Z:{selected.orientationKey[2]}</span>
+          <span className="rounded bg-[#dbeafe] px-1 py-0.5 text-[#1d4ed8]">X:{displayAxis(selected.orientationAxes?.x, selected.orientationKey[0])}</span>
+          <span className="rounded bg-[#dcfce7] px-1 py-0.5 text-[#166534]">Y:{displayAxis(selected.orientationAxes?.y, selected.orientationKey[1])}</span>
+          <span className="rounded bg-[#fee2e2] px-1 py-0.5 text-[#991b1b]">Z:{displayAxis(selected.orientationAxes?.z, selected.orientationKey[2])}</span>
         </div>
-        <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] font-semibold">
-          <span className="rounded bg-white px-2 py-1 text-[#334155]">{t.facing}: H{(selected.yawQuarterTurn ?? 0) * 90}</span>
-          <span className="rounded bg-white px-2 py-1 text-[#334155]">I{(selected.pitchQuarterTurn ?? 0) * 90}</span>
+        <div className="mt-2 grid grid-cols-3 gap-1 text-[11px] font-semibold">
+          <span className="rounded bg-white px-2 py-1 text-[#334155]">X {displayAxis(selected.orientationAxes?.x, selected.orientationKey[0])}</span>
+          <span className="rounded bg-white px-2 py-1 text-[#334155]">Y {displayAxis(selected.orientationAxes?.y, selected.orientationKey[1])}</span>
+          <span className="rounded bg-white px-2 py-1 text-[#334155]">Z {displayAxis(selected.orientationAxes?.z, selected.orientationKey[2])}</span>
         </div>
         {placementSettings && (
           <p className="mt-2 text-[11px] text-[#64748b]">

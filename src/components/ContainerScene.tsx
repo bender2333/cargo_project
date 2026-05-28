@@ -129,9 +129,9 @@ function makeFaceLabelTexture(label: string, color: string, selected: boolean, r
   context.fillText(label, 0, 0, 142)
   context.restore()
   context.fillStyle = '#0f172a'
-  context.font = 'bold 28px Verdana, sans-serif'
+  context.font = 'bold 22px Verdana, sans-serif'
   context.textAlign = 'center'
-  context.fillText(orientationLabel, 128, 222, 170)
+  context.fillText(orientationLabel, 128, 222, 226)
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
@@ -968,10 +968,6 @@ export function ContainerScene({
       const step = event.shiftKey ? 100 : event.ctrlKey || event.metaKey ? 1 : 10
       let handled = true
       switch (event.key) {
-        case 'r':
-        case 'R':
-          onManualRotateRef.current?.(boxId, event.shiftKey ? 'down' : 'right')
-          break
         case 'Delete':
         case 'Backspace':
           onManualDeleteRef.current?.(boxId)

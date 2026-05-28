@@ -4,6 +4,9 @@ import { DEFAULT_PLACEMENT_SETTINGS, type SupportPolicy } from './placementSetti
 export type OrientationKey = 'LWH' | 'WLH' | 'LHW' | 'HLW' | 'WHL' | 'HWL'
 export type LabelRotationDeg = 0 | 90 | 180 | 270
 export type QuarterTurn = 0 | 1 | 2 | 3
+export type BodyAxis = 'L' | 'W' | 'H'
+export type SignedBodyAxis = 'L+' | 'L-' | 'W+' | 'W-' | 'H+' | 'H-'
+export type OrientationAxes = { x: SignedBodyAxis; y: SignedBodyAxis; z: SignedBodyAxis }
 
 export type ManualPlacedBox = {
   id: string
@@ -23,6 +26,7 @@ export type ManualPlacedBox = {
   labelRotationDeg: LabelRotationDeg
   yawQuarterTurn?: QuarterTurn
   pitchQuarterTurn?: QuarterTurn
+  orientationAxes?: OrientationAxes
   orientationLabel?: string
   weight?: number
   canRotate?: boolean
@@ -97,24 +101,6 @@ export function removeBox(draft: ManualDraft, id: string): ManualDraft {
 
 const ALL_ORIENTATIONS: OrientationKey[] = ['LWH', 'WLH', 'LHW', 'HLW', 'WHL', 'HWL']
 
-const HORIZONTAL_ROTATION_NEXT: Record<OrientationKey, OrientationKey> = {
-  LWH: 'WLH',
-  WLH: 'LWH',
-  LHW: 'HLW',
-  HLW: 'LHW',
-  WHL: 'HWL',
-  HWL: 'WHL',
-}
-
-const DOWN_ROTATION_NEXT: Record<OrientationKey, OrientationKey> = {
-  LWH: 'LHW',
-  LHW: 'LWH',
-  WLH: 'WHL',
-  WHL: 'WLH',
-  HLW: 'HWL',
-  HWL: 'HLW',
-}
-
 const LABEL_ROTATION_FOR_ORIENTATION: Record<OrientationKey, LabelRotationDeg> = {
   LWH: 0,
   WLH: 0,
@@ -140,8 +126,49 @@ function quarterTurn(value: number): QuarterTurn {
   return (((value % 4) + 4) % 4) as QuarterTurn
 }
 
-function orientationLabel(yawQuarterTurn: QuarterTurn, pitchQuarterTurn: QuarterTurn) {
-  return `H${yawQuarterTurn * 90} I${pitchQuarterTurn * 90}`
+function canonicalAxesForOrientation(orientationKey: OrientationKey): OrientationAxes {
+  const [x, y, z] = orientationKey.split('') as BodyAxis[]
+  return { x: `${x}+` as SignedBodyAxis, y: `${y}+` as SignedBodyAxis, z: `${z}+` as SignedBodyAxis }
+}
+
+function axisLetter(axis: SignedBodyAxis): BodyAxis {
+  return axis[0] as BodyAxis
+}
+
+function flipAxis(axis: SignedBodyAxis): SignedBodyAxis {
+  return `${axisLetter(axis)}${axis.endsWith('+') ? '-' : '+'}` as SignedBodyAxis
+}
+
+function orientationKeyForAxes(axes: OrientationAxes): OrientationKey {
+  return `${axisLetter(axes.x)}${axisLetter(axes.y)}${axisLetter(axes.z)}` as OrientationKey
+}
+
+function axesFromBox(box: ManualPlacedBox): OrientationAxes {
+  return box.orientationAxes ?? canonicalAxesForOrientation(box.orientationKey)
+}
+
+function rotateAxesRight(axes: OrientationAxes): OrientationAxes {
+  return {
+    x: axes.y,
+    y: flipAxis(axes.x),
+    z: axes.z,
+  }
+}
+
+function rotateAxesDown(axes: OrientationAxes): OrientationAxes {
+  return {
+    x: axes.x,
+    y: axes.z,
+    z: flipAxis(axes.y),
+  }
+}
+
+function displayAxis(axis: SignedBodyAxis) {
+  return axis.replace('H', 'T')
+}
+
+function orientationLabel(axes: OrientationAxes) {
+  return `X:${displayAxis(axes.x)} Y:${displayAxis(axes.y)} Z:${displayAxis(axes.z)}`
 }
 
 function inferTurnsForOrientation(orientationKey: OrientationKey): { yawQuarterTurn: QuarterTurn; pitchQuarterTurn: QuarterTurn } {
@@ -159,12 +186,13 @@ function inferTurnsForOrientation(orientationKey: OrientationKey): { yawQuarterT
 function applyOrientation(
   box: ManualPlacedBox,
   orientationKey: OrientationKey,
-  turns: { yawQuarterTurn?: QuarterTurn; pitchQuarterTurn?: QuarterTurn } = {},
+  turns: { yawQuarterTurn?: QuarterTurn; pitchQuarterTurn?: QuarterTurn; orientationAxes?: OrientationAxes } = {},
 ) {
   const base = baseDimensionsFor(box)
   const inferred = inferTurnsForOrientation(orientationKey)
   const yawQuarterTurn = turns.yawQuarterTurn ?? inferred.yawQuarterTurn
   const pitchQuarterTurn = turns.pitchQuarterTurn ?? inferred.pitchQuarterTurn
+  const orientationAxes = turns.orientationAxes ?? canonicalAxesForOrientation(orientationKey)
   return {
     ...box,
     ...dimensionsForManualOrientation(base, orientationKey),
@@ -175,7 +203,8 @@ function applyOrientation(
     labelRotationDeg: LABEL_ROTATION_FOR_ORIENTATION[orientationKey],
     yawQuarterTurn,
     pitchQuarterTurn,
-    orientationLabel: orientationLabel(yawQuarterTurn, pitchQuarterTurn),
+    orientationAxes,
+    orientationLabel: orientationLabel(orientationAxes),
   }
 }
 
@@ -223,10 +252,11 @@ export function rotateBoxRight90(draft: ManualDraft, id: string): ManualDraft {
   if (!target) return draft
   const yawQuarterTurn = quarterTurn((target.yawQuarterTurn ?? inferTurnsForOrientation(target.orientationKey).yawQuarterTurn) + 1)
   const pitchQuarterTurn = target.pitchQuarterTurn ?? inferTurnsForOrientation(target.orientationKey).pitchQuarterTurn
-  const orientationKey = HORIZONTAL_ROTATION_NEXT[target.orientationKey]
+  const orientationAxes = rotateAxesRight(axesFromBox(target))
+  const orientationKey = orientationKeyForAxes(orientationAxes)
   return {
     boxes: draft.boxes.map((box) =>
-      box.id === id ? applyOrientation(box, orientationKey, { yawQuarterTurn, pitchQuarterTurn }) : box,
+      box.id === id ? applyOrientation(box, orientationKey, { yawQuarterTurn, pitchQuarterTurn, orientationAxes }) : box,
     ),
   }
 }
@@ -237,10 +267,11 @@ export function rotateBoxDown90(draft: ManualDraft, id: string): ManualDraft {
   const inferred = inferTurnsForOrientation(target.orientationKey)
   const yawQuarterTurn = target.yawQuarterTurn ?? inferred.yawQuarterTurn
   const pitchQuarterTurn = quarterTurn((target.pitchQuarterTurn ?? inferred.pitchQuarterTurn) + 1)
-  const orientationKey = DOWN_ROTATION_NEXT[target.orientationKey]
+  const orientationAxes = rotateAxesDown(axesFromBox(target))
+  const orientationKey = orientationKeyForAxes(orientationAxes)
   return {
     boxes: draft.boxes.map((box) =>
-      box.id === id ? applyOrientation(box, orientationKey, { yawQuarterTurn, pitchQuarterTurn }) : box,
+      box.id === id ? applyOrientation(box, orientationKey, { yawQuarterTurn, pitchQuarterTurn, orientationAxes }) : box,
     ),
   }
 }
@@ -534,7 +565,8 @@ export function makeManualBox(params: {
     labelRotationDeg: 0,
     yawQuarterTurn: 0,
     pitchQuarterTurn: 0,
-    orientationLabel: orientationLabel(0, 0),
+    orientationAxes: { x: 'L+', y: 'W+', z: 'H+' },
+    orientationLabel: orientationLabel({ x: 'L+', y: 'W+', z: 'H+' }),
     weight: params.weight ?? 0,
     canRotate: params.canRotate ?? true,
     stackable: params.stackable ?? true,
@@ -570,7 +602,8 @@ export function toPlacedBoxes(
     labelRotationDeg: box.labelRotationDeg,
     yawQuarterTurn: box.yawQuarterTurn ?? 0,
     pitchQuarterTurn: box.pitchQuarterTurn ?? 0,
-    orientationLabel: box.orientationLabel ?? orientationLabel(box.yawQuarterTurn ?? 0, box.pitchQuarterTurn ?? 0),
+    orientationAxes: axesFromBox(box),
+    orientationLabel: box.orientationLabel ?? orientationLabel(axesFromBox(box)),
     weight: box.weight ?? 0,
     color: box.color,
     stackable: box.stackable ?? true,

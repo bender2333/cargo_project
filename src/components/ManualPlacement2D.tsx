@@ -260,6 +260,10 @@ export function ManualPlacement2D({
         const textY = rectY + rectHeight / 2
         const rotation = viewMode === 'top' ? box.labelRotationDeg : 0
         const orientationLabel = box.orientationLabel ?? box.orientationKey
+        const markerWidth = Math.max(130, Math.min(Math.max(130, rectWidth - 48), Math.max(300, rectWidth * 0.42)))
+        const markerHeight = Math.max(90, rectHeight * 0.2)
+        const markerX = rectX + 24
+        const markerY = rectY + 24
 
         return (
           <g
@@ -301,21 +305,21 @@ export function ManualPlacement2D({
             <g pointerEvents="none" data-testid="manual-orientation-marker" data-orientation={box.orientationKey}>
               <rect
                 fill="#0f172a"
-                height={Math.max(90, rectHeight * 0.2)}
+                height={markerHeight}
                 opacity={0.9}
                 rx={18}
-                width={Math.max(130, rectWidth * 0.22)}
-                x={rectX + 24}
-                y={rectY + 24}
+                width={markerWidth}
+                x={markerX}
+                y={markerY}
               />
               <text
                 dominantBaseline="middle"
                 fill="#fff"
-                fontSize={Math.max(44, Math.min(rectWidth, rectHeight) * 0.14)}
+                fontSize={Math.max(30, Math.min(46, markerWidth / 8.8))}
                 fontWeight="800"
                 textAnchor="middle"
-                x={rectX + 24 + Math.max(130, rectWidth * 0.22) / 2}
-                y={rectY + 24 + Math.max(90, rectHeight * 0.2) / 2}
+                x={markerX + markerWidth / 2}
+                y={markerY + markerHeight / 2}
               >
                 {orientationLabel}
               </text>

@@ -66,6 +66,10 @@ export function ContainerPlan2D({ container, boxes, activeLayerId, activeLabelId
         const textY = padding + size.height - projected.y - projected.height / 2
         const rotation = box.labelRotationDeg
         const orientationLabel = box.orientationLabel ?? box.orientationKey
+        const markerWidth = Math.max(110, Math.min(Math.max(110, projected.width - 40), Math.max(280, projected.width * 0.38)))
+        const markerHeight = Math.max(70, projected.height * 0.18)
+        const markerX = padding + projected.x + 20
+        const markerY = padding + size.height - projected.y - projected.height + 20
 
         return (
           <g
@@ -105,21 +109,21 @@ export function ContainerPlan2D({ container, boxes, activeLayerId, activeLabelId
             <g pointerEvents="none" data-testid="plan-orientation-marker" data-orientation={box.orientationKey}>
               <rect
                 fill="#0f172a"
-                height={Math.max(70, projected.height * 0.18)}
+                height={markerHeight}
                 opacity={0.9}
                 rx={14}
-                width={Math.max(110, projected.width * 0.2)}
-                x={padding + projected.x + 20}
-                y={padding + size.height - projected.y - projected.height + 20}
+                width={markerWidth}
+                x={markerX}
+                y={markerY}
               />
               <text
                 dominantBaseline="middle"
                 fill="#fff"
-                fontSize={Math.max(38, Math.min(projected.width, projected.height) * 0.13)}
+                fontSize={Math.max(28, Math.min(42, markerWidth / 8.8))}
                 fontWeight="800"
                 textAnchor="middle"
-                x={padding + projected.x + 20 + Math.max(110, projected.width * 0.2) / 2}
-                y={padding + size.height - projected.y - projected.height + 20 + Math.max(70, projected.height * 0.18) / 2}
+                x={markerX + markerWidth / 2}
+                y={markerY + markerHeight / 2}
               >
                 {orientationLabel}
               </text>

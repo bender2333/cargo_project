@@ -14,6 +14,25 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-05-28-r25-rotation-notifications',
+    date: '2026-05-28',
+    title: { en: 'Rotation cycles, readable orientation labels, notification bar', zh: '旋转循环 / 朝向识别标签 / 通知栏' },
+    items: {
+      en: [
+        'R and Shift+R now rotate as two independent four-step cycles; four presses return the cargo to the same pose.',
+        'Manual labels no longer use H/I angle text. They show signed X/Y/Z axis mapping so the current pose is identifiable from one label.',
+        'What\'s new has been renamed to Notifications and will be updated with each shipped change.',
+        'The maximize workspace control sits inside the actual canvas area instead of overlapping toolbar text.',
+      ],
+      zh: [
+        'R 与 Shift+R 改为两个独立的四步循环旋转；连续按四次会回到同一姿态。',
+        '手动标签不再使用 H/I 角度文字，改为显示 X/Y/Z 三轴对应关系，从单个标签即可识别当前姿态。',
+        '「新特性」已改名为「通知栏」，后续每次上线改动都需要更新这里。',
+        '最大化工作区按钮放入真正画布区域，不再遮挡工具条文字。',
+      ],
+    },
+  },
+  {
     version: '2026-05-27-r22-rework',
     date: '2026-05-27',
     title: { en: 'Round 22 rework: manual feedback, fixed ruler lines, checklist', zh: '第二十二轮重构：手动反馈 / 固定测量线 / 复核清单' },
@@ -96,7 +115,7 @@ export const releaseNotes: ReleaseNote[] = [
   {
     version: '2026-05-25-r18',
     date: '2026-05-25',
-    title: { en: 'Maximize workspace, edge snap, vehicle profile, release notes', zh: '工作区最大化 / 边缘吸附 / 车型选择 / 新特性通知' },
+    title: { en: 'Maximize workspace, edge snap, vehicle profile, release notes', zh: '工作区最大化 / 边缘吸附 / 车型选择 / 通知栏' },
     items: {
       en: [
         'Manual workspace can be maximised to give the 3D canvas the full screen.',
@@ -108,7 +127,7 @@ export const releaseNotes: ReleaseNote[] = [
         '手动工作区新增「最大化」按钮，给 3D 画布更多空间。',
         '拖拽时自动吸附到货柜内壁和已放置箱体边缘（30mm 容差），可关闭。',
         '装载重心面板新增「车型」下拉（半挂 / 平板挂 / 厢式 / 仅货柜），安全重心范围与拖挂示意图按车型自动调整。',
-        '新增「新特性」站内通知，列出每个版本的关键改动。',
+        '新增「通知栏」站内通知，列出每个版本的关键改动。',
       ],
     },
   },

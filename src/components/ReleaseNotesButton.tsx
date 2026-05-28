@@ -23,8 +23,8 @@ type Props = {
 }
 
 const T = {
-  en: { open: 'What\'s new', title: 'What\'s new', markRead: 'Mark all as read', close: 'Close', unread: 'unread' },
-  zh: { open: '新特性', title: '新特性', markRead: '已读全部', close: '关闭', unread: '未读' },
+  en: { open: 'Notifications', title: 'Notifications', markRead: 'Mark all as read', close: 'Close', unread: 'unread' },
+  zh: { open: '通知栏', title: '通知栏', markRead: '已读全部', close: '关闭', unread: '未读' },
 } as const
 
 export function ReleaseNotesButton({ locale, userId }: Props) {
