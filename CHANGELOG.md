@@ -15,6 +15,11 @@
   - `maximize-workspace` now renders inside `manual-view-container` or `auto-view-container`, covering manual 2D/3D and automatic 2D/3D without sitting on the outer workspace shell.
   - Manual 2D now receives the shared placement settings prop, keeping snap behavior wired consistently with the 3D path.
 - Verification: `npx vitest run src/lib/manualPlacement.test.ts src/lib/debugSnapshot.test.ts src/components/ManualPlacement2D.test.tsx` passed; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "R 与 Shift|最大化|通知栏"` passed 4 tests; `npm run lint` passed; `npm test` passed 30 files / 174 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 72 tests / 1 skipped / 0 failed.
+- Completed subtask: deployed and verified Round 25 on the public host.
+  - Deployment completed with `npm run deploy`; remote backup created at `/root/cargo_project-backup-20260528-072121`.
+  - Remote health check passed during deploy.
+  - Remote targeted E2E passed: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npx playwright test e2e/manual-3d.spec.ts --grep "R 与 Shift|最大化|通知栏"` passed 4 tests.
+  - Remote full E2E passed: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npm run test:e2e` passed 72 tests / 1 skipped / 0 failed.
 
 ## 2026-05-28 (Round 24 View Consistency Review Fixes)
 
