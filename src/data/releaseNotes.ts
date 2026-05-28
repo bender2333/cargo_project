@@ -14,6 +14,23 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-05-28-r26-label-snap-settings',
+    date: '2026-05-28',
+    title: { en: 'Directional label rotation and split snap settings', zh: '标签方向旋转 / 吸附设置拆分' },
+    items: {
+      en: [
+        'R and Shift+R now rotate the cargo label itself through the same four visual directions, so asymmetric labels point up, left, down, right, then up again.',
+        'Placement settings and snap settings are now separate menu panels.',
+        'Snap settings include a global on/off switch; turning it off disables grid, edge, Z, and surface snapping together.',
+      ],
+      zh: [
+        'R 与 Shift+R 现在会让货物标签本体按四个方向循环，非对称标签会依次朝上、朝左、朝下、朝右、再朝上。',
+        '「排布设置」与「吸附设置」已拆成两个独立菜单面板。',
+        '「吸附设置」新增总开关；关闭后网格、边缘、Z 轴和上表面吸附会一起停用。',
+      ],
+    },
+  },
+  {
     version: '2026-05-28-r25-rotation-notifications',
     date: '2026-05-28',
     title: { en: 'Rotation cycles, readable orientation labels, notification bar', zh: '旋转循环 / 朝向识别标签 / 通知栏' },

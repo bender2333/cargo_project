@@ -75,4 +75,24 @@ describe('applyManualPlacementSnap', () => {
 
     expect(snapped).toEqual({ x: 0, y: 0 })
   })
+
+  it('bypasses all 2D snapping when the global snap switch is disabled', () => {
+    const snapped = applyManualPlacementSnap({
+      x: 26,
+      y: 33,
+      boxSize,
+      others: [placedBox({ id: 'other' })],
+      container,
+      settings: {
+        ...DEFAULT_PLACEMENT_SETTINGS,
+        snapEnabled: false,
+        gridSnapEnabled: true,
+        edgeSnapEnabled: true,
+        edgeToleranceMm: 40,
+        gridStepMm: 25,
+      },
+    })
+
+    expect(snapped).toEqual({ x: 26, y: 33 })
+  })
 })

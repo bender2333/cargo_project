@@ -171,6 +171,10 @@ function orientationLabel(axes: OrientationAxes) {
   return `X:${displayAxis(axes.x)} Y:${displayAxis(axes.y)} Z:${displayAxis(axes.z)}`
 }
 
+function labelRotationForQuarterTurns(turns: QuarterTurn): LabelRotationDeg {
+  return quarterTurn(-turns) * 90 as LabelRotationDeg
+}
+
 function inferTurnsForOrientation(orientationKey: OrientationKey): { yawQuarterTurn: QuarterTurn; pitchQuarterTurn: QuarterTurn } {
   const mapping: Record<OrientationKey, { yawQuarterTurn: QuarterTurn; pitchQuarterTurn: QuarterTurn }> = {
     LWH: { yawQuarterTurn: 0, pitchQuarterTurn: 0 },
@@ -200,7 +204,7 @@ function applyOrientation(
     baseWidth: base.width,
     baseHeight: base.height,
     orientationKey,
-    labelRotationDeg: LABEL_ROTATION_FOR_ORIENTATION[orientationKey],
+    labelRotationDeg: turns.orientationAxes ? labelRotationForQuarterTurns(quarterTurn(yawQuarterTurn + pitchQuarterTurn)) : LABEL_ROTATION_FOR_ORIENTATION[orientationKey],
     yawQuarterTurn,
     pitchQuarterTurn,
     orientationAxes,

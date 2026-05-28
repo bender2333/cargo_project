@@ -46,4 +46,19 @@ describe('placementSettings', () => {
     expect(loadPlacementSettings('u-1', localStorage)).toEqual(settings)
     expect(storage.has('cargo-placement-settings:u-1')).toBe(true)
   })
+
+  it('normalizes legacy placement settings with snap enabled by default', () => {
+    const loaded = loadPlacementSettings('legacy', {
+      getItem: () => JSON.stringify({
+        gridSnapEnabled: false,
+        edgeSnapEnabled: true,
+        supportPolicy: { minSupportRatio: 0.4 },
+      }),
+    } as Pick<Storage, 'getItem'>)
+
+    expect(loaded.snapEnabled).toBe(true)
+    expect(loaded.gridSnapEnabled).toBe(false)
+    expect(loaded.edgeSnapEnabled).toBe(true)
+    expect(loaded.supportPolicy.minSupportRatio).toBe(0.4)
+  })
 })

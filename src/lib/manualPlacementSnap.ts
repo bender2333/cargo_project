@@ -17,6 +17,10 @@ export function applyManualPlacementSnap(params: {
   let x = params.x
   let y = params.y
 
+  if (!settings.snapEnabled) {
+    return { x, y }
+  }
+
   if (settings.edgeSnapEnabled) {
     const snapped = snapToEdges({
       x,

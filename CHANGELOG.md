@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-05-28 (Round 26 Label Direction and Snap Settings Review)
+
+- Completed subtask: recorded the new review and root-cause analysis in `REVIEW.md`.
+  - Root cause: Round 25 kept `labelRotationDeg` at 0 for readability, so asymmetric labels such as `A` did not visually point up/left/down/right as the user expects.
+  - Root cause: `placement-settings-panel` mixed support/overhang placement rules with grid/edge/Z/surface snap interaction rules, and there was no global snap switch.
+- Completed subtask: implemented the review fixes.
+  - Make `R` and `Shift+R` rotate the label body through `0 -> 270 -> 180 -> 90 -> 0` while keeping the X/Y/Z orientation text readable.
+  - Split the workspace menu into independent `placement-settings-panel` and `snap-settings-panel`.
+  - Add persisted `snapEnabled`; when off, 2D and 3D skip grid, edge, Z, and surface snapping.
+- Verification: `npm run lint` passed; `npm test` passed 30 files / 176 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 72 tests / 1 skipped / 0 failed.
+
 ## 2026-05-28 (Round 25 Rotation, Labels, Notification Bar, Canvas Button)
 
 - Completed subtask: recorded the new review and fix plan in `REVIEW.md`.

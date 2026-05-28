@@ -198,8 +198,12 @@ const copy = {
     gridSnapOff: 'Free move',
     edgeSnap: 'Edge snap',
     edgeSnapOff: 'No edge snap',
+    snapSettings: 'Snap settings',
+    snapSettingsClose: 'Close snap settings',
+    snapEnabled: 'Snap enabled',
+    snapDisabled: 'Snap disabled',
     placementSettings: 'Placement settings',
-    placementSettingsClose: 'Close settings',
+    placementSettingsClose: 'Close placement settings',
     surfaceSnap: 'Surface snap',
     zSnap: 'Z snap',
     gridStep: 'Grid step',
@@ -434,8 +438,12 @@ const copy = {
     gridSnapOff: '自由移动',
     edgeSnap: '边缘吸附',
     edgeSnapOff: '关闭边缘吸附',
+    snapSettings: '吸附设置',
+    snapSettingsClose: '关闭吸附设置',
+    snapEnabled: '开启吸附',
+    snapDisabled: '关闭吸附',
     placementSettings: '排布设置',
-    placementSettingsClose: '关闭设置',
+    placementSettingsClose: '关闭排布设置',
     surfaceSnap: '上表面吸附',
     zSnap: 'Z 轴吸附',
     gridStep: '网格步长',
@@ -852,8 +860,9 @@ function Workbench() {
   const [sceneViewMode, setSceneViewMode] = useState<SceneViewMode>('iso')
   const [placementSettings, setPlacementSettings] = useState<PlacementSettings>(() => loadPlacementSettings(getCurrentUser()?.id ?? null))
   const [placementSettingsOpen, setPlacementSettingsOpen] = useState(false)
-  const gridSnap = placementSettings.gridSnapEnabled
-  const edgeSnap = placementSettings.edgeSnapEnabled
+  const [snapSettingsOpen, setSnapSettingsOpen] = useState(false)
+  const gridSnap = placementSettings.snapEnabled && placementSettings.gridSnapEnabled
+  const edgeSnap = placementSettings.snapEnabled && placementSettings.edgeSnapEnabled
   const [rulerEnabled, setRulerEnabled] = useState(false)
   const [hoverInfo, setHoverInfo] = useState<{ id: string; label: string; length: number; width: number; height: number; orientationKey: OrientationKey; x: number; y: number; z: number; clientX: number; clientY: number } | null>(null)
   const [poolDragInfo, setPoolDragInfo] = useState<{ cargoId: string; length: number; width: number; height: number; color: string } | null>(null)
@@ -2347,47 +2356,16 @@ function Workbench() {
                 type="button"
                 aria-expanded={placementSettingsOpen}
                 data-testid="placement-settings-toggle"
-                onClick={() => setPlacementSettingsOpen((open) => !open)}
+                onClick={() => {
+                  setPlacementSettingsOpen((open) => !open)
+                  setSnapSettingsOpen(false)
+                }}
               >
                 {placementSettingsOpen ? t.placementSettingsClose : t.placementSettings}
               </button>
               {placementSettingsOpen && (
                 <div className="border border-[#cbd5e1] bg-white px-3 py-2 text-xs text-[#334155] shadow-sm" data-testid="placement-settings-panel">
                   <div className="grid gap-3">
-                    <label className="flex items-center gap-2 font-semibold">
-                      <input
-                        type="checkbox"
-                        checked={placementSettings.gridSnapEnabled}
-                        data-testid="toggle-grid-snap"
-                        onChange={(event) => setPlacementSettings((s) => ({ ...s, gridSnapEnabled: event.target.checked }))}
-                      />
-                      {placementSettings.gridSnapEnabled ? t.gridSnap : t.gridSnapOff}
-                    </label>
-                    <label className="flex items-center gap-2 font-semibold">
-                      <input
-                        type="checkbox"
-                        checked={placementSettings.edgeSnapEnabled}
-                        data-testid="toggle-edge-snap"
-                        onChange={(event) => setPlacementSettings((s) => ({ ...s, edgeSnapEnabled: event.target.checked }))}
-                      />
-                      {placementSettings.edgeSnapEnabled ? t.edgeSnap : t.edgeSnapOff}
-                    </label>
-                    <label className="flex items-center gap-2 font-semibold">
-                      <input
-                        type="checkbox"
-                        checked={placementSettings.surfaceSnapEnabled}
-                        onChange={(event) => setPlacementSettings((s) => ({ ...s, surfaceSnapEnabled: event.target.checked }))}
-                      />
-                      {t.surfaceSnap}
-                    </label>
-                    <label className="flex items-center gap-2 font-semibold">
-                      <input
-                        type="checkbox"
-                        checked={placementSettings.zSnapEnabled}
-                        onChange={(event) => setPlacementSettings((s) => ({ ...s, zSnapEnabled: event.target.checked }))}
-                      />
-                      {t.zSnap}
-                    </label>
                     <label className="flex items-center gap-2 font-semibold">
                       <input
                         type="checkbox"
@@ -2404,27 +2382,6 @@ function Workbench() {
                       {t.allowOverhang}
                     </label>
                     <span className="text-[#64748b]">{t.settingsStored}</span>
-                    {[
-                      ['gridStepMm', t.gridStep, 1, 1000],
-                      ['edgeToleranceMm', t.edgeTolerance, 0, 1000],
-                      ['zStepMm', t.zStep, 1, 1000],
-                    ].map(([key, label, min, max]) => (
-                      <label key={String(key)} className="flex flex-col gap-1">
-                        <span className="font-semibold">{label} (mm)</span>
-                        <input
-                          className="rounded border border-[#cbd5e1] px-2 py-1"
-                          type="number"
-                          min={Number(min)}
-                          max={Number(max)}
-                          value={Number(placementSettings[key as keyof Pick<PlacementSettings, 'gridStepMm' | 'edgeToleranceMm' | 'zStepMm'>])}
-                          onChange={(event) => {
-                            const value = Number(event.target.value)
-                            if (!Number.isFinite(value)) return
-                            setPlacementSettings((s) => ({ ...s, [key]: value }))
-                          }}
-                        />
-                      </label>
-                    ))}
                     <label className="flex flex-col gap-1">
                       <span className="font-semibold">{t.minSupport}</span>
                       <input
@@ -2473,6 +2430,89 @@ function Workbench() {
                     >
                       {t.resetPlacementSettings}
                     </button>
+                  </div>
+                </div>
+              )}
+              <button
+                className="archive-button secondary text-left"
+                type="button"
+                aria-expanded={snapSettingsOpen}
+                data-testid="snap-settings-toggle"
+                onClick={() => {
+                  setSnapSettingsOpen((open) => !open)
+                  setPlacementSettingsOpen(false)
+                }}
+              >
+                {snapSettingsOpen ? t.snapSettingsClose : t.snapSettings}
+              </button>
+              {snapSettingsOpen && (
+                <div className="border border-[#cbd5e1] bg-white px-3 py-2 text-xs text-[#334155] shadow-sm" data-testid="snap-settings-panel">
+                  <div className="grid gap-3">
+                    <label className="flex items-center gap-2 font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={placementSettings.snapEnabled}
+                        data-testid="toggle-snap"
+                        onChange={(event) => setPlacementSettings((s) => ({ ...s, snapEnabled: event.target.checked }))}
+                      />
+                      {placementSettings.snapEnabled ? t.snapEnabled : t.snapDisabled}
+                    </label>
+                    <label className="flex items-center gap-2 font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={placementSettings.gridSnapEnabled}
+                        data-testid="toggle-grid-snap"
+                        onChange={(event) => setPlacementSettings((s) => ({ ...s, gridSnapEnabled: event.target.checked }))}
+                      />
+                      {placementSettings.gridSnapEnabled ? t.gridSnap : t.gridSnapOff}
+                    </label>
+                    <label className="flex items-center gap-2 font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={placementSettings.edgeSnapEnabled}
+                        data-testid="toggle-edge-snap"
+                        onChange={(event) => setPlacementSettings((s) => ({ ...s, edgeSnapEnabled: event.target.checked }))}
+                      />
+                      {placementSettings.edgeSnapEnabled ? t.edgeSnap : t.edgeSnapOff}
+                    </label>
+                    <label className="flex items-center gap-2 font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={placementSettings.surfaceSnapEnabled}
+                        onChange={(event) => setPlacementSettings((s) => ({ ...s, surfaceSnapEnabled: event.target.checked }))}
+                      />
+                      {t.surfaceSnap}
+                    </label>
+                    <label className="flex items-center gap-2 font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={placementSettings.zSnapEnabled}
+                        onChange={(event) => setPlacementSettings((s) => ({ ...s, zSnapEnabled: event.target.checked }))}
+                      />
+                      {t.zSnap}
+                    </label>
+                    <span className="text-[#64748b]">{t.settingsStored}</span>
+                    {[
+                      ['gridStepMm', t.gridStep, 1, 1000],
+                      ['edgeToleranceMm', t.edgeTolerance, 0, 1000],
+                      ['zStepMm', t.zStep, 1, 1000],
+                    ].map(([key, label, min, max]) => (
+                      <label key={String(key)} className="flex flex-col gap-1">
+                        <span className="font-semibold">{label} (mm)</span>
+                        <input
+                          className="rounded border border-[#cbd5e1] px-2 py-1"
+                          type="number"
+                          min={Number(min)}
+                          max={Number(max)}
+                          value={Number(placementSettings[key as keyof Pick<PlacementSettings, 'gridStepMm' | 'edgeToleranceMm' | 'zStepMm'>])}
+                          onChange={(event) => {
+                            const value = Number(event.target.value)
+                            if (!Number.isFinite(value)) return
+                            setPlacementSettings((s) => ({ ...s, [key]: value }))
+                          }}
+                        />
+                      </label>
+                    ))}
                   </div>
                 </div>
               )}

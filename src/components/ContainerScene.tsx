@@ -421,8 +421,8 @@ export function ContainerScene({
       gridSnapEnabled: gridSnap ?? DEFAULT_PLACEMENT_SETTINGS.gridSnapEnabled,
       edgeSnapEnabled: edgeSnap ?? DEFAULT_PLACEMENT_SETTINGS.edgeSnapEnabled,
     }
-    gridSnapRef.current = placementSettingsRef.current.gridSnapEnabled
-    edgeSnapRef.current = placementSettingsRef.current.edgeSnapEnabled
+    gridSnapRef.current = placementSettingsRef.current.snapEnabled && placementSettingsRef.current.gridSnapEnabled
+    edgeSnapRef.current = placementSettingsRef.current.snapEnabled && placementSettingsRef.current.edgeSnapEnabled
   }, [placementSettings, gridSnap, edgeSnap])
 
   useEffect(() => {
@@ -755,7 +755,7 @@ export function ContainerScene({
           draggedSize: { length: entry.box.length, width: entry.box.width, height: entry.box.height },
           container,
           supportPolicy: placementSettingsRef.current.supportPolicy,
-          surfaceSnapEnabled: placementSettingsRef.current.surfaceSnapEnabled,
+          surfaceSnapEnabled: placementSettingsRef.current.snapEnabled && placementSettingsRef.current.surfaceSnapEnabled,
         })
         nextX = drop.x
         nextY = drop.y
@@ -774,7 +774,7 @@ export function ContainerScene({
         if (dragState.mode === 'plane') {
           nextX = snapToGrid(nextX, placementSettingsRef.current.gridStepMm)
           nextY = snapToGrid(nextY, placementSettingsRef.current.gridStepMm)
-        } else if (placementSettingsRef.current.zSnapEnabled) {
+        } else if (placementSettingsRef.current.snapEnabled && placementSettingsRef.current.zSnapEnabled) {
           nextZ = snapToGrid(nextZ, placementSettingsRef.current.zStepMm)
         }
       }
@@ -805,7 +805,7 @@ export function ContainerScene({
           if (mode === 'plane') {
             finalXmm = snapToGrid(finalXmm, placementSettingsRef.current.gridStepMm)
             finalYmm = snapToGrid(finalYmm, placementSettingsRef.current.gridStepMm)
-          } else if (placementSettingsRef.current.zSnapEnabled) {
+          } else if (placementSettingsRef.current.snapEnabled && placementSettingsRef.current.zSnapEnabled) {
             finalZmm = snapToGrid(finalZmm, placementSettingsRef.current.zStepMm)
           }
         }
@@ -870,7 +870,7 @@ export function ContainerScene({
         draggedSize: { length: info.length, width: info.width, height: info.height },
         container,
         supportPolicy: placementSettingsRef.current.supportPolicy,
-        surfaceSnapEnabled: placementSettingsRef.current.surfaceSnapEnabled,
+        surfaceSnapEnabled: placementSettingsRef.current.snapEnabled && placementSettingsRef.current.surfaceSnapEnabled,
       })
       let dropX = drop.x
       let dropY = drop.y
@@ -932,7 +932,7 @@ export function ContainerScene({
             draggedSize: { length: info.length, width: info.width, height: info.height },
             container,
             supportPolicy: placementSettingsRef.current.supportPolicy,
-            surfaceSnapEnabled: placementSettingsRef.current.surfaceSnapEnabled,
+            surfaceSnapEnabled: placementSettingsRef.current.snapEnabled && placementSettingsRef.current.surfaceSnapEnabled,
           })
           let targetX = target.x
           let targetY = target.y
@@ -1410,8 +1410,8 @@ export function ContainerScene({
       data-testid="container-scene"
       data-controls-enabled="true"
       data-interaction-mode={interactionMode}
-      data-grid-snap={gridSnap === false ? 'off' : 'on'}
-      data-edge-snap={edgeSnap === false ? 'off' : 'on'}
+      data-grid-snap={placementSettings?.snapEnabled === false || gridSnap === false ? 'off' : 'on'}
+      data-edge-snap={placementSettings?.snapEnabled === false || edgeSnap === false ? 'off' : 'on'}
       data-cog-overlay={cogOverlay ? 'on' : 'off'}
       data-box-opacity={boxOpacityOverride ?? 'normal'}
       data-gravity-field="off"

@@ -196,7 +196,7 @@ describe('manualPlacement', () => {
       orientationKey: 'WLH',
       orientationAxes: { x: 'W+', y: 'L-', z: 'H+' },
       orientationLabel: 'X:W+ Y:L- Z:T+',
-      labelRotationDeg: 0,
+      labelRotationDeg: 270,
       yawQuarterTurn: 1,
       pitchQuarterTurn: 0,
     })
@@ -231,9 +231,9 @@ describe('manualPlacement', () => {
     }
 
     expect(seen).toEqual([
-      expect.objectContaining({ orientationKey: 'WLH', yawQuarterTurn: 1, pitchQuarterTurn: 0, height: 600, labelRotationDeg: 0, orientationAxes: { x: 'W+', y: 'L-', z: 'H+' }, orientationLabel: 'X:W+ Y:L- Z:T+' }),
-      expect.objectContaining({ orientationKey: 'LWH', yawQuarterTurn: 2, pitchQuarterTurn: 0, height: 600, labelRotationDeg: 0, orientationAxes: { x: 'L-', y: 'W-', z: 'H+' }, orientationLabel: 'X:L- Y:W- Z:T+' }),
-      expect.objectContaining({ orientationKey: 'WLH', yawQuarterTurn: 3, pitchQuarterTurn: 0, height: 600, labelRotationDeg: 0, orientationAxes: { x: 'W-', y: 'L+', z: 'H+' }, orientationLabel: 'X:W- Y:L+ Z:T+' }),
+      expect.objectContaining({ orientationKey: 'WLH', yawQuarterTurn: 1, pitchQuarterTurn: 0, height: 600, labelRotationDeg: 270, orientationAxes: { x: 'W+', y: 'L-', z: 'H+' }, orientationLabel: 'X:W+ Y:L- Z:T+' }),
+      expect.objectContaining({ orientationKey: 'LWH', yawQuarterTurn: 2, pitchQuarterTurn: 0, height: 600, labelRotationDeg: 180, orientationAxes: { x: 'L-', y: 'W-', z: 'H+' }, orientationLabel: 'X:L- Y:W- Z:T+' }),
+      expect.objectContaining({ orientationKey: 'WLH', yawQuarterTurn: 3, pitchQuarterTurn: 0, height: 600, labelRotationDeg: 90, orientationAxes: { x: 'W-', y: 'L+', z: 'H+' }, orientationLabel: 'X:W- Y:L+ Z:T+' }),
       expect.objectContaining({ orientationKey: 'LWH', yawQuarterTurn: 0, pitchQuarterTurn: 0, height: 600, labelRotationDeg: 0, orientationAxes: { x: 'L+', y: 'W+', z: 'H+' }, orientationLabel: 'X:L+ Y:W+ Z:T+' }),
     ])
   })
@@ -259,7 +259,7 @@ describe('manualPlacement', () => {
     expect(draft.boxes[0]).toMatchObject({
       orientationKey: 'HLW',
       height: 500,
-      labelRotationDeg: 0,
+      labelRotationDeg: 180,
       yawQuarterTurn: 1,
       pitchQuarterTurn: 1,
       orientationAxes: { x: 'H+', y: 'L-', z: 'W-' },
@@ -307,9 +307,9 @@ describe('manualPlacement', () => {
     }
 
     expect(seen).toEqual([
-      expect.objectContaining({ orientationKey: 'LHW', yawQuarterTurn: 0, pitchQuarterTurn: 1, width: 600, height: 500, labelRotationDeg: 0, orientationAxes: { x: 'L+', y: 'H+', z: 'W-' }, orientationLabel: 'X:L+ Y:T+ Z:W-' }),
-      expect.objectContaining({ orientationKey: 'LWH', yawQuarterTurn: 0, pitchQuarterTurn: 2, width: 500, height: 600, labelRotationDeg: 0, orientationAxes: { x: 'L+', y: 'W-', z: 'H-' }, orientationLabel: 'X:L+ Y:W- Z:T-' }),
-      expect.objectContaining({ orientationKey: 'LHW', yawQuarterTurn: 0, pitchQuarterTurn: 3, width: 600, height: 500, labelRotationDeg: 0, orientationAxes: { x: 'L+', y: 'H-', z: 'W+' }, orientationLabel: 'X:L+ Y:T- Z:W+' }),
+      expect.objectContaining({ orientationKey: 'LHW', yawQuarterTurn: 0, pitchQuarterTurn: 1, width: 600, height: 500, labelRotationDeg: 270, orientationAxes: { x: 'L+', y: 'H+', z: 'W-' }, orientationLabel: 'X:L+ Y:T+ Z:W-' }),
+      expect.objectContaining({ orientationKey: 'LWH', yawQuarterTurn: 0, pitchQuarterTurn: 2, width: 500, height: 600, labelRotationDeg: 180, orientationAxes: { x: 'L+', y: 'W-', z: 'H-' }, orientationLabel: 'X:L+ Y:W- Z:T-' }),
+      expect.objectContaining({ orientationKey: 'LHW', yawQuarterTurn: 0, pitchQuarterTurn: 3, width: 600, height: 500, labelRotationDeg: 90, orientationAxes: { x: 'L+', y: 'H-', z: 'W+' }, orientationLabel: 'X:L+ Y:T- Z:W+' }),
       expect.objectContaining({ orientationKey: 'LWH', yawQuarterTurn: 0, pitchQuarterTurn: 0, width: 500, height: 600, labelRotationDeg: 0, orientationAxes: { x: 'L+', y: 'W+', z: 'H+' }, orientationLabel: 'X:L+ Y:W+ Z:T+' }),
     ])
   })
@@ -636,7 +636,7 @@ describe('manualPlacement', () => {
       name: 'A',
       color: '#f59e0b',
       orientationKey: 'WLH',
-      labelRotationDeg: 0,
+      labelRotationDeg: 270,
       yawQuarterTurn: 1,
       pitchQuarterTurn: 0,
       orientationAxes: { x: 'W+', y: 'L-', z: 'H+' },

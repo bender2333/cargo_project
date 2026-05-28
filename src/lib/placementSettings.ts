@@ -6,6 +6,7 @@ export type SupportPolicy = {
 }
 
 export type PlacementSettings = {
+  snapEnabled: boolean
   gridSnapEnabled: boolean
   gridStepMm: number
   edgeSnapEnabled: boolean
@@ -17,6 +18,7 @@ export type PlacementSettings = {
 }
 
 export const DEFAULT_PLACEMENT_SETTINGS: PlacementSettings = {
+  snapEnabled: true,
   gridSnapEnabled: true,
   gridStepMm: 50,
   edgeSnapEnabled: true,
@@ -60,6 +62,7 @@ function normalizeSupportPolicy(value: unknown): SupportPolicy {
 export function normalizePlacementSettings(value: unknown): PlacementSettings {
   const src = typeof value === 'object' && value !== null ? value as Partial<PlacementSettings> : {}
   return {
+    snapEnabled: src.snapEnabled ?? DEFAULT_PLACEMENT_SETTINGS.snapEnabled,
     gridSnapEnabled: src.gridSnapEnabled ?? DEFAULT_PLACEMENT_SETTINGS.gridSnapEnabled,
     gridStepMm: clampNumber(src.gridStepMm, DEFAULT_PLACEMENT_SETTINGS.gridStepMm, 1, 1000),
     edgeSnapEnabled: src.edgeSnapEnabled ?? DEFAULT_PLACEMENT_SETTINGS.edgeSnapEnabled,
