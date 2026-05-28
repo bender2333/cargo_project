@@ -78,6 +78,7 @@ import { RegisterPage } from './components/RegisterPage'
 import { UserManagement } from './components/UserManagement'
 import { DebugPanel } from './components/DebugPanel'
 import { CustomContainerDialog } from './components/CustomContainerDialog'
+import { buildCargoDebugSnapshot } from './lib/debugSnapshot'
 
 const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
 
@@ -856,7 +857,7 @@ function Workbench() {
   const [rulerEnabled, setRulerEnabled] = useState(false)
   const [hoverInfo, setHoverInfo] = useState<{ id: string; label: string; length: number; width: number; height: number; orientationKey: OrientationKey; x: number; y: number; z: number; clientX: number; clientY: number } | null>(null)
   const [poolDragInfo, setPoolDragInfo] = useState<{ cargoId: string; length: number; width: number; height: number; color: string } | null>(null)
-  const [manualMaximized, setManualMaximized] = useState(false)
+  const [workspaceMaximized, setWorkspaceMaximized] = useState(false)
   const [resetViewTick, setResetViewTick] = useState(0)
   const [compareSelection, setCompareSelection] = useState<string[]>(() => containers.slice(0, 3).map((c) => c.id))
   const [showCogOverlay, setShowCogOverlay] = useState(false)
@@ -1284,13 +1285,13 @@ function Workbench() {
   }
 
   useEffect(() => {
-    if (!manualMaximized) return
+    if (!workspaceMaximized) return
     const handle = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setManualMaximized(false)
+      if (event.key === 'Escape') setWorkspaceMaximized(false)
     }
     window.addEventListener('keydown', handle)
     return () => window.removeEventListener('keydown', handle)
-  }, [manualMaximized])
+  }, [workspaceMaximized])
 
   useEffect(() => {
     setHoverInfo(null)
@@ -1437,6 +1438,96 @@ function Workbench() {
       locale,
     }),
     [result, measurements, cogResult, manualIssues, locale],
+  )
+  const debugSnapshot = useMemo(
+    () => buildCargoDebugSnapshot({
+      user: currentUser,
+      locale,
+      projectName,
+      shipmentName,
+      placementMode,
+      workspaceView,
+      sceneViewMode,
+      planViewMode,
+      activeResultTab,
+      activeLayerId,
+      activeLabelId,
+      selectedContainer,
+      effectiveContainer: renderingContainer,
+      loadingMode,
+      cargoItems: displayCargoItems,
+      placementSettings,
+      hasCalculated,
+      automatic: {
+        placedBoxes: result.placed,
+        visibleBoxes: visibleAutoBoxes,
+        unplaced: result.unplaced,
+        diagnostics: result.diagnostics,
+        layersCount: result.layers.length,
+        placedCount: result.placedCount,
+        totalCargoCount: result.totalCargoCount,
+      },
+      manual: {
+        draft: manualDraft,
+        placedBoxes: manualPlacedBoxes,
+        pool: manualPool,
+        issues: manualIssues,
+        invalidBoxIds: Array.from(manualInvalidBoxIds),
+        selectedBoxId: manualSelectedId,
+        notice: manualNotice,
+        capacity: manualCapacity,
+      },
+      measurements,
+      ui: {
+        gridSnap,
+        edgeSnap,
+        rulerEnabled,
+        workspaceMaximized,
+      },
+      historyCount: historyPlans.length,
+      recentErrors,
+    }),
+    [
+      activeLabelId,
+      activeLayerId,
+      activeResultTab,
+      currentUser,
+      displayCargoItems,
+      edgeSnap,
+      gridSnap,
+      hasCalculated,
+      historyPlans.length,
+      loadingMode,
+      locale,
+      manualCapacity,
+      manualDraft,
+      manualInvalidBoxIds,
+      manualIssues,
+      manualNotice,
+      manualPlacedBoxes,
+      manualPool,
+      manualSelectedId,
+      measurements,
+      placementMode,
+      placementSettings,
+      planViewMode,
+      projectName,
+      recentErrors,
+      renderingContainer,
+      result.diagnostics,
+      result.layers.length,
+      result.placed,
+      result.placedCount,
+      result.totalCargoCount,
+      result.unplaced,
+      rulerEnabled,
+      sceneViewMode,
+      selectedContainer,
+      shipmentName,
+      visibleAutoBoxes,
+      workspaceMaximized,
+      workspaceView,
+    ],
   )
 
   const handleAddFillCargo = (presetId: string, quantity: number) => {
@@ -2064,7 +2155,7 @@ function Workbench() {
   return (
     <main className="min-h-screen bg-[#f4f7fb] text-[#1f2937]">
       <div className="mx-auto p-5 max-w-[1500px] xl:max-w-[1800px] 2xl:max-w-none 2xl:px-8">
-        <header className={`mb-5 rounded-2xl bg-gradient-to-br from-[#2563eb] to-[#7c3aed] p-6 text-white ${manualMaximized ? 'hidden' : ''}`}>
+        <header className={`mb-5 rounded-2xl bg-gradient-to-br from-[#2563eb] to-[#7c3aed] p-6 text-white ${workspaceMaximized ? 'hidden' : ''}`}>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1 className="m-0 text-[30px] font-bold">{t.title}</h1>
@@ -2200,7 +2291,7 @@ function Workbench() {
           </section>
         ) : (
         <section className={sidebarCollapsed ? "flex gap-5 max-lg:flex-col" : "flex gap-5 max-lg:flex-col"} data-testid="workbench-layout">
-          <aside className={`${sidebarCollapsed ? "w-[32px] shrink-0 overflow-hidden flex flex-col items-center" : "w-[340px] lg:w-[360px] shrink-0 space-y-4 max-lg:w-full"} ${manualMaximized ? 'hidden' : ''}`}>
+          <aside className={`${sidebarCollapsed ? "w-[32px] shrink-0 overflow-hidden flex flex-col items-center" : "w-[340px] lg:w-[360px] shrink-0 space-y-4 max-lg:w-full"} ${workspaceMaximized ? 'hidden' : ''}`}>
             {sidebarCollapsed ? (
               <button
                 className="mt-4 flex h-8 w-8 items-center justify-center rounded bg-[#111827] text-white hover:bg-slate-700 font-bold"
@@ -2246,6 +2337,122 @@ function Workbench() {
             <div className="grid gap-2 border-b border-[#e5e7eb] bg-[#f8fafc] p-3 text-sm" data-testid="workspace-menu">
               <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('overview')}>{t.nav[0]}</button>
               <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('history')}>{t.nav[1]}</button>
+              <button
+                className="archive-button secondary text-left"
+                type="button"
+                aria-expanded={placementSettingsOpen}
+                data-testid="placement-settings-toggle"
+                onClick={() => setPlacementSettingsOpen((open) => !open)}
+              >
+                {placementSettingsOpen ? t.placementSettingsClose : t.placementSettings}
+              </button>
+              {placementSettingsOpen && (
+                <div className="border border-[#cbd5e1] bg-white px-3 py-2 text-xs text-[#334155] shadow-sm" data-testid="placement-settings-panel">
+                  <div className="grid gap-3">
+                    <label className="flex items-center gap-2 font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={placementSettings.surfaceSnapEnabled}
+                        onChange={(event) => setPlacementSettings((s) => ({ ...s, surfaceSnapEnabled: event.target.checked }))}
+                      />
+                      {t.surfaceSnap}
+                    </label>
+                    <label className="flex items-center gap-2 font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={placementSettings.zSnapEnabled}
+                        onChange={(event) => setPlacementSettings((s) => ({ ...s, zSnapEnabled: event.target.checked }))}
+                      />
+                      {t.zSnap}
+                    </label>
+                    <label className="flex items-center gap-2 font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={placementSettings.supportPolicy.allowPartialOverhang}
+                        onChange={(event) => setPlacementSettings((s) => ({
+                          ...s,
+                          supportPolicy: {
+                            ...s.supportPolicy,
+                            allowPartialOverhang: event.target.checked,
+                            supportMode: event.target.checked ? 'field-review' : 'strict',
+                          },
+                        }))}
+                      />
+                      {t.allowOverhang}
+                    </label>
+                    <span className="text-[#64748b]">{t.settingsStored}</span>
+                    {[
+                      ['gridStepMm', t.gridStep, 1, 1000],
+                      ['edgeToleranceMm', t.edgeTolerance, 0, 1000],
+                      ['zStepMm', t.zStep, 1, 1000],
+                    ].map(([key, label, min, max]) => (
+                      <label key={String(key)} className="flex flex-col gap-1">
+                        <span className="font-semibold">{label} (mm)</span>
+                        <input
+                          className="rounded border border-[#cbd5e1] px-2 py-1"
+                          type="number"
+                          min={Number(min)}
+                          max={Number(max)}
+                          value={Number(placementSettings[key as keyof Pick<PlacementSettings, 'gridStepMm' | 'edgeToleranceMm' | 'zStepMm'>])}
+                          onChange={(event) => {
+                            const value = Number(event.target.value)
+                            if (!Number.isFinite(value)) return
+                            setPlacementSettings((s) => ({ ...s, [key]: value }))
+                          }}
+                        />
+                      </label>
+                    ))}
+                    <label className="flex flex-col gap-1">
+                      <span className="font-semibold">{t.minSupport}</span>
+                      <input
+                        className="rounded border border-[#cbd5e1] px-2 py-1"
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={Math.round(placementSettings.supportPolicy.minSupportRatio * 100)}
+                        onChange={(event) => {
+                          const next = Math.max(0, Math.min(100, Number(event.target.value))) / 100
+                          setPlacementSettings((s) => ({
+                            ...s,
+                            supportPolicy: {
+                              ...s.supportPolicy,
+                              minSupportRatio: next,
+                              warningSupportRatio: Math.max(next, s.supportPolicy.warningSupportRatio),
+                            },
+                          }))
+                        }}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="font-semibold">{t.warnSupport}</span>
+                      <input
+                        className="rounded border border-[#cbd5e1] px-2 py-1"
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={Math.round(placementSettings.supportPolicy.warningSupportRatio * 100)}
+                        onChange={(event) => {
+                          const next = Math.max(0, Math.min(100, Number(event.target.value))) / 100
+                          setPlacementSettings((s) => ({
+                            ...s,
+                            supportPolicy: {
+                              ...s.supportPolicy,
+                              warningSupportRatio: Math.max(s.supportPolicy.minSupportRatio, next),
+                            },
+                          }))
+                        }}
+                      />
+                    </label>
+                    <button
+                      className="archive-button"
+                      type="button"
+                      onClick={() => setPlacementSettings(DEFAULT_PLACEMENT_SETTINGS)}
+                    >
+                      {t.resetPlacementSettings}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <div className="flex items-center justify-between bg-[#b0b4b7] pl-4">
@@ -2412,7 +2619,11 @@ function Workbench() {
             <div className="archive-stat"><div className="archive-stat-value">{result.labelStats.length}</div><div className="archive-stat-key">{t.cargoTypes}</div></div>
           </div>
 
-          <section className="archive-card overflow-hidden" data-testid="visual-workspace">
+          <section
+            className="archive-card overflow-hidden"
+            data-testid="visual-workspace"
+            data-workspace-maximized={workspaceMaximized ? 'true' : 'false'}
+          >
             <div className="flex flex-wrap gap-2 border-b border-[#e5e7eb] p-[18px]">
               <button
                 className={`archive-tab ${placementMode === 'auto' ? 'active' : ''}`}
@@ -2519,26 +2730,6 @@ function Workbench() {
               </>
             )}
             <button
-              className={`archive-tab inline-flex items-center gap-2 ${placementSettingsOpen ? 'active' : ''}`}
-              type="button"
-              aria-expanded={placementSettingsOpen}
-              data-testid="placement-settings-toggle"
-              onClick={() => setPlacementSettingsOpen((open) => !open)}
-            >
-              <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
-                <path d="M12 3v3" />
-                <path d="M12 18v3" />
-                <path d="M3 12h3" />
-                <path d="M18 12h3" />
-                <circle cx="12" cy="12" r="3" />
-                <path d="m5.6 5.6 2.1 2.1" />
-                <path d="m16.3 16.3 2.1 2.1" />
-                <path d="m18.4 5.6-2.1 2.1" />
-                <path d="m7.7 16.3-2.1 2.1" />
-              </svg>
-              {placementSettingsOpen ? t.placementSettingsClose : t.placementSettings}
-            </button>
-            <button
               className={`archive-tab inline-flex items-center gap-2 ${rulerEnabled ? 'active' : ''}`}
               type="button"
               aria-pressed={rulerEnabled}
@@ -2559,6 +2750,15 @@ function Workbench() {
             <button className="archive-button success" type="button" onClick={exportCurrentView}>
               {t.exportView}
             </button>
+            <button
+              className={`archive-tab inline-flex items-center gap-2 ${workspaceMaximized ? 'active' : ''}`}
+              type="button"
+              data-testid="maximize-workspace"
+              aria-pressed={workspaceMaximized}
+              onClick={() => setWorkspaceMaximized((current) => !current)}
+            >
+              {workspaceMaximized ? t.restoreManual : t.maximizeManual}
+            </button>
             <div
               className="ml-auto flex items-center gap-2 rounded-lg bg-[#f1f5f9] px-3 py-1.5 text-xs text-[#0f172a] shadow-sm"
               data-testid="container-dimension-badge"
@@ -2568,113 +2768,6 @@ function Workbench() {
                 {renderingContainer.length.toLocaleString()} × {renderingContainer.width.toLocaleString()} × {renderingContainer.height.toLocaleString()} mm
               </span>
             </div>
-            {placementSettingsOpen && (
-              <div className="w-full border border-[#cbd5e1] bg-white px-3 py-2 text-xs text-[#334155] shadow-sm" data-testid="placement-settings-panel">
-                <div className="grid gap-3 md:grid-cols-4">
-                  <label className="flex items-center gap-2 font-semibold">
-                    <input
-                      type="checkbox"
-                      checked={placementSettings.surfaceSnapEnabled}
-                      onChange={(event) => setPlacementSettings((s) => ({ ...s, surfaceSnapEnabled: event.target.checked }))}
-                    />
-                    {t.surfaceSnap}
-                  </label>
-                  <label className="flex items-center gap-2 font-semibold">
-                    <input
-                      type="checkbox"
-                      checked={placementSettings.zSnapEnabled}
-                      onChange={(event) => setPlacementSettings((s) => ({ ...s, zSnapEnabled: event.target.checked }))}
-                    />
-                    {t.zSnap}
-                  </label>
-                  <label className="flex items-center gap-2 font-semibold">
-                    <input
-                      type="checkbox"
-                      checked={placementSettings.supportPolicy.allowPartialOverhang}
-                      onChange={(event) => setPlacementSettings((s) => ({
-                        ...s,
-                        supportPolicy: {
-                          ...s.supportPolicy,
-                          allowPartialOverhang: event.target.checked,
-                          supportMode: event.target.checked ? 'field-review' : 'strict',
-                        },
-                      }))}
-                    />
-                    {t.allowOverhang}
-                  </label>
-                  <span className="text-[#64748b]">{t.settingsStored}</span>
-                  {[
-                    ['gridStepMm', t.gridStep, 1, 1000],
-                    ['edgeToleranceMm', t.edgeTolerance, 0, 1000],
-                    ['zStepMm', t.zStep, 1, 1000],
-                  ].map(([key, label, min, max]) => (
-                    <label key={String(key)} className="flex flex-col gap-1">
-                      <span className="font-semibold">{label} (mm)</span>
-                      <input
-                        className="rounded border border-[#cbd5e1] px-2 py-1"
-                        type="number"
-                        min={Number(min)}
-                        max={Number(max)}
-                        value={Number(placementSettings[key as keyof Pick<PlacementSettings, 'gridStepMm' | 'edgeToleranceMm' | 'zStepMm'>])}
-                        onChange={(event) => {
-                          const value = Number(event.target.value)
-                          if (!Number.isFinite(value)) return
-                          setPlacementSettings((s) => ({ ...s, [key]: value }))
-                        }}
-                      />
-                    </label>
-                  ))}
-                  <label className="flex flex-col gap-1">
-                    <span className="font-semibold">{t.minSupport}</span>
-                    <input
-                      className="rounded border border-[#cbd5e1] px-2 py-1"
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={Math.round(placementSettings.supportPolicy.minSupportRatio * 100)}
-                      onChange={(event) => {
-                        const next = Math.max(0, Math.min(100, Number(event.target.value))) / 100
-                        setPlacementSettings((s) => ({
-                          ...s,
-                          supportPolicy: {
-                            ...s.supportPolicy,
-                            minSupportRatio: next,
-                            warningSupportRatio: Math.max(next, s.supportPolicy.warningSupportRatio),
-                          },
-                        }))
-                      }}
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="font-semibold">{t.warnSupport}</span>
-                    <input
-                      className="rounded border border-[#cbd5e1] px-2 py-1"
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={Math.round(placementSettings.supportPolicy.warningSupportRatio * 100)}
-                      onChange={(event) => {
-                        const next = Math.max(0, Math.min(100, Number(event.target.value))) / 100
-                        setPlacementSettings((s) => ({
-                          ...s,
-                          supportPolicy: {
-                            ...s.supportPolicy,
-                            warningSupportRatio: Math.max(s.supportPolicy.minSupportRatio, next),
-                          },
-                        }))
-                      }}
-                    />
-                  </label>
-                  <button
-                    className="archive-button"
-                    type="button"
-                    onClick={() => setPlacementSettings(DEFAULT_PLACEMENT_SETTINGS)}
-                  >
-                    {t.resetPlacementSettings}
-                  </button>
-                </div>
-              </div>
-            )}
             </div>
             <div
               className={`relative w-full bg-gradient-to-b from-[#eef6ff] to-[#f8fafc] ${
@@ -2684,7 +2777,7 @@ function Workbench() {
               }`}
             >
               {placementMode === 'manual' ? (
-                <div className="flex h-full w-full flex-col gap-3 p-4" data-testid="manual-workspace" data-manual-maximized={manualMaximized ? 'true' : 'false'}>
+                <div className="flex h-full w-full flex-col gap-3 p-4" data-testid="manual-workspace" data-workspace-maximized={workspaceMaximized ? 'true' : 'false'}>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       className="archive-button"
@@ -2845,15 +2938,6 @@ function Workbench() {
                       )}
                     </aside>
                     <div className="relative flex-1 overflow-hidden rounded-xl border border-[#e5e7eb] bg-white" data-testid="manual-view-container">
-                      <button
-                        type="button"
-                        className="absolute right-3 top-3 z-30 rounded-lg border border-[#cbd5e1] bg-white/95 px-3 py-1.5 text-xs font-semibold text-[#0f172a] shadow-md hover:bg-white"
-                        data-testid="maximize-manual"
-                        aria-pressed={manualMaximized}
-                        onClick={() => setManualMaximized((current) => !current)}
-                      >
-                        {manualMaximized ? t.restoreManual : t.maximizeManual}
-                      </button>
                       {workspaceView === '3d' ? (
                         <ContainerScene
                           activeLabelId={'all'}
@@ -2981,7 +3065,7 @@ function Workbench() {
             </div>
           </section>
 
-          <section className={`archive-card overflow-hidden ${manualMaximized ? 'hidden' : ''}`} ref={reportRef} data-testid="report-panel">
+          <section className={`archive-card overflow-hidden ${workspaceMaximized ? 'hidden' : ''}`} ref={reportRef} data-testid="report-panel">
           <div className="border-b border-[#e5e7eb] p-[18px]">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3" data-testid="import-export-toolbar">
               <h2 className="text-lg font-bold">{t.results}</h2>
@@ -3567,29 +3651,7 @@ function Workbench() {
           }}
         />
       )}
-      <DebugPanel
-        snapshot={{
-          user: currentUser,
-          locale,
-          placementMode,
-          workspaceView,
-          selectedContainer: {
-            id: selectedContainer.id,
-            label: selectedContainer.label,
-            length: selectedContainer.length,
-            width: selectedContainer.width,
-            height: selectedContainer.height,
-          },
-          loadingMode,
-          cargoItemsCount: cargoItems.length,
-          placedCount: result.placedCount,
-          totalCargoCount: result.totalCargoCount,
-          layersCount: result.layers.length,
-          manualBoxesCount: manualDraft.boxes.length,
-          historyCount: historyPlans.length,
-          recentErrors,
-        }}
-      />
+      <DebugPanel snapshot={debugSnapshot} />
     </main>
   )
 }

@@ -1,31 +1,9 @@
 import { useEffect, useState } from 'react'
-import type { LoadingMode } from '../types'
-import { fetchWithAuth, getCurrentUser } from '../lib/auth'
-
-type DebugSnapshot = {
-  user: ReturnType<typeof getCurrentUser>
-  locale: string
-  placementMode: string
-  workspaceView: string
-  selectedContainer: {
-    id: string
-    label: string
-    length: number
-    width: number
-    height: number
-  }
-  loadingMode: LoadingMode
-  cargoItemsCount: number
-  placedCount: number
-  totalCargoCount: number
-  layersCount: number
-  manualBoxesCount: number
-  historyCount: number
-  recentErrors: string[]
-}
+import { fetchWithAuth } from '../lib/auth'
+import type { CargoDebugSnapshot } from '../lib/debugSnapshot'
 
 type DebugPanelProps = {
-  snapshot: DebugSnapshot
+  snapshot: CargoDebugSnapshot
 }
 
 const STORAGE_KEY = 'cargo_debug_panel'
@@ -67,7 +45,7 @@ export function DebugPanel({ snapshot }: DebugPanelProps) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    ;(window as unknown as { __cargoSnapshot?: () => DebugSnapshot }).__cargoSnapshot = () => snapshot
+    ;(window as unknown as { __cargoSnapshot?: () => CargoDebugSnapshot }).__cargoSnapshot = () => snapshot
   }, [snapshot])
 
   if (!open) {
@@ -89,6 +67,16 @@ export function DebugPanel({ snapshot }: DebugPanelProps) {
     } catch {
       // ignore
     }
+  }
+
+  const downloadSnapshot = () => {
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'cargo-debug-snapshot.json'
+    link.click()
+    URL.revokeObjectURL(url)
   }
 
   const fetchLogs = async () => {
@@ -124,6 +112,14 @@ export function DebugPanel({ snapshot }: DebugPanelProps) {
         <button
           type="button"
           className="rounded border border-slate-300 px-2 py-0.5 text-xs"
+          data-testid="debug-download-snapshot"
+          onClick={downloadSnapshot}
+        >
+          Download
+        </button>
+        <button
+          type="button"
+          className="rounded border border-slate-300 px-2 py-0.5 text-xs"
           onClick={() => setOpen(false)}
         >
           ×
@@ -134,13 +130,13 @@ export function DebugPanel({ snapshot }: DebugPanelProps) {
           <tr><td className="pr-2 text-slate-500">User</td><td>{snapshot.user?.username ?? '-'}</td></tr>
           <tr><td className="pr-2 text-slate-500">Role</td><td>{snapshot.user?.role ?? '-'}</td></tr>
           <tr><td className="pr-2 text-slate-500">Locale</td><td>{snapshot.locale}</td></tr>
-          <tr><td className="pr-2 text-slate-500">Mode</td><td>{snapshot.placementMode} / {snapshot.workspaceView}</td></tr>
-          <tr><td className="pr-2 text-slate-500">Container</td><td>{snapshot.selectedContainer.label} ({snapshot.selectedContainer.length}×{snapshot.selectedContainer.width}×{snapshot.selectedContainer.height})</td></tr>
+          <tr><td className="pr-2 text-slate-500">Mode</td><td>{snapshot.mode.placement} / {snapshot.mode.workspaceView}</td></tr>
+          <tr><td className="pr-2 text-slate-500">Container</td><td>{snapshot.container.selected.label} ({snapshot.container.selected.length}×{snapshot.container.selected.width}×{snapshot.container.selected.height})</td></tr>
           <tr><td className="pr-2 text-slate-500">Loading</td><td>{snapshot.loadingMode}</td></tr>
-          <tr><td className="pr-2 text-slate-500">Cargo items</td><td>{snapshot.cargoItemsCount}</td></tr>
-          <tr><td className="pr-2 text-slate-500">Placed</td><td>{snapshot.placedCount} / {snapshot.totalCargoCount} ({snapshot.layersCount} layers)</td></tr>
-          <tr><td className="pr-2 text-slate-500">Manual boxes</td><td>{snapshot.manualBoxesCount}</td></tr>
-          <tr><td className="pr-2 text-slate-500">History</td><td>{snapshot.historyCount}</td></tr>
+          <tr><td className="pr-2 text-slate-500">Cargo items</td><td>{snapshot.summary.cargoItemsCount}</td></tr>
+          <tr><td className="pr-2 text-slate-500">Placed</td><td>{snapshot.summary.placedCount} / {snapshot.summary.totalCargoCount} ({snapshot.summary.layersCount} layers)</td></tr>
+          <tr><td className="pr-2 text-slate-500">Manual boxes</td><td>{snapshot.summary.manualBoxesCount}</td></tr>
+          <tr><td className="pr-2 text-slate-500">History</td><td>{snapshot.summary.historyCount}</td></tr>
         </tbody>
       </table>
       {snapshot.recentErrors.length > 0 && (

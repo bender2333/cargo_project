@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-05-28 (Round 23 Review Fixes)
+
+- Completed subtask: implemented the new review fixes for manual-placement debug replay, global placement settings, and shared workspace maximize.
+  - Added `src/lib/debugSnapshot.ts` with a structured `CargoDebugSnapshot` plus `restoreManualDebugScenario()` so downloaded debug data can recreate manual placement scenes in source-side tests.
+  - Expanded DebugPanel from shallow counters to a downloadable/copyable snapshot containing cargo, selected/effective container, placement settings, automatic result state, manual draft/pool/issues/notice/capacity, measurements, UI flags, and recent errors.
+  - Moved placement settings out of the visual placement toolbar into the top-left workspace menu, while keeping existing user-level persistence.
+  - Replaced manual-only maximize with shared `workspaceMaximized` and a common `maximize-workspace` control available in both automatic and manual workspaces.
+  - Added regression coverage for debug snapshot recovery, debug download, global settings entry, automatic maximize, and manual maximize state attributes.
+  - Verification: `npm run lint` passed; `npm test` passed 28 files / 168 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 72 tests / 1 skipped / 0 failed.
+
 ## 2026-05-27 (Round 22 Re-review Implementation)
 
 - Completed subtask: implemented the “第二十二轮重审 Review 与下一阶段重构计划（2026-05-27）” core refactor.

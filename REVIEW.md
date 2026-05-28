@@ -1,5 +1,74 @@
 # Review 与下一阶段开发计划
 
+日期：2026-05-28
+
+## 第二十三轮 Review 与重构落地计划
+
+本轮 review 针对手动排布无法拖拽/放置时的复现能力、排布设置入口位置，以及自动排布工作区缺少最大化能力。
+
+### 1. 手动排布 debug 信息不可复现
+
+问题定位：
+
+- `src/components/DebugPanel.tsx` 原 `DebugSnapshot` 只包含用户、模式、柜型、计数和 recentErrors。
+- `src/Workbench.tsx` 传入 DebugPanel 的 snapshot 没有包含 `manualDraft`、货物清单、有效柜型、吸附/支撑设置、手动校验问题、当前通知、pool 剩余数量和测量线。
+- 结果是用户遇到拖拽失败时，即使复制 debug JSON，源码侧也无法恢复同一个手动排布场景，测试也无法直接复用。
+
+已落地：
+
+- 新增 `src/lib/debugSnapshot.ts`，定义 `CargoDebugSnapshot` 和 `restoreManualDebugScenario()`。
+- debug 快照现在包含 `cargo.items`、`container.selected/effective`、`placementSettings`、`automatic`、`manual.draft`、`manual.issues`、`manual.pool`、`manual.notice`、`measurements`、UI 开关和 recentErrors。
+- `DebugPanel` 增加 `Download`，下载 `cargo-debug-snapshot.json`；保留 Copy；`window.__cargoSnapshot()` 暴露同一份结构化快照。
+- 新增 `src/lib/debugSnapshot.test.ts`，验证下载数据可恢复到手动测试场景。
+
+下一步事项：
+
+- 将用户反馈的真实 `cargo-debug-snapshot.json` 放入 `test-data/debug/`，新增针对失败拖拽场景的单元测试或 E2E 回归。
+- 若后续发现 3D 射线坐标仍不足以复现，需要把最近一次 drag/drop pointer 事件轨迹加入 snapshot。
+
+### 2. 排布设置入口位置错误
+
+问题定位：
+
+- `src/Workbench.tsx` 的 `placement-settings-toggle` 和 `placement-settings-panel` 原本在视觉工作区工具栏内。
+- 这些设置是用户级全局配置，不属于单次 2D/3D 排布栏，放在工作区工具栏会与尺规、导出、视角控制混在一起。
+
+已落地：
+
+- 排布设置入口移动到左上角工作台菜单 `≡` 下。
+- 原工具栏内不再渲染 `placement-settings-toggle`，避免用户误认为它只影响当前视图。
+- 原有用户级持久化逻辑 `placementSettingsKey(userId)` 保持不变。
+
+下一步事项：
+
+- 全局设置项增多后，拆出独立 `SettingsPanel` 组件，避免 `Workbench.tsx` 继续膨胀。
+
+### 3. 自动排布缺少最大化工作区
+
+问题定位：
+
+- `src/Workbench.tsx` 之前只维护 `manualMaximized`，按钮 `maximize-manual` 只在手动 3D/2D 容器里出现。
+- 自动排布的 2D/3D 视觉工作区没有最大化入口，导致同一工作区能力在模式之间不一致。
+
+已落地：
+
+- `manualMaximized` 重构为 `workspaceMaximized`。
+- 最大化按钮统一为 `maximize-workspace`，放在视觉工作区工具栏，自动/手动模式都可用。
+- 最大化后隐藏 header、左侧参数栏和报告面板；手动模式仍保留 pool 与精确数值面板。
+- `data-workspace-maximized` 暴露在 `visual-workspace` 和 `manual-workspace` 上，供 E2E 回归。
+
+下一步事项：
+
+- 在移动端再补一条最大化布局 E2E，确认工具栏按钮不与柜型 badge 和导出按钮挤压重叠。
+
+### 验证计划
+
+- 单元测试：`npx vitest run src/lib/debugSnapshot.test.ts`
+- 目标 E2E：`npx playwright test e2e/manual-3d.spec.ts --grep "调试面板可下载|排布设置面板|自动模式工作区也提供最大化|手动模式最大化"`
+- 全量验证：`npm run lint`、`npm test`、`npm run build`、`npm run test:e2e`
+
+---
+
 日期：2026-05-20
 
 ## 背景
