@@ -10,6 +10,11 @@
   - Split the workspace menu into independent `placement-settings-panel` and `snap-settings-panel`.
   - Add persisted `snapEnabled`; when off, 2D and 3D skip grid, edge, Z, and surface snapping.
 - Verification: `npm run lint` passed; `npm test` passed 30 files / 176 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 72 tests / 1 skipped / 0 failed.
+- Completed subtask: deployed and verified Round 26 on the public host.
+  - Deployment completed with `npm run deploy`; remote backup created at `/root/cargo_project-backup-20260528-085715`.
+  - Remote health check passed during deploy.
+  - Remote targeted E2E passed: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npx playwright test e2e/manual-3d.spec.ts --grep "R 与 Shift|网格吸附|边缘吸附|排布设置和吸附设置"` passed 4 tests.
+  - Remote full E2E first hit the local command timeout at 6 minutes without assertion output; rerun with a longer timeout passed 72 tests / 1 skipped / 0 failed.
 
 ## 2026-05-28 (Round 25 Rotation, Labels, Notification Bar, Canvas Button)
 
