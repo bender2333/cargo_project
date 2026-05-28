@@ -1195,6 +1195,11 @@ function Workbench() {
     event.dataTransfer.effectAllowed = 'copy'
     const item = displayCargoItems.find((c) => c.id === cargoId)
     if (item) {
+      event.dataTransfer.setData('application/x-cargo-size', JSON.stringify({
+        length: item.length,
+        width: item.width,
+        height: item.height,
+      }))
       setPoolDragInfo({ cargoId, length: item.length, width: item.width, height: item.height, color: item.color })
     }
   }
@@ -2352,6 +2357,24 @@ function Workbench() {
                     <label className="flex items-center gap-2 font-semibold">
                       <input
                         type="checkbox"
+                        checked={placementSettings.gridSnapEnabled}
+                        data-testid="toggle-grid-snap"
+                        onChange={(event) => setPlacementSettings((s) => ({ ...s, gridSnapEnabled: event.target.checked }))}
+                      />
+                      {placementSettings.gridSnapEnabled ? t.gridSnap : t.gridSnapOff}
+                    </label>
+                    <label className="flex items-center gap-2 font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={placementSettings.edgeSnapEnabled}
+                        data-testid="toggle-edge-snap"
+                        onChange={(event) => setPlacementSettings((s) => ({ ...s, edgeSnapEnabled: event.target.checked }))}
+                      />
+                      {placementSettings.edgeSnapEnabled ? t.edgeSnap : t.edgeSnapOff}
+                    </label>
+                    <label className="flex items-center gap-2 font-semibold">
+                      <input
+                        type="checkbox"
                         checked={placementSettings.surfaceSnapEnabled}
                         onChange={(event) => setPlacementSettings((s) => ({ ...s, surfaceSnapEnabled: event.target.checked }))}
                       />
@@ -2698,35 +2721,6 @@ function Workbench() {
                   </svg>
                   {t.resetView}
                 </button>
-                <button
-                  className={`archive-tab inline-flex items-center gap-2 ${gridSnap ? 'active' : ''}`}
-                  type="button"
-                  aria-pressed={gridSnap}
-                  data-testid="toggle-grid-snap"
-                  onClick={() => setPlacementSettings((s) => ({ ...s, gridSnapEnabled: !s.gridSnapEnabled }))}
-                >
-                  <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
-                    <rect x="3" y="3" width="7" height="7" />
-                    <rect x="14" y="3" width="7" height="7" />
-                    <rect x="3" y="14" width="7" height="7" />
-                    <rect x="14" y="14" width="7" height="7" />
-                  </svg>
-                  {gridSnap ? t.gridSnap : t.gridSnapOff}
-                </button>
-                <button
-                  className={`archive-tab inline-flex items-center gap-2 ${edgeSnap ? 'active' : ''}`}
-                  type="button"
-                  aria-pressed={edgeSnap}
-                  data-testid="toggle-edge-snap"
-                  onClick={() => setPlacementSettings((s) => ({ ...s, edgeSnapEnabled: !s.edgeSnapEnabled }))}
-                >
-                  <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
-                    <path d="M4 4h16v16H4z" />
-                    <path d="M9 4v16" />
-                    <path d="M15 4v16" />
-                  </svg>
-                  {edgeSnap ? t.edgeSnap : t.edgeSnapOff}
-                </button>
               </>
             )}
             <button
@@ -2750,15 +2744,6 @@ function Workbench() {
             <button className="archive-button success" type="button" onClick={exportCurrentView}>
               {t.exportView}
             </button>
-            <button
-              className={`archive-tab inline-flex items-center gap-2 ${workspaceMaximized ? 'active' : ''}`}
-              type="button"
-              data-testid="maximize-workspace"
-              aria-pressed={workspaceMaximized}
-              onClick={() => setWorkspaceMaximized((current) => !current)}
-            >
-              {workspaceMaximized ? t.restoreManual : t.maximizeManual}
-            </button>
             <div
               className="ml-auto flex items-center gap-2 rounded-lg bg-[#f1f5f9] px-3 py-1.5 text-xs text-[#0f172a] shadow-sm"
               data-testid="container-dimension-badge"
@@ -2775,7 +2760,17 @@ function Workbench() {
                   ? 'min-h-[480px] xl:min-h-[640px] 2xl:min-h-[760px] h-[70vh] xl:h-[78vh]'
                   : 'aspect-[16/9] min-h-[420px] max-h-[85vh] xl:min-h-[560px]'
               }`}
+              data-testid="visual-workspace-canvas"
             >
+              <button
+                className={`archive-tab absolute right-4 top-4 z-30 inline-flex items-center gap-2 bg-white/95 shadow-lg ${workspaceMaximized ? 'active' : ''}`}
+                type="button"
+                data-testid="maximize-workspace"
+                aria-pressed={workspaceMaximized}
+                onClick={() => setWorkspaceMaximized((current) => !current)}
+              >
+                {workspaceMaximized ? t.restoreManual : t.maximizeManual}
+              </button>
               {placementMode === 'manual' ? (
                 <div className="flex h-full w-full flex-col gap-3 p-4" data-testid="manual-workspace" data-workspace-maximized={workspaceMaximized ? 'true' : 'false'}>
                   <div className="flex flex-wrap items-center gap-2">

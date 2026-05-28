@@ -8,6 +8,7 @@ import { resolveDropTarget } from '../lib/sceneDrop'
 import { snapToEdges } from '../lib/snapEdges'
 import type { CogOverlay } from '../lib/cogVisual'
 import { DEFAULT_PLACEMENT_SETTINGS, type PlacementSettings } from '../lib/placementSettings'
+import { manualMoveCommitArgs } from '../lib/manualMoveCommit'
 
 export type SceneViewMode = 'iso' | 'top' | 'front' | 'side'
 
@@ -813,11 +814,15 @@ export function ContainerScene({
         refreshEntryVisual(entry)
         clearGhost(sceneState)
         if (!invalid) {
-          if (mode === 'z') {
-            onManualMoveRef.current?.(boxId, entry.box.x, entry.box.y, Math.max(0, finalZmm))
-          } else {
-            onManualMoveRef.current?.(boxId, finalXmm, finalYmm)
-          }
+          onManualMoveRef.current?.(...manualMoveCommitArgs({
+            mode,
+            boxId,
+            currentX: entry.box.x,
+            currentY: entry.box.y,
+            finalX: finalXmm,
+            finalY: finalYmm,
+            finalZ: finalZmm,
+          }))
         } else {
           onManualOperationRejectedRef.current?.('move', boxId)
           entry.mesh.position.set(

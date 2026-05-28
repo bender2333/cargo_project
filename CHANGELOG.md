@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-05-28 (Round 24 View Consistency Review Fixes)
+
+- Completed subtask: recorded the new review and root-cause analysis in `REVIEW.md`.
+  - Documented the downloaded D-box debug snapshot coordinates and why the saved snapshot itself was valid.
+  - Root cause: 3D plane dragging recalculated `z=0` visually, but pointer-up only submitted X/Y, so `manualSetBoxPosition` preserved the old stacked `z=600` and `validateDraft` reported floating.
+  - Decomposed this round into view-consistent snapping, canvas-right maximize, global snap settings, local verification, deploy, and remote E2E.
+- Completed subtask: fixed manual placement consistency across 3D and editable 2D top view.
+  - Added `manualMoveCommitArgs()` so 3D plane moves submit X/Y/Z together; moving a stacked D box back to floor now commits `z=0` instead of retaining the old stacked height.
+  - Added a regression test using the user snapshot's key D coordinates: stale X/Y-only movement reproduces floating, while committing `z=0` clears the issue.
+  - Added shared `applyManualPlacementSnap()` and wired `ManualPlacement2D` to use the same edge-then-grid snap settings as 3D for top-view moves and pool drops.
+- Completed subtask: moved snapping controls and maximize to the requested UI locations.
+  - `toggle-grid-snap` and `toggle-edge-snap` now live inside the left-top global placement settings panel, not the visual toolbar.
+  - `maximize-workspace` moved from the toolbar to the top-right of `visual-workspace-canvas`, so automatic 2D/3D and manual 2D/3D expose it in the same canvas position.
+  - Target verification passed: `npx vitest run src/lib/manualMoveCommit.test.ts src/lib/manualPlacementSnap.test.ts src/components/ManualPlacement2D.test.tsx`; `npx tsc -b`; targeted Playwright grep for snap settings and maximize.
+  - Local verification: `npm run lint` passed; `npm test` passed 30 files / 174 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 72 tests / 1 skipped / 0 failed.
+
 ## 2026-05-28 (Round 23 Review Fixes)
 
 - Completed subtask: implemented the new review fixes for manual-placement debug replay, global placement settings, and shared workspace maximize.

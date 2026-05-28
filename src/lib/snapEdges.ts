@@ -2,6 +2,8 @@ import type { ContainerSpec, PlacedBox } from '../types'
 
 export const EDGE_SNAP_TOLERANCE_MM = 30
 
+type EdgeSnapBox = Pick<PlacedBox, 'x' | 'y' | 'length' | 'width'>
+
 /**
  * Snap a candidate footprint to the nearest container wall, container centerline, or
  * neighbouring box edge within `tolerance` millimetres. Returns the (possibly snapped)
@@ -16,7 +18,7 @@ export function snapToEdges(params: {
   length: number
   width: number
   /** Boxes already placed in the scene (the dragged box should be excluded). */
-  others: PlacedBox[]
+  others: EdgeSnapBox[]
   container: Pick<ContainerSpec, 'length' | 'width'>
   /** Only snap when |delta| <= tolerance. Pass 0 to disable. */
   tolerance?: number

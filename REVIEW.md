@@ -2,6 +2,82 @@
 
 日期：2026-05-28
 
+## 第二十四轮 Review 与视图一致性修复计划
+
+本轮 review 聚焦“所有视图行为一致”、用户提供 debug 快照中的 D 箱体拖到地面失败、最大化入口位置，以及吸附配置入口归位。
+
+用户复现场景：
+
+- `C:\Users\BA_H3C_Pad\Downloads\cargo-debug-snapshot.json`
+- 手动模式 / 3D / 20GP；D 箱体有两个实例：
+  - 底层 D：`x=1800, y=1200, z=0`
+  - 上层 D：`x=1872.43, y=1102.30, z=600`
+- 快照保存时 `manual.issues=[]`，因为上层 D 对底层 D 的支撑约 66%，满足当前 50% 支撑要求。
+
+### 1. 3D 拖动 D 到地面后被误判悬空
+
+问题定位：
+
+- `src/components/ContainerScene.tsx` 的 plane 拖拽预览已经通过 `resolveDropTarget(...)` 计算出新的 `(x, y, z)`，当鼠标指向地面时 `z=0`。
+- 但 `onPointerUp` 在 plane 模式提交时只调用 `onManualMoveRef.current?.(boxId, finalXmm, finalYmm)`，没有提交 `finalZmm`。
+- `src/Workbench.tsx` 的 `manualSetBoxPosition(draft, id, x, y, z?)` 在 `z` 未传入时会保留原 `z`。
+- 因此从快照中的上层 D（原 `z=600`）拖到地面时，提交结果变成“新的 X/Y + 旧的 z=600”。底下没有足够支撑后，`validateDraft(...)` 正确报出 floating，于是用户看到“操作未生效：货物处于悬空状态，底面至少需要 50% 支撑。”
+
+修复目标：
+
+- 3D plane 拖拽提交必须携带预览/松手时计算出的 `z`，包括从堆叠层落到地面。
+- 增加回归测试，验证“原本在 `z=600` 的箱体移动到地面时，提交必须把 `z` 清为 0”，避免再次只提交 X/Y。
+
+### 2. 2D / 3D 吸附行为不一致
+
+问题定位：
+
+- 3D 手动拖拽使用 `gridSnapEnabled`、`gridStepMm`、`edgeSnapEnabled`、`edgeToleranceMm`、`surfaceSnapEnabled`、`zSnapEnabled`。
+- 2D 顶视图的 `ManualPlacement2D` 目前直接把 pointer 坐标传给 `onMoveBox` / `onDropFromPool`，没有应用网格吸附和边缘吸附。
+- 2D 前视/侧视仍是只读投影视图，这一点符合当前设计；一致性要求应覆盖可编辑的顶视图。
+
+修复目标：
+
+- `ManualPlacement2D` 增加 `placementSettings` 输入，在顶视图移动和从 pool drop 时使用与 3D 相同的 X/Y 吸附顺序：先边缘吸附，再网格吸附。
+- 2D 吸附只改变 `x/y`，不做表面/Z 吸附；堆叠和 Z 调整继续在 3D 或精确面板中完成。
+- 增加组件测试，验证 2D 顶视图会使用 `gridStepMm` 与 `edgeToleranceMm`。
+
+### 3. 最大化工作区入口位置不符合画布语义
+
+问题定位：
+
+- 第二十三轮把 `maximize-workspace` 放进视觉工作区工具栏，虽然自动/手动都可用，但它不是视角/尺规/导出类工具。
+- 用户期望最大化属于画布本身，应固定在画布右上角，且所有场景一致。
+
+修复目标：
+
+- 从工具栏移除最大化按钮。
+- 在视觉画布容器右上角放置统一的 `maximize-workspace` 浮动按钮，自动 3D、自动 2D、手动 3D、手动 2D 都可见。
+- E2E 验证按钮位于 `visual-workspace-canvas` 右上区域且切换仍隐藏/恢复报告面板。
+
+### 4. 边缘吸附与吸附参数应放入全局设置
+
+问题定位：
+
+- 排布设置面板已经在左上角工作台菜单中，但 `toggle-grid-snap` / `toggle-edge-snap` 仍留在 3D 工具栏。
+- 这些参数是用户级全局配置，不应只出现在某个视图工具栏里。
+
+修复目标：
+
+- 把“网格吸附”和“边缘吸附”开关加入左上角 `placement-settings-panel`。
+- 工具栏只保留视图、尺规、导出等画布操作。
+- 保留原测试 id `toggle-grid-snap` / `toggle-edge-snap`，但它们应只存在于设置面板中，便于 E2E 和用户定位。
+
+### 本轮验收清单
+
+1. `REVIEW.md` 记录本轮 review、快照根因和拆解。
+2. 单元/组件测试覆盖 3D move Z 提交和 2D 顶视图吸附。
+3. E2E 覆盖全局设置里的吸附开关、画布右上最大化、以及 D 快照根因对应的失败规避。
+4. 本地验证：`npm run lint`、`npm test`、`npm run build`、`npm run test:e2e`。
+5. 部署到 `cargo-server`，并对 `http://101.33.232.150/` 执行远程 E2E。
+
+---
+
 ## 第二十三轮 Review 与重构落地计划
 
 本轮 review 针对手动排布无法拖拽/放置时的复现能力、排布设置入口位置，以及自动排布工作区缺少最大化能力。

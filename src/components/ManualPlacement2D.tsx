@@ -3,6 +3,8 @@ import type { PointerEvent as ReactPointerEvent, DragEvent as ReactDragEvent } f
 import type { ContainerSpec } from '../types'
 import type { MeasurementAnnotation, Point3D } from '../lib/measurement'
 import type { ManualDraft, ManualPlacedBox, ValidationIssue } from '../lib/manualPlacement'
+import { applyManualPlacementSnap } from '../lib/manualPlacementSnap'
+import { DEFAULT_PLACEMENT_SETTINGS, type PlacementSettings } from '../lib/placementSettings'
 
 export type ManualViewMode = 'top' | 'front' | 'side'
 
@@ -19,6 +21,7 @@ type ManualPlacement2DProps = {
   measurementDraftPoint?: Point3D | null
   measurements?: MeasurementAnnotation[]
   onMeasurementPoint?: (point: Point3D) => void
+  placementSettings?: PlacementSettings
 }
 
 const padding = 28
@@ -100,6 +103,7 @@ export function ManualPlacement2D({
   measurementDraftPoint = null,
   measurements = [],
   onMeasurementPoint,
+  placementSettings = DEFAULT_PLACEMENT_SETTINGS,
 }: ManualPlacement2DProps) {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const [dragState, setDragState] = useState<DragState | null>(null)
@@ -119,6 +123,18 @@ export function ManualPlacement2D({
     const raw = svgPoint(svg, event.clientX, event.clientY)
     const point = projection.toMm(raw.x, raw.y)
     return { x: Math.max(0, point.x), y: Math.max(0, point.y), z: 0 }
+  }
+
+  const snapTopViewPoint = (x: number, y: number, box: Pick<ManualPlacedBox, 'id' | 'length' | 'width'>) => {
+    if (viewMode !== 'top') return { x, y }
+    return applyManualPlacementSnap({
+      x,
+      y,
+      boxSize: { length: box.length, width: box.width },
+      others: draft.boxes.filter((other) => other.id !== box.id),
+      container,
+      settings: placementSettings,
+    })
   }
 
   const handleBackgroundClick = () => {
@@ -167,7 +183,10 @@ export function ManualPlacement2D({
     if (!svg) return
     const raw = svgPoint(svg, event.clientX, event.clientY)
     const point = projection.toMm(raw.x, raw.y)
-    onMoveBox(dragState.boxId, point.x - dragState.offsetX, point.y - dragState.offsetY)
+    const box = draft.boxes.find((b) => b.id === dragState.boxId)
+    if (!box) return
+    const snapped = snapTopViewPoint(point.x - dragState.offsetX, point.y - dragState.offsetY, box)
+    onMoveBox(dragState.boxId, snapped.x, snapped.y)
   }
 
   const handlePointerUp = () => {
@@ -191,6 +210,14 @@ export function ManualPlacement2D({
     if (!cargoId) return
     const raw = svgPoint(svg, event.clientX, event.clientY)
     const point = projection.toMm(raw.x, raw.y)
+    const poolSize = JSON.parse(event.dataTransfer?.getData('application/x-cargo-size') || 'null') as { length?: number; width?: number } | null
+    if (poolSize?.length && poolSize?.width) {
+      const topLeftX = point.x - poolSize.length / 2
+      const topLeftY = point.y - poolSize.width / 2
+      const snapped = snapTopViewPoint(topLeftX, topLeftY, { id: '__pool__', length: poolSize.length, width: poolSize.width })
+      onDropFromPool(cargoId, snapped.x + poolSize.length / 2, snapped.y + poolSize.width / 2)
+      return
+    }
     onDropFromPool(cargoId, point.x, point.y)
   }
 
