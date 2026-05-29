@@ -2,6 +2,19 @@
 
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
+## 2026-05-29 第二十九轮：手动旋转改为绕箱体几何中心
+
+- 背景：用户连按 R 的四个调试快照（`cargo-debug-snapshot*.json`）显示，旋转时 `x/y` 不变、`length/width` 互换，导致几何中心在 `(1800,1900)` 与 `(1850,1850)` 间来回跳。用户明确要求「旋转应该按照中心来旋转」。
+- 选项：
+  - 纯几何中心：补偿 `x/y/z` 使旋转前后 `(cx,cy,cz)` 完全不动；Shift+R 改变高度时箱体可能下穿地面/上穿柜顶，由现有校验提示越界。
+  - XY 绕中心 + 保持落地：只补偿水平面，z 方向保持贴地不下沉。
+- 决策：采用**纯几何中心**（用户确认）。在 `applyOrientation` 内按尺寸差的一半补偿 `x/y/z`，因此 `rotateBoxRight90`、`rotateBoxDown90`、`setManualBoxOrientation`（六向 picker）共用同一中心轴心规则。
+- 影响：
+  - 贴柜角（如 `x:0 y:0`）的箱体旋转后可能越界——这是几何中心旋转的既定代价，由 `validateDraft` 的 boundary 校验显式提示，不静默纠正。
+  - 调整了 `dryRunRotation` 的「fits」夹具改为带余量的居中放置，并新增「贴角旋转触发 boundary」用例锁定该取舍；新增 `rotateBox` 绕中心不变的单测复现快照场景。
+- 后续：如果业务希望旋转后自动夹回容器内（而非提示越界），需在 reducer 后追加一个 clamp 步骤；当前不做，保持「失败显式提示」语义。
+- 已知 E2E 缺口（非本轮回归）：`e2e/manual-3d.spec.ts:160`「手动模式 R 与 Shift+R 更新朝向示意图」断言 `R` 后再 `Shift+R` 得到 `orientationKey='WHL'`，但 reducer 实际产出 `WLH`（单测 `keeps the current vertical axis fixed when R is pressed after a downward rotation` 锁定的就是该序列）。用 `git stash` 暂存本轮改动后该用例在干净 HEAD 同样失败，证明与本轮「绕中心」位置补偿无关——本轮只改 `x/y/z`，未触碰 `orientationAxes/orientationKey/yaw/pitch`。按规则不弱化断言来强行通过，先记录：该 E2E 期望值与 reducer 的组合旋转语义不一致，需在下一轮单独裁定（修 E2E 期望为 `WLH`，或按产品意图调整组合旋转 reducer），不在本轮位置修复范围内。
+
 ## 2026-05-29 第二十八轮：真实 3D 旋转作为标签朝向来源
 
 - 背景：第二十五到第二十七轮连续修复标签旋转，但实现仍把 3D 箱体保持轴对齐，只在每个面贴不同旋转角的 canvas 标签。用户指出应该按旋转轴角度思考，不能继续用逐面角度表模拟。

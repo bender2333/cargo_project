@@ -202,6 +202,42 @@ describe('manualPlacement', () => {
     })
   })
 
+  it('rotates around the box centre so R keeps the geometric centre fixed', () => {
+    // Reproduces the debug-snapshot finding: a box at x=1600 y=1650 with L/W=400/500
+    // had its centre jump between (1800,1900) and (1850,1850) on each R. Rotation must
+    // pivot about the box centre, not its min corner.
+    const draft = addBox(emptyDraft(), makeManualBox({
+      id: 'box-1',
+      cargoId: 'cargo-a',
+      label: 'A',
+      color: '#fff',
+      length: 400,
+      width: 500,
+      height: 600,
+      x: 1600,
+      y: 1650,
+      z: 300,
+    }))
+    const before = draft.boxes[0]
+    const centre = (b: typeof before) => ({
+      cx: b.x + b.length / 2,
+      cy: b.y + b.width / 2,
+      cz: b.z + b.height / 2,
+    })
+
+    const right = rotateBoxRight90(draft, 'box-1').boxes[0]
+    // dimensions swap on R …
+    expect(right).toMatchObject({ length: 500, width: 400, height: 600 })
+    // … but the geometric centre is unchanged.
+    expect(centre(right)).toEqual(centre(before))
+    // concretely: 400×500 box centred at (1800,1900) becomes 500×400 → x=1550 y=1700.
+    expect(right).toMatchObject({ x: 1550, y: 1700, z: 300 })
+
+    const down = rotateBoxDown90(draft, 'box-1').boxes[0]
+    // Shift+R changes height (600→500 here); the centre must still hold (pure geometric centre).
+    expect(centre(down)).toEqual(centre(before))
+  })
+
   it('cycles R through four horizontal quarter turns without changing top and bottom', () => {
     let draft = addBox(emptyDraft(), makeManualBox({
       id: 'box-1',
@@ -680,10 +716,21 @@ describe('dryRunRotation', () => {
   const container: _CS = { id: 't', label: 'T', description: '', length: 6000, width: 2300, height: 2600, maxWeight: 28000, doorGap: 0, topGap: 0, sideGap: 0 }
 
   it('returns ok when rotation keeps the box inside the container', () => {
-    const box = { id: 'a', cargoId: 'c', label: 'A', x: 0, y: 0, z: 0, length: 1000, width: 800, height: 500, orientationKey: 'LWH' as const, labelRotationDeg: 0 as const, color: '#000' }
+    // Centre-pivot rotation: place the box with margin so the rotated footprint
+    // still fits. Centre (1500,900) → rotated 800×1000 spans x[1100,1900] y[400,1400].
+    const box = { id: 'a', cargoId: 'c', label: 'A', x: 1000, y: 500, z: 0, length: 1000, width: 800, height: 500, orientationKey: 'LWH' as const, labelRotationDeg: 0 as const, color: '#000' }
     const { ok, issues } = _dryRunRotation({ boxes: [box] }, 'a', container)
     expect(ok).toBe(true)
     expect(issues).toEqual([])
+  })
+
+  it('flags boundary when centre-pivot rotation pushes a corner box out of bounds', () => {
+    // A box flush in the corner legitimately leaves the container when rotated about
+    // its centre (the accepted tradeoff of pure geometric-centre rotation).
+    const box = { id: 'a', cargoId: 'c', label: 'A', x: 0, y: 0, z: 0, length: 1000, width: 800, height: 500, orientationKey: 'LWH' as const, labelRotationDeg: 0 as const, color: '#000' }
+    const { ok, issues } = _dryRunRotation({ boxes: [box] }, 'a', container)
+    expect(ok).toBe(false)
+    expect(issues.some((i) => i.type === 'boundary')).toBe(true)
   })
 
   it('flags boundary issue when rotated width would exceed container width', () => {

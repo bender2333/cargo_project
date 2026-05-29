@@ -197,9 +197,18 @@ function applyOrientation(
   const yawQuarterTurn = turns.yawQuarterTurn ?? inferred.yawQuarterTurn
   const pitchQuarterTurn = turns.pitchQuarterTurn ?? inferred.pitchQuarterTurn
   const orientationAxes = turns.orientationAxes ?? canonicalAxesForOrientation(orientationKey)
+  const nextDimensions = dimensionsForManualOrientation(base, orientationKey)
+  // Rotate about the box's geometric centre: the centre (cx,cy,cz) must stay fixed
+  // as the footprint changes, so the min corner shifts by half the dimension delta.
+  const x = box.x + (box.length - nextDimensions.length) / 2
+  const y = box.y + (box.width - nextDimensions.width) / 2
+  const z = box.z + (box.height - nextDimensions.height) / 2
   return {
     ...box,
-    ...dimensionsForManualOrientation(base, orientationKey),
+    ...nextDimensions,
+    x,
+    y,
+    z,
     baseLength: base.length,
     baseWidth: base.width,
     baseHeight: base.height,
