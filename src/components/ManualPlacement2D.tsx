@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, DragEvent as ReactDragEvent } from 'react'
 import type { ContainerSpec } from '../types'
 import type { MeasurementAnnotation, Point3D } from '../lib/measurement'
-import type { ManualDraft, ManualPlacedBox, ValidationIssue } from '../lib/manualPlacement'
+import { labelRotationForManualFace, type ManualDraft, type ManualPlacedBox, type ValidationIssue } from '../lib/manualPlacement'
 import { applyManualPlacementSnap } from '../lib/manualPlacementSnap'
 import { DEFAULT_PLACEMENT_SETTINGS, type PlacementSettings } from '../lib/placementSettings'
 
@@ -109,6 +109,7 @@ export function ManualPlacement2D({
   const [dragState, setDragState] = useState<DragState | null>(null)
   const projection = buildProjection(container, viewMode)
   const viewBox = `0 0 ${projection.horizontalSpan + padding * 2} ${projection.verticalSpan + padding * 2}`
+  const labelFace = viewMode === 'side' ? 'side' : viewMode === 'front' ? 'front' : 'top'
 
   const issuesByBoxId = new Map<string, ValidationIssue[]>()
   for (const issue of issues) {
@@ -258,7 +259,7 @@ export function ManualPlacement2D({
         const rectHeight = projection.rectHeight(box)
         const textX = rectX + rectWidth / 2
         const textY = rectY + rectHeight / 2
-        const rotation = viewMode === 'top' ? box.labelRotationDeg : 0
+        const rotation = labelRotationForManualFace(box, labelFace)
         const orientationLabel = box.orientationLabel ?? box.orientationKey
         const markerWidth = Math.max(130, Math.min(Math.max(130, rectWidth - 48), Math.max(300, rectWidth * 0.42)))
         const markerHeight = Math.max(90, rectHeight * 0.2)
@@ -272,6 +273,7 @@ export function ManualPlacement2D({
             data-has-issue={hasIssue ? 'true' : 'false'}
             data-orientation={box.orientationKey}
             data-label-rotation={box.labelRotationDeg}
+            data-face-label-rotation={rotation}
             data-yaw-quarter-turn={box.yawQuarterTurn ?? 0}
             data-pitch-quarter-turn={box.pitchQuarterTurn ?? 0}
             onPointerDown={(event) => handlePointerDown(event, box.id)}

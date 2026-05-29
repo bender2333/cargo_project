@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { ContainerSpec, PlacedBox } from '../types'
-import { MIN_SUPPORT_OVERLAP_RATIO } from '../lib/manualPlacement'
+import { labelRotationForManualFace, MIN_SUPPORT_OVERLAP_RATIO, type ManualLabelFace } from '../lib/manualPlacement'
 import { snapToGrid } from '../lib/snap'
 import { resolveDropTarget } from '../lib/sceneDrop'
 import { snapToEdges } from '../lib/snapEdges'
@@ -81,7 +81,7 @@ type SceneState = {
 }
 
 const textureCache = new WeakMap<SceneState, Map<string, THREE.Texture>>()
-const materialCache = new WeakMap<SceneState, Map<string, THREE.Material>>()
+const materialCache = new WeakMap<SceneState, Map<string, THREE.Material | THREE.Material[]>>()
 
 function getTextureCache(state: SceneState) {
   let cache = textureCache.get(state)
@@ -157,26 +157,65 @@ function makeBoxMaterial(texture: THREE.Texture, selected: boolean, opacity: num
   })
 }
 
-function getCachedBoxMaterial(state: SceneState, box: PlacedBox, selected: boolean, opacity: number, invalid: boolean) {
+function getCachedFaceMaterial(
+  state: SceneState,
+  box: PlacedBox,
+  selected: boolean,
+  opacity: number,
+  invalid: boolean,
+  face: ManualLabelFace,
+) {
   const tCache = getTextureCache(state)
   const mCache = getMaterialCache(state)
   const orientationLabel = box.orientationLabel ?? box.orientationKey
-  const textureKey = `${box.label}:${box.color}:${selected}:${box.labelRotationDeg}:${orientationLabel}`
+  const rotationDeg = labelRotationForManualFace(box, face)
+  const textureKey = `${box.label}:${box.color}:${selected}:${face}:${rotationDeg}:${orientationLabel}`
   let texture = tCache.get(textureKey)
   if (!texture) {
-    texture = makeFaceLabelTexture(box.label, box.color, selected, box.labelRotationDeg, orientationLabel)
+    texture = makeFaceLabelTexture(box.label, box.color, selected, rotationDeg, orientationLabel)
     tCache.set(textureKey, texture)
   }
 
   const materialKey = `${textureKey}:${opacity}:${invalid ? 'inv' : 'ok'}`
   const cached = mCache.get(materialKey)
   if (cached) {
-    return cached
+    return cached as THREE.Material
   }
 
   const material = makeBoxMaterial(texture, selected, opacity, invalid)
   mCache.set(materialKey, material)
   return material
+}
+
+function getCachedBoxMaterials(state: SceneState, box: PlacedBox, selected: boolean, opacity: number, invalid: boolean) {
+  const mCache = getMaterialCache(state)
+  const materialKey = [
+    'boxFaces',
+    box.label,
+    box.color,
+    selected,
+    opacity,
+    invalid ? 'inv' : 'ok',
+    box.orientationLabel ?? box.orientationKey,
+    box.labelRotationDeg,
+    box.yawQuarterTurn ?? 'y0',
+    box.pitchQuarterTurn ?? 'p0',
+  ].join(':')
+  const cached = mCache.get(materialKey)
+  if (Array.isArray(cached)) {
+    return cached
+  }
+  // BoxGeometry material order: +X, -X, +Y, -Y, +Z, -Z.
+  const materials = [
+    getCachedFaceMaterial(state, box, selected, opacity, invalid, 'side'),
+    getCachedFaceMaterial(state, box, selected, opacity, invalid, 'side'),
+    getCachedFaceMaterial(state, box, selected, opacity, invalid, 'top'),
+    getCachedFaceMaterial(state, box, selected, opacity, invalid, 'top'),
+    getCachedFaceMaterial(state, box, selected, opacity, invalid, 'front'),
+    getCachedFaceMaterial(state, box, selected, opacity, invalid, 'front'),
+  ]
+  mCache.set(materialKey, materials)
+  return materials
 }
 
 function boxVisualState(
@@ -213,7 +252,7 @@ function applyBoxVisualState(
   const opacity = opacityOverride === null || opacityOverride === undefined
     ? visual.opacity
     : Math.min(1, Math.max(0.45, visual.selected ? Math.max(opacityOverride, 0.75) : opacityOverride))
-  entry.mesh.material = getCachedBoxMaterial(state, entry.box, visual.selected, opacity, visual.invalid)
+  entry.mesh.material = getCachedBoxMaterials(state, entry.box, visual.selected, opacity, visual.invalid)
   const material = entry.edges.material
   if (material instanceof THREE.LineBasicMaterial) {
     material.color.setHex(visual.edgeColor)
@@ -1053,7 +1092,15 @@ export function ContainerScene({
       }
       const mCache = materialCache.get(sceneState)
       if (mCache) {
-        mCache.forEach((mat) => mat.dispose())
+        const disposed = new Set<THREE.Material>()
+        mCache.forEach((mat) => {
+          const materials = Array.isArray(mat) ? mat : [mat]
+          for (const material of materials) {
+            if (disposed.has(material)) continue
+            material.dispose()
+            disposed.add(material)
+          }
+        })
         mCache.clear()
       }
       const geometries = new Set<THREE.BufferGeometry>()
@@ -1126,7 +1173,7 @@ export function ContainerScene({
       const opacity = opacityOverride === null || opacityOverride === undefined
         ? visualState.opacity
         : Math.min(1, Math.max(0.12, visualState.selected ? Math.max(opacityOverride, 0.75) : opacityOverride))
-      const material = getCachedBoxMaterial(state, box, visualState.selected, opacity, invalid)
+      const material = getCachedBoxMaterials(state, box, visualState.selected, opacity, invalid)
       const mesh = new THREE.Mesh(geometry, material)
       mesh.position.set(
         -length / 2 + (box.x + box.length / 2) * scale,

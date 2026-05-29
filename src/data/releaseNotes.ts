@@ -14,6 +14,23 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-05-29-r27-physical-face-label-rotation',
+    date: '2026-05-29',
+    title: { en: 'Physical face-level label rotation', zh: '物理面级标签旋转' },
+    items: {
+      en: [
+        'Manual rotation now treats label direction by physical face instead of applying one angle to the whole box.',
+        'R rotates the label direction on the top and bottom faces only; vertical side labels stay upright for that action.',
+        'Shift+R rotates the label direction on the side faces only; top-view labels no longer change when the cargo is flipped vertically.',
+      ],
+      zh: [
+        '手动旋转现在按物理面计算标签方向，不再把一个角度套到整个箱体六个面。',
+        'R 只改变上下面标签方向；这个动作不会让竖直侧面标签一起侧躺。',
+        'Shift+R 只改变两侧面标签方向；上下翻转时俯视标签不再跟着改变。',
+      ],
+    },
+  },
+  {
     version: '2026-05-28-r26-label-snap-settings',
     date: '2026-05-28',
     title: { en: 'Directional label rotation and split snap settings', zh: '标签方向旋转 / 吸附设置拆分' },

@@ -40,13 +40,55 @@ const draft: ManualDraft = {
   ],
 }
 
+const yawRotatedDraft: ManualDraft = {
+  boxes: [
+    {
+      ...draft.boxes[0],
+      orientationKey: 'WLH',
+      labelRotationDeg: 270,
+      yawQuarterTurn: 1,
+      pitchQuarterTurn: 0,
+      orientationAxes: { x: 'W+', y: 'L-', z: 'H+' },
+      orientationLabel: 'X:W+ Y:L- Z:T+',
+    },
+  ],
+}
+
+const pitchRotatedDraft: ManualDraft = {
+  boxes: [
+    {
+      ...draft.boxes[0],
+      orientationKey: 'LHW',
+      labelRotationDeg: 0,
+      yawQuarterTurn: 0,
+      pitchQuarterTurn: 1,
+      orientationAxes: { x: 'L+', y: 'H+', z: 'W-' },
+      orientationLabel: 'X:L+ Y:T+ Z:W-',
+    },
+  ],
+}
+
+const yawAndPitchRotatedDraft: ManualDraft = {
+  boxes: [
+    {
+      ...draft.boxes[0],
+      orientationKey: 'HLW',
+      labelRotationDeg: 270,
+      yawQuarterTurn: 1,
+      pitchQuarterTurn: 1,
+      orientationAxes: { x: 'H+', y: 'L-', z: 'W-' },
+      orientationLabel: 'X:T+ Y:L- Z:W-',
+    },
+  ],
+}
+
 const padding = 28
 
-function svg(view: 'top' | 'front' | 'side') {
+function svg(view: 'top' | 'front' | 'side', sourceDraft = draft) {
   const { container: dom } = render(
     <ManualPlacement2D
       container={container}
-      draft={draft}
+      draft={sourceDraft}
       issues={[]}
       onDropFromPool={() => {}}
       onMoveBox={() => {}}
@@ -68,6 +110,7 @@ describe('ManualPlacement2D viewMode projection', () => {
     const group = node.querySelector('[data-box-id="box-1"]')
     expect(group?.getAttribute('data-orientation')).toBe('LWH')
     expect(group?.getAttribute('data-label-rotation')).toBe('0')
+    expect(group?.getAttribute('data-face-label-rotation')).toBe('0')
     expect(node.querySelector('[data-testid="manual-orientation-marker"]')?.textContent).toBe('X:L+ Y:W+ Z:T+')
     const rect = node.querySelector('[data-box-id="box-1"] rect[aria-label="A manual placement"]')
     expect(rect?.getAttribute('width')).toBe('400')
@@ -90,6 +133,22 @@ describe('ManualPlacement2D viewMode projection', () => {
     const rect = node.querySelector('[data-box-id="box-1"] rect[aria-label="A manual placement"]')
     expect(rect?.getAttribute('width')).toBe('300')
     expect(rect?.getAttribute('height')).toBe('500')
+  })
+
+  it('uses physical face rotation per projection instead of one box-wide label angle', () => {
+    const yawTop = svg('top', yawRotatedDraft)
+    const yawFront = svg('front', yawRotatedDraft)
+    const pitchTop = svg('top', pitchRotatedDraft)
+    const pitchFront = svg('front', pitchRotatedDraft)
+    const pitchSide = svg('side', pitchRotatedDraft)
+    const combinedSide = svg('side', yawAndPitchRotatedDraft)
+
+    expect(yawTop.querySelector('[data-box-id="box-1"]')?.getAttribute('data-face-label-rotation')).toBe('270')
+    expect(yawFront.querySelector('[data-box-id="box-1"]')?.getAttribute('data-face-label-rotation')).toBe('0')
+    expect(pitchTop.querySelector('[data-box-id="box-1"]')?.getAttribute('data-face-label-rotation')).toBe('0')
+    expect(pitchFront.querySelector('[data-box-id="box-1"]')?.getAttribute('data-face-label-rotation')).toBe('0')
+    expect(pitchSide.querySelector('[data-box-id="box-1"]')?.getAttribute('data-face-label-rotation')).toBe('270')
+    expect(combinedSide.querySelector('[data-box-id="box-1"]')?.getAttribute('data-face-label-rotation')).toBe('270')
   })
 })
 

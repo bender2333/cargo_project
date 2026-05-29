@@ -1,6 +1,47 @@
 # Review 与下一阶段开发计划
 
-日期：2026-05-28
+日期：2026-05-29
+
+## 第二十七轮 Review 与物理面级标签旋转计划
+
+本轮 review 重新定义标签旋转的物理语义：不能把一个箱体级标签角度套到六个面上。箱体绕哪个轴转，只有被该轴影响的面上的贴纸方向应该变。
+
+### 1. 左右旋转 `R` 只改变上下两面标签方向
+
+问题定位：
+
+- 第二十六轮把 `labelRotationDeg` 当作整箱标签角度，导致 3D 六个面共用同一个旋转贴图。
+- 物理上 `R` 是绕世界 Z 轴水平旋转：箱体顶部/底部平面上的贴纸方向会跟着转，但前后/左右竖直面贴纸不应该因为这个动作统一侧躺。
+- 当前 `ContainerScene` 的 `BoxGeometry` 只挂了一个 material，无法表达不同面不同贴纸角度。
+
+修复目标：
+
+- `labelRotationDeg` 保留为水平上/下面的 yaw 角，用于俯视图和自动 2D 平面。
+- 3D 改为按面生成材质：上/下面使用 yaw，左右面使用 pitch，前后面保持默认角度。
+- 单元测试覆盖：`R` 四步循环只改变 top-face 角度，不再把 pitch 混进 top-face。
+
+### 2. 上下旋转 `Shift+R` 只改变两侧面标签方向
+
+问题定位：
+
+- 第二十六轮将 `yawQuarterTurn + pitchQuarterTurn` 合并成一个 `labelRotationDeg`，所以 `Shift+R` 会错误影响俯视/上下平面标签。
+- 物理上 `Shift+R` 是翻转箱体：用户关注的是两侧竖直面贴纸随翻转转 90/180/270/360，顶部/底部贴纸不应因此变化。
+- 2D 前/侧视图也需要按所看的面取不同标签角度，不能继续只在 top view 旋转。
+
+修复目标：
+
+- 新增 `labelRotationForManualFace(...)`，按 `top/front/side` 返回面级标签角度。
+- `ManualPlacement2D` 暴露 `data-face-label-rotation` 并按视图使用面级角度：俯视看 top，侧视看 side，正视看 front。
+- 3D 六面材质与 2D 投影视图共享同一面级角度规则。
+
+### 本轮验收清单
+
+1. 先写红测覆盖物理面级旋转：`Shift+R` 不改变 top-face，`R` 不改变 front/side-face。
+2. 修复 `manualPlacement`、`ManualPlacement2D`、`ContainerScene` 的面级标签角度。
+3. 通知栏追加本轮变更。
+4. 本地验证：相关单元测试、`npm run lint`、`npm test`、`npm run build`、`npm run test:e2e`。
+
+---
 
 ## 第二十六轮 Review 与标签方向/吸附设置拆分计划
 

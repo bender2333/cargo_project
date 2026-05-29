@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-05-29 (Round 27 Physical Face Label Rotation Review)
+
+- Completed subtask: recorded the new review and root-cause analysis in `REVIEW.md`.
+  - Root cause: Round 26 treated `labelRotationDeg` as a whole-box label angle, so 3D reused one rotated texture on every face.
+  - Root cause: yaw and pitch were summed into one angle, which made `Shift+R` incorrectly change top-view labels and made `R` incorrectly affect vertical faces.
+- Completed subtask: implemented physical face-level label rotation.
+  - Treat `labelRotationDeg` as the top/bottom horizontal-face yaw angle.
+  - Add face-level label rotation for 2D projections and 3D faces: top uses yaw, side uses pitch, front stays upright.
+  - Keep signed X/Y/Z orientation labels as the pose identifier while the label graphic rotates only on the physically affected face.
+- Verification: red test first failed in `src/lib/manualPlacement.test.ts` and `src/components/ManualPlacement2D.test.tsx`; after the fix, targeted tests passed 37 tests. `npx tsc -b` passed; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "R 与 Shift"` passed; `npm run lint` passed; `npm test` passed 30 files / 177 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 72 tests / 1 skipped / 0 failed.
+
 ## 2026-05-28 (Round 26 Label Direction and Snap Settings Review)
 
 - Completed subtask: recorded the new review and root-cause analysis in `REVIEW.md`.
