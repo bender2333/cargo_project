@@ -2,6 +2,16 @@
 
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
+## 2026-05-29 第二十八轮：真实 3D 旋转作为标签朝向来源
+
+- 背景：第二十五到第二十七轮连续修复标签旋转，但实现仍把 3D 箱体保持轴对齐，只在每个面贴不同旋转角的 canvas 标签。用户指出应该按旋转轴角度思考，不能继续用逐面角度表模拟。
+- 选项：
+  - 继续维护 `labelRotationForManualFace` 这类逐面角度表，短期改动小，但复合旋转会继续遗漏。
+  - 改为 signed axes → 真实旋转矩阵，3D 用原始 L/W/H 几何体整体旋转，2D 只从同一 signed axes 推投影面角。
+- 决策：采用真实 3D 旋转模型。新增 `orientationTransform` 作为朝向数学唯一来源；`ContainerScene` 按原始尺寸建 geometry 并给 mesh/edges 应用 quaternion；2D 手动/自动视图从 `faceLabelRotation(orientationAxesOf(box), view)` 取角度。自动装箱结果不改 `packing.ts`，消费端从 `orientationKey` 推 canonical axes。
+- 影响：3D 标签方向由物理 mesh 旋转决定，贴图内部保持正立；拾取、hover、ghost 和拖拽仍以放置后的包围盒中心和尺寸做业务校验，不改变碰撞/支撑算法。
+- 后续：如果未来自动装箱也要表达 180/270 的 signed pose，需要让 `packing.ts` 直接产出 `orientationAxes`，否则 canonical axes 只能表达同一 `orientationKey` 下的一种默认姿态。
+
 ## 2026-05-25 第十九轮：浮动最大化 / 中键平移 / Admin 主导航
 
 - 决策：

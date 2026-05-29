@@ -1,4 +1,5 @@
 import type { ContainerSpec, PlacedBox } from '../types'
+import { faceLabelRotation, orientationAxesOf } from '../lib/orientationTransform'
 
 export type PlanViewMode = 'top' | 'front' | 'side'
 
@@ -64,7 +65,7 @@ export function ContainerPlan2D({ container, boxes, activeLayerId, activeLabelId
         const opacity = isCurrentLayer && isCurrentLabel ? 0.88 : 0.18
         const textX = padding + projected.x + projected.width / 2
         const textY = padding + size.height - projected.y - projected.height / 2
-        const rotation = box.labelRotationDeg
+        const rotation = faceLabelRotation(orientationAxesOf(box), mode)
         const orientationLabel = box.orientationLabel ?? box.orientationKey
         const markerWidth = Math.max(110, Math.min(Math.max(110, projected.width - 40), Math.max(280, projected.width * 0.38)))
         const markerHeight = Math.max(70, projected.height * 0.18)
@@ -75,6 +76,7 @@ export function ContainerPlan2D({ container, boxes, activeLayerId, activeLabelId
           <g
             data-orientation={box.orientationKey}
             data-label-rotation={rotation}
+            data-face-label-rotation={rotation}
             data-yaw-quarter-turn={box.yawQuarterTurn ?? 0}
             data-pitch-quarter-turn={box.pitchQuarterTurn ?? 0}
             key={box.id}

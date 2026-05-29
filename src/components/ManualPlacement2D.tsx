@@ -2,8 +2,9 @@ import { useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, DragEvent as ReactDragEvent } from 'react'
 import type { ContainerSpec } from '../types'
 import type { MeasurementAnnotation, Point3D } from '../lib/measurement'
-import { labelRotationForManualFace, type ManualDraft, type ManualPlacedBox, type ValidationIssue } from '../lib/manualPlacement'
+import type { ManualDraft, ManualPlacedBox, ValidationIssue } from '../lib/manualPlacement'
 import { applyManualPlacementSnap } from '../lib/manualPlacementSnap'
+import { faceLabelRotation, orientationAxesOf } from '../lib/orientationTransform'
 import { DEFAULT_PLACEMENT_SETTINGS, type PlacementSettings } from '../lib/placementSettings'
 
 export type ManualViewMode = 'top' | 'front' | 'side'
@@ -259,7 +260,7 @@ export function ManualPlacement2D({
         const rectHeight = projection.rectHeight(box)
         const textX = rectX + rectWidth / 2
         const textY = rectY + rectHeight / 2
-        const rotation = labelRotationForManualFace(box, labelFace)
+        const rotation = faceLabelRotation(orientationAxesOf(box), labelFace)
         const orientationLabel = box.orientationLabel ?? box.orientationKey
         const markerWidth = Math.max(130, Math.min(Math.max(130, rectWidth - 48), Math.max(300, rectWidth * 0.42)))
         const markerHeight = Math.max(90, rectHeight * 0.2)

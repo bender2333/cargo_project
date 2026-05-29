@@ -2,13 +2,14 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { ContainerSpec, PlacedBox } from '../types'
-import { labelRotationForManualFace, MIN_SUPPORT_OVERLAP_RATIO, type ManualLabelFace } from '../lib/manualPlacement'
+import { MIN_SUPPORT_OVERLAP_RATIO } from '../lib/manualPlacement'
 import { snapToGrid } from '../lib/snap'
 import { resolveDropTarget } from '../lib/sceneDrop'
 import { snapToEdges } from '../lib/snapEdges'
 import type { CogOverlay } from '../lib/cogVisual'
 import { DEFAULT_PLACEMENT_SETTINGS, type PlacementSettings } from '../lib/placementSettings'
 import { manualMoveCommitArgs } from '../lib/manualMoveCommit'
+import { baseDimensionsFromPlaced, orientationAxesOf, orientationBasisVectors } from '../lib/orientationTransform'
 
 export type SceneViewMode = 'iso' | 'top' | 'front' | 'side'
 
@@ -101,7 +102,7 @@ function getMaterialCache(state: SceneState) {
   return cache
 }
 
-function makeFaceLabelTexture(label: string, color: string, selected: boolean, rotationDeg: number, orientationLabel: string) {
+function makeFaceLabelTexture(label: string, color: string, selected: boolean, orientationLabel: string) {
   const canvas = document.createElement('canvas')
   canvas.width = 256
   canvas.height = 256
@@ -123,11 +124,8 @@ function makeFaceLabelTexture(label: string, color: string, selected: boolean, r
   context.font = 'bold 104px Verdana, sans-serif'
   context.textAlign = 'center'
   context.textBaseline = 'middle'
-  context.save()
   context.translate(128, 134)
-  context.rotate((rotationDeg * Math.PI) / 180)
   context.fillText(label, 0, 0, 142)
-  context.restore()
   context.fillStyle = '#0f172a'
   context.font = 'bold 22px Verdana, sans-serif'
   context.textAlign = 'center'
@@ -163,16 +161,14 @@ function getCachedFaceMaterial(
   selected: boolean,
   opacity: number,
   invalid: boolean,
-  face: ManualLabelFace,
 ) {
   const tCache = getTextureCache(state)
   const mCache = getMaterialCache(state)
   const orientationLabel = box.orientationLabel ?? box.orientationKey
-  const rotationDeg = labelRotationForManualFace(box, face)
-  const textureKey = `${box.label}:${box.color}:${selected}:${face}:${rotationDeg}:${orientationLabel}`
+  const textureKey = `${box.label}:${box.color}:${selected}:${orientationLabel}`
   let texture = tCache.get(textureKey)
   if (!texture) {
-    texture = makeFaceLabelTexture(box.label, box.color, selected, rotationDeg, orientationLabel)
+    texture = makeFaceLabelTexture(box.label, box.color, selected, orientationLabel)
     tCache.set(textureKey, texture)
   }
 
@@ -197,9 +193,6 @@ function getCachedBoxMaterials(state: SceneState, box: PlacedBox, selected: bool
     opacity,
     invalid ? 'inv' : 'ok',
     box.orientationLabel ?? box.orientationKey,
-    box.labelRotationDeg,
-    box.yawQuarterTurn ?? 'y0',
-    box.pitchQuarterTurn ?? 'p0',
   ].join(':')
   const cached = mCache.get(materialKey)
   if (Array.isArray(cached)) {
@@ -207,12 +200,12 @@ function getCachedBoxMaterials(state: SceneState, box: PlacedBox, selected: bool
   }
   // BoxGeometry material order: +X, -X, +Y, -Y, +Z, -Z.
   const materials = [
-    getCachedFaceMaterial(state, box, selected, opacity, invalid, 'side'),
-    getCachedFaceMaterial(state, box, selected, opacity, invalid, 'side'),
-    getCachedFaceMaterial(state, box, selected, opacity, invalid, 'top'),
-    getCachedFaceMaterial(state, box, selected, opacity, invalid, 'top'),
-    getCachedFaceMaterial(state, box, selected, opacity, invalid, 'front'),
-    getCachedFaceMaterial(state, box, selected, opacity, invalid, 'front'),
+    getCachedFaceMaterial(state, box, selected, opacity, invalid),
+    getCachedFaceMaterial(state, box, selected, opacity, invalid),
+    getCachedFaceMaterial(state, box, selected, opacity, invalid),
+    getCachedFaceMaterial(state, box, selected, opacity, invalid),
+    getCachedFaceMaterial(state, box, selected, opacity, invalid),
+    getCachedFaceMaterial(state, box, selected, opacity, invalid),
   ]
   mCache.set(materialKey, materials)
   return materials
@@ -262,6 +255,47 @@ function applyBoxVisualState(
   }
 }
 
+function worldCenterForBox(box: PlacedBox, scale: number, length: number, width: number) {
+  return new THREE.Vector3(
+    -length / 2 + (box.x + box.length / 2) * scale,
+    (box.z + box.height / 2) * scale,
+    -width / 2 + (box.y + box.width / 2) * scale,
+  )
+}
+
+function boxOrientationQuaternion(box: PlacedBox) {
+  const basis = orientationBasisVectors(orientationAxesOf(box))
+  const matrix = new THREE.Matrix4().makeBasis(
+    new THREE.Vector3(basis.length.x, basis.length.z, basis.length.y),
+    new THREE.Vector3(basis.height.x, basis.height.z, basis.height.y),
+    new THREE.Vector3(basis.width.x, basis.width.z, basis.width.y),
+  )
+  return new THREE.Quaternion().setFromRotationMatrix(matrix)
+}
+
+function boxGeometryForPlaced(box: PlacedBox, scale: number) {
+  const base = baseDimensionsFromPlaced(box)
+  return new THREE.BoxGeometry(base.length * scale, base.height * scale, base.width * scale)
+}
+
+function sameBoxGeometry(box: PlacedBox, geometry: THREE.BufferGeometry, scale: number) {
+  if (!(geometry instanceof THREE.BoxGeometry)) return false
+  const base = baseDimensionsFromPlaced(box)
+  const parameters = geometry.parameters
+  return parameters.width === base.length * scale
+    && parameters.height === base.height * scale
+    && parameters.depth === base.width * scale
+}
+
+function applyBoxTransform(entry: Pick<MeshEntry, 'box' | 'mesh' | 'edges'>, scale: number, length: number, width: number) {
+  const center = worldCenterForBox(entry.box, scale, length, width)
+  const quaternion = boxOrientationQuaternion(entry.box)
+  entry.mesh.position.copy(center)
+  entry.mesh.quaternion.copy(quaternion)
+  entry.edges.position.copy(center)
+  entry.edges.quaternion.copy(quaternion)
+}
+
 function cameraPositionForMode(mode: SceneViewMode, length: number, width: number, height: number) {
   const distance = Math.max(length, width, height) * 1.25
   if (mode === 'top') {
@@ -308,7 +342,7 @@ const HOVER_HIGHLIGHT_COLOR = 0xf59e0b
 
 function ensureGhost(state: SceneState, box: PlacedBox, scale: number, length: number, width: number) {
   if (!state.ghost) {
-    const geometry = new THREE.BoxGeometry(box.length * scale, box.height * scale, box.width * scale)
+    const geometry = boxGeometryForPlaced(box, scale)
     const material = new THREE.MeshBasicMaterial({
       color: GHOST_VALID_COLOR,
       transparent: true,
@@ -324,14 +358,10 @@ function ensureGhost(state: SceneState, box: PlacedBox, scale: number, length: n
     state.scene.add(edges)
     state.ghost = { mesh, edges }
   } else {
-    const sameSize = state.ghost.mesh.geometry instanceof THREE.BoxGeometry
-      && (state.ghost.mesh.geometry as THREE.BoxGeometry).parameters.width === box.length * scale
-      && (state.ghost.mesh.geometry as THREE.BoxGeometry).parameters.depth === box.width * scale
-      && (state.ghost.mesh.geometry as THREE.BoxGeometry).parameters.height === box.height * scale
-    if (!sameSize) {
+    if (!sameBoxGeometry(box, state.ghost.mesh.geometry, scale)) {
       state.ghost.mesh.geometry.dispose()
       state.ghost.edges.geometry.dispose()
-      const geometry = new THREE.BoxGeometry(box.length * scale, box.height * scale, box.width * scale)
+      const geometry = boxGeometryForPlaced(box, scale)
       state.ghost.mesh.geometry = geometry
       state.ghost.edges.geometry = new THREE.EdgesGeometry(geometry)
     }
@@ -344,11 +374,13 @@ function ensureGhost(state: SceneState, box: PlacedBox, scale: number, length: n
 
 function positionGhost(state: SceneState, x: number, y: number, z: number, box: PlacedBox, invalid: boolean, scale: number, length: number, width: number) {
   if (!state.ghost) return
-  const worldX = -length / 2 + (x + box.length / 2) * scale
-  const worldY = (z + box.height / 2) * scale
-  const worldZ = -width / 2 + (y + box.width / 2) * scale
-  state.ghost.mesh.position.set(worldX, worldY, worldZ)
-  state.ghost.edges.position.set(worldX, worldY, worldZ)
+  const ghostBox = { ...box, x, y, z }
+  const center = worldCenterForBox(ghostBox, scale, length, width)
+  const quaternion = boxOrientationQuaternion(ghostBox)
+  state.ghost.mesh.position.copy(center)
+  state.ghost.mesh.quaternion.copy(quaternion)
+  state.ghost.edges.position.copy(center)
+  state.ghost.edges.quaternion.copy(quaternion)
   const color = invalid ? GHOST_INVALID_COLOR : GHOST_VALID_COLOR
   ;(state.ghost.mesh.material as THREE.MeshBasicMaterial).color.setHex(color)
   ;(state.ghost.edges.material as THREE.LineBasicMaterial).color.setHex(color)
@@ -370,7 +402,7 @@ function updateHoverHighlight(state: SceneState, boxId: string | null, scale: nu
   const entry = state.meshEntries.get(boxId)
   if (!entry) return
   const geometry = new THREE.EdgesGeometry(
-    new THREE.BoxGeometry(entry.box.length * scale, entry.box.height * scale, entry.box.width * scale),
+    boxGeometryForPlaced(entry.box, scale),
   )
   if (!state.hoverHighlight) {
     state.hoverHighlight = new THREE.LineSegments(
@@ -382,10 +414,8 @@ function updateHoverHighlight(state: SceneState, boxId: string | null, scale: nu
     state.hoverHighlight.geometry.dispose()
     state.hoverHighlight.geometry = geometry
   }
-  const worldX = -length / 2 + (entry.box.x + entry.box.length / 2) * scale
-  const worldY = (entry.box.z + entry.box.height / 2) * scale
-  const worldZ = -width / 2 + (entry.box.y + entry.box.width / 2) * scale
-  state.hoverHighlight.position.set(worldX, worldY, worldZ)
+  state.hoverHighlight.position.copy(worldCenterForBox(entry.box, scale, length, width))
+  state.hoverHighlight.quaternion.copy(boxOrientationQuaternion(entry.box))
   state.hoverHighlight.visible = true
 }
 
@@ -818,11 +848,8 @@ export function ContainerScene({
         }
       }
 
-      const newWorldX = -length / 2 + (nextX + entry.box.length / 2) * scale
-      const newWorldY = (nextZ + entry.box.height / 2) * scale
-      const newWorldZ = -width / 2 + (nextY + entry.box.width / 2) * scale
-      entry.mesh.position.set(newWorldX, newWorldY, newWorldZ)
-      entry.edges.position.set(newWorldX, newWorldY, newWorldZ)
+      const previewBox = { ...entry.box, x: nextX, y: nextY, z: nextZ }
+      applyBoxTransform({ box: previewBox, mesh: entry.mesh, edges: entry.edges }, scale, length, width)
 
       const invalid = computeDragInvalid(entry, nextX, nextY, nextZ)
       if (invalid) {
@@ -864,12 +891,7 @@ export function ContainerScene({
           }))
         } else {
           onManualOperationRejectedRef.current?.('move', boxId)
-          entry.mesh.position.set(
-            -length / 2 + (entry.box.x + entry.box.length / 2) * scale,
-            (entry.box.z + entry.box.height / 2) * scale,
-            -width / 2 + (entry.box.y + entry.box.width / 2) * scale,
-          )
-          entry.edges.position.copy(entry.mesh.position)
+          applyBoxTransform(entry, scale, length, width)
         }
         renderer.domElement.releasePointerCapture?.(event.pointerId)
         dragState = null
@@ -1150,36 +1172,25 @@ export function ContainerScene({
       const existing = meshEntries.get(box.id)
       const invalid = state.invalidOverride.has(box.id) || invalidBoxIdsRef.current.has(box.id)
       if (existing) {
-        const sameSize = existing.box.length === box.length && existing.box.width === box.width && existing.box.height === box.height
-        if (!sameSize) {
+        existing.box = box
+        if (!sameBoxGeometry(box, existing.mesh.geometry, scale)) {
           existing.mesh.geometry.dispose()
           existing.edges.geometry.dispose()
-          const geometry = new THREE.BoxGeometry(box.length * scale, box.height * scale, box.width * scale)
+          const geometry = boxGeometryForPlaced(box, scale)
           existing.mesh.geometry = geometry
           existing.edges.geometry = new THREE.EdgesGeometry(geometry)
         }
-        existing.mesh.position.set(
-          -length / 2 + (box.x + box.length / 2) * scale,
-          (box.z + box.height / 2) * scale,
-          -width / 2 + (box.y + box.width / 2) * scale,
-        )
-        existing.edges.position.copy(existing.mesh.position)
-        existing.box = box
+        applyBoxTransform(existing, scale, length, width)
         applyBoxVisualState(state, existing, la, lb, sb, invalid, opacityOverride)
         return
       }
-      const geometry = new THREE.BoxGeometry(box.length * scale, box.height * scale, box.width * scale)
+      const geometry = boxGeometryForPlaced(box, scale)
       const visualState = boxVisualState(box, la, lb, sb, invalid)
       const opacity = opacityOverride === null || opacityOverride === undefined
         ? visualState.opacity
         : Math.min(1, Math.max(0.12, visualState.selected ? Math.max(opacityOverride, 0.75) : opacityOverride))
       const material = getCachedBoxMaterials(state, box, visualState.selected, opacity, invalid)
       const mesh = new THREE.Mesh(geometry, material)
-      mesh.position.set(
-        -length / 2 + (box.x + box.length / 2) * scale,
-        (box.z + box.height / 2) * scale,
-        -width / 2 + (box.y + box.width / 2) * scale,
-      )
       mesh.castShadow = true
       mesh.receiveShadow = true
       scene.add(mesh)
@@ -1194,7 +1205,7 @@ export function ContainerScene({
           opacity: visualState.edgeOpacity,
         }),
       )
-      edges.position.copy(mesh.position)
+      applyBoxTransform({ box, mesh, edges }, scale, length, width)
       scene.add(edges)
       meshEntries.set(box.id, { box, mesh, edges })
     })

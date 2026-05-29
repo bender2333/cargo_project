@@ -14,6 +14,23 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-05-29-r28-true-3d-rotation',
+    date: '2026-05-29',
+    title: { en: 'True 3D label rotation', zh: '真实 3D 标签旋转' },
+    items: {
+      en: [
+        'Cargo labels now follow the real 3D box rotation instead of being simulated by separate per-face texture angles.',
+        '2D projections and 3D rendering now share one orientation math module, so compound R and Shift+R rotations stay consistent.',
+        'Automatic packing boxes without signed manual axes are still supported by deriving canonical axes from their orientation key.',
+      ],
+      zh: [
+        '货物标签现在跟随箱体真实 3D 旋转，不再用逐面贴图角度模拟。',
+        '2D 投影和 3D 渲染共用同一个朝向数学模块，R 与 Shift+R 的复合旋转保持一致。',
+        '自动装箱产出的箱体即使没有 signed axes，也会从 orientationKey 推出 canonical 朝向继续兼容。',
+      ],
+    },
+  },
+  {
     version: '2026-05-29-r27-physical-face-label-rotation',
     date: '2026-05-29',
     title: { en: 'Physical face-level label rotation', zh: '物理面级标签旋转' },

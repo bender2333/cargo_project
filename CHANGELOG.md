@@ -5,7 +5,13 @@
 - Completed subtask: recorded the Round 28 review and refactor plan in `REVIEW.md`.
   - Root cause: previous fixes still treated label direction as per-face 2D texture rotation while the 3D cargo mesh stayed axis-aligned.
   - Target: move orientation math into one tested module, build 3D cargo from original dimensions, apply the real signed-axis rotation to mesh/edges, and make 2D projections consume the same face-rotation helper.
-- Status: implementation, verification, deployment, and remote E2E are still pending in this round.
+- Completed subtask: implemented the true 3D rotation model.
+  - Added `src/lib/orientationTransform.ts` with tested signed-axis helpers for canonical axes fallback, original-dimension recovery, basis vectors, and projection label rotation.
+  - Updated manual and automatic 2D projections to consume the shared face-rotation helper.
+  - Updated `ContainerScene` to build cargo meshes from original L/W/H dimensions and rotate mesh/edges with the signed-axis quaternion; 3D label textures are now upright stickers carried by the physical mesh rotation.
+  - Removed the old per-face manual label rotation helper so new consumers must use the shared orientation transform module.
+  - Recorded the model decision in `decision.md` and updated the notification bar release notes.
+- Verification: `npm run lint` passed; `npm test` passed 31 files / 182 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 72 tests / 1 skipped / 0 failed. Deployment and remote E2E are still pending in this round.
 
 ## 2026-05-29 (Round 27 Physical Face Label Rotation Review)
 

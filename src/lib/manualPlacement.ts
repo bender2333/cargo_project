@@ -7,7 +7,6 @@ export type QuarterTurn = 0 | 1 | 2 | 3
 export type BodyAxis = 'L' | 'W' | 'H'
 export type SignedBodyAxis = 'L+' | 'L-' | 'W+' | 'W-' | 'H+' | 'H-'
 export type OrientationAxes = { x: SignedBodyAxis; y: SignedBodyAxis; z: SignedBodyAxis }
-export type ManualLabelFace = 'top' | 'front' | 'side'
 
 export type ManualPlacedBox = {
   id: string
@@ -174,21 +173,6 @@ function orientationLabel(axes: OrientationAxes) {
 
 function labelRotationForQuarterTurns(turns: QuarterTurn): LabelRotationDeg {
   return quarterTurn(-turns) * 90 as LabelRotationDeg
-}
-
-export function labelRotationForManualFace(
-  box: Pick<ManualPlacedBox, 'labelRotationDeg' | 'yawQuarterTurn' | 'pitchQuarterTurn'>,
-  face: ManualLabelFace,
-): LabelRotationDeg {
-  const hasPhysicalTurns = box.yawQuarterTurn !== undefined || box.pitchQuarterTurn !== undefined
-  if (!hasPhysicalTurns) return box.labelRotationDeg
-  if (face === 'top') {
-    return labelRotationForQuarterTurns(box.yawQuarterTurn ?? 0)
-  }
-  if (face === 'side') {
-    return labelRotationForQuarterTurns(box.pitchQuarterTurn ?? 0)
-  }
-  return 0
 }
 
 function inferTurnsForOrientation(orientationKey: OrientationKey): { yawQuarterTurn: QuarterTurn; pitchQuarterTurn: QuarterTurn } {
