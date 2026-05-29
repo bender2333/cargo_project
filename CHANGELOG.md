@@ -10,6 +10,11 @@
   - Add face-level label rotation for 2D projections and 3D faces: top uses yaw, side uses pitch, front stays upright.
   - Keep signed X/Y/Z orientation labels as the pose identifier while the label graphic rotates only on the physically affected face.
 - Verification: red test first failed in `src/lib/manualPlacement.test.ts` and `src/components/ManualPlacement2D.test.tsx`; after the fix, targeted tests passed 37 tests. `npx tsc -b` passed; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "R 与 Shift"` passed; `npm run lint` passed; `npm test` passed 30 files / 177 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 72 tests / 1 skipped / 0 failed.
+- Completed subtask: deployed and verified Round 27 on the public host.
+  - Deployment completed with `npm run deploy`; remote backup created at `/root/cargo_project-backup-20260529-011931`.
+  - Remote health check passed during deploy.
+  - Remote targeted E2E passed: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npx playwright test e2e/manual-3d.spec.ts --grep "R 与 Shift"` passed.
+  - Remote full E2E passed: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npm run test:e2e` passed 72 tests / 1 skipped / 0 failed.
 
 ## 2026-05-28 (Round 26 Label Direction and Snap Settings Review)
 
