@@ -2,6 +2,52 @@
 
 日期：2026-05-29
 
+## 第二十八轮 Review 与「真实 3D 旋转」标签重构计划
+
+本轮 review 直面一个反复回归的事实：标签旋转从第二十五轮到第二十七轮被「修」了四次又坏四次，根因不是某一处取值写错，而是整套模型选错了。用户本轮的提示一针见血——**应该按照旋转轴的角度来考虑**，而不是逐面去查角度表。
+
+### 1. 根因：用「逐面 2D 平面角」假装 3D 旋转
+
+问题定位：
+
+- 现状 `labelRotationForManualFace(box, face)` 把朝向拆成 `top→yaw`、`side→pitch`、`front→0` 三个独立的 2D 平面角，箱体始终轴对齐渲染，只是交换长宽高，再给每个面贴一张 canvas 旋转过的贴图。
+- 这在数学上无法表达真实旋转：绕任一轴转 90° 会同时重定向 **6 个面里的 4 个**，但现有模型每次只动「垂直于某一根轴的 2 个面」，且对 `yaw + pitch` 的复合旋转没有定义。
+- 这正是二十五/二十六/二十七轮每轮都「修好又坏」的原因：在一个不完备的模型上调参，换个旋转组合就再次暴露。
+- `ContainerScene` 的盒子是按交换后的尺寸建几何体，没有真正的旋转变换，所以面与贴图的对应关系本质上是猜的。
+
+修复目标：
+
+- 把旋转当作**真实的 3D 变换**：盒子按**原始** L/W/H 建几何体，用已有的 `orientationAxes`（signed body axes）推出旋转矩阵/四元数施加到 mesh 与 edges 上。
+- 旋转后每个面只需要一张「正立」的标签贴图，物理旋转会自动把字母带到正确的面与角度——对任意 `yaw + pitch` 复合旋转都成立，by construction。
+- 标签是贴在货物上的贴纸，跟随箱体一起转（用户本轮确认），方向本身即可读出朝向。
+
+### 2. 把朝向数学收敛到单一可测模块
+
+问题定位：
+
+- 朝向相关计算目前散落在 `manualPlacement.ts`、`ContainerScene.tsx`、`ManualPlacement2D.tsx`、`ContainerPlan2D.tsx`，且自动装箱产出的 `PlacedBox` 只有 `orientationKey` / `labelRotationDeg`，没有 `orientationAxes`。
+- `ContainerPlan2D` 的 front/side 投影一直错误地套用箱体级 `labelRotationDeg`，与手动 2D 行为不一致。
+
+修复目标：
+
+- 新增并单测 `src/lib/orientationTransform.ts`，作为朝向数学唯一来源：
+  - `orientationAxesOf(box)`：缺省时由 `orientationKey` 推出 canonical signed axes（兼容自动装箱箱体）。
+  - `baseDimensionsFromPlaced(...)`：从放置尺寸逆推原始 L/W/H，供 3D 按原始尺寸建几何体。
+  - `orientationBasisVectors(axes)`：返回真实旋转的三组基向量（纯数值，不依赖 Three，便于单测）。
+  - `faceLabelRotation(axes, view)`：由旋转轴几何推出 `0|90|180|270` 的面级角度，复现现有 2D 断言并对复合旋转正确。
+- `ManualPlacement2D` / `ContainerPlan2D` 统一改用 `faceLabelRotation(orientationAxesOf(box), view)`，三视图共享同一规则；`data-face-label-rotation` / `data-label-rotation` 输出保持兼容。
+
+### 本轮验收清单
+
+1. 先写单测覆盖朝向数学：identity（LWH）、`R` 四步循环、`Shift+R` 四步循环、复合旋转、原始尺寸逆推。
+2. `ContainerScene` 改为真实 3D 旋转 + 单面正立标签，移除 `labelRotationForManualFace` 依赖；确认拾取/拖拽/ghost/hover 不受影响。
+3. 2D 三视图（手动 + 自动）改用 `faceLabelRotation`，保持 `data-*` 断言兼容（含 `container-calc.spec.ts:562` 的 WLH→90）。
+4. `decision.md` 记录模型变更（逐面角 → 真实旋转），更新 `CHANGELOG.md` 与通知栏。
+5. 本地验证：相关单元测试、`npm run lint`、`npm test`、`npm run build`、`npm run test:e2e`。
+6. 范围之外：`packing.ts` 不改（自动箱体在消费端推 canonical axes）；旋转 reducer（`rotateBoxRight90/Down90` 与 `orientationAxes`）已正确，保持不动。
+
+---
+
 ## 第二十七轮 Review 与物理面级标签旋转计划
 
 本轮 review 重新定义标签旋转的物理语义：不能把一个箱体级标签角度套到六个面上。箱体绕哪个轴转，只有被该轴影响的面上的贴纸方向应该变。

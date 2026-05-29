@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-05-29 (Round 28 True 3D Rotation Label Review)
+
+- Completed subtask: recorded the Round 28 review and refactor plan in `REVIEW.md`.
+  - Root cause: previous fixes still treated label direction as per-face 2D texture rotation while the 3D cargo mesh stayed axis-aligned.
+  - Target: move orientation math into one tested module, build 3D cargo from original dimensions, apply the real signed-axis rotation to mesh/edges, and make 2D projections consume the same face-rotation helper.
+- Status: implementation, verification, deployment, and remote E2E are still pending in this round.
+
 ## 2026-05-29 (Round 27 Physical Face Label Rotation Review)
 
 - Completed subtask: recorded the new review and root-cause analysis in `REVIEW.md`.
