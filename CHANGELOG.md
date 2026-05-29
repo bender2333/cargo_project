@@ -11,7 +11,12 @@
   - Updated `ContainerScene` to build cargo meshes from original L/W/H dimensions and rotate mesh/edges with the signed-axis quaternion; 3D label textures are now upright stickers carried by the physical mesh rotation.
   - Removed the old per-face manual label rotation helper so new consumers must use the shared orientation transform module.
   - Recorded the model decision in `decision.md` and updated the notification bar release notes.
-- Verification: `npm run lint` passed; `npm test` passed 31 files / 182 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 72 tests / 1 skipped / 0 failed. Deployment and remote E2E are still pending in this round.
+- Verification: `npm run lint` passed; `npm test` passed 31 files / 182 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 72 tests / 1 skipped / 0 failed.
+- Completed subtask: deployed and verified Round 28 on the public host.
+  - Deployment completed with `npm run deploy`; remote backup created at `/root/cargo_project-backup-20260529-065215`.
+  - Remote health check passed during deploy.
+  - Remote targeted E2E passed: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npx playwright test e2e/manual-3d.spec.ts e2e/container-calc.spec.ts --grep "R 与 Shift|rotates 2D labels|通知栏"` passed 3 tests.
+  - Remote full E2E passed: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npm run test:e2e` passed 72 tests / 1 skipped / 0 failed.
 
 ## 2026-05-29 (Round 27 Physical Face Label Rotation Review)
 
