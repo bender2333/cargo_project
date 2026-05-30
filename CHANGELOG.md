@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-05-30 (Round 29 Depth-First Loading Order Review)
+
+- Completed subtask: confirmed the user-provided `cargo-debug-snapshot (4).json` exposes a loading-order issue, not a geometry-overlap issue.
+  - Inner depth layer `x=0..400` had `workStep` spread across `1..171`.
+  - Top-fill boxes at `x=0,z=1800` were sequenced after the first outer-depth box at `x=400,workStep=13`.
+- Completed subtask: recorded the review, root cause, and next plan in `REVIEW.md`.
+  - Root cause: `workStep` was assigned during greedy insertion before `assignDepthLayers()` finalized the depth-first layer semantics.
+- Completed subtask: added a regression unit test for the 20GP, `400x500x600`, rotatable multi-batch snapshot scenario.
+  - The new test failed before the fix with `expected 171 to be less than 13`.
+- Completed subtask: reassigned `workStep` after depth-layer mapping using final coordinates ordered by `x`, then `y`, then `z`.
+- Verification: `npm test -- src/lib/packing.test.ts` passed 29 tests; `npm test` passed 31 files / 185 tests; `npm run lint` passed; `npm run build` passed with the existing Vite chunk-size warning; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "作业回放面板按 workSteps"` passed. Full `npm run test:e2e` first failed because backend port 3010 was not running; after starting `npm run start:server` on port 3010 it passed 71 tests / 1 skipped and retained the pre-existing manual `Shift+R` orientation expectation failure recorded in `decision.md`.
+
 ## 2026-05-29 (Round 28 True 3D Rotation Label Review)
 
 - Completed subtask: recorded the Round 28 review and refactor plan in `REVIEW.md`.

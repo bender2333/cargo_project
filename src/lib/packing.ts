@@ -286,6 +286,27 @@ function hasStackingViolation(placed: PlacedBox[]) {
   return placed.some((box) => box.supportedBy.some((supportId) => placedById.get(supportId)?.stackable === false))
 }
 
+function loadingSequenceScore(box: PlacedBox, container: ContainerSpec) {
+  return (
+    box.x * container.width * container.height +
+    box.y * container.height +
+    box.z
+  )
+}
+
+function assignWorkStepsByDepth(placed: PlacedBox[], container: ContainerSpec) {
+  const ordered = [...placed].sort(
+    (a, b) =>
+      loadingSequenceScore(a, container) - loadingSequenceScore(b, container) ||
+      a.index - b.index ||
+      a.id.localeCompare(b.id),
+  )
+
+  ordered.forEach((box, index) => {
+    box.workStep = index + 1
+  })
+}
+
 function buildDiagnostics(
   placed: PlacedBox[],
   unplaced: PackingResult['unplaced'],
@@ -551,6 +572,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
 
   // 2. Perform inward physical layer mapping and pusher updates (depth layers)
   assignDepthLayers(placed)
+  assignWorkStepsByDepth(placed, effective)
   const layers = buildPackingLayers(placed)
 
   const labelStats = cargoItems.map((item, itemIndex) => {

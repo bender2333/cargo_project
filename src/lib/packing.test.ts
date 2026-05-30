@@ -128,6 +128,34 @@ describe('calculatePacking', () => {
     expect(result.placed[4].x).toBe(1000)
   })
 
+  it('loads rotatable top-fill boxes before moving to the next outer depth slice', () => {
+    const items = [
+      cargo({ id: 'carton-a', label: 'A', length: 400, width: 500, height: 600, quantity: 18, canRotate: true }),
+      ...Array.from({ length: 21 }, (_, index) =>
+        cargo({
+          id: `carton-${index + 2}`,
+          label: String.fromCharCode('B'.charCodeAt(0) + index),
+          length: 400,
+          width: 500,
+          height: 600,
+          quantity: 10,
+          canRotate: true,
+        }),
+      ),
+    ]
+    const result = calculatePacking(containers[0], items)
+
+    expectValidPacking(effectiveContainer(containers[0]), result)
+
+    const byStep = [...result.placed].sort((a, b) => a.workStep - b.workStep)
+    const firstOuterDepthStep = byStep.find((box) => box.x > 0)?.workStep
+    const innerTopFillSteps = byStep.filter((box) => box.x === 0 && box.z >= 1800).map((box) => box.workStep)
+
+    expect(firstOuterDepthStep).toBeDefined()
+    expect(innerTopFillSteps.length).toBeGreaterThan(0)
+    expect(Math.max(...innerTopFillSteps)).toBeLessThan(firstOuterDepthStep!)
+  })
+
   it('can preserve input order as a loading mode instead of volume-priority order', () => {
     const container = testContainer({ length: 3000, width: 1000, height: 1000 })
     const items = [

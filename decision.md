@@ -2,6 +2,15 @@
 
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
+## 2026-05-30 第二十九轮：自动装箱作业顺序按最终深度优先重排
+
+- 背景：用户提供 `C:\Users\BA_H3C_Pad\Downloads\cargo-debug-snapshot (4).json`，指出当前算法应从集装箱里边往外装，但快照中最内侧顶部补装箱被安排到很晚才装。
+- 证据：快照中 210 个自动排布箱体没有几何越界/重叠；但 `physicalLayer=1` 的 `workStep` 跨到 `1..171`，其中 `x=0,z=1800` 的顶部补装箱为 `169..171`，而第一个外侧深度 `x=400` 已在 `workStep=13`。
+- 决策：本轮不改变极点贪心几何摆放，只在 `assignDepthLayers(placed)` 后按最终坐标重排 `workStep`，排序键为 `x -> y -> z`，使回放、作业清单和分层查看共享「从内向外」的深度优先语义。
+- 影响：`workStep` 不再等同于贪心插入顺序，而是最终装柜作业顺序；几何摆放坐标、支撑校验、装载率和标签统计不变。`loadingMode=input/weight/quantity/volume` 仍决定候选货物的优先级和最终空间结果，但最终回放会按物理深度顺序展示。
+- 验证：新增 `src/lib/packing.test.ts` 回归测试，修复前失败 `expected 171 to be less than 13`，修复后通过。`npm test`、`npm run lint`、`npm run build` 通过；相关 E2E `作业回放面板按 workSteps 顺序逐步显示箱体` 通过。
+- 已知 E2E 状态：完整 `npm run test:e2e` 首次失败是因为 Vite 代理请求 `127.0.0.1:3010` 时本地后端未运行；启动 `PORT=3010 npm run start:server` 后重跑，自动排布/回放相关用例通过，剩余 1 个失败仍是既有的手动模式 `R` 后 `Shift+R` 方向图断言 `WHL` vs 实际 `WLH`，与本轮自动装箱 `workStep` 重排无关，延续 2026-05-29 的手动旋转语义待裁定事项。
+
 ## 2026-05-29 第二十九轮：手动旋转改为绕箱体几何中心
 
 - 背景：用户连按 R 的四个调试快照（`cargo-debug-snapshot*.json`）显示，旋转时 `x/y` 不变、`length/width` 互换，导致几何中心在 `(1800,1900)` 与 `(1850,1850)` 间来回跳。用户明确要求「旋转应该按照中心来旋转」。
