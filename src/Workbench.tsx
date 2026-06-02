@@ -7,9 +7,11 @@ import { ContainerPlan2D } from './components/ContainerPlan2D'
 import type { PlanViewMode } from './components/ContainerPlan2D'
 import { ManualPlacement2D } from './components/ManualPlacement2D'
 import { PlaybackPanel } from './components/PlaybackPanel'
+import { LoadingStepsPanel } from './components/LoadingStepsPanel'
 import { CenterOfGravityPanel } from './components/CenterOfGravityPanel'
 import { ContainerComparisonPanel } from './components/ContainerComparisonPanel'
 import { buildPlaybackSequence, visibleBoxesAt } from './lib/playback'
+import { buildLoadingTaskGroups } from './lib/loadingTaskGroups'
 import { usePlaybackController } from './hooks/usePlaybackController'
 import type { PlaybackSpeed } from './hooks/usePlaybackController'
 import { computeCenterOfGravity } from './lib/centerOfGravity'
@@ -189,6 +191,7 @@ const copy = {
     isoView: 'Iso',
     resetView: 'Reset view',
     playbackTab: 'Playback',
+    loadingStepsTab: 'Stage Plan',
     cogTab: 'Balance',
     compareTab: 'Compare',
     fillTab: 'Fill',
@@ -429,6 +432,7 @@ const copy = {
     isoView: '轴测',
     resetView: '重置视角',
     playbackTab: '作业回放',
+    loadingStepsTab: '装柜步骤',
     cogTab: '装载重心',
     compareTab: '柜型对比',
     fillTab: '补装建议',
@@ -596,7 +600,7 @@ const customContainerDefaults = {
 
 type CargoForm = Omit<CargoItem, 'id'>
 type WorkspaceView = '3d' | '2d'
-type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback' | 'cog' | 'compare' | 'fill' | 'reviewChecklist'
+type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback' | 'loadingSteps' | 'cog' | 'compare' | 'fill' | 'reviewChecklist'
 type NavTarget = 'overview' | 'report' | 'cargo' | 'container' | 'history' | 'users'
 
 function buildRotationNotice(
@@ -873,6 +877,8 @@ function Workbench() {
   const [vehicleProfile, setVehicleProfile] = useState<VehicleProfileId>(DEFAULT_VEHICLE_PROFILE)
   const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
   const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
+  const [activeLoadingGroupIndex, setActiveLoadingGroupIndex] = useState(0)
+  const [loadingGroupsPlaying, setLoadingGroupsPlaying] = useState(false)
   const [placementMode, setPlacementMode] = useState<'auto' | 'manual'>('auto')
   const [manualHistory, setManualHistory] = useState<ManualHistory>(() => manualEmptyHistory())
   const [manualSelectedId, setManualSelectedId] = useState<string | null>(null)
@@ -1403,6 +1409,11 @@ function Workbench() {
   const playbackAvailable = placementMode === 'auto' && hasCalculated && playbackSequence.total > 0
   const playback = usePlaybackController(playbackSequence)
   const playbackActive = playbackAvailable && activeResultTab === 'playback'
+  const loadingTaskGroups = useMemo(() => buildLoadingTaskGroups(placementMode === 'auto' && hasCalculated ? result : null), [placementMode, hasCalculated, result])
+  const loadingStepsAvailable = placementMode === 'auto' && hasCalculated && loadingTaskGroups.length > 0
+  const activeLoadingGroup = loadingTaskGroups[Math.max(0, Math.min(activeLoadingGroupIndex, loadingTaskGroups.length - 1))] ?? null
+  const activeLoadingGroupBoxIds = useMemo(() => activeLoadingGroup ? new Set(activeLoadingGroup.boxIds) : undefined, [activeLoadingGroup])
+  const loadingStepsActive = loadingStepsAvailable && activeResultTab === 'loadingSteps'
   const visibleAutoBoxes = useMemo(() => {
     if (playbackActive) return visibleBoxesAt(playbackSequence, playback.cursor)
     return hasCalculated ? result.placed : []
@@ -1410,6 +1421,27 @@ function Workbench() {
   const visibleBoxes = hasCalculated
     ? result.placed.filter((box) => (activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId) && (activeLabelId === 'all' || box.label === activeLabelId))
     : []
+
+  useEffect(() => {
+    setActiveLoadingGroupIndex(0)
+    setLoadingGroupsPlaying(false)
+  }, [loadingTaskGroups.length])
+
+  useEffect(() => {
+    if (!loadingStepsActive) {
+      setLoadingGroupsPlaying(false)
+      return
+    }
+    if (!loadingGroupsPlaying) return
+    if (activeLoadingGroupIndex >= loadingTaskGroups.length - 1) {
+      setLoadingGroupsPlaying(false)
+      return
+    }
+    const timer = window.setTimeout(() => {
+      setActiveLoadingGroupIndex((current) => Math.min(current + 1, loadingTaskGroups.length - 1))
+    }, 900)
+    return () => window.clearTimeout(timer)
+  }, [loadingStepsActive, loadingGroupsPlaying, activeLoadingGroupIndex, loadingTaskGroups.length])
 
   const cogResult = useMemo(() => computeCenterOfGravity(visibleAutoBoxes.length > 0 ? visibleAutoBoxes : result.placed, selectedContainer), [result.placed, visibleAutoBoxes, selectedContainer])
   const cogViewState = useMemo(
@@ -3074,7 +3106,7 @@ function Workbench() {
                     >
                       {workspaceMaximized ? t.restoreManual : t.maximizeManual}
                     </button>
-                    <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} boxOpacityOverride={cogViewState.boxOpacity} cogOverlay={cogOverlay} container={renderingContainer} edgeSnap={edgeSnap} gridSnap={gridSnap} placementSettings={placementSettings} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
+                    <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} boxOpacityOverride={cogViewState.boxOpacity} cogOverlay={cogOverlay} container={renderingContainer} edgeSnap={edgeSnap} gridSnap={gridSnap} highlightBoxIds={loadingStepsActive ? activeLoadingGroupBoxIds : undefined} placementSettings={placementSettings} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
                   </div>
                 </>
               ) : (
@@ -3094,7 +3126,7 @@ function Workbench() {
                     >
                       {workspaceMaximized ? t.restoreManual : t.maximizeManual}
                     </button>
-                    <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} container={renderingContainer} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
+                    <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} container={renderingContainer} highlightBoxIds={loadingStepsActive ? activeLoadingGroupBoxIds : undefined} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
                   </div>
                 </>
               )}
@@ -3158,6 +3190,7 @@ function Workbench() {
                 { id: 'diagnostics' as const, label: t.diagnostics },
                 { id: 'importLog' as const, label: t.importLog },
                 { id: 'playback' as const, label: t.playbackTab },
+                { id: 'loadingSteps' as const, label: t.loadingStepsTab },
                 { id: 'cog' as const, label: t.cogTab },
                 { id: 'compare' as const, label: t.compareTab },
                 { id: 'fill' as const, label: t.fillTab },
@@ -3309,6 +3342,29 @@ function Workbench() {
                   onSpeedChange={(next: PlaybackSpeed) => playback.setSpeed(next)}
                   onTogglePlay={playback.togglePlay}
                   onExport={exportPlaybackInstructions}
+                />
+              </div>
+            )}
+
+            {activeResultTab === 'loadingSteps' && (
+              <div className="mt-3" data-testid="loading-steps-tab-panel">
+                <LoadingStepsPanel
+                  activeIndex={activeLoadingGroupIndex}
+                  available={loadingStepsAvailable}
+                  groups={loadingTaskGroups}
+                  locale={locale}
+                  playing={loadingGroupsPlaying}
+                  onSelectGroup={(index) => {
+                    const nextIndex = Math.max(0, Math.min(index, loadingTaskGroups.length - 1))
+                    const group = loadingTaskGroups[nextIndex]
+                    setActiveLoadingGroupIndex(nextIndex)
+                    setLoadingGroupsPlaying(false)
+                    if (group) {
+                      setActiveLayerId(String(group.physicalLayer))
+                      setSelectedBoxId(group.boxIds[0] ?? null)
+                    }
+                  }}
+                  onTogglePlay={() => setLoadingGroupsPlaying((current) => !current)}
                 />
               </div>
             )}

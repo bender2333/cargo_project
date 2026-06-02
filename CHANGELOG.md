@@ -8,7 +8,12 @@
   - The planned data source remains `PackingResult.workSteps` and `PlacedBox.workStep/physicalLayer/supportedBy`, so the new view stays aligned with the depth-first loading order fixed in Round 29.
 - Completed subtask: recorded the business decision in `decision.md`.
   - Stage groups must preserve every box and step range, while splitting across physical layer changes, obvious depth boundaries, or meaningful support-state changes.
-- Verification: documentation-only change; no code, lint, unit, build, or E2E commands were run.
+- Completed subtask: implemented the first stage-merged loading steps view.
+  - Added `src/lib/loadingTaskGroups.ts` to build `LoadingTaskGroup[]` from `PackingResult.workSteps` without recalculating packing order.
+  - Added `src/components/LoadingStepsPanel.tsx` and a result tab named `装柜步骤` / `Loading Steps`.
+  - Added grouped-stage highlighting in the existing 2D and 3D views via `highlightBoxIds`.
+  - Added Playwright coverage for opening the loading steps tab, switching stages, seeing label statistics, and proving the first stage is a merged group rather than a single box.
+- Verification: `npx vitest run src/lib/loadingTaskGroups.test.ts` passed 5 tests; `npx vitest run src/lib/loadingTaskGroups.test.ts src/lib/playback.test.ts` passed 10 tests; `npx tsc -b` passed; `npm run lint` passed; `npm test` passed 32 files / 190 tests; `npm run build` passed with the existing Vite chunk-size warning. Targeted E2E first failed because backend port 3010 was not running, then passed after starting `PORT=3010 npm run start:server`: `npx playwright test e2e/manual-3d.spec.ts --grep "装柜步骤|作业回放面板"` passed 3 tests. Full local `npm run test:e2e` passed 72 tests / 1 skipped and retained the pre-existing manual rotation failure `WHL` expected vs `WLH` actual, which is still unrelated to this automatic loading-steps round and remains recorded in `decision.md`.
 
 ## 2026-05-30 (Round 29 Depth-First Loading Order Review)
 

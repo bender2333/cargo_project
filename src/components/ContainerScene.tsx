@@ -38,6 +38,7 @@ type ContainerSceneProps = {
   placementSettings?: PlacementSettings
   resetViewTick?: number
   selectedBoxId?: string | null
+  highlightBoxIds?: Set<string>
   onSelectBox?: (boxId: string) => void
   invalidBoxIds?: Set<string>
   manualEditable?: boolean
@@ -216,18 +217,21 @@ function boxVisualState(
   activeLayerId: string,
   activeLabelId: string,
   selectedBoxId: string | null | undefined,
+  highlightBoxIds: Set<string> | undefined,
   invalid: boolean,
 ) {
   const selected = box.id === selectedBoxId
+  const highlighted = highlightBoxIds?.has(box.id) ?? false
   const currentLayer = activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId
   const currentLabel = activeLabelId === 'all' || box.label === activeLabelId
-  const active = selected || (currentLayer && currentLabel)
+  const active = selected || highlighted || (currentLayer && currentLabel)
   return {
     selected,
+    highlighted,
     active,
     invalid,
     opacity: active ? 1 : 0.22,
-    edgeColor: invalid ? 0xef4444 : selected ? 0xf3b21a : active ? 0x252525 : 0x777777,
+    edgeColor: invalid ? 0xef4444 : selected || highlighted ? 0xf3b21a : active ? 0x252525 : 0x777777,
     edgeOpacity: invalid ? 0.95 : active ? 0.72 : 0.14,
   }
 }
@@ -238,10 +242,11 @@ function applyBoxVisualState(
   activeLayerId: string,
   activeLabelId: string,
   selectedBoxId: string | null | undefined,
+  highlightBoxIds: Set<string> | undefined,
   invalid: boolean,
   opacityOverride?: number | null,
 ) {
-  const visual = boxVisualState(entry.box, activeLayerId, activeLabelId, selectedBoxId, invalid)
+  const visual = boxVisualState(entry.box, activeLayerId, activeLabelId, selectedBoxId, highlightBoxIds, invalid)
   const opacity = opacityOverride === null || opacityOverride === undefined
     ? visual.opacity
     : Math.min(1, Math.max(0.45, visual.selected ? Math.max(opacityOverride, 0.75) : opacityOverride))
@@ -430,6 +435,7 @@ export function ContainerScene({
   placementSettings,
   resetViewTick,
   selectedBoxId,
+  highlightBoxIds,
   onSelectBox,
   invalidBoxIds,
   manualEditable,
@@ -466,7 +472,7 @@ export function ContainerScene({
   const onClearSelectionRef = useRef<typeof onClearSelection>(onClearSelection)
   const onHoverBoxRef = useRef<typeof onHoverBox>(onHoverBox)
   const selectedManualBoxIdRef = useRef<string | null>(selectedManualBoxId ?? null)
-  const visualPropsRef = useRef({ activeLayerId, activeLabelId, selectedBoxId, boxOpacityOverride })
+  const visualPropsRef = useRef({ activeLayerId, activeLabelId, selectedBoxId, highlightBoxIds, boxOpacityOverride })
 
   useEffect(() => {
     invalidBoxIdsRef.current = invalidBoxIds ?? new Set()
@@ -538,8 +544,8 @@ export function ContainerScene({
   }, [onSelectBox])
 
   useEffect(() => {
-    visualPropsRef.current = { activeLayerId, activeLabelId, selectedBoxId, boxOpacityOverride }
-  }, [activeLayerId, activeLabelId, selectedBoxId, boxOpacityOverride])
+    visualPropsRef.current = { activeLayerId, activeLabelId, selectedBoxId, highlightBoxIds, boxOpacityOverride }
+  }, [activeLayerId, activeLabelId, selectedBoxId, highlightBoxIds, boxOpacityOverride])
 
   useEffect(() => {
     const mount = mountRef.current
@@ -702,9 +708,9 @@ export function ContainerScene({
       computeInvalidByGeometry(entry.box.id, x, y, z, entry.box.length, entry.box.width, entry.box.height)
 
     const refreshEntryVisual = (entry: MeshEntry) => {
-      const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb, boxOpacityOverride: opacityOverride } = visualPropsRef.current
+      const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb, highlightBoxIds: hb, boxOpacityOverride: opacityOverride } = visualPropsRef.current
       const invalid = sceneState.invalidOverride.has(entry.box.id) || invalidBoxIdsRef.current.has(entry.box.id)
-      applyBoxVisualState(sceneState, entry, la, lb, sb, invalid, opacityOverride)
+      applyBoxVisualState(sceneState, entry, la, lb, sb, hb, invalid, opacityOverride)
     }
 
     const onPointerDown = (event: PointerEvent) => {
@@ -1167,7 +1173,7 @@ export function ContainerScene({
       }
     }
 
-    const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb, boxOpacityOverride: opacityOverride } = visualPropsRef.current
+    const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb, highlightBoxIds: hb, boxOpacityOverride: opacityOverride } = visualPropsRef.current
     boxes.forEach((box) => {
       const existing = meshEntries.get(box.id)
       const invalid = state.invalidOverride.has(box.id) || invalidBoxIdsRef.current.has(box.id)
@@ -1181,11 +1187,11 @@ export function ContainerScene({
           existing.edges.geometry = new THREE.EdgesGeometry(geometry)
         }
         applyBoxTransform(existing, scale, length, width)
-        applyBoxVisualState(state, existing, la, lb, sb, invalid, opacityOverride)
+        applyBoxVisualState(state, existing, la, lb, sb, hb, invalid, opacityOverride)
         return
       }
       const geometry = boxGeometryForPlaced(box, scale)
-      const visualState = boxVisualState(box, la, lb, sb, invalid)
+      const visualState = boxVisualState(box, la, lb, sb, hb, invalid)
       const opacity = opacityOverride === null || opacityOverride === undefined
         ? visualState.opacity
         : Math.min(1, Math.max(0.12, visualState.selected ? Math.max(opacityOverride, 0.75) : opacityOverride))
@@ -1452,12 +1458,12 @@ export function ContainerScene({
   useEffect(() => {
     const state = sceneStateRef.current
     if (!state) return
-    const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb, boxOpacityOverride: opacityOverride } = visualPropsRef.current
+    const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb, highlightBoxIds: hb, boxOpacityOverride: opacityOverride } = visualPropsRef.current
     state.meshEntries.forEach((entry) => {
       const invalid = state.invalidOverride.has(entry.box.id) || invalidBoxIdsRef.current.has(entry.box.id)
-      applyBoxVisualState(state, entry, la, lb, sb, invalid, opacityOverride)
+      applyBoxVisualState(state, entry, la, lb, sb, hb, invalid, opacityOverride)
     })
-  }, [activeLayerId, activeLabelId, selectedBoxId, invalidBoxIds, boxOpacityOverride])
+  }, [activeLayerId, activeLabelId, selectedBoxId, highlightBoxIds, invalidBoxIds, boxOpacityOverride])
 
   const interactionMode = manualEditable ? 'manual' : 'auto'
 

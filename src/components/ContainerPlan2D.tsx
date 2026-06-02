@@ -10,6 +10,7 @@ type ContainerPlan2DProps = {
   activeLabelId: string
   mode: PlanViewMode
   selectedBoxId?: string | null
+  highlightBoxIds?: Set<string>
   onSelectBox?: (boxId: string) => void
 }
 
@@ -42,7 +43,7 @@ function viewSize(container: ContainerSpec, mode: PlanViewMode) {
   return { width: container.length, height: container.width }
 }
 
-export function ContainerPlan2D({ container, boxes, activeLayerId, activeLabelId, mode, selectedBoxId, onSelectBox }: ContainerPlan2DProps) {
+export function ContainerPlan2D({ container, boxes, activeLayerId, activeLabelId, mode, selectedBoxId, highlightBoxIds, onSelectBox }: ContainerPlan2DProps) {
   const size = viewSize(container, mode)
   const viewBox = `0 0 ${size.width + padding * 2} ${size.height + padding * 2}`
 
@@ -61,8 +62,11 @@ export function ContainerPlan2D({ container, boxes, activeLayerId, activeLabelId
         const projected = projectBox(box, mode)
         const isCurrentLayer = activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId
         const isCurrentLabel = activeLabelId === 'all' || box.label === activeLabelId
+        const isHighlighted = highlightBoxIds?.has(box.id) ?? false
         const isSelected = box.id === selectedBoxId
-        const opacity = isCurrentLayer && isCurrentLabel ? 0.88 : 0.18
+        const opacity = highlightBoxIds
+          ? isHighlighted ? 0.94 : 0.16
+          : isCurrentLayer && isCurrentLabel ? 0.88 : 0.18
         const textX = padding + projected.x + projected.width / 2
         const textY = padding + size.height - projected.y - projected.height / 2
         const rotation = faceLabelRotation(orientationAxesOf(box), mode)
@@ -88,8 +92,8 @@ export function ContainerPlan2D({ container, boxes, activeLayerId, activeLabelId
               height={projected.height}
               onClick={() => onSelectBox?.(box.id)}
               role="button"
-              stroke={isSelected ? '#f3b21a' : '#222222'}
-              strokeWidth={isSelected ? 14 : 5}
+              stroke={isSelected || isHighlighted ? '#f3b21a' : '#222222'}
+              strokeWidth={isSelected || isHighlighted ? 14 : 5}
               tabIndex={0}
               width={projected.width}
               x={padding + projected.x}

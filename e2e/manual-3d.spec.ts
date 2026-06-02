@@ -339,6 +339,28 @@ test('作业回放面板按 workSteps 顺序逐步显示箱体', async ({ page }
   await expect(scene).toHaveAttribute('data-box-count', String(totalBoxes))
 })
 
+test('装柜步骤按阶段合并显示并高亮当前阶段', async ({ page }) => {
+  await ensureChinese(page)
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toBeVisible()
+  const totalBoxes = Number(await scene.getAttribute('data-box-count'))
+  expect(totalBoxes).toBeGreaterThan(2)
+
+  await page.getByRole('button', { name: '装柜步骤' }).click()
+  const panel = page.getByTestId('loading-steps-panel')
+  await expect(panel).toBeVisible()
+  await expect(page.getByTestId('loading-steps-current')).toContainText('阶段 1')
+  await expect(page.getByTestId('loading-steps-labels')).toContainText('A')
+
+  const firstGroupCount = Number(await panel.getAttribute('data-active-box-count'))
+  expect(firstGroupCount).toBeGreaterThan(1)
+  expect(firstGroupCount).toBeLessThan(totalBoxes)
+
+  await page.getByTestId('loading-steps-next').click()
+  await expect(panel).toHaveAttribute('data-active-group', '2')
+  await expect(page.getByTestId('loading-steps-current')).toContainText('步骤')
+})
+
 test('手动模式作业回放面板提示不可用', async ({ page }) => {
   await ensureChinese(page)
   await enterManualMode(page)
