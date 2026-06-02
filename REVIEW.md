@@ -81,7 +81,7 @@ type LoadingTaskGroup = {
 结果区新增 Tab：
 
 - 中文：`装柜步骤`
-- 英文：`Loading Steps`
+- 英文：`Stage Plan`（避免和主操作按钮 `Load` 产生可访问名称匹配冲突）
 
 第一版已实现：
 
@@ -108,13 +108,18 @@ type LoadingTaskGroup = {
 2. `npx vitest run src/lib/loadingTaskGroups.test.ts src/lib/playback.test.ts`：10 个相关单测通过。
 3. `npx tsc -b`：通过。
 4. `npx playwright test e2e/manual-3d.spec.ts --grep "装柜步骤|作业回放面板"`：启动本地 `PORT=3010 npm run start:server` 后，3 个目标 E2E 通过。
+5. `npm run lint`：通过。
+6. `npm test`：32 个测试文件 / 190 个测试通过。
+7. `npm run build`：通过，保留既有 Vite chunk-size warning。
+8. 本地完整 `npm run test:e2e`：72 passed / 1 skipped，仍保留既有手动旋转 `WHL` expected vs `WLH` actual 失败，与本轮自动装柜步骤图无关。
+9. `npm run deploy`：部署成功，远程备份 `/root/cargo_project-backup-20260602-035202`，远程健康检查通过。
+10. 远程目标 E2E：`PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npx playwright test e2e/manual-3d.spec.ts --grep "装柜步骤|作业回放面板"` 通过 3 个测试。
+11. 远程完整 E2E：`PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npm run test:e2e` 结果为 72 passed / 1 skipped，仍保留同一个既有手动旋转失败。
 
 后续计划：
 
-1. 运行完整 `npm run lint`、`npm test`、`npm run build`、`npm run test:e2e`，确认第三十轮没有破坏既有流程。
-2. 完成本地验证后执行 `npm run deploy`。
-3. 部署完成后对远程地址运行目标 E2E 和完整远程 E2E。
-4. 打印/导出步骤图作为下一轮小步任务，不混入本轮阶段合并和 UI 接入。
+1. 打印/导出步骤图作为下一轮小步任务，不混入本轮阶段合并和 UI 接入。
+2. 单独裁定既有手动旋转组合语义：更新 E2E 期望为 `WLH`，或按产品意图调整 reducer 产出 `WHL`。
 
 ---
 
