@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-06-02 (Round 30 Stage-Merged Loading Steps Review)
+
+- Completed subtask: discussed and recorded the Round 30 review plan for an EasyCargo-like loading steps view.
+  - Product wording is "装柜步骤图" / "Loading Steps", not a project task decomposition chart.
+  - First implementation should use stage merging, not one step per box, because real plans can contain hundreds of boxes.
+  - The planned data source remains `PackingResult.workSteps` and `PlacedBox.workStep/physicalLayer/supportedBy`, so the new view stays aligned with the depth-first loading order fixed in Round 29.
+- Completed subtask: recorded the business decision in `decision.md`.
+  - Stage groups must preserve every box and step range, while splitting across physical layer changes, obvious depth boundaries, or meaningful support-state changes.
+- Verification: documentation-only change; no code, lint, unit, build, or E2E commands were run.
+
 ## 2026-05-30 (Round 29 Depth-First Loading Order Review)
 
 - Completed subtask: confirmed the user-provided `cargo-debug-snapshot (4).json` exposes a loading-order issue, not a geometry-overlap issue.
