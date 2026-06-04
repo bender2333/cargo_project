@@ -31,6 +31,7 @@ export type ManualPlacedBox = {
   weight?: number
   canRotate?: boolean
   stackable?: boolean
+  maxStackLayers?: number
 }
 
 export type ManualDraft = {
@@ -38,11 +39,13 @@ export type ManualDraft = {
 }
 
 export type ValidationIssue = {
-  type: 'boundary' | 'overlap' | 'floating' | 'rotation-disabled' | 'stacking'
+  type: 'boundary' | 'overlap' | 'floating' | 'rotation-disabled' | 'stacking' | 'max-stack-layers'
   severity?: 'warning' | 'error'
   message: string
   boxId: string
   supportRatio?: number
+  stackLayer?: number
+  maxStackLayers?: number
 }
 
 export type PoolEntry = {
@@ -55,6 +58,7 @@ export type PoolEntry = {
   remaining: number
   canRotate: boolean
   stackable: boolean
+  maxStackLayers?: number
 }
 
 export type ManualHistory = {
@@ -403,6 +407,35 @@ export function findSupport(box: ManualPlacedBox, others: ManualPlacedBox[], min
   return null
 }
 
+function directSupportsFor(box: ManualPlacedBox, others: ManualPlacedBox[], minSupportRatio: number) {
+  if (box.z <= EPSILON) return []
+  const baseArea = box.length * box.width
+  if (baseArea <= 0) return []
+
+  const supports: ManualPlacedBox[] = []
+  let supportedArea = 0
+  for (const other of others) {
+    if (other.id === box.id) continue
+    const topZ = other.z + other.height
+    if (Math.abs(topZ - box.z) > EPSILON) continue
+    const overlap = overlapAreaXY(box, other)
+    if (overlap <= 0) continue
+    supportedArea += overlap
+    supports.push(other)
+  }
+
+  return supportedArea / baseArea >= minSupportRatio ? supports : []
+}
+
+function stackLayerForManualBox(box: ManualPlacedBox, boxes: ManualPlacedBox[], minSupportRatio: number, seen = new Set<string>()): number {
+  if (box.z <= EPSILON) return 1
+  if (seen.has(box.id)) return 1
+  seen.add(box.id)
+  const supports = directSupportsFor(box, boxes, minSupportRatio)
+  if (supports.length === 0) return 1
+  return Math.max(...supports.map((support) => stackLayerForManualBox(support, boxes, minSupportRatio, new Set(seen)))) + 1
+}
+
 export function isBlockingManualIssue(issue: ValidationIssue) {
   return issue.severity !== 'warning'
 }
@@ -481,6 +514,21 @@ export function validateDraft(draft: ManualDraft, container: ContainerSpec, supp
     }
   }
 
+  for (const box of draft.boxes) {
+    if (!box.maxStackLayers || box.maxStackLayers <= 0) continue
+    const stackLayer = stackLayerForManualBox(box, draft.boxes, supportPolicy.allowPartialOverhang ? supportPolicy.minSupportRatio : MIN_SUPPORT_OVERLAP_RATIO)
+    if (stackLayer > box.maxStackLayers) {
+      issues.push({
+        type: 'max-stack-layers',
+        severity: 'error',
+        boxId: box.id,
+        stackLayer,
+        maxStackLayers: box.maxStackLayers,
+        message: `Box ${box.label} is on stack layer ${stackLayer}, above the maximum ${box.maxStackLayers}.`,
+      })
+    }
+  }
+
   return issues
 }
 
@@ -503,6 +551,7 @@ export function buildPool(cargoItems: CargoItem[], draft: ManualDraft): PoolEntr
       remaining,
       canRotate: item.canRotate,
       stackable: item.stackable,
+      maxStackLayers: item.maxStackLayers,
     }
   })
 }
@@ -556,6 +605,7 @@ export function makeManualBox(params: {
   weight?: number
   canRotate?: boolean
   stackable?: boolean
+  maxStackLayers?: number
   x: number
   y: number
   z?: number
@@ -583,6 +633,7 @@ export function makeManualBox(params: {
     weight: params.weight ?? 0,
     canRotate: params.canRotate ?? true,
     stackable: params.stackable ?? true,
+    maxStackLayers: params.maxStackLayers,
   }
 }
 
@@ -620,6 +671,7 @@ export function toPlacedBoxes(
     weight: box.weight ?? 0,
     color: box.color,
     stackable: box.stackable ?? true,
+    maxStackLayers: box.maxStackLayers,
     physicalLayer: 1,
     workStep: 1,
     supportType: 'floor',

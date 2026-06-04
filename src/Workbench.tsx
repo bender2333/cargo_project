@@ -107,6 +107,7 @@ const copy = {
     color: 'Color',
     rotate: 'Allow rotation',
     stackable: 'Stackable',
+    maxStackLayers: 'Max stack layers',
     add: '+ Add cargo item',
     cargoItems: 'Cargo items',
     unitParameters: 'Pallet / cargo unit parameters',
@@ -178,6 +179,7 @@ const copy = {
     templateDefaultColor: 'Default color',
     templateDefaultRotate: 'Default rotatable',
     templateDefaultStackable: 'Default stackable',
+    templateDefaultMaxStackLayers: 'Default max stack layers',
     mappingFieldLabel: 'Cargo label',
     mappingFieldName: 'Cargo name',
     mappingFieldLength: 'Length',
@@ -318,6 +320,7 @@ const copy = {
     manualIssueFloating: 'is floating and needs at least 50% base support',
     manualIssueRotationDisabled: 'rotation is disabled for this cargo',
     manualIssueStacking: 'is stacked on non-stackable cargo',
+    manualIssueMaxStackLayers: 'exceeds max stack layers',
     orientationDiagram: 'Orientation',
     reviewChecklistEmpty: 'No review items.',
     reviewChecklistExportJson: 'Export JSON',
@@ -348,6 +351,7 @@ const copy = {
     color: '颜色',
     rotate: '允许旋转',
     stackable: '允许堆叠',
+    maxStackLayers: '最大堆叠层数',
     add: '+ 添加货物',
     cargoItems: '货物项目',
     unitParameters: '托盘 / 货物单元参数',
@@ -419,6 +423,7 @@ const copy = {
     templateDefaultColor: '默认颜色',
     templateDefaultRotate: '默认可旋转',
     templateDefaultStackable: '默认可堆叠',
+    templateDefaultMaxStackLayers: '默认最大堆叠层数',
     mappingFieldLabel: '货物标识',
     mappingFieldName: '货物名称',
     mappingFieldLength: '长度',
@@ -559,6 +564,7 @@ const copy = {
     manualIssueFloating: '处于悬空状态，底面至少需要 50% 支撑',
     manualIssueRotationDisabled: '该货物禁止旋转',
     manualIssueStacking: '堆叠在不可堆叠货物上',
+    manualIssueMaxStackLayers: '超过最大堆叠层数',
     orientationDiagram: '朝向示意',
     reviewChecklistEmpty: '暂无复核事项。',
     reviewChecklistExportJson: '导出 JSON',
@@ -666,6 +672,7 @@ const emptyForm: CargoForm = {
   color: '#0ea5e9',
   canRotate: true,
   stackable: true,
+  maxStackLayers: undefined,
 }
 
 function nextLabel(index: number) {
@@ -839,6 +846,7 @@ function localizeManualIssue(issue: ValidationIssue, localeCopy: typeof copy.en)
   if (issue.type === 'overlap') return localeCopy.manualIssueOverlap
   if (issue.type === 'floating') return localeCopy.manualIssueFloating
   if (issue.type === 'rotation-disabled') return localeCopy.manualIssueRotationDisabled
+  if (issue.type === 'max-stack-layers') return localeCopy.manualIssueMaxStackLayers
   return localeCopy.manualIssueStacking
 }
 
@@ -957,6 +965,7 @@ function Workbench() {
     color: '',
     canRotate: '',
     stackable: '',
+    maxStackLayers: '',
   })
   type DimensionUnit = 'auto' | 'mm' | 'cm'
   const [customUnits, setCustomUnits] = useState<Record<'length' | 'width' | 'height', DimensionUnit>>({
@@ -1189,6 +1198,7 @@ function Workbench() {
       weight: cargoItem.weight,
       canRotate: cargoItem.canRotate,
       stackable: cargoItem.stackable,
+      maxStackLayers: cargoItem.maxStackLayers,
       x,
       y,
       z: supplyZ ? dropZ : 0,
@@ -1296,6 +1306,7 @@ function Workbench() {
           weight: box.weight,
           canRotate: cargo?.canRotate ?? true,
           stackable: cargo?.stackable ?? box.stackable,
+          maxStackLayers: cargo?.maxStackLayers ?? box.maxStackLayers,
         }
       }),
     }
@@ -1618,6 +1629,16 @@ function Workbench() {
     setEditForm((current) => ({ ...current, [field]: Number(value) || 0 }))
   }
 
+  const updateMaxStackLayers = (value: string) => {
+    const parsed = Math.floor(Number(value) || 0)
+    setForm((current) => ({ ...current, maxStackLayers: parsed > 0 ? parsed : undefined }))
+  }
+
+  const updateEditMaxStackLayers = (value: string) => {
+    const parsed = Math.floor(Number(value) || 0)
+    setEditForm((current) => ({ ...current, maxStackLayers: parsed > 0 ? parsed : undefined }))
+  }
+
   const updateContainerNumber = (field: 'length' | 'width' | 'height' | 'maxWeight' | 'doorGap' | 'topGap' | 'sideGap', value: string) => {
     const nextValue = Math.max(0, Number(value) || 0)
     if (selectedContainerId === 'custom') {
@@ -1641,6 +1662,7 @@ function Workbench() {
       name: form.name.trim() || `Cargo ${cargoItems.length + 1}`,
       label: (form.label || nextLabel(cargoItems.length)).toUpperCase().slice(0, 2),
       quantity: Math.max(1, Math.floor(form.quantity)),
+      maxStackLayers: form.stackable ? form.maxStackLayers : undefined,
     }
     setCargoItems((items) => [...items, next])
     setForm((current) => ({
@@ -1665,6 +1687,7 @@ function Workbench() {
       color: cargo.color,
       canRotate: cargo.canRotate,
       stackable: cargo.stackable,
+      maxStackLayers: cargo.maxStackLayers,
     })
   }
 
@@ -1678,6 +1701,7 @@ function Workbench() {
       name: editForm.name.trim() || editingCargo.name,
       label: (editForm.label || editingCargo.label || nextLabel(cargoItems.length)).toUpperCase().slice(0, 2),
       quantity: Math.max(1, Math.floor(editForm.quantity)),
+      maxStackLayers: editForm.stackable ? editForm.maxStackLayers : undefined,
     }
 
     setCargoItems((items) => items.map((item) => item.id === editingCargo.id ? nextCargo : item))
@@ -1770,6 +1794,7 @@ function Workbench() {
       quantity: ['quantity', '数量', '數量', '箱数', '箱數', '托数', '托數', 'carton_count'],
       name: ['name', '名称', '品名', '名称', '货物名称', 'description'],
       label: ['label', '标签', '代码', '代号', '托盘'],
+      maxStackLayers: ['maxstacklayers', 'max stack layers', '最大堆叠层数', '最大堆疊層數', '堆叠层数', '堆疊層數'],
     }[fieldKey] || []
     return columns.find(col => candidates.some(cand => col.toLowerCase().includes(cand.toLowerCase()))) || ''
   }
@@ -1837,8 +1862,9 @@ function Workbench() {
         color: '',
         canRotate: '',
         stackable: '',
+        maxStackLayers: '',
       }
-      const requiredFields = ['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable']
+      const requiredFields = ['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable', 'maxStackLayers']
       requiredFields.forEach((fieldKey) => {
         initialMap[fieldKey] = preSelectCol(fieldKey, rowKeys)
       })
@@ -2629,8 +2655,20 @@ function Workbench() {
             </div>
             <div className="grid grid-cols-2 gap-2 text-sm">
               <label className="flex items-center gap-2"><input checked={form.canRotate} type="checkbox" onChange={(event) => setForm((current) => ({ ...current, canRotate: event.target.checked }))} />{t.rotate}</label>
-              <label className="flex items-center gap-2"><input checked={form.stackable} type="checkbox" onChange={(event) => setForm((current) => ({ ...current, stackable: event.target.checked }))} />{t.stackable}</label>
+              <label className="flex items-center gap-2"><input checked={form.stackable} type="checkbox" onChange={(event) => setForm((current) => ({ ...current, stackable: event.target.checked, maxStackLayers: event.target.checked ? current.maxStackLayers : undefined }))} />{t.stackable}</label>
             </div>
+            {form.stackable && (
+              <label className="field-label" data-testid="max-stack-layers-field">
+                {t.maxStackLayers}
+                <input
+                  className="field-input mt-1"
+                  type="number"
+                  min={1}
+                  value={form.maxStackLayers ?? ''}
+                  onChange={(event) => updateMaxStackLayers(event.target.value)}
+                />
+              </label>
+            )}
             <button className="archive-button w-full text-left" type="submit">{t.add}</button>
           </form>
           <section className="border-t border-[#e5e7eb] p-[18px] text-xs" data-testid="loading-rules-panel">
@@ -2706,7 +2744,7 @@ function Workbench() {
         </aside>
 
         <section className="flex-1 min-w-0 space-y-4" ref={workspaceRef}>
-          <div className="grid grid-cols-5 gap-3 max-xl:grid-cols-2" data-testid="archive-stat-grid">
+          <div className={`grid grid-cols-5 gap-3 max-xl:grid-cols-2 ${workspaceMaximized ? 'hidden' : ''}`} data-testid="archive-stat-grid">
             <div className="archive-stat"><div className="archive-stat-value">{result.placedCount}</div><div className="archive-stat-key">{t.loaded}</div></div>
             <div className="archive-stat"><div className="archive-stat-value">{Math.round(result.usedWeight)}</div><div className="archive-stat-key">{t.weight}</div></div>
             <div className="archive-stat"><div className="archive-stat-value">{result.volumeUtilization.toFixed(1)}%</div><div className="archive-stat-key">{t.volumeUse}</div></div>
@@ -2817,11 +2855,11 @@ function Workbench() {
               {t.exportView}
             </button>
             <div
-              className="ml-auto flex items-center gap-2 rounded-lg bg-[#f1f5f9] px-3 py-1.5 text-xs text-[#0f172a] shadow-sm"
+              className="ml-auto grid max-w-full grid-cols-[auto_auto] items-center gap-x-2 rounded-lg bg-[#f1f5f9] px-3 py-1.5 text-xs text-[#0f172a] shadow-sm"
               data-testid="container-dimension-badge"
             >
-              <strong className="text-sm">{selectedContainer.label}</strong>
-              <span className="text-[#475569]">
+              <strong className="min-w-0 truncate text-sm">{selectedContainer.label}</strong>
+              <span className="whitespace-nowrap font-mono tabular-nums text-[#475569]">
                 {renderingContainer.length.toLocaleString()} × {renderingContainer.width.toLocaleString()} × {renderingContainer.height.toLocaleString()} mm
               </span>
             </div>
@@ -2929,26 +2967,6 @@ function Workbench() {
                       {rotationNotice}
                     </div>
                   )}
-                  <div
-                    className="grid grid-cols-3 gap-2 rounded-xl border border-[#e5e7eb] bg-white p-3 text-xs text-[#475569]"
-                    data-testid="remaining-capacity"
-                  >
-                    <div>
-                      <div className="text-[10px] uppercase tracking-wider text-[#94a3b8]">{t.remainingVolumeLabel}</div>
-                      <div className="font-mono text-sm font-bold text-[#0f172a]" data-testid="remaining-volume-ratio">{(manualCapacity.volumeRatio * 100).toFixed(1)}%</div>
-                      <div className="text-[10px]">{(manualCapacity.remainingVolume / 1e9).toFixed(2)} m³ {t.remainingLabel}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] uppercase tracking-wider text-[#94a3b8]">{t.remainingWeightLabel}</div>
-                      <div className="font-mono text-sm font-bold text-[#0f172a]">{(manualCapacity.weightRatio * 100).toFixed(1)}%</div>
-                      <div className="text-[10px]">{manualCapacity.remainingWeight.toFixed(1)} kg {t.remainingLabel}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] uppercase tracking-wider text-[#94a3b8]">{t.remainingFloorLabel}</div>
-                      <div className="font-mono text-sm font-bold text-[#0f172a]">{(manualCapacity.floorRatio * 100).toFixed(1)}%</div>
-                      <div className="text-[10px]">{(manualCapacity.remainingFloorArea / 1e6).toFixed(2)} m² {t.remainingLabel}</div>
-                    </div>
-                  </div>
                   {manualIssues.length > 0 && (
                     <div
                       className="rounded-xl border border-[#fecaca] bg-[#fef2f2] p-3 text-xs text-[#991b1b]"
@@ -3597,10 +3615,26 @@ function Workbench() {
                     type="checkbox"
                     checked={templateDefaults.stackable ?? true}
                     data-testid="template-default-stackable"
-                    onChange={(event) => setTemplateDefaults((current) => ({ ...current, stackable: event.target.checked }))}
+                    onChange={(event) => setTemplateDefaults((current) => ({ ...current, stackable: event.target.checked, maxStackLayers: event.target.checked ? current.maxStackLayers : undefined }))}
                   />
                   {t.templateDefaultStackable}
                 </label>
+                {(templateDefaults.stackable ?? true) && (
+                  <label className="font-semibold text-slate-700">
+                    {t.templateDefaultMaxStackLayers}
+                    <input
+                      className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                      type="number"
+                      min={1}
+                      value={templateDefaults.maxStackLayers ?? ''}
+                      data-testid="template-default-max-stack-layers"
+                      onChange={(event) => {
+                        const parsed = Math.floor(Number(event.target.value) || 0)
+                        setTemplateDefaults((current) => ({ ...current, maxStackLayers: parsed > 0 ? parsed : undefined }))
+                      }}
+                    />
+                  </label>
+                )}
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-3" data-testid="mapping-fields">
@@ -3616,6 +3650,7 @@ function Workbench() {
                       color: t.color,
                       canRotate: t.rotate,
                       stackable: t.stackable,
+                      maxStackLayers: t.maxStackLayers,
                     }
                     const excelColumns = Object.keys(importRows[0] ?? {})
                     const isDimension = fieldKey === 'length' || fieldKey === 'width' || fieldKey === 'height'
@@ -3737,8 +3772,20 @@ function Workbench() {
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                 <label className="flex items-center gap-2"><input checked={editForm.canRotate} type="checkbox" onChange={(event) => setEditForm((current) => ({ ...current, canRotate: event.target.checked }))} />{t.rotate}</label>
-                <label className="flex items-center gap-2"><input checked={editForm.stackable} type="checkbox" onChange={(event) => setEditForm((current) => ({ ...current, stackable: event.target.checked }))} />{t.stackable}</label>
+                <label className="flex items-center gap-2"><input checked={editForm.stackable} type="checkbox" onChange={(event) => setEditForm((current) => ({ ...current, stackable: event.target.checked, maxStackLayers: event.target.checked ? current.maxStackLayers : undefined }))} />{t.stackable}</label>
               </div>
+              {editForm.stackable && (
+                <label className="field-label mt-3 block" data-testid="edit-max-stack-layers-field">
+                  {t.maxStackLayers}
+                  <input
+                    className="field-input mt-1"
+                    type="number"
+                    min={1}
+                    value={editForm.maxStackLayers ?? ''}
+                    onChange={(event) => updateEditMaxStackLayers(event.target.value)}
+                  />
+                </label>
+              )}
               <div className="mt-5 flex justify-end gap-2">
                 <button className="border border-slate-300 bg-white px-4 py-2 text-sm font-semibold" type="button" onClick={() => setEditingCargo(null)}>
                   {t.cancel}

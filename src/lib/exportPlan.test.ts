@@ -37,7 +37,7 @@ describe('buildExportPlanRows', () => {
   it('exports labels, original and actual dimensions, layers, work steps, and failure reasons from the packing result', () => {
     const items = [
       cargo({ id: 'a', name: 'Alpha', label: 'A', quantity: 2 }),
-      cargo({ id: 'b', name: 'Beta', label: 'B', length: 500, width: 500, weight: 25 }),
+      cargo({ id: 'b', name: 'Beta', label: 'B', length: 500, width: 500, weight: 25, maxStackLayers: 4 }),
     ]
     const result = calculatePacking(container, items)
 
@@ -52,6 +52,7 @@ describe('buildExportPlanRows', () => {
         actualWidth: 1000,
         actualHeight: 500,
         weight: 100,
+        maxStackLayers: '',
         plannedQuantity: 2,
         placedQuantity: 1,
         unplacedQuantity: 1,
@@ -70,6 +71,7 @@ describe('buildExportPlanRows', () => {
         actualWidth: 500,
         actualHeight: 500,
         weight: 25,
+        maxStackLayers: 4,
         plannedQuantity: 1,
         placedQuantity: 1,
         unplacedQuantity: 0,

@@ -20,6 +20,7 @@ async function createWorkbookFile() {
       color: '#123456',
       canRotate: true,
       stackable: false,
+      maxStackLayers: 4,
     },
   ])
   const workbook = XLSX.utils.book_new()
@@ -43,6 +44,7 @@ async function createChineseWorkbookFile() {
       颜色: '#123456',
       允许旋转: '是',
       允许堆叠: '否',
+      最大堆叠层数: 4,
     },
   ])
   const workbook = XLSX.utils.book_new()
@@ -61,8 +63,8 @@ async function createCsvFile() {
   await fs.writeFile(
     filePath,
     [
-      'label,name,length,width,height,weight,quantity,color,canRotate,stackable',
-      'C,CSV crate,1100,750,550,40,2,#654321,true,false',
+      'label,name,length,width,height,weight,quantity,color,canRotate,stackable,maxStackLayers',
+      'C,CSV crate,1100,750,550,40,2,#654321,true,false,4',
     ].join('\n'),
     'utf8',
   )
@@ -700,6 +702,7 @@ test('supports Excel import/export affordance and Chinese mode', async ({ page }
     unplacedQuantity: 0,
     layer: '1',
     workStep: '1, 2',
+    maxStackLayers: 4,
   })
   expect(rows[0]).toHaveProperty('failureReason')
 

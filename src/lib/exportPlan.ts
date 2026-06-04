@@ -10,6 +10,7 @@ export type ExportPlanRow = {
   actualWidth: number | ''
   actualHeight: number | ''
   weight: number
+  maxStackLayers: number | ''
   plannedQuantity: number
   placedQuantity: number
   unplacedQuantity: number
@@ -39,6 +40,7 @@ export function buildExportPlanRows(cargoItems: CargoItem[], result: PackingResu
       actualWidth: placedBoxes[0]?.width ?? '',
       actualHeight: placedBoxes[0]?.height ?? '',
       weight: item.weight,
+      maxStackLayers: item.maxStackLayers ?? '',
       plannedQuantity: item.quantity,
       placedQuantity: stats?.placed ?? placedBoxes.length,
       unplacedQuantity: stats?.unplaced ?? unplaced?.quantity ?? 0,

@@ -6,6 +6,7 @@ import { MIN_SUPPORT_OVERLAP_RATIO } from '../lib/manualPlacement'
 import { snapToGrid } from '../lib/snap'
 import { resolveDropTarget } from '../lib/sceneDrop'
 import { snapToEdges } from '../lib/snapEdges'
+import { applyManualPlacementSnap } from '../lib/manualPlacementSnap'
 import type { CogOverlay } from '../lib/cogVisual'
 import { DEFAULT_PLACEMENT_SETTINGS, type PlacementSettings } from '../lib/placementSettings'
 import { manualMoveCommitArgs } from '../lib/manualMoveCommit'
@@ -1019,8 +1020,19 @@ export function ContainerScene({
         onManualOperationRejectedRef.current?.('drop', undefined, cargoId)
         return
       }
-      const snappedX = gridSnapRef.current && finalDrop.z === 0 ? snapToGrid(finalDrop.x, placementSettingsRef.current.gridStepMm) : finalDrop.x
-      const snappedY = gridSnapRef.current && finalDrop.z === 0 ? snapToGrid(finalDrop.y, placementSettingsRef.current.gridStepMm) : finalDrop.y
+      const poolInfo = poolDragInfoRef.current
+      const snapped = finalDrop.z === 0 && poolInfo
+        ? applyManualPlacementSnap({
+            x: finalDrop.x,
+            y: finalDrop.y,
+            boxSize: { length: poolInfo.length, width: poolInfo.width },
+            others: Array.from(sceneState.meshEntries.values()).map((entry) => entry.box),
+            container,
+            settings: placementSettingsRef.current,
+          })
+        : { x: finalDrop.x, y: finalDrop.y }
+      const snappedX = snapped.x
+      const snappedY = snapped.y
       onManualDropFromPoolRef.current?.(cargoId, snappedX, snappedY, finalDrop.z)
     }
 

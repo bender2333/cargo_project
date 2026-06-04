@@ -14,6 +14,25 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-06-04-r31-workspace-snap-stack',
+    date: '2026-06-04',
+    title: { en: 'Workspace, edge snap, and stack limits', zh: '工作区 / 边界吸附 / 堆叠层数' },
+    items: {
+      en: [
+        'Maximized workspaces now hide the top statistics strip, so 2D and 3D operations get more vertical room.',
+        'Manual placement no longer shows the capacity card in the main canvas path; capacity remains available in debug snapshots.',
+        'Edge snapping now keeps wall and neighbour-edge alignment even when the exact coordinate is not on the grid.',
+        'Cargo can now store a max stack layer limit, with automatic packing, manual validation, import/export, templates, and history preserving the value.',
+      ],
+      zh: [
+        '最大化工作区现在会隐藏顶部统计条，把竖向空间让给 2D / 3D 作业区。',
+        '手动排布主画布默认不再显示容量占用卡；相关容量数据仍保留在调试快照中。',
+        '边界吸附现在不会再被网格吸附二次拉偏，贴墙和贴邻箱边的最终落点保持精确。',
+        '货物新增最大堆叠层数，自动装箱、手动校验、导入导出、模板和历史方案都会保留该参数。',
+      ],
+    },
+  },
+  {
     version: '2026-05-29-r28-true-3d-rotation',
     date: '2026-05-29',
     title: { en: 'True 3D label rotation', zh: '真实 3D 标签旋转' },

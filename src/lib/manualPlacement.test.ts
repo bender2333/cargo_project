@@ -592,6 +592,28 @@ describe('manualPlacement', () => {
     ])
   })
 
+  it('validateDraft flags boxes above their max stack layer limit', () => {
+    let draft = emptyDraft()
+    draft = addBox(draft, makeManualBox({
+      id: 'base', cargoId: 'cargo-a', label: 'A', color: '#fff',
+      length: 400, width: 500, height: 600, x: 0, y: 0, maxStackLayers: 2,
+    }))
+    draft = setBoxPosition(addBox(draft, makeManualBox({
+      id: 'middle', cargoId: 'cargo-a', label: 'A', color: '#fff',
+      length: 400, width: 500, height: 600, x: 0, y: 0, maxStackLayers: 2,
+    })), 'middle', 0, 0, 600)
+    draft = setBoxPosition(addBox(draft, makeManualBox({
+      id: 'top', cargoId: 'cargo-a', label: 'A', color: '#fff',
+      length: 400, width: 500, height: 600, x: 0, y: 0, maxStackLayers: 2,
+    })), 'top', 0, 0, 1200)
+
+    const issues = validateDraft(draft, container())
+
+    expect(issues).toEqual([
+      expect.objectContaining({ type: 'max-stack-layers', boxId: 'top', stackLayer: 3, maxStackLayers: 2 }),
+    ])
+  })
+
   it('validateDraft returns no issues for non-overlapping in-bounds boxes', () => {
     let draft = emptyDraft()
     draft = addBox(draft, makeManualBox({
@@ -701,6 +723,17 @@ describe('manualPlacement', () => {
     const placed = toPlacedBoxes(draft, new Set())
 
     expect(placed[0]).toMatchObject({ weight: 24, stackable: false })
+  })
+
+  it('toPlacedBoxes preserves max stack layer metadata', () => {
+    const draft = addBox(emptyDraft(), makeManualBox({
+      id: 'b1', cargoId: 'cargo-a', label: 'A', color: '#f59e0b',
+      length: 400, width: 500, height: 600, maxStackLayers: 4, x: 100, y: 200,
+    }))
+
+    const placed = toPlacedBoxes(draft, new Set())
+
+    expect(placed[0]).toMatchObject({ maxStackLayers: 4 })
   })
 
   it('toPlacedBoxes returns an empty array for an empty draft without throwing', () => {

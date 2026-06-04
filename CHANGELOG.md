@@ -13,6 +13,21 @@
   - Root cause candidate: `ContainerScene.boxOrientationQuaternion()` feeds a determinant `-1` basis matrix into `THREE.Quaternion().setFromRotationMatrix()`, producing a non-unit quaternion for a reflection matrix; the next fix should normalize rendering orientation to a legal right-handed basis instead of changing packing geometry.
   - Reprioritized the plan so 3D top-cargo rotation visibility is a P0 phase before broader label-overlap polish.
 - Verification: documentation-only change; code verification not rerun.
+- Completed subtask: implemented the first Round 31 P0/P1 slice for workspace density, boundary snapping, and max stack layers.
+  - Maximized automatic/manual workspaces now hide `archive-stat-grid`; exiting maximize restores the statistics strip.
+  - Manual placement no longer renders the `remaining-capacity` card in the main canvas path, while the existing `manualCapacity` debug snapshot payload is preserved.
+  - `applyManualPlacementSnap()` now keeps axes already snapped to walls or neighboring edges from being overwritten by grid snapping; 3D pool drop reuses the shared snap function for the final drop point.
+  - Added optional `maxStackLayers` to `CargoItem`, `PlacedBox`, manual boxes, import template defaults, import mapping, export rows, and server-side template payload cleaning.
+  - Automatic packing rejects candidates above the current cargo's max stack layer limit; manual validation emits blocking `max-stack-layers` issues.
+  - Updated the in-app notification bar with the Round 31 fix summary.
+  - Recorded the business decision in `decision.md`: first version counts max stack layers by vertical support-chain depth, with missing values preserving legacy unlimited behavior.
+- Remaining Round 31 plan items not closed by this slice: snapshot 5 label/projection deconfliction and snapshot 6 3D rotation-visibility normalization remain planned separately.
+- Verification so far: focused red/green tests now pass with `npx vitest run src/lib/manualPlacementSnap.test.ts src/lib/packing.test.ts src/lib/manualPlacement.test.ts src/lib/importCargo.test.ts src/lib/exportPlan.test.ts`; `npx tsc -b` passes; `node --check server/index.mjs` passes; `npm run lint` passes; `npm test` passes 32 files / 195 tests; `npm run build` passes with the existing Vite chunk-size warning. Local targeted E2E `npx playwright test e2e/manual-3d.spec.ts e2e/container-calc.spec.ts --grep "最大堆叠|容量占用|最大化|Excel import/export"` passed 5 tests. Full local `npm run test:e2e` ran 75 tests: 73 passed / 1 skipped / 1 failed. The failed test is the pre-existing manual rotation expectation mismatch `WHL` expected vs `WLH` actual in `e2e/manual-3d.spec.ts:170`, not the new Round 31 workspace/snap/stack coverage.
+- Completed subtask: deployed and verified this Round 31 slice on the public host.
+  - Deployment completed with `npm run deploy`; remote backup created at `/root/cargo_project-backup-20260604-065754`.
+  - Remote health check passed during deploy.
+  - Remote targeted E2E passed: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npx playwright test e2e/manual-3d.spec.ts e2e/container-calc.spec.ts --grep "最大堆叠|容量占用|最大化|Excel import/export"` passed 5 tests.
+  - Remote full E2E result: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npm run test:e2e` ran 75 tests with 72 passed / 1 skipped / 2 failed. One failure is the same known manual rotation mismatch `WHL` expected vs `WLH` actual; the other was a one-off `page.goto('/')` timeout before `shows failure reason in the detail table for unplaced cargo`. The timeout test passed when rerun targeted against the same remote host.
 
 ## 2026-06-02 (Round 30 Stage-Merged Loading Steps Review)
 

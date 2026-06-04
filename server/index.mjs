@@ -186,7 +186,7 @@ app.delete('/api/containers/custom/:id', authenticate, (req, res) => {
 })
 
 // 4. Excel import templates (user-scoped deterministic mappings)
-const TEMPLATE_FIELDS = new Set(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable'])
+const TEMPLATE_FIELDS = new Set(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable', 'maxStackLayers'])
 const TEMPLATE_UNITS = new Set(['auto', 'mm', 'cm'])
 const TEMPLATE_MERGE_ROWS = new Set(['none', 'by-label'])
 
@@ -216,6 +216,7 @@ function parseTemplatePayload(body) {
   if (defaults.color != null) cleanDefaults.color = String(defaults.color).trim().slice(0, 40)
   if (defaults.canRotate != null) cleanDefaults.canRotate = Boolean(defaults.canRotate)
   if (defaults.stackable != null) cleanDefaults.stackable = Boolean(defaults.stackable)
+  if (defaults.maxStackLayers != null && Number.isFinite(Number(defaults.maxStackLayers))) cleanDefaults.maxStackLayers = Math.max(1, Math.floor(Number(defaults.maxStackLayers)))
   return { name, mapping: cleanMapping, units: cleanUnits, headerRow, startRow, mergeRows, defaultValues: cleanDefaults }
 }
 

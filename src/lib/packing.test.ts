@@ -358,6 +358,43 @@ describe('calculatePacking', () => {
     expect(result.unplaced[0]).toMatchObject({ quantity: 1, reasonCode: UNPLACED_REASON_CODES.NO_SPACE })
   })
 
+  it('honors cargo max stack layers while preserving unlimited legacy behavior by default', () => {
+    const container = testContainer({ length: 1000, width: 1000, height: 3000 })
+
+    const limited = calculatePacking(container, [
+      cargo({
+        id: 'stack-limited',
+        label: 'S',
+        length: 1000,
+        width: 1000,
+        height: 500,
+        quantity: 3,
+        canRotate: false,
+        maxStackLayers: 2,
+      }),
+    ])
+    expectValidPacking(container, limited)
+    expect(limited.placedCount).toBe(2)
+    expect(limited.unplaced[0]).toMatchObject({ cargoId: 'stack-limited', quantity: 1, reasonCode: UNPLACED_REASON_CODES.NO_SPACE })
+    expect(Math.max(...limited.placed.map((box) => box.z))).toBe(500)
+    expect(limited.placed.every((box) => box.maxStackLayers === 2)).toBe(true)
+
+    const legacy = calculatePacking(container, [
+      cargo({
+        id: 'legacy-stack',
+        label: 'L',
+        length: 1000,
+        width: 1000,
+        height: 500,
+        quantity: 3,
+        canRotate: false,
+      }),
+    ])
+    expectValidPacking(container, legacy)
+    expect(legacy.placedCount).toBe(3)
+    expect(Math.max(...legacy.placed.map((box) => box.z))).toBe(1000)
+  })
+
   it('rejects boxes that exceed dimensions', () => {
     const result = calculatePacking(containers[0], [cargo({ length: 9000 })])
 

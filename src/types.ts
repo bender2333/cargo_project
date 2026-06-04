@@ -23,6 +23,7 @@ export type CargoItem = {
   color: string
   canRotate: boolean
   stackable: boolean
+  maxStackLayers?: number
 }
 
 export type PlacedBox = {
@@ -50,6 +51,7 @@ export type PlacedBox = {
   weight: number
   color: string
   stackable: boolean
+  maxStackLayers?: number
   physicalLayer: number
   workStep: number
   supportType: 'floor' | 'fully-supported' | 'partially-supported'
@@ -176,6 +178,7 @@ export type ImportTemplateDefaults = {
   color?: string
   canRotate?: boolean
   stackable?: boolean
+  maxStackLayers?: number
 }
 
 export interface ImportTemplate {

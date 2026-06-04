@@ -16,6 +16,7 @@ describe('parseCargoRows', () => {
           颜色: '#123456',
           允许旋转: '是',
           允许堆叠: '否',
+          最大堆叠层数: 4,
         },
       ],
       { createId: () => 'import-1' },
@@ -34,6 +35,7 @@ describe('parseCargoRows', () => {
         color: '#123456',
         canRotate: true,
         stackable: false,
+        maxStackLayers: 4,
       },
     ])
     expect(result.errors).toEqual([])
@@ -46,7 +48,7 @@ describe('parseCargoRows', () => {
     expect(typeof result.warnings[0].message).toBe('string')
     expect(result.summary).toEqual({
       importedRows: 1,
-      mappedFields: ['canRotate', 'color', 'height', 'label', 'name', 'quantity', 'stackable', 'weight', 'width', 'length'].sort(),
+      mappedFields: ['canRotate', 'color', 'height', 'label', 'name', 'quantity', 'stackable', 'maxStackLayers', 'weight', 'width', 'length'].sort(),
       convertedCentimeterRows: 1,
     })
   })
@@ -151,6 +153,7 @@ describe('parseCargoRowsWithMapping', () => {
         color: '#f59e0b',
         canRotate: true,
         stackable: true,
+        maxStackLayers: undefined,
       },
     ])
   })
@@ -216,6 +219,7 @@ describe('parseCargoRowsWithMapping', () => {
           color: '#123456',
           canRotate: false,
           stackable: false,
+          maxStackLayers: 4,
         },
       },
       { createId: () => 'template-meta-1' },
@@ -233,6 +237,7 @@ describe('parseCargoRowsWithMapping', () => {
         color: '#123456',
         canRotate: false,
         stackable: false,
+        maxStackLayers: 4,
       }),
     ])
   })

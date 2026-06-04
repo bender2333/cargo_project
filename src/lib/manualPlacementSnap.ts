@@ -33,6 +33,13 @@ export function applyManualPlacementSnap(params: {
     })
     x = snapped.x
     y = snapped.y
+    if (settings.gridSnapEnabled) {
+      const snappedAxes = new Set(snapped.snappedAxes)
+      return {
+        x: snappedAxes.has('x') ? x : snapToGrid(x, settings.gridStepMm),
+        y: snappedAxes.has('y') ? y : snapToGrid(y, settings.gridStepMm),
+      }
+    }
   }
 
   if (settings.gridSnapEnabled) {

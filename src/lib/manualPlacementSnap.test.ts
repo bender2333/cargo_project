@@ -76,6 +76,44 @@ describe('applyManualPlacementSnap', () => {
     expect(snapped).toEqual({ x: 0, y: 0 })
   })
 
+  it('keeps right and rear container wall snaps even when the wall coordinate is not on the grid', () => {
+    const snapped = applyManualPlacementSnap({
+      x: 5355,
+      y: 1848,
+      boxSize,
+      others: [],
+      container,
+      settings: {
+        ...DEFAULT_PLACEMENT_SETTINGS,
+        gridSnapEnabled: true,
+        gridStepMm: 50,
+        edgeSnapEnabled: true,
+        edgeToleranceMm: 30,
+      },
+    })
+
+    expect(snapped).toEqual({ x: 5358, y: 1852 })
+  })
+
+  it('keeps neighbouring edge snaps from being overwritten by later grid snapping', () => {
+    const snapped = applyManualPlacementSnap({
+      x: 997,
+      y: 500,
+      boxSize,
+      others: [placedBox({ id: 'other', x: 1003, y: 500 })],
+      container,
+      settings: {
+        ...DEFAULT_PLACEMENT_SETTINGS,
+        gridSnapEnabled: true,
+        gridStepMm: 50,
+        edgeSnapEnabled: true,
+        edgeToleranceMm: 30,
+      },
+    })
+
+    expect(snapped.x).toBe(1003)
+  })
+
   it('bypasses all 2D snapping when the global snap switch is disabled', () => {
     const snapped = applyManualPlacementSnap({
       x: 26,

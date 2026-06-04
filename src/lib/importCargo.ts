@@ -64,6 +64,7 @@ const fields = {
   color: ['color', 'Color', '颜色', '顏色'],
   canRotate: ['canRotate', 'Rotate', 'rotation_allowed', '可旋转', '可旋轉', '允许旋转', '允許旋轉'],
   stackable: ['stackable', 'Stackable', '可堆叠', '可堆疊', '允许堆叠', '允許堆疊'],
+  maxStackLayers: ['maxStackLayers', 'max stack layers', 'Max stack layers', '最大堆叠层数', '最大堆疊層數', '堆叠层数', '堆疊層數'],
 }
 
 function valueFor(row: ImportCargoRow, candidates: string[]) {
@@ -186,6 +187,7 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
       { field: 'color', candidates: fields.color },
       { field: 'canRotate', candidates: fields.canRotate },
       { field: 'stackable', candidates: fields.stackable },
+      { field: 'maxStackLayers', candidates: fields.maxStackLayers },
     ]
 
     fieldMappings.forEach(({ field, candidates }) => {
@@ -216,6 +218,7 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
       color,
       canRotate: boolValue(valueFor(row, fields.canRotate), true),
       stackable: boolValue(valueFor(row, fields.stackable), true),
+      maxStackLayers: numberValue(valueFor(row, fields.maxStackLayers)) > 0 ? Math.floor(numberValue(valueFor(row, fields.maxStackLayers))) : undefined,
     })
   })
 
@@ -291,6 +294,7 @@ export function parseCargoRowsWithTemplate(
     if (defaults.color) applyDefault('color', '__default_color', defaults.color)
     if (defaults.canRotate !== undefined) applyDefault('canRotate', '__default_canRotate', defaults.canRotate)
     if (defaults.stackable !== undefined) applyDefault('stackable', '__default_stackable', defaults.stackable)
+    if (defaults.maxStackLayers !== undefined) applyDefault('maxStackLayers', '__default_maxStackLayers', defaults.maxStackLayers)
     return next
   })
   if (defaults.label && !effectiveMapping.label) effectiveMapping.label = '__default_label'
@@ -299,6 +303,7 @@ export function parseCargoRowsWithTemplate(
   if (defaults.color && !effectiveMapping.color) effectiveMapping.color = '__default_color'
   if (defaults.canRotate !== undefined && !effectiveMapping.canRotate) effectiveMapping.canRotate = '__default_canRotate'
   if (defaults.stackable !== undefined && !effectiveMapping.stackable) effectiveMapping.stackable = '__default_stackable'
+  if (defaults.maxStackLayers !== undefined && !effectiveMapping.maxStackLayers) effectiveMapping.maxStackLayers = '__default_maxStackLayers'
 
   dimensionFields.forEach((field) => {
     const colName = template.mapping[field]

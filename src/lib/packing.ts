@@ -22,6 +22,10 @@ type BoxSize = {
   height: number
 }
 
+type StackLimitCarrier = {
+  maxStackLayers?: number
+}
+
 type OrientationKey = PlacedBox['orientationKey']
 type LabelRotationDeg = PlacedBox['labelRotationDeg']
 
@@ -157,10 +161,20 @@ function supportDetails(point: Point, box: BoxSize, placed: PlacedBox[]) {
   }
 }
 
-function canPlace(point: Point, box: BoxSize, container: ContainerSpec, placed: PlacedBox[]) {
+function stackLayerForPlacement(point: Point, box: BoxSize, placed: PlacedBox[]) {
+  return supportDetails(point, box, placed).physicalLayer
+}
+
+function respectsMaxStackLayers(point: Point, box: BoxSize, placed: PlacedBox[], item: StackLimitCarrier) {
+  if (!item.maxStackLayers || item.maxStackLayers <= 0) return true
+  return stackLayerForPlacement(point, box, placed) <= item.maxStackLayers
+}
+
+function canPlace(point: Point, box: BoxSize, container: ContainerSpec, placed: PlacedBox[], item: StackLimitCarrier) {
   return (
     fitsInsideContainer(point, box, container) &&
     supportDetails(point, box, placed).supportRatio >= 0.8 &&
+    respectsMaxStackLayers(point, box, placed, item) &&
     placed.every((candidate) => !overlaps(candidate, point, box))
   )
 }
@@ -244,7 +258,7 @@ function bestPlacement(item: CargoItem, container: ContainerSpec, placed: Placed
     )
     .flatMap((box) =>
       points
-        .filter((point) => canPlace(point, box, container, placed))
+        .filter((point) => canPlace(point, box, container, placed, item))
         .map((point) => ({
           box,
           point,
@@ -455,6 +469,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       weight: entry.item.weight,
       color: entry.item.color,
       stackable: entry.item.stackable,
+      maxStackLayers: entry.item.maxStackLayers,
       physicalLayer: support.physicalLayer,
       workStep: placed.length + 1,
       supportType: support.supportType,
@@ -506,7 +521,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
             continue
           }
           for (const point of extremePoints) {
-            if (!canPlace(point, box, effective, placed)) continue
+            if (!canPlace(point, box, effective, placed, item)) continue
             const score = placementScore(item, box, point, placed, effective)
             if (
               best === null ||
