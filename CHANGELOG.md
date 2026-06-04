@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-06-04 (Round 31 Workspace Density and Stacking Parameters Review)
+
+- Completed subtask: recorded the Round 31 review and implementation plan in `REVIEW.md`.
+  - Classified the new feedback into workspace-density fixes, visual label/projection ambiguity, snap behavior, and a real data-model gap for max stack layers.
+  - Confirmed `cargo-debug-snapshot (5).json` does not show geometric A/Q overlap: 28 A/Q boxes were checked and cross-label 3D overlap count was 0, so the next fix should target label/projection clarity before changing packing collision logic.
+  - Planned P0 work for hiding the stat grid in maximized mode, removing the manual capacity card from the main manual workspace, compacting the container dimension badge, and preserving boundary/edge snap against later grid snapping.
+  - Planned P1 work for cargo-level `maxStackLayers`, including automatic packing, manual validation, import/export, history, and debug snapshots.
+- Verification: documentation-only change; code verification not rerun.
+
 ## 2026-06-02 (Round 30 Stage-Merged Loading Steps Review)
 
 - Completed subtask: discussed and recorded the Round 30 review plan for an EasyCargo-like loading steps view.
