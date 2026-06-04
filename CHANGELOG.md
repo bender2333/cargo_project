@@ -7,6 +7,11 @@
   - Confirmed `cargo-debug-snapshot (5).json` does not show geometric A/Q overlap: 28 A/Q boxes were checked and cross-label 3D overlap count was 0, so the next fix should target label/projection clarity before changing packing collision logic.
   - Planned P0 work for hiding the stat grid in maximized mode, removing the manual capacity card from the main manual workspace, compacting the container dimension badge, and preserving boundary/edge snap against later grid snapping.
   - Planned P1 work for cargo-level `maxStackLayers`, including automatic packing, manual validation, import/export, history, and debug snapshots.
+- Completed subtask: appended the snapshot 6 rotation-visibility finding to the Round 31 review.
+  - Confirmed `cargo-debug-snapshot (6).json` still contains the T boxes in `manual.draft` and `manual.placedBoxes`; the issue is not data deletion, validation rejection, or 3D overlap.
+  - Identified the risky state `orientationAxes={ x:'L-', y:'H-', z:'W+' }` with `orientationKey=LHW`, `yawQuarterTurn=2`, and `pitchQuarterTurn=1`.
+  - Root cause candidate: `ContainerScene.boxOrientationQuaternion()` feeds a determinant `-1` basis matrix into `THREE.Quaternion().setFromRotationMatrix()`, producing a non-unit quaternion for a reflection matrix; the next fix should normalize rendering orientation to a legal right-handed basis instead of changing packing geometry.
+  - Reprioritized the plan so 3D top-cargo rotation visibility is a P0 phase before broader label-overlap polish.
 - Verification: documentation-only change; code verification not rerun.
 
 ## 2026-06-02 (Round 30 Stage-Merged Loading Steps Review)

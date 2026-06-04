@@ -191,6 +191,61 @@
 - 自动装箱 `canPlace()` 在候选点上计算支撑链层数，超过当前货物 `maxStackLayers` 时拒绝该候选点。
 - 手动 `validateDraft()` 超过层数时返回 blocking issue，2D/3D ghost 和精确面板统一显示同一原因。
 
+### 7. 快照 6 中顶层 T 旋转后在 3D 视觉上消失
+
+**现象**：
+
+- 用户提供 `C:\Users\BA_H3C_Pad\Downloads\cargo-debug-snapshot (6).json`。
+- 手动 3D 场景中有一个顶层 T 货物，在执行 `R` 旋转到某个状态后，视觉上看不到了。
+- 用户描述的重点不是 T 被删除，而是“有一个旋转状态触发视觉消失”。
+
+**快照复核结果**：
+
+- 当前快照处于手动模式：`placement=manual`、`workspaceView=3d`、`sceneViewMode=iso`。
+- 手动草稿和 3D 输入中共有 198 个箱体。
+- 标签 T 在 `manual.draft.boxes` 与 `manual.placedBoxes` 中都存在，共 6 个。
+- `manual.issues=[]`，`manual.invalidBoxIds=[]`，说明手动校验没有把 T 判为非法，也没有把它移出 3D 输入。
+- 逐个检查 6 个 T 的三维包围盒，真实几何重叠数均为 0。
+- 其中一个异常候选状态为：
+  - `id=manual-cargo-mpz28jub-u8c9jh81-3`
+  - `x=4000,y=900,z=1800`
+  - `length=400,width=600,height=500`
+  - `orientationKey=LHW`
+  - `labelRotationDeg=180`
+  - `yawQuarterTurn=2,pitchQuarterTurn=1`
+  - `orientationAxes={ x: 'L-', y: 'H-', z: 'W+' }`
+
+**代码定位**：
+
+- `src/lib/debugSnapshot.ts` 已能保存 manual draft、manual placedBoxes、issues 和 selectedBoxId，因此该问题可以从 snapshot 复现。
+- `src/lib/manualPlacement.ts` 的 `toPlacedBoxes()` 会把手动草稿转换为 3D 渲染输入，当前 T 已进入该输入。
+- `src/components/ContainerScene.tsx` 的 `boxOrientationQuaternion()` 使用 `orientationBasisVectors(orientationAxesOf(box))` 生成 matrix，再调用 `THREE.Quaternion().setFromRotationMatrix(matrix)`。
+- `src/lib/orientationTransform.ts` 的 `orientationAxesOf()` 优先信任 `box.orientationAxes`，缺省时用 `orientationKey` 生成全正方向 canonical axes。
+
+**根因分析**：
+
+这不是装箱几何、手动校验或数据丢失问题，而是 3D 渲染层的朝向基底问题。当前 `boxOrientationQuaternion()` 假设 `orientationAxes` 一定能组成合法右手系旋转矩阵，但快照里的部分朝向状态不是右手系：
+
+- 对异常 T 状态 `{ x:'L-', y:'H-', z:'W+' }` 构造 Three.js basis 后，矩阵 determinant 为 `-1`。
+- `setFromRotationMatrix()` 只能稳定表达合法旋转矩阵，不能表达反射/镜像矩阵。
+- 对 determinant `-1` 的矩阵，实测生成的 quaternion 长度为 `0.707...`，不是正常单位 quaternion。
+- 当该 quaternion 进入 mesh/edges transform 时，结果可能表现为姿态退化、面朝向异常、边线与面错位或视觉上“消失”。
+
+这个问题和第三十一轮第 3 点 Q/A 视觉交叉不同：Q/A 是标签/投影歧义，T 消失是 3D 旋转数学输入不合法。
+
+**影响评估**：
+
+- 影响范围集中在 3D 渲染和手动旋转态，不应先修改自动装箱碰撞或支撑算法。
+- 如果只把材质改成 `DoubleSide`、调透明度或强行重置相机，可能掩盖症状，但不能解决非法 quaternion。
+- 修复必须收敛到朝向模型：`orientationKey` 只表达尺寸排列，3D 物理旋转必须使用合法右手系 signed axes 或从 yaw/pitch 重新推导。
+
+**推荐方案**：
+
+- 新增朝向基底合法性检查：`orientationBasisVectors` 或新的 `orientationBasisForRendering` 必须保证三轴唯一、正交且 determinant 为 `+1`。
+- 对历史 snapshot / 自动装箱缺少 signed axes 的数据，不能直接用 `orientationKey` 的全正 canonical axes 当 3D 旋转；需要用一个右手系 fallback。
+- 对手动数据，优先从 `yawQuarterTurn` / `pitchQuarterTurn` 或合法 `orientationAxes` 推导 3D basis；发现非法 handedness 时要归一化并在测试中覆盖。
+- E2E 增加针对 `cargo-debug-snapshot (6).json` 的复现：恢复快照后，T 旋转 4 个 `R` 状态，canvas 中 T 的 mesh/edge 必须持续存在且可选中。
+
 ## 下一阶段实施计划
 
 ### 阶段 A：最大化与手动工作区减负（P0）
@@ -208,7 +263,22 @@
 - `npm run build`
 - `npm run test:e2e` 中相关手动工作区用例
 
-### 阶段 B：容器尺寸 badge 与快照标签歧义修复（P0）
+### 阶段 B：3D 顶层货物旋转可见性修复（P0）
+
+目标：修复 `cargo-debug-snapshot (6).json` 中 T 货物在特定 `R` 旋转状态下视觉消失的问题。
+
+- `src/lib/orientationTransform.ts`：新增朝向基底合法性工具，验证三轴唯一、正交、右手系。
+- `src/components/ContainerScene.tsx`：`boxOrientationQuaternion()` 不再直接消费可能为反射矩阵的 basis；渲染前统一取得合法右手系 basis。
+- `src/lib/manualPlacement.ts`：检查 `rotateAxesRight()` / `rotateAxesDown()` 的输出是否始终保持右手系；旧 snapshot 中不合法的 `orientationAxes` 需要有兼容归一化路径。
+- 单元测试：覆盖 `orientationAxes={ x:'L-', y:'H-', z:'W+' }` 这类快照状态，断言渲染 basis determinant 为 `+1`，quaternion 为单位 quaternion。
+- E2E：恢复 snapshot 6 后对顶层 T 连续按 `R`，每个状态都能看到并选中 T，不出现视觉消失。
+
+验证：
+
+- `npx vitest run src/lib/orientationTransform.test.ts src/lib/manualPlacement.test.ts`
+- 针对 snapshot 6 的手动 3D E2E
+
+### 阶段 C：容器尺寸 badge 与快照标签歧义修复（P0）
 
 目标：减少工作区工具栏换行，并让 `cargo-debug-snapshot (5).json` 这类堆叠场景不再被误读为 Q/A 实体交叉。
 
@@ -222,7 +292,7 @@
 - 针对 `cargo-debug-snapshot (5).json` 的单元或 E2E 复核。
 - 自动 2D/3D 标签现有 E2E 不回退。
 
-### 阶段 C：边界吸附最终落点一致性（P0）
+### 阶段 D：边界吸附最终落点一致性（P0）
 
 目标：靠近柜壁、角落和邻箱边时自动对齐，且不被网格吸附二次破坏。
 
@@ -236,7 +306,7 @@
 - `npx vitest run src/lib/manualPlacementSnap.test.ts src/lib/snapEdges.test.ts`
 - 手动 2D/3D 目标 E2E
 
-### 阶段 D：最大堆叠层数数据模型与算法约束（P1）
+### 阶段 E：最大堆叠层数数据模型与算法约束（P1）
 
 目标：把“允许堆叠”从 boolean 升级为可配置业务规则，但保持旧数据兼容。
 
@@ -251,7 +321,7 @@
 - 单元测试覆盖最大 1/2/4 层、无限制旧数据、混合货物支撑链、不可堆叠与最大层数同时存在。
 - E2E 覆盖勾选允许堆叠后显示最大层数输入，取消勾选后隐藏并禁用该规则。
 
-### 阶段 E：导入导出与回归收口（P1）
+### 阶段 F：导入导出与回归收口（P1）
 
 目标：把最大堆叠层数纳入外部数据流，避免 UI 能配置但导入/导出/历史丢失。
 
