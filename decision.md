@@ -2,6 +2,18 @@
 
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
+## 2026-06-04 第三十二轮：全局堆叠层数兜底与 3D 朝向面标签
+
+- 背景：第三十二轮 review 复核 `cargo-debug-snapshot (8).json` 后确认，顶层躺倒箱并非碰撞算法重叠，而是这批手动货物没有携带 `maxStackLayers`；同时 3D 同一标签在不同层显示 full/compact，造成上下大小不一致。
+- 选项：
+  - 继续只依赖货物级或导入模板默认 `maxStackLayers`：实现已存在，但手动录入批次不可达，用户仍会误以为“设了层数但没生效”。
+  - 在装载规则层增加全局默认层数，并在 `calculatePacking` 入口对未自带值的货物兜底：货物自带值优先，缺省才用全局值，旧方案无全局值时保持不限制。
+  - 3D 继续沿用 `buildBoxLabelModes()` compact 避让：遮挡减少，但同标签在不同箱体上字号不一致。
+  - 3D 改为按相机方向选择 1-2 个可见面绘制统一 full 标签，其余面只保留色块：标签字号一致，背向面不再重复画字。
+- 决策：采用全局默认层数兜底 + 3D 朝向面标签。`PlacementSettings.defaultMaxStackLayers` 按用户/浏览器持久化；`calculatePacking(..., { defaultMaxStackLayers })` 在扩展货物条目时填充缺省 `maxStackLayers`。3D `ContainerScene` 根据当前相机到箱体中心的本地方向选择标签面，OrbitControls change 时刷新材质分配；2D 仍保留现有 compact 避让。
+- 影响：手动添加、导入、历史恢复、项目导出/导入、柜型对比、调试快照和 Excel 明细都能看到同一个全局层数规则；设置全局 2 层时未自带层数的货物不会继续码到第三层或顶层躺倒填充。3D 同一标签在可见面上保持 full 大小，未朝向相机的面不再绘制文字。
+- 验证：新增 `src/lib/packing.test.ts` 覆盖全局默认限制与货物自带覆盖；新增 `src/lib/cameraFacingLabels.test.ts` 覆盖相机方向到本地面的选择；新增 E2E `applies global max stack layers to cargo without per-item limits` 覆盖 UI 设置、明细表已装/未装和层数结果；新增 E2E `moves 3D labels to camera-facing faces across camera views` 覆盖 3D iso/front/side/top 朝向面切换。聚焦 Vitest、`npx tsc -b`、`npm run lint`、`npm test`、`npm run build` 和两项 targeted E2E 已通过；完整本地 `npm run test:e2e` 为 76 passed / 1 skipped / 1 failed，唯一失败仍是既有 `e2e/manual-3d.spec.ts:170` 手动旋转语义待裁定事项，与本轮无关。
+
 ## 2026-06-04 第三十一轮：快照 5/6 显示问题不改变装箱几何
 
 - 背景：`cargo-debug-snapshot (5).json` 中 A/Q 看起来交叉，但三维包围盒复核没有实体重叠；`cargo-debug-snapshot (6).json` 中 T 货物在特定旋转态视觉消失，数据仍存在且手动校验没有报错。

@@ -14,6 +14,23 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-06-04-r32-global-stack-facing-labels',
+    date: '2026-06-04',
+    title: { en: 'Global stack limit and camera-facing 3D labels', zh: '全局堆叠层数 / 3D 朝向面标签' },
+    items: {
+      en: [
+        'Loading rules now include a global default max stack layer limit for cargo that does not have its own limit.',
+        'Cargo cards, exports, debug snapshots, saved projects, history plans, and container comparison all use the same global stack fallback.',
+        '3D labels now render only on faces oriented toward the camera, keeping label size consistent while other faces remain plain color blocks.',
+      ],
+      zh: [
+        '装载规则新增全局默认最大堆叠层数，未单独设置层数的货物会自动套用该限制。',
+        '货物卡片、导出、调试快照、项目保存、历史方案和柜型对比都会使用同一个全局堆叠兜底值。',
+        '3D 标签现在只画在朝向相机的面上，标签大小保持一致，其余面保留纯色块。',
+      ],
+    },
+  },
+  {
     version: '2026-06-04-r31-workspace-snap-stack',
     date: '2026-06-04',
     title: { en: 'Workspace, edge snap, stack limits, label clarity', zh: '工作区 / 边界吸附 / 堆叠层数 / 标签清晰度' },

@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-06-04 (Round 32 Top-Layer Visual Offset, Label Facing, Global Stack Limit)
+
+- Completed subtask: recorded the Round 32 review and implementation plan in `REVIEW.md`.
+  - Confirmed snapshot 8 had no real box overlaps; the top-layer U/P “penetration” was visual offset from tilted `LHW` top-fill boxes plus co-planar wireframe ambiguity.
+  - Confirmed the user’s stack-limit value was not reaching manually added cargo because import-template defaults and cargo form values were separate paths.
+  - Chose the global default max stack layer rule as the root fix for top tilted fill, while preserving cargo-level overrides.
+- Completed subtask: implemented global default max stack layers.
+  - Added `PlacementSettings.defaultMaxStackLayers` with user/browser persistence.
+  - `calculatePacking()` now accepts `defaultMaxStackLayers` and applies it only when a cargo item lacks its own `maxStackLayers`.
+  - Workbench loading rules now expose a global max stack layer input; cargo cards show whether the current limit comes from the cargo itself, the global fallback, or unlimited behavior.
+  - Export rows, debug snapshots, project save/upload, history save/restore, and container comparison now carry the same global rule.
+- Completed subtask: made 3D labels camera-facing and consistent.
+  - Added `cameraFacingLabelFaces()` to choose the local box faces that face the current camera.
+  - `ContainerScene` now assigns full-size label textures only to those facing faces and uses plain color materials on the other faces.
+  - OrbitControls camera changes refresh face/material assignment, so rotating the 3D scene moves the label to the newly visible face.
+  - 2D label deconfliction remains unchanged; the compact downgrade is no longer used by 3D labels.
+- Verification: `npx vitest run src/lib/packing.test.ts src/lib/cameraFacingLabels.test.ts src/lib/placementSettings.test.ts src/lib/exportPlan.test.ts src/lib/historyPlans.test.ts src/lib/debugSnapshot.test.ts` passed 44 tests; `npx tsc -b` passed; `npm run lint` passed; `npm test` passed 35 files / 205 tests; `npm run build` passed with the existing Vite chunk-size warning; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "global max stack"` passed 1 test; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "moves 3D labels"` passed 1 test. Full local `npm run test:e2e` ran 78 tests with 76 passed / 1 skipped / 1 failed. The remaining failure is the known manual rotation expectation mismatch `WHL` expected vs `WLH` actual in `e2e/manual-3d.spec.ts:170`, unrelated to this automatic packing/global stack/3D label-facing round and already recorded in `decision.md`.
+
 ## 2026-06-04 (Round 31 Workspace Density and Stacking Parameters Review)
 
 - Completed subtask: recorded the Round 31 review and implementation plan in `REVIEW.md`.

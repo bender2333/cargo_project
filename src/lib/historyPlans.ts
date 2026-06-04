@@ -14,6 +14,7 @@ export type HistoryPlan = {
   layerCount: number
   labelSummary: string
   loadingMode: LoadingMode
+  defaultMaxStackLayers?: number
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
@@ -24,7 +25,7 @@ export function createHistoryPlan(
   container: ContainerSpec,
   cargoItems: CargoItem[],
   result: PackingResult,
-  options: { createId?: () => string; now?: () => Date; shipmentName?: string; projectName?: string; loadingMode?: LoadingMode } = {},
+  options: { createId?: () => string; now?: () => Date; shipmentName?: string; projectName?: string; loadingMode?: LoadingMode; defaultMaxStackLayers?: number } = {},
 ): HistoryPlan {
   const createId = options.createId ?? createClientId
   const now = options.now ?? (() => new Date())
@@ -42,6 +43,7 @@ export function createHistoryPlan(
     layerCount: result.layers.length,
     labelSummary: result.labelStats.map((item) => `${item.label}:${item.placed}/${item.planned}`).join(', '),
     loadingMode: options.loadingMode || 'volume',
+    defaultMaxStackLayers: options.defaultMaxStackLayers,
   }
 }
 
@@ -63,6 +65,7 @@ export function readHistoryPlans(storage: StorageLike): HistoryPlan[] {
         projectName: item.projectName || '新装箱项目',
         shipmentName: item.shipmentName || 'Untitled shipment',
         loadingMode: item.loadingMode || 'volume',
+        defaultMaxStackLayers: item.defaultMaxStackLayers,
       }))
   } catch {
     return []

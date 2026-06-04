@@ -82,4 +82,22 @@ describe('buildExportPlanRows', () => {
       },
     ])
   })
+
+  it('exports the global max stack layer fallback for cargo without its own limit', () => {
+    const items = [
+      cargo({ id: 'a', name: 'Alpha', label: 'A', quantity: 3, weight: 10 }),
+    ]
+    const result = calculatePacking({
+      ...container,
+      height: 2000,
+      maxWeight: 1000,
+    }, items, { defaultMaxStackLayers: 2 })
+
+    expect(buildExportPlanRows(items, result, { defaultMaxStackLayers: 2 })[0]).toMatchObject({
+      maxStackLayers: 2,
+      plannedQuantity: 3,
+      placedQuantity: 2,
+      unplacedQuantity: 1,
+    })
+  })
 })

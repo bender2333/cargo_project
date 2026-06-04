@@ -40,6 +40,7 @@ export type CargoDebugSnapshot = {
     effective: ContainerSpec
   }
   loadingMode: LoadingMode
+  defaultMaxStackLayers?: number
   cargo: {
     count: number
     items: CargoItem[]
@@ -103,6 +104,7 @@ export type BuildCargoDebugSnapshotInput = {
   selectedContainer: ContainerSpec
   effectiveContainer: ContainerSpec
   loadingMode: LoadingMode
+  defaultMaxStackLayers?: number
   cargoItems: CargoItem[]
   placementSettings: PlacementSettings
   hasCalculated: boolean
@@ -161,6 +163,7 @@ export function buildCargoDebugSnapshot(input: BuildCargoDebugSnapshotInput): Ca
       effective: input.effectiveContainer,
     },
     loadingMode: input.loadingMode,
+    defaultMaxStackLayers: input.defaultMaxStackLayers,
     cargo: {
       count: input.cargoItems.length,
       items: input.cargoItems,
@@ -198,6 +201,7 @@ export function restoreManualDebugScenario(snapshot: CargoDebugSnapshot) {
     container: snapshot.container.effective,
     selectedContainer: snapshot.container.selected,
     cargoItems: snapshot.cargo.items,
+    defaultMaxStackLayers: snapshot.defaultMaxStackLayers,
     placementSettings: snapshot.placementSettings,
     manualDraft: snapshot.manual.draft,
     expectedIssues: snapshot.manual.issues,

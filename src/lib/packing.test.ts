@@ -395,6 +395,46 @@ describe('calculatePacking', () => {
     expect(Math.max(...legacy.placed.map((box) => box.z))).toBe(1000)
   })
 
+  it('applies a global default max stack layer limit only to cargo without its own limit', () => {
+    const container = testContainer({ length: 1000, width: 1000, height: 3000 })
+
+    const globalOnly = calculatePacking(container, [
+      cargo({
+        id: 'global-stack',
+        label: 'G',
+        length: 1000,
+        width: 1000,
+        height: 500,
+        quantity: 3,
+        canRotate: false,
+      }),
+    ], { defaultMaxStackLayers: 2 })
+
+    expectValidPacking(container, globalOnly)
+    expect(globalOnly.placedCount).toBe(2)
+    expect(globalOnly.unplaced[0]).toMatchObject({ cargoId: 'global-stack', quantity: 1, reasonCode: UNPLACED_REASON_CODES.NO_SPACE })
+    expect(globalOnly.placed.every((box) => box.maxStackLayers === 2)).toBe(true)
+    expect(Math.max(...globalOnly.placed.map((box) => box.z))).toBe(500)
+
+    const cargoOverride = calculatePacking(container, [
+      cargo({
+        id: 'cargo-stack',
+        label: 'C',
+        length: 1000,
+        width: 1000,
+        height: 500,
+        quantity: 3,
+        canRotate: false,
+        maxStackLayers: 3,
+      }),
+    ], { defaultMaxStackLayers: 2 })
+
+    expectValidPacking(container, cargoOverride)
+    expect(cargoOverride.placedCount).toBe(3)
+    expect(cargoOverride.unplaced).toEqual([])
+    expect(cargoOverride.placed.every((box) => box.maxStackLayers === 3)).toBe(true)
+  })
+
   it('rejects boxes that exceed dimensions', () => {
     const result = calculatePacking(containers[0], [cargo({ length: 9000 })])
 

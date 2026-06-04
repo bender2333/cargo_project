@@ -24,9 +24,10 @@ export function compareContainers(
   containers: ContainerSpec[],
   cargoItems: CargoItem[],
   loadingMode: LoadingMode,
+  defaultMaxStackLayers?: number,
 ): ContainerComparisonRow[] {
   return containers.map((container) => {
-    const result = calculatePacking(container, cargoItems, { loadingMode })
+    const result = calculatePacking(container, cargoItems, { loadingMode, defaultMaxStackLayers })
     const total = result.totalCargoCount
     const placed = result.placedCount
     const unplaced = total - placed

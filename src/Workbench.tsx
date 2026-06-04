@@ -108,6 +108,10 @@ const copy = {
     rotate: 'Allow rotation',
     stackable: 'Stackable',
     maxStackLayers: 'Max stack layers',
+    globalMaxStackLayers: 'Global default max stack layers',
+    maxStackLayersOwn: 'own',
+    maxStackLayersGlobal: 'global default',
+    maxStackLayersUnlimited: 'unlimited',
     add: '+ Add cargo item',
     cargoItems: 'Cargo items',
     unitParameters: 'Pallet / cargo unit parameters',
@@ -352,6 +356,10 @@ const copy = {
     rotate: '允许旋转',
     stackable: '允许堆叠',
     maxStackLayers: '最大堆叠层数',
+    globalMaxStackLayers: '全局默认最大堆叠层数',
+    maxStackLayersOwn: '货物自带',
+    maxStackLayersGlobal: '全局兜底',
+    maxStackLayersUnlimited: '不限制',
     add: '+ 添加货物',
     cargoItems: '货物项目',
     unitParameters: '托盘 / 货物单元参数',
@@ -1038,6 +1046,7 @@ function Workbench() {
         totalCargoCount: item.data.totalCargoCount,
         layerCount: item.data.layerCount,
         labelSummary: item.data.labelSummary,
+        defaultMaxStackLayers: item.data.defaultMaxStackLayers,
       }))
       setHistoryPlans(mapped)
     } catch (err) {
@@ -1080,8 +1089,15 @@ function Workbench() {
 
   const renderingContainer = effectiveContainer(selectedContainer)
   const displayCargoItems = useMemo(() => normalizeCargoLabelColors(cargoItems), [cargoItems])
-  const result = useMemo(() => calculatePacking(selectedContainer, displayCargoItems, { loadingMode }), [displayCargoItems, loadingMode, selectedContainer])
-  const detailRows = useMemo(() => buildExportPlanRows(displayCargoItems, result), [displayCargoItems, result])
+  const defaultMaxStackLayers = placementSettings.defaultMaxStackLayers
+  const result = useMemo(
+    () => calculatePacking(selectedContainer, displayCargoItems, { loadingMode, defaultMaxStackLayers }),
+    [defaultMaxStackLayers, displayCargoItems, loadingMode, selectedContainer],
+  )
+  const detailRows = useMemo(
+    () => buildExportPlanRows(displayCargoItems, result, { defaultMaxStackLayers }),
+    [defaultMaxStackLayers, displayCargoItems, result],
+  )
   const currentContainerKey = useMemo(() => containerPlacementKey(selectedContainer), [selectedContainer])
 
   const markPlacementDirty = () => {
@@ -1480,8 +1496,8 @@ function Workbench() {
   const compareRows = useMemo(() => {
     if (compareSelection.length === 0) return []
     const chosen = compareCandidates.filter((c) => compareSelection.includes(c.id))
-    return compareContainers(chosen, displayCargoItems, loadingMode)
-  }, [compareSelection, compareCandidates, displayCargoItems, loadingMode])
+    return compareContainers(chosen, displayCargoItems, loadingMode, defaultMaxStackLayers)
+  }, [compareSelection, compareCandidates, defaultMaxStackLayers, displayCargoItems, loadingMode])
   const fillSuggestions = useMemo(
     () => suggestFillItems(hasCalculated ? result : null, selectedContainer),
     [hasCalculated, result, selectedContainer],
@@ -1512,6 +1528,7 @@ function Workbench() {
       selectedContainer,
       effectiveContainer: renderingContainer,
       loadingMode,
+      defaultMaxStackLayers,
       cargoItems: displayCargoItems,
       placementSettings,
       hasCalculated,
@@ -1549,6 +1566,7 @@ function Workbench() {
       activeLayerId,
       activeResultTab,
       currentUser,
+      defaultMaxStackLayers,
       displayCargoItems,
       edgeSnap,
       gridSnap,
@@ -1637,6 +1655,12 @@ function Workbench() {
   const updateEditMaxStackLayers = (value: string) => {
     const parsed = Math.floor(Number(value) || 0)
     setEditForm((current) => ({ ...current, maxStackLayers: parsed > 0 ? parsed : undefined }))
+  }
+
+  const updateDefaultMaxStackLayers = (value: string) => {
+    const parsed = Math.floor(Number(value) || 0)
+    setPlacementSettings((current) => ({ ...current, defaultMaxStackLayers: parsed > 0 ? parsed : undefined }))
+    markPlacementDirty()
   }
 
   const updateContainerNumber = (field: 'length' | 'width' | 'height' | 'maxWeight' | 'doorGap' | 'topGap' | 'sideGap', value: string) => {
@@ -1986,6 +2010,7 @@ function Workbench() {
       totalCargoCount: result.totalCargoCount,
       layerCount: result.layers.length,
       labelSummary: result.labelStats.map((item) => `${item.label}:${item.placed}/${item.planned}`).join(', '),
+      defaultMaxStackLayers,
     }
 
     try {
@@ -2025,6 +2050,7 @@ function Workbench() {
     }
     setCargoItems(plan.cargoItems)
     setLoadingMode(plan.loadingMode || 'quantity')
+    setPlacementSettings((current) => ({ ...current, defaultMaxStackLayers: plan.defaultMaxStackLayers }))
     setActiveLayerId('all')
     setActiveLabelId('all')
     setSelectedBoxId(null)
@@ -2042,6 +2068,7 @@ function Workbench() {
     setSelectedContainerId(containers[0].id)
     setCustomContainer(customContainerDefaults)
     setLoadingMode('volume')
+    setPlacementSettings((current) => ({ ...current, defaultMaxStackLayers: undefined }))
     setActiveLayerId('all')
     setActiveLabelId('all')
     setSelectedBoxId(null)
@@ -2056,6 +2083,7 @@ function Workbench() {
       shipmentName,
       selectedContainerId,
       loadingMode,
+      defaultMaxStackLayers,
       cargoItems,
       customContainer,
     }
@@ -2077,6 +2105,7 @@ function Workbench() {
       totalCargoCount: result.totalCargoCount,
       layerCount: result.layers.length,
       labelSummary: result.labelStats.map((item) => `${item.label}:${item.placed}/${item.planned}`).join(', '),
+      defaultMaxStackLayers,
     }
     fetchWithAuth('/api/history', {
       method: 'POST',
@@ -2102,6 +2131,13 @@ function Workbench() {
         if (config.shipmentName !== undefined) setShipmentName(String(config.shipmentName))
         if (config.selectedContainerId !== undefined) setSelectedContainerId(String(config.selectedContainerId))
         if (config.loadingMode !== undefined) setLoadingMode(config.loadingMode)
+        const parsedDefaultMaxStackLayers = Number(config.defaultMaxStackLayers)
+        setPlacementSettings((current) => ({
+          ...current,
+          defaultMaxStackLayers: Number.isFinite(parsedDefaultMaxStackLayers) && parsedDefaultMaxStackLayers > 0
+            ? Math.floor(parsedDefaultMaxStackLayers)
+            : undefined,
+        }))
         if (Array.isArray(config.cargoItems)) setCargoItems(config.cargoItems)
         if (config.customContainer !== undefined) setCustomContainer(config.customContainer)
         
@@ -2484,7 +2520,10 @@ function Workbench() {
                     <button
                       className="archive-button"
                       type="button"
-                      onClick={() => setPlacementSettings(DEFAULT_PLACEMENT_SETTINGS)}
+                      onClick={() => setPlacementSettings((current) => ({
+                        ...DEFAULT_PLACEMENT_SETTINGS,
+                        defaultMaxStackLayers: current.defaultMaxStackLayers,
+                      }))}
                     >
                       {t.resetPlacementSettings}
                     </button>
@@ -2689,17 +2728,36 @@ function Workbench() {
             {!rulesCollapsed && (
               <>
                 <label className="field-label">{t.selectableRules}
-                  <select aria-label={t.ruleSummary} className="field-input mt-1" value={loadingMode} onChange={(event) => setLoadingMode(event.target.value as LoadingMode)}>
+                  <select aria-label={t.ruleSummary} className="field-input mt-1" value={loadingMode} onChange={(event) => {
+                    setLoadingMode(event.target.value as LoadingMode)
+                    markPlacementDirty()
+                  }}>
                     <option value="volume">{t.volumeMode}</option>
                     <option value="weight">{t.weightMode}</option>
                     <option value="quantity">{t.quantityMode}</option>
                     <option value="input">{t.inputMode}</option>
                   </select>
                 </label>
+                <label className="field-label mt-3" data-testid="global-max-stack-layers-field">
+                  {t.globalMaxStackLayers}
+                  <input
+                    className="field-input mt-1"
+                    type="number"
+                    min={1}
+                    value={defaultMaxStackLayers ?? ''}
+                    onChange={(event) => updateDefaultMaxStackLayers(event.target.value)}
+                  />
+                </label>
                 <div className="mt-3 grid gap-2">
                   <div className="rounded-xl border border-[#e5e7eb] bg-[#f8fafc] px-3 py-2"><strong>{t.hardRules}</strong>: {t.boundaryRule}</div>
                   <div className="rounded-xl border border-[#e5e7eb] bg-[#f8fafc] px-3 py-2"><strong>{t.hardRules}</strong>: {t.payloadRule}</div>
-                  <div className="rounded-xl border border-[#e5e7eb] bg-[#f8fafc] px-3 py-2"><strong>{t.hardRules}</strong>: {t.supportRule}</div>
+                  <div className="rounded-xl border border-[#e5e7eb] bg-[#f8fafc] px-3 py-2">
+                    <strong>{t.hardRules}</strong>: {t.supportRule}
+                    <br />
+                    <span className="text-[#64748b]">
+                      {t.globalMaxStackLayers}: {defaultMaxStackLayers ?? t.maxStackLayersUnlimited}
+                    </span>
+                  </div>
                 </div>
               </>
             )}
@@ -2735,6 +2793,13 @@ function Workbench() {
                     </button>
                   </div>
                   <p className="mt-1 text-xs text-[#666]">{item.length} x {item.width} x {item.height} mm, {item.weight} kg, {t.qty} {item.quantity}</p>
+                  <p className="mt-1 text-xs text-[#64748b]">
+                    {t.maxStackLayers}: {item.maxStackLayers
+                      ? `${item.maxStackLayers} (${t.maxStackLayersOwn})`
+                      : defaultMaxStackLayers
+                        ? `${defaultMaxStackLayers} (${t.maxStackLayersGlobal})`
+                        : t.maxStackLayersUnlimited}
+                  </p>
                 </div>
               ))}
             </div>

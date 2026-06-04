@@ -162,6 +162,7 @@ export interface DbHistoryPlan {
     totalCargoCount: number
     layerCount: number
     labelSummary: string
+    defaultMaxStackLayers?: number
   }
 }
 

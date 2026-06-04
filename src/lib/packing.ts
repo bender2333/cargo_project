@@ -26,6 +26,11 @@ type StackLimitCarrier = {
   maxStackLayers?: number
 }
 
+export type CalculatePackingOptions = {
+  loadingMode?: LoadingMode
+  defaultMaxStackLayers?: number
+}
+
 type OrientationKey = PlacedBox['orientationKey']
 type LabelRotationDeg = PlacedBox['labelRotationDeg']
 
@@ -406,7 +411,17 @@ function buildDiagnostics(
   return diagnostics
 }
 
-export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[], options: { loadingMode?: LoadingMode } = {}): PackingResult {
+function effectiveMaxStackLayers(item: CargoItem, defaultMaxStackLayers: number | undefined) {
+  if (item.maxStackLayers !== undefined) return item.maxStackLayers
+  return defaultMaxStackLayers
+}
+
+function normalizeDefaultMaxStackLayers(value: number | undefined) {
+  if (!Number.isFinite(Number(value)) || Number(value) <= 0) return undefined
+  return Math.floor(Number(value))
+}
+
+export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[], options: CalculatePackingOptions = {}): PackingResult {
   const effective = effectiveContainer(container)
   const placed: PlacedBox[] = []
   let extremePoints: Point[] = [{ x: 0, y: 0, z: 0 }]
@@ -415,11 +430,16 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   let totalCargoCount = 0
 
   const loadingMode = options.loadingMode ?? 'quantity'
+  const defaultMaxStackLayers = normalizeDefaultMaxStackLayers(options.defaultMaxStackLayers)
   const expanded = cargoItems
     .flatMap((item, itemIndex) => {
       totalCargoCount += item.quantity
       const label = (item.label || labelForIndex(itemIndex)).toUpperCase().slice(0, 2)
-      return Array.from({ length: item.quantity }, (_, index) => ({ item, itemIndex, label, index: index + 1 }))
+      const effectiveItem = {
+        ...item,
+        maxStackLayers: effectiveMaxStackLayers(item, defaultMaxStackLayers),
+      }
+      return Array.from({ length: item.quantity }, (_, index) => ({ item: effectiveItem, itemIndex, label, index: index + 1 }))
     })
     .sort((a, b) => {
       if (loadingMode === 'input') {

@@ -24,7 +24,7 @@ function formatNumberList(values: number[]) {
   return values.join(', ')
 }
 
-export function buildExportPlanRows(cargoItems: CargoItem[], result: PackingResult): ExportPlanRow[] {
+export function buildExportPlanRows(cargoItems: CargoItem[], result: PackingResult, options: { defaultMaxStackLayers?: number } = {}): ExportPlanRow[] {
   return cargoItems.map((item): ExportPlanRow => {
     const placedBoxes = result.placed.filter((box) => box.cargoId === item.id)
     const unplaced = result.unplaced.find((entry) => entry.cargoId === item.id)
@@ -40,7 +40,7 @@ export function buildExportPlanRows(cargoItems: CargoItem[], result: PackingResu
       actualWidth: placedBoxes[0]?.width ?? '',
       actualHeight: placedBoxes[0]?.height ?? '',
       weight: item.weight,
-      maxStackLayers: item.maxStackLayers ?? '',
+      maxStackLayers: item.maxStackLayers ?? options.defaultMaxStackLayers ?? '',
       plannedQuantity: item.quantity,
       placedQuantity: stats?.placed ?? placedBoxes.length,
       unplacedQuantity: stats?.unplaced ?? unplaced?.quantity ?? 0,

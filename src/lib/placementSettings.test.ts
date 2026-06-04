@@ -30,6 +30,7 @@ describe('placementSettings', () => {
     } as unknown as Storage
     const settings = {
       ...DEFAULT_PLACEMENT_SETTINGS,
+      defaultMaxStackLayers: 2,
       gridStepMm: 25,
       edgeToleranceMm: 80,
       zStepMm: 100,
@@ -60,5 +61,15 @@ describe('placementSettings', () => {
     expect(loaded.gridSnapEnabled).toBe(false)
     expect(loaded.edgeSnapEnabled).toBe(true)
     expect(loaded.supportPolicy.minSupportRatio).toBe(0.4)
+  })
+
+  it('normalizes global max stack layer defaults to a positive integer or unlimited', () => {
+    expect(loadPlacementSettings('layers', {
+      getItem: () => JSON.stringify({ defaultMaxStackLayers: 2.8 }),
+    } as Pick<Storage, 'getItem'>).defaultMaxStackLayers).toBe(2)
+
+    expect(loadPlacementSettings('layers', {
+      getItem: () => JSON.stringify({ defaultMaxStackLayers: 0 }),
+    } as Pick<Storage, 'getItem'>).defaultMaxStackLayers).toBeUndefined()
   })
 })

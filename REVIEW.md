@@ -2,6 +2,133 @@
 
 日期：2026-05-29
 
+## 第三十二轮 Review 与「顶层错位穿模、标签朝向一致、全局堆叠层数」计划
+
+日期：2026-06-04
+
+本轮 review 针对用户提供的三张截图反馈和两份对照快照：
+
+- `C:\Users\BA_H3C_Pad\Pictures\contain.png`（侧面看 U 与 P 疑似穿模）
+- `C:\Users\BA_H3C_Pad\Pictures\label1.png`（同一标签上下大小不一致）
+- `C:\Users\BA_H3C_Pad\Downloads\cargo-debug-snapshot (7).json`（14 种货 / 148 个，顶层无货，正常）
+- `C:\Users\BA_H3C_Pad\Downloads\cargo-debug-snapshot (8).json`（29 种货 / 298 个，顶层开始码躺倒箱）
+
+审查结论：三个问题分属可视化与规则模型两类，且已用快照数据 + 复现实验确认根因，均非装箱碰撞算法本身出错。
+
+| 快照 | 货物 | 朝向 | z 层 | 顶层 |
+|---|---|---|---|---|
+| snapshot 7（正常） | 14 种 / 148 个 | 全 `LWH` | 0 / 600 / 1200 | 无 |
+| snapshot 8（异常） | 29 种 / 298 个 | `LWH`×168 + `LHW`×42 | 0 / 600 / 1200 / 1800 | 42 个躺倒箱，`z=1800`、`top=2300` |
+
+对 snapshot 8 做两两包围盒检测：**210 个箱体真实几何重叠数 = 0**。问题 1 是视觉歧义，问题 3 是数据未带限制值。
+
+### 1. 侧面看 U 与 P "穿模"（视觉错位，非真实重叠）
+
+**现象**：
+
+- `contain.png` 中顶排 U/U/T 与下方 P 阵列，从侧面带透视看像插进了下层。
+
+**快照复核结果**：
+
+- snapshot 8 全量两两包围盒检测，跨标签真实几何重叠数为 0，算法无碰撞失败。
+- 成因一：顶层是躺倒的 `LHW` 箱，footprint 与下层不对齐。下层 P 为 `LWH`，y 向宽 500mm，列边界 `[0,500,1000,1500,2000]`；顶层躺倒后 y 向宽 600mm，列边界 `[0,600,1200,1800]`。两套网格竖直棱边互相错开穿插，透视下棱线交叉，看着像穿模。
+- 成因二：顶层底面 `z=1800` 与下层顶面 `z=1800` 完全共面，两组 wireframe 棱线同平面闪烁（z-fighting），加重穿模观感。
+
+**代码定位**：
+
+- `src/lib/packing.ts` 的 `orientations()`（line 78）在 `canRotate=true` 时提供包含 `LHW` 在内的躺倒朝向；列堆满后顶部余高不足竖放时，会选躺倒朝向继续码顶。
+- `src/components/ContainerScene.tsx` 的 `makeBoxMaterial`（line 146）对被遮挡箱关闭 `depthWrite` 且用 `FrontSide`，共面处深度排序不稳定。
+
+**根因**：
+
+顶层躺倒导致 footprint 与下层网格错位，叠加共面 z-fighting，产生"穿模"视觉假象。根源与问题 3 同一条链路——顶层不该出现躺倒码货。
+
+**影响评估**：
+
+- 消除顶层躺倒错位后，上下层网格对齐，棱边不再交叉，穿模假象自然消失。
+- 不应改 `overlaps()` 碰撞算法，当前几何无错误。
+
+**推荐方案**：
+
+- **以问题 3 的全局堆叠层数限制为根治手段**：限制生效后顶层躺倒箱消失（复现实验已验证 `maxStackLayers:2` 时 tilted=0），网格对齐，穿模假象随之消除。
+- 本问题不单独改渲染，挂在问题 3 的修复结果上验证。
+
+### 2. 同一标签 3D 面贴图上下大小不一致（标签朝向一致性）
+
+**现象**：
+
+- `label1.png` 中顶排 A/B/C/D 是大居中徽章，下方各排是小角标徽章。
+- 同一标签（如 B）顶部居中大、下部角落小，缺乏一致性，识别角度也差。
+
+**代码定位**：
+
+- `src/lib/labelDeconfliction.ts` 的 `buildBoxLabelModes`（line 52）按顶视投影做避让，被上方箱遮挡的下层箱降级为 `compact`。
+- `src/components/ContainerScene.tsx` 的 `makeFaceLabelTexture`（line 108）：`full` 模式徽章大且居中（`translate(128,134)`，104px）；`compact` 模式徽章小且贴左上角（`badgeX/Y=22`，44px）。
+- iso 视角下 `projectionMode` 被强制为 `'top'`（line 729），导致所有被压住的下层箱全部 compact。
+- `getCachedBoxMaterials`（line 194）把同一 texture 贴满 6 个面（注释 `BoxGeometry material order: +X,-X,+Y,-Y,+Z,-Z`），所以每个面都画字，朝向用户与背向用户的面一视同仁。
+
+**根因**：
+
+拥挤避让把标签分成 full/compact 两种位置与字号，叠加"6 面同贴图"，让同一标签在不同箱、不同面上呈现不一致的大小与位置。
+
+**影响评估**：
+
+- 用户选定**方案 B（按相机朝向决定哪面画字，其余面留色块）**，识别度最高。
+- 改动较大：需打破"6 面共用同一 material"的现状，按朝向相机的面单独贴带标签 texture，背向面用纯色块 material。
+- 需要相机朝向 → 箱体可见面的映射，并在相机旋转时更新；要兼顾性能（material/texture 缓存 key 需纳入"可见面"维度）。
+
+**推荐方案（方案 B）**：
+
+- `makeFaceLabelTexture` 拆为两类：带标签的 full 贴图、纯色块贴图（无字）。
+- `getCachedBoxMaterials` 不再 6 面同贴：根据当前相机视线方向，判定该箱朝向相机的 1~2 个面用 full 标签贴图，其余面用纯色块。
+- 相机朝向变化时（OrbitControls change / 视图模式切换）刷新各箱面材质分配；缓存 key 加入"朝向面"标识，避免每帧重建。
+- 弃用 / 收敛 `compact` 模式与现有 `buildBoxLabelModes` 顶视避让在 3D 中的作用（2D 视图的避让如仍需要可保留，需分别评估）。
+- 单元测试：给定相机方向与箱体朝向，断言被选为"画字面"的是朝向相机的面；纯色块面不含标签纹理标记。
+- E2E：iso / 正视 / 侧视下，同一标签的可见面标签字号与位置一致，旋转相机后画字面随之切换。
+
+### 3. 顶层码躺倒货不符合"从内向外"作业（全局最大堆叠层数）
+
+**现象**：
+
+- snapshot 7（货少）顶层无货，正常；snapshot 8（货多）列堆满后顶部出现 42 个躺倒（`LHW`）箱，`z=1800`、`top=2300`。
+- 从操作者视角，车厢从内向外、逐层码货，这种为塞满而躺倒码顶不现实。
+- 用户反馈：这次实际设了"最大堆叠层数"限制，但没生效。
+
+**快照复核 + 复现实验结果**：
+
+- snapshot 8 的 29 个 `CargoItem` 中，`maxStackLayers` 字段**完全不存在**（`'maxStackLayers' in item` 全为 false），算法收到的是"无限制"。
+- 用 snapshot 8 几何做对照复现：
+  - **不设** `maxStackLayers`：`z:[0,600,1200,1800]`、42 个躺倒箱、装 210 个——**完美复现截图**。
+  - **设** `maxStackLayers:2`：`z:[0,600]`、**0 个躺倒箱**、装 112 个——**限制完全生效**。
+- 结论：`packing.ts` 的 `respectsMaxStackLayers`（line 168-171）**功能正常**；"没生效"是因为限制值没进入参与计算的 `CargoItem`。
+
+**代码定位（断点：UI 设值 → CargoItem）**：
+
+- `src/lib/packing.ts:168-171` `respectsMaxStackLayers` 用 `supportDetails().physicalLayer`（竖直支撑链层数，line 160）校验，逻辑正确。
+- `src/Workbench.tsx` 有两个**互不相通**的 `maxStackLayers` 入口：
+  - 单货物"添加/编辑"表单（line 2663 / 3784）→ 写进该货物的 `CargoItem`，绑定正确。
+  - 导入模板默认值 `templateDefaults`（line 3629）→ 仅在 Excel/CSV 导入流程套用（`importCargo.ts:297`），**对手动添加的货物完全无效**。
+- snapshot 8 货物全带 `cargo-xxxxx`（`createClientId()`）client id，说明是手动逐个添加、未走导入，故模板默认值未套上。
+- 静默失败陷阱（line 2658）：取消再勾选 `stackable` 复选框会把 `maxStackLayers` 清成 `undefined`（`event.target.checked ? current.maxStackLayers : undefined`），且无任何提示。
+
+**根因**：
+
+`maxStackLayers` 只能逐货物设置，或经导入模板默认值套用；缺少一个对**所有货物可达**的全局/兜底设置。用户记忆中"设了限制"很可能设在导入模板默认值上，而货物是手动添加的，导致限制对这批货不可达；算法因此按"无限制"码到顶层并躺倒填充。
+
+**影响评估**：
+
+- 用户选定**根治方案：让限制对所有货物可达**——新增全局默认堆叠层数，在 `calculatePacking` 入口对未自带 `maxStackLayers` 的货物兜底套用。
+- 全局限制生效后，顶层躺倒箱消失，问题 1 的穿模假象一并解决。
+- 取舍提示：`respectsMaxStackLayers` 限制的是**单摞竖直层数**，限制为 2 会让柜子上半部整体空置（复现实验装载率 112/290）。"单摞最大层数" ≠ "可用柜高"，二者语义不同，方向选择需另记 `decision.md`。
+
+**推荐方案（全局最大堆叠层数，根治）**：
+
+- 新增全局默认堆叠层数设置（建议与 `placementSettings` 同级或并列），UI 放在显眼且与货物无关的位置（如装载规则区）。
+- `calculatePacking` 入口对每个货物兜底：`item.maxStackLayers ?? globalDefault`（货物自带值优先，全局值兜底）；`globalDefault` 缺省/≤0 时维持旧的不限制行为，保持向后兼容。
+- 防呆补充：货物列表/明细显示每个货物当前 `maxStackLayers`（含来源：自带 / 全局兜底），让"设没设、几层"一眼可见；`stackable` 联动清空时给可见反馈，不静默抹值。
+- 单元测试：全局默认存在时未自带值的货物受限；货物自带值覆盖全局值；全局缺省时维持旧行为。复用本轮 snapshot 8 几何做密铺多列回归。
+- E2E：设全局层数后，自动结果最大 `physicalLayer` 不超过该值，且无躺倒顶层箱。
+
 ## 第三十一轮 Review 与「最大化工作区、边界吸附、堆叠参数」计划
 
 日期：2026-06-04

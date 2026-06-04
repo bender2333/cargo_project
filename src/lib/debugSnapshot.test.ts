@@ -83,6 +83,7 @@ describe('debug snapshot', () => {
       selectedContainer,
       effectiveContainer: effectiveContainer(selectedContainer),
       loadingMode: 'quantity',
+      defaultMaxStackLayers: 2,
       cargoItems,
       placementSettings: DEFAULT_PLACEMENT_SETTINGS,
       hasCalculated: true,
@@ -147,12 +148,14 @@ describe('debug snapshot', () => {
     })
     expect(snapshot.manual.notice?.reasonCode).toBe('floating')
     expect(snapshot.cargo.items[0].label).toBe('A')
+    expect(snapshot.defaultMaxStackLayers).toBe(2)
     expect(snapshot.recovery.testHelper).toBe('restoreManualDebugScenario')
 
     const restored = restoreManualDebugScenario(snapshot)
     expect(restored.container.length).toBe(effectiveContainer(selectedContainer).length)
     expect(restored.manualDraft.boxes).toHaveLength(1)
     expect(restored.placementSettings.supportPolicy.minSupportRatio).toBe(0.5)
+    expect(restored.defaultMaxStackLayers).toBe(2)
     expect(restored.expectedIssues).toEqual(issues)
   })
 })

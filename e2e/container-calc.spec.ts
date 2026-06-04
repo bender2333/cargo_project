@@ -276,6 +276,38 @@ test('adds cargo and recalculates utilization', async ({ page }) => {
   await expect(page.getByText('Layer view')).toBeVisible()
 })
 
+test('applies global max stack layers to cargo without per-item limits', async ({ page }) => {
+  await openEnglish(page)
+  await page.getByRole('button', { name: /Delete cargo: Carton A/ }).click()
+  await page.getByLabel('Container type').selectOption('custom')
+  await page.getByLabel('Length mm').first().fill('1000')
+  await page.getByLabel('Width mm').first().fill('1000')
+  await page.getByLabel('Height mm').first().fill('2000')
+  await page.getByLabel('Max payload kg').fill('10000')
+
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('Name', { exact: true }).fill('Global stack crate')
+  await cargoForm.getByLabel('Label', { exact: true }).fill('GS')
+  await cargoForm.getByLabel('Length mm').fill('1000')
+  await cargoForm.getByLabel('Width mm').fill('1000')
+  await cargoForm.getByLabel('Height mm').fill('500')
+  await cargoForm.getByLabel('Weight kg').fill('10')
+  await cargoForm.getByLabel('Quantity').fill('3')
+  await page.getByRole('button', { name: '+ Add cargo item' }).click()
+
+  await page.getByTestId('global-max-stack-layers-field').getByRole('spinbutton').fill('2')
+  await expect(page.getByTestId('cargo-list-item').filter({ hasText: 'Global stack crate' })).toContainText('Max stack layers: 2 (global default)')
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
+
+  await page.getByRole('button', { name: 'Details' }).click()
+  const row = page.getByRole('row').filter({ hasText: 'Global stack crate' })
+  await expect(row.getByRole('cell').nth(5)).toHaveText('3')
+  await expect(row.getByRole('cell').nth(6)).toHaveText('2')
+  await expect(row.getByRole('cell').nth(7)).toHaveText('1')
+  await expect(row.getByRole('cell').nth(8)).toHaveText('1')
+  await expect(row.getByRole('cell').nth(9)).toHaveText('1, 2')
+})
+
 test('adds cargo from the default Chinese workspace', async ({ page }) => {
   await page.goto('/')
   const cargoForm = page.locator('form')
@@ -701,6 +733,40 @@ test('switches 3D camera views and keeps layer filtering visible', async ({ page
   await page.getByRole('button', { name: /Layer 2/ }).first().click()
   await expect(page.getByTestId('container-scene')).toBeVisible()
   await expectCanvasHasRenderedPixels(page)
+})
+
+test('moves 3D labels to camera-facing faces across camera views', async ({ page }) => {
+  await openEnglish(page)
+  await page.getByRole('button', { name: /Delete cargo: Carton A/ }).click()
+  await page.getByLabel('Container type').selectOption('custom')
+  await page.getByLabel('Length mm').first().fill('1000')
+  await page.getByLabel('Width mm').first().fill('1000')
+  await page.getByLabel('Height mm').first().fill('1000')
+  await page.getByLabel('Max payload kg').fill('10000')
+
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('Name', { exact: true }).fill('Camera label cube')
+  await cargoForm.getByLabel('Label', { exact: true }).fill('CL')
+  await cargoForm.getByLabel('Length mm').fill('1000')
+  await cargoForm.getByLabel('Width mm').fill('1000')
+  await cargoForm.getByLabel('Height mm').fill('1000')
+  await cargoForm.getByLabel('Weight kg').fill('10')
+  await cargoForm.getByLabel('Quantity').fill('1')
+  await page.getByRole('button', { name: '+ Add cargo item' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
+
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-label-faces-sample', /\+X/)
+  await expect(scene).toHaveAttribute('data-label-faces-sample', /\+Z/)
+
+  await page.getByRole('button', { name: 'Front', exact: true }).click()
+  await expect(scene).toHaveAttribute('data-label-faces-sample', '+Z')
+
+  await page.getByRole('button', { name: 'Side', exact: true }).click()
+  await expect(scene).toHaveAttribute('data-label-faces-sample', '+X')
+
+  await page.getByRole('button', { name: 'Top', exact: true }).click()
+  await expect(scene).toHaveAttribute('data-label-faces-sample', '+Y')
 })
 
 test('supports Excel import/export affordance and Chinese mode', async ({ page }) => {

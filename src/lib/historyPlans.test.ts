@@ -52,6 +52,7 @@ describe('history plans', () => {
       shipmentName: 'Review shipment',
       projectName: 'Test Project',
       loadingMode: 'weight',
+      defaultMaxStackLayers: 2,
     })
 
     expect(plan).toMatchObject({
@@ -66,6 +67,7 @@ describe('history plans', () => {
       layerCount: 1,
       labelSummary: 'H:2/2',
       loadingMode: 'weight',
+      defaultMaxStackLayers: 2,
     })
     expect(plan.cargoItems[0]).toMatchObject({ label: 'H', name: 'History crate' })
   })

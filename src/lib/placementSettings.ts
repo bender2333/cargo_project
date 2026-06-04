@@ -6,6 +6,7 @@ export type SupportPolicy = {
 }
 
 export type PlacementSettings = {
+  defaultMaxStackLayers?: number
   snapEnabled: boolean
   gridSnapEnabled: boolean
   gridStepMm: number
@@ -18,6 +19,7 @@ export type PlacementSettings = {
 }
 
 export const DEFAULT_PLACEMENT_SETTINGS: PlacementSettings = {
+  defaultMaxStackLayers: undefined,
   snapEnabled: true,
   gridSnapEnabled: true,
   gridStepMm: 50,
@@ -61,7 +63,11 @@ function normalizeSupportPolicy(value: unknown): SupportPolicy {
 
 export function normalizePlacementSettings(value: unknown): PlacementSettings {
   const src = typeof value === 'object' && value !== null ? value as Partial<PlacementSettings> : {}
+  const defaultMaxStackLayers = Number(src.defaultMaxStackLayers)
   return {
+    defaultMaxStackLayers: Number.isFinite(defaultMaxStackLayers) && defaultMaxStackLayers > 0
+      ? Math.floor(Math.min(100, defaultMaxStackLayers))
+      : undefined,
     snapEnabled: src.snapEnabled ?? DEFAULT_PLACEMENT_SETTINGS.snapEnabled,
     gridSnapEnabled: src.gridSnapEnabled ?? DEFAULT_PLACEMENT_SETTINGS.gridSnapEnabled,
     gridStepMm: clampNumber(src.gridStepMm, DEFAULT_PLACEMENT_SETTINGS.gridStepMm, 1, 1000),
