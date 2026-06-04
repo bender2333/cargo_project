@@ -6,6 +6,7 @@ import {
   faceLabelRotation,
   orientationAxesOf,
   orientationBasisVectors,
+  orientationRenderingBasisVectors,
 } from './orientationTransform'
 
 const placed = (overrides: Partial<PlacedBox>): PlacedBox => ({
@@ -31,6 +32,15 @@ const placed = (overrides: Partial<PlacedBox>): PlacedBox => ({
   supportedBy: [],
   ...overrides,
 })
+
+function determinant(basis: ReturnType<typeof orientationBasisVectors>) {
+  const { length, width, height } = basis
+  return (
+    length.x * (width.y * height.z - width.z * height.y)
+    - width.x * (length.y * height.z - length.z * height.y)
+    + height.x * (length.y * width.z - length.z * width.y)
+  )
+}
 
 describe('orientationTransform', () => {
   it('uses identity axes and basis vectors for an unrotated LWH box', () => {
@@ -151,5 +161,17 @@ describe('orientationTransform', () => {
     expect(faceLabelRotation(axes, 'top')).toBe(270)
     expect(faceLabelRotation(axes, 'front')).toBe(0)
     expect(faceLabelRotation(axes, 'side')).toBe(270)
+  })
+
+  it('normalizes left-handed snapshot axes into a legal rendering basis', () => {
+    const axes = { x: 'L-', y: 'H-', z: 'W+' } as const
+
+    expect(determinant(orientationBasisVectors(axes))).toBe(-1)
+    expect(determinant(orientationRenderingBasisVectors(axes))).toBe(1)
+    expect(orientationRenderingBasisVectors(axes)).toEqual({
+      length: { x: -1, y: 0, z: 0 },
+      width: { x: 0, y: 0, z: 1 },
+      height: { x: 0, y: 1, z: 0 },
+    })
   })
 })

@@ -10,7 +10,8 @@ import { applyManualPlacementSnap } from '../lib/manualPlacementSnap'
 import type { CogOverlay } from '../lib/cogVisual'
 import { DEFAULT_PLACEMENT_SETTINGS, type PlacementSettings } from '../lib/placementSettings'
 import { manualMoveCommitArgs } from '../lib/manualMoveCommit'
-import { baseDimensionsFromPlaced, orientationAxesOf, orientationBasisVectors } from '../lib/orientationTransform'
+import { buildBoxLabelModes, type BoxLabelMode } from '../lib/labelDeconfliction'
+import { baseDimensionsFromPlaced, orientationAxesOf, orientationRenderingBasisVectors } from '../lib/orientationTransform'
 
 export type SceneViewMode = 'iso' | 'top' | 'front' | 'side'
 
@@ -104,7 +105,7 @@ function getMaterialCache(state: SceneState) {
   return cache
 }
 
-function makeFaceLabelTexture(label: string, color: string, selected: boolean, orientationLabel: string) {
+function makeFaceLabelTexture(label: string, color: string, selected: boolean, orientationLabel: string, labelMode: BoxLabelMode) {
   const canvas = document.createElement('canvas')
   canvas.width = 256
   canvas.height = 256
@@ -115,21 +116,25 @@ function makeFaceLabelTexture(label: string, color: string, selected: boolean, o
   context.fillStyle = color
   context.fillRect(0, 0, canvas.width, canvas.height)
 
-  context.fillStyle = selected ? 'rgba(243, 178, 26, 0.92)' : 'rgba(255, 255, 255, 0.86)'
-  context.strokeStyle = selected ? '#f3b21a' : '#222222'
-  context.lineWidth = selected ? 14 : 10
+  const compact = labelMode === 'compact'
+  const badgeSize = compact ? 88 : 172
+  const badgeX = compact ? 22 : 42
+  const badgeY = compact ? 22 : 42
+  context.fillStyle = selected ? 'rgba(243, 178, 26, 0.92)' : compact ? 'rgba(255, 255, 255, 0.58)' : 'rgba(255, 255, 255, 0.86)'
+  context.strokeStyle = selected ? '#f3b21a' : compact ? 'rgba(15, 23, 42, 0.55)' : '#222222'
+  context.lineWidth = selected ? 14 : compact ? 6 : 10
   context.beginPath()
-  context.roundRect(42, 42, 172, 172, 22)
+  context.roundRect(badgeX, badgeY, badgeSize, badgeSize, compact ? 14 : 22)
   context.fill()
   context.stroke()
   context.fillStyle = '#222222'
-  context.font = 'bold 104px Verdana, sans-serif'
+  context.font = compact ? 'bold 44px Verdana, sans-serif' : 'bold 104px Verdana, sans-serif'
   context.textAlign = 'center'
   context.textBaseline = 'middle'
-  context.translate(128, 134)
-  context.fillText(label, 0, 0, 142)
+  context.translate(compact ? badgeX + badgeSize / 2 : 128, compact ? badgeY + badgeSize / 2 + 3 : 134)
+  context.fillText(label, 0, 0, compact ? 62 : 142)
   context.fillStyle = '#0f172a'
-  context.font = 'bold 22px Verdana, sans-serif'
+  context.font = compact ? 'bold 18px Verdana, sans-serif' : 'bold 22px Verdana, sans-serif'
   context.textAlign = 'center'
   context.fillText(orientationLabel, 128, 222, 226)
 
@@ -163,14 +168,15 @@ function getCachedFaceMaterial(
   selected: boolean,
   opacity: number,
   invalid: boolean,
+  labelMode: BoxLabelMode,
 ) {
   const tCache = getTextureCache(state)
   const mCache = getMaterialCache(state)
   const orientationLabel = box.orientationLabel ?? box.orientationKey
-  const textureKey = `${box.label}:${box.color}:${selected}:${orientationLabel}`
+  const textureKey = `${box.label}:${box.color}:${selected}:${orientationLabel}:${labelMode}`
   let texture = tCache.get(textureKey)
   if (!texture) {
-    texture = makeFaceLabelTexture(box.label, box.color, selected, orientationLabel)
+    texture = makeFaceLabelTexture(box.label, box.color, selected, orientationLabel, labelMode)
     tCache.set(textureKey, texture)
   }
 
@@ -185,7 +191,7 @@ function getCachedFaceMaterial(
   return material
 }
 
-function getCachedBoxMaterials(state: SceneState, box: PlacedBox, selected: boolean, opacity: number, invalid: boolean) {
+function getCachedBoxMaterials(state: SceneState, box: PlacedBox, selected: boolean, opacity: number, invalid: boolean, labelMode: BoxLabelMode) {
   const mCache = getMaterialCache(state)
   const materialKey = [
     'boxFaces',
@@ -195,6 +201,7 @@ function getCachedBoxMaterials(state: SceneState, box: PlacedBox, selected: bool
     opacity,
     invalid ? 'inv' : 'ok',
     box.orientationLabel ?? box.orientationKey,
+    labelMode,
   ].join(':')
   const cached = mCache.get(materialKey)
   if (Array.isArray(cached)) {
@@ -202,12 +209,12 @@ function getCachedBoxMaterials(state: SceneState, box: PlacedBox, selected: bool
   }
   // BoxGeometry material order: +X, -X, +Y, -Y, +Z, -Z.
   const materials = [
-    getCachedFaceMaterial(state, box, selected, opacity, invalid),
-    getCachedFaceMaterial(state, box, selected, opacity, invalid),
-    getCachedFaceMaterial(state, box, selected, opacity, invalid),
-    getCachedFaceMaterial(state, box, selected, opacity, invalid),
-    getCachedFaceMaterial(state, box, selected, opacity, invalid),
-    getCachedFaceMaterial(state, box, selected, opacity, invalid),
+    getCachedFaceMaterial(state, box, selected, opacity, invalid, labelMode),
+    getCachedFaceMaterial(state, box, selected, opacity, invalid, labelMode),
+    getCachedFaceMaterial(state, box, selected, opacity, invalid, labelMode),
+    getCachedFaceMaterial(state, box, selected, opacity, invalid, labelMode),
+    getCachedFaceMaterial(state, box, selected, opacity, invalid, labelMode),
+    getCachedFaceMaterial(state, box, selected, opacity, invalid, labelMode),
   ]
   mCache.set(materialKey, materials)
   return materials
@@ -246,12 +253,13 @@ function applyBoxVisualState(
   highlightBoxIds: Set<string> | undefined,
   invalid: boolean,
   opacityOverride?: number | null,
+  labelMode: BoxLabelMode = 'full',
 ) {
   const visual = boxVisualState(entry.box, activeLayerId, activeLabelId, selectedBoxId, highlightBoxIds, invalid)
   const opacity = opacityOverride === null || opacityOverride === undefined
     ? visual.opacity
     : Math.min(1, Math.max(0.45, visual.selected ? Math.max(opacityOverride, 0.75) : opacityOverride))
-  entry.mesh.material = getCachedBoxMaterials(state, entry.box, visual.selected, opacity, visual.invalid)
+  entry.mesh.material = getCachedBoxMaterials(state, entry.box, visual.selected, opacity, visual.invalid, labelMode)
   const material = entry.edges.material
   if (material instanceof THREE.LineBasicMaterial) {
     material.color.setHex(visual.edgeColor)
@@ -270,7 +278,7 @@ function worldCenterForBox(box: PlacedBox, scale: number, length: number, width:
 }
 
 function boxOrientationQuaternion(box: PlacedBox) {
-  const basis = orientationBasisVectors(orientationAxesOf(box))
+  const basis = orientationRenderingBasisVectors(orientationAxesOf(box))
   const matrix = new THREE.Matrix4().makeBasis(
     new THREE.Vector3(basis.length.x, basis.length.z, basis.length.y),
     new THREE.Vector3(basis.height.x, basis.height.z, basis.height.y),
@@ -464,6 +472,7 @@ export function ContainerScene({
     edgeSnapEnabled: edgeSnap ?? DEFAULT_PLACEMENT_SETTINGS.edgeSnapEnabled,
   })
   const poolDragInfoRef = useRef<typeof poolDragInfo>(poolDragInfo ?? null)
+  const viewModeRef = useRef<SceneViewMode>(viewMode)
   const onManualMoveRef = useRef<typeof onManualMove>(onManualMove)
   const onManualDropFromPoolRef = useRef<typeof onManualDropFromPool>(onManualDropFromPool)
   const onManualRotateRef = useRef<typeof onManualRotate>(onManualRotate)
@@ -507,6 +516,10 @@ export function ContainerScene({
       clearGhost(sceneStateRef.current)
     }
   }, [poolDragInfo])
+
+  useEffect(() => {
+    viewModeRef.current = viewMode
+  }, [viewMode])
 
   useEffect(() => {
     onManualMoveRef.current = onManualMove
@@ -710,8 +723,17 @@ export function ContainerScene({
 
     const refreshEntryVisual = (entry: MeshEntry) => {
       const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb, highlightBoxIds: hb, boxOpacityOverride: opacityOverride } = visualPropsRef.current
+      const currentViewMode = viewModeRef.current
+      const labelModes = buildBoxLabelModes({
+        boxes: Array.from(sceneState.meshEntries.values()).map((meshEntry) => meshEntry.box),
+        projectionMode: currentViewMode === 'iso' ? 'top' : currentViewMode,
+        activeLayerId: la,
+        activeLabelId: lb,
+        selectedBoxId: sb,
+        highlightBoxIds: hb,
+      })
       const invalid = sceneState.invalidOverride.has(entry.box.id) || invalidBoxIdsRef.current.has(entry.box.id)
-      applyBoxVisualState(sceneState, entry, la, lb, sb, hb, invalid, opacityOverride)
+      applyBoxVisualState(sceneState, entry, la, lb, sb, hb, invalid, opacityOverride, labelModes.get(entry.box.id) ?? 'full')
     }
 
     const onPointerDown = (event: PointerEvent) => {
@@ -1186,6 +1208,14 @@ export function ContainerScene({
     }
 
     const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb, highlightBoxIds: hb, boxOpacityOverride: opacityOverride } = visualPropsRef.current
+    const labelModes = buildBoxLabelModes({
+      boxes,
+      projectionMode: viewMode === 'iso' ? 'top' : viewMode,
+      activeLayerId: la,
+      activeLabelId: lb,
+      selectedBoxId: sb,
+      highlightBoxIds: hb,
+    })
     boxes.forEach((box) => {
       const existing = meshEntries.get(box.id)
       const invalid = state.invalidOverride.has(box.id) || invalidBoxIdsRef.current.has(box.id)
@@ -1199,7 +1229,7 @@ export function ContainerScene({
           existing.edges.geometry = new THREE.EdgesGeometry(geometry)
         }
         applyBoxTransform(existing, scale, length, width)
-        applyBoxVisualState(state, existing, la, lb, sb, hb, invalid, opacityOverride)
+        applyBoxVisualState(state, existing, la, lb, sb, hb, invalid, opacityOverride, labelModes.get(box.id) ?? 'full')
         return
       }
       const geometry = boxGeometryForPlaced(box, scale)
@@ -1207,7 +1237,7 @@ export function ContainerScene({
       const opacity = opacityOverride === null || opacityOverride === undefined
         ? visualState.opacity
         : Math.min(1, Math.max(0.12, visualState.selected ? Math.max(opacityOverride, 0.75) : opacityOverride))
-      const material = getCachedBoxMaterials(state, box, visualState.selected, opacity, invalid)
+      const material = getCachedBoxMaterials(state, box, visualState.selected, opacity, invalid, labelModes.get(box.id) ?? 'full')
       const mesh = new THREE.Mesh(geometry, material)
       mesh.castShadow = true
       mesh.receiveShadow = true
@@ -1227,7 +1257,7 @@ export function ContainerScene({
       scene.add(edges)
       meshEntries.set(box.id, { box, mesh, edges })
     })
-  }, [boxes])
+  }, [boxes, viewMode])
 
   useEffect(() => {
     const state = sceneStateRef.current
@@ -1471,11 +1501,19 @@ export function ContainerScene({
     const state = sceneStateRef.current
     if (!state) return
     const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb, highlightBoxIds: hb, boxOpacityOverride: opacityOverride } = visualPropsRef.current
+    const labelModes = buildBoxLabelModes({
+      boxes,
+      projectionMode: viewMode === 'iso' ? 'top' : viewMode,
+      activeLayerId: la,
+      activeLabelId: lb,
+      selectedBoxId: sb,
+      highlightBoxIds: hb,
+    })
     state.meshEntries.forEach((entry) => {
       const invalid = state.invalidOverride.has(entry.box.id) || invalidBoxIdsRef.current.has(entry.box.id)
-      applyBoxVisualState(state, entry, la, lb, sb, hb, invalid, opacityOverride)
+      applyBoxVisualState(state, entry, la, lb, sb, hb, invalid, opacityOverride, labelModes.get(entry.box.id) ?? 'full')
     })
-  }, [activeLayerId, activeLabelId, selectedBoxId, highlightBoxIds, invalidBoxIds, boxOpacityOverride])
+  }, [activeLayerId, activeLabelId, selectedBoxId, highlightBoxIds, invalidBoxIds, boxOpacityOverride, boxes, viewMode])
 
   const interactionMode = manualEditable ? 'manual' : 'auto'
 

@@ -2,6 +2,16 @@
 
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
+## 2026-06-04 第三十一轮：快照 5/6 显示问题不改变装箱几何
+
+- 背景：`cargo-debug-snapshot (5).json` 中 A/Q 看起来交叉，但三维包围盒复核没有实体重叠；`cargo-debug-snapshot (6).json` 中 T 货物在特定旋转态视觉消失，数据仍存在且手动校验没有报错。
+- 选项：
+  - 修改装箱碰撞或支撑算法：可能掩盖显示问题，并影响已验证的深度优先作业顺序和支撑关系。
+  - 在显示层处理标签歧义和非法渲染 basis：保留当前几何结果，只修用户看到的复核视图。
+- 决策：选择显示层修复。快照 5 类同柱位多层标签在全层/全标签视图中使用 `buildBoxLabelModes()` 降级被上层覆盖的标签；选中、高亮、指定层或指定标签时仍显示完整标签。快照 6 类 determinant `-1` 的 signed axes 使用 `orientationRenderingBasisVectors()` 归一化为右手系 basis 后再生成 Three.js quaternion。
+- 影响：2D 与 3D 视图会减少全层堆叠标签互相覆盖造成的“实体交叉”误读；3D 不再把反射矩阵直接交给 `setFromRotationMatrix()`。装箱坐标、碰撞检测、支撑校验、导出和历史数据不变。
+- 验证：新增 `src/lib/orientationTransform.test.ts` 覆盖 `{ x:'L-', y:'H-', z:'W+' }` 从 determinant `-1` 到 rendering determinant `+1`；新增 `src/lib/labelDeconfliction.test.ts` 和 `src/components/ContainerPlan2D.test.tsx` 覆盖同投影堆叠标签降级；新增 E2E `downgrades covered all-layer 2D labels while keeping top labels readable` 覆盖真实 UI。
+
 ## 2026-06-04 第三十一轮：最大堆叠层数按垂直支撑链解释
 
 - 背景：第三十一轮 review 要求在“允许堆叠”后增加最大堆叠层数，并贯穿自动装箱、手动校验、导入导出和历史方案。PRD 未定义该层数是按同 SKU、同标签还是所有支撑链计数。

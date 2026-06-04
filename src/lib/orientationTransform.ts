@@ -65,6 +65,40 @@ export function orientationBasisVectors(axes: OrientationAxes): OrientationBasis
   }
 }
 
+function vectorCross(a: AxisVector, b: AxisVector): AxisVector {
+  return {
+    x: (a.y * b.z - a.z * b.y) as AxisVector['x'],
+    y: (a.z * b.x - a.x * b.z) as AxisVector['y'],
+    z: (a.x * b.y - a.y * b.x) as AxisVector['z'],
+  }
+}
+
+function vectorDot(a: AxisVector, b: AxisVector) {
+  return a.x * b.x + a.y * b.y + a.z * b.z
+}
+
+function axisComponent(value: number): AxisVector['x'] {
+  if (value > 0) return 1
+  if (value < 0) return -1
+  return 0
+}
+
+export function orientationRenderingBasisVectors(axes: OrientationAxes): OrientationBasisVectors {
+  const basis = orientationBasisVectors(axes)
+  const expectedHeight = vectorCross(basis.length, basis.width)
+  if (vectorDot(expectedHeight, basis.height) < 0) {
+    return {
+      ...basis,
+      height: {
+        x: axisComponent(-basis.height.x),
+        y: axisComponent(-basis.height.y),
+        z: axisComponent(-basis.height.z),
+      },
+    }
+  }
+  return basis
+}
+
 export function baseDimensionsFromPlaced(
   box: Pick<PlacedBox, 'length' | 'width' | 'height' | 'orientationKey'>,
 ): { length: number; width: number; height: number } {

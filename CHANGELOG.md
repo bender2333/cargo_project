@@ -28,6 +28,12 @@
   - Remote health check passed during deploy.
   - Remote targeted E2E passed: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npx playwright test e2e/manual-3d.spec.ts e2e/container-calc.spec.ts --grep "最大堆叠|容量占用|最大化|Excel import/export"` passed 5 tests.
   - Remote full E2E result: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npm run test:e2e` ran 75 tests with 72 passed / 1 skipped / 2 failed. One failure is the same known manual rotation mismatch `WHL` expected vs `WLH` actual; the other was a one-off `page.goto('/')` timeout before `shows failure reason in the detail table for unplaced cargo`. The timeout test passed when rerun targeted against the same remote host.
+- Completed subtask: closed the remaining Round 31 snapshot 5/6 display fixes.
+  - Added `orientationRenderingBasisVectors()` so 3D rendering normalizes determinant `-1` snapshot axes such as `{ x:'L-', y:'H-', z:'W+' }` into a legal right-handed basis before `THREE.Quaternion().setFromRotationMatrix()`.
+  - Added shared label deconfliction with `buildBoxLabelModes()`: all-layer/all-label views downgrade boxes covered by higher-priority stacked projections to compact labels, while selected, highlighted, layer-filtered, and label-filtered boxes keep full labels.
+  - Wired the same label mode into `ContainerPlan2D` and `ContainerScene` so snapshot 5-style same-XY stacked labels are clarified in 2D and 3D without changing packing geometry or collision checks.
+  - Updated the in-app notification bar with the snapshot 5 label clarity and snapshot 6 rotation-basis fixes.
+- Verification update: `npx vitest run src/lib/orientationTransform.test.ts src/lib/labelDeconfliction.test.ts src/components/ContainerPlan2D.test.tsx` passed 10 tests; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/container-calc.spec.ts e2e/manual-3d.spec.ts --grep "covered all-layer|最大堆叠|容量占用|最大化|Excel import/export|3D 场景重建"` passed 7 tests. Full local verification after the display fixes: `npm run lint` passed with no warnings; `npm test` passed 34 files / 200 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` ran 76 tests with 74 passed / 1 skipped / 1 failed. The remaining failure is the same pre-existing manual rotation expectation mismatch `WHL` expected vs `WLH` actual in `e2e/manual-3d.spec.ts:170`.
 
 ## 2026-06-02 (Round 30 Stage-Merged Loading Steps Review)
 

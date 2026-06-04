@@ -540,6 +540,37 @@ test('switches to 2D plan views and keeps labels visible', async ({ page }) => {
   expect(pngDownload.suggestedFilename()).toBe('packing-plan-iso.png')
 })
 
+test('downgrades covered all-layer 2D labels while keeping top labels readable', async ({ page }) => {
+  await openEnglish(page)
+
+  await page.getByLabel('Container type').selectOption('custom')
+  await page.getByLabel('Length mm').first().fill('1200')
+  await page.getByLabel('Width mm').first().fill('800')
+  await page.getByLabel('Height mm').first().fill('2500')
+  await page.getByLabel('Max payload kg').fill('10000')
+
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('Name', { exact: true }).fill('Stacked visual crate')
+  await cargoForm.getByLabel('Label', { exact: true }).fill('Q')
+  await cargoForm.getByLabel('Length mm').fill('400')
+  await cargoForm.getByLabel('Width mm').fill('500')
+  await cargoForm.getByLabel('Height mm').fill('600')
+  await cargoForm.getByLabel('Weight kg').fill('10')
+  await cargoForm.getByLabel('Quantity').fill('4')
+  await page.getByRole('button', { name: '+ Add cargo item' }).click()
+  await page.getByLabel('Loading rules').selectOption('input')
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
+
+  await page.getByRole('button', { name: '2D' }).click()
+  const plan = page.getByTestId('container-plan-2d')
+  await expect(plan).toBeVisible()
+  await expect(plan.locator('[data-label-mode="compact"]').first()).toBeVisible()
+  await expect(plan.locator('[data-label-mode="full"]').first()).toBeVisible()
+
+  await page.getByTestId('report-panel').getByRole('button', { name: /^Layer 1\b/ }).click()
+  await expect(plan.locator('[data-label-mode="compact"]')).toHaveCount(0)
+})
+
 test('rotates 2D labels using packing orientation metadata', async ({ page }) => {
   await openEnglish(page)
   await page.getByLabel('Container type').selectOption('custom')
