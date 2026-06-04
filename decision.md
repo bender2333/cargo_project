@@ -12,7 +12,7 @@
   - 3D 改为按相机方向选择 1-2 个可见面绘制统一 full 标签，其余面只保留色块：标签字号一致，背向面不再重复画字。
 - 决策：采用全局默认层数兜底 + 3D 朝向面标签。`PlacementSettings.defaultMaxStackLayers` 按用户/浏览器持久化；`calculatePacking(..., { defaultMaxStackLayers })` 在扩展货物条目时填充缺省 `maxStackLayers`。3D `ContainerScene` 根据当前相机到箱体中心的本地方向选择标签面，OrbitControls change 时刷新材质分配；2D 仍保留现有 compact 避让。
 - 影响：手动添加、导入、历史恢复、项目导出/导入、柜型对比、调试快照和 Excel 明细都能看到同一个全局层数规则；设置全局 2 层时未自带层数的货物不会继续码到第三层或顶层躺倒填充。3D 同一标签在可见面上保持 full 大小，未朝向相机的面不再绘制文字。
-- 验证：新增 `src/lib/packing.test.ts` 覆盖全局默认限制与货物自带覆盖；新增 `src/lib/cameraFacingLabels.test.ts` 覆盖相机方向到本地面的选择；新增 E2E `applies global max stack layers to cargo without per-item limits` 覆盖 UI 设置、明细表已装/未装和层数结果；新增 E2E `moves 3D labels to camera-facing faces across camera views` 覆盖 3D iso/front/side/top 朝向面切换。聚焦 Vitest、`npx tsc -b`、`npm run lint`、`npm test`、`npm run build` 和两项 targeted E2E 已通过；完整本地 `npm run test:e2e` 为 76 passed / 1 skipped / 1 failed，唯一失败仍是既有 `e2e/manual-3d.spec.ts:170` 手动旋转语义待裁定事项，与本轮无关。
+- 验证：新增 `src/lib/packing.test.ts` 覆盖全局默认限制与货物自带覆盖，并用 20GP + 400×500×600 密集货物回归确认无限制时会出现 `LHW` 顶层补装、全局 2 层时该补装消失；新增 `src/lib/cameraFacingLabels.test.ts` 覆盖相机方向到本地面的选择；新增 E2E `applies global max stack layers to cargo without per-item limits` 覆盖 UI 设置、明细表已装/未装和层数结果；新增 E2E `moves 3D labels to camera-facing faces across camera views` 覆盖 3D iso/front/side/top 朝向面切换。聚焦 Vitest、`npx tsc -b`、`npm run lint`、`npm test`、`npm run build` 和两项 targeted E2E 已通过；完整本地 `npm run test:e2e` 为 76 passed / 1 skipped / 1 failed，唯一失败仍是既有 `e2e/manual-3d.spec.ts:170` 手动旋转语义待裁定事项，与本轮无关。
 
 ## 2026-06-04 第三十一轮：快照 5/6 显示问题不改变装箱几何
 

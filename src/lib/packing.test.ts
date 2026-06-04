@@ -435,6 +435,31 @@ describe('calculatePacking', () => {
     expect(cargoOverride.placed.every((box) => box.maxStackLayers === 3)).toBe(true)
   })
 
+  it('uses the global default stack limit to stop dense tilted top-fill boxes', () => {
+    const container = containers[0]
+    const items = [
+      cargo({
+        id: 'dense-top-fill',
+        label: 'D',
+        length: 400,
+        width: 500,
+        height: 600,
+        quantity: 210,
+        canRotate: true,
+      }),
+    ]
+
+    const unrestricted = calculatePacking(container, items, { loadingMode: 'quantity' })
+    const unrestrictedTopFill = unrestricted.placed.filter((box) => box.orientationKey === 'LHW' && box.z >= 1800)
+    expect(unrestrictedTopFill.length).toBeGreaterThan(0)
+
+    const capped = calculatePacking(container, items, { loadingMode: 'quantity', defaultMaxStackLayers: 2 })
+    expectValidPacking(container, capped)
+    expect(Math.max(...capped.placed.map((box) => box.z))).toBeLessThanOrEqual(600)
+    expect(capped.placed.some((box) => box.orientationKey === 'LHW' && box.z >= 1800)).toBe(false)
+    expect(capped.unplaced[0]).toMatchObject({ cargoId: 'dense-top-fill', reasonCode: UNPLACED_REASON_CODES.NO_SPACE })
+  })
+
   it('rejects boxes that exceed dimensions', () => {
     const result = calculatePacking(containers[0], [cargo({ length: 9000 })])
 
