@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { ContainerSpec, PlacedBox } from '../types'
-import { MIN_SUPPORT_OVERLAP_RATIO } from '../lib/manualPlacement'
+import { MIN_SUPPORT_OVERLAP_RATIO, type ManualRotationDirection } from '../lib/manualPlacement'
 import { snapToGrid } from '../lib/snap'
 import { resolveDropTarget } from '../lib/sceneDrop'
 import { snapToEdges } from '../lib/snapEdges'
@@ -30,6 +30,12 @@ export type HoverBoxInfo = {
   clientY: number
 }
 
+export type SelectedBoxScreenRect = {
+  x: number
+  y: number
+  visible: boolean
+}
+
 type ContainerSceneProps = {
   container: ContainerSpec
   boxes: PlacedBox[]
@@ -47,10 +53,11 @@ type ContainerSceneProps = {
   manualEditable?: boolean
   onManualMove?: (boxId: string, x: number, y: number, z?: number) => void
   onManualDropFromPool?: (cargoId: string, x: number, y: number, z?: number) => void
-  onManualRotate?: (boxId: string, direction?: 'right' | 'down') => void
+  onManualRotate?: (boxId: string, direction?: ManualRotationDirection) => void
   onManualDelete?: (boxId: string) => void
   onManualOperationRejected?: (operation: 'move' | 'drop', boxId?: string, cargoId?: string) => void
   selectedManualBoxId?: string | null
+  onSelectedBoxScreenRect?: (rect: SelectedBoxScreenRect | null) => void
   onClearSelection?: () => void
   onHoverBox?: (info: HoverBoxInfo | null) => void
   cogOverlay?: CogOverlay | null
@@ -498,6 +505,7 @@ export function ContainerScene({
   onManualDelete,
   onManualOperationRejected,
   selectedManualBoxId,
+  onSelectedBoxScreenRect,
   onClearSelection,
   onHoverBox,
   cogOverlay,
@@ -525,6 +533,8 @@ export function ContainerScene({
   const onSelectBoxRef = useRef<typeof onSelectBox>(onSelectBox)
   const onClearSelectionRef = useRef<typeof onClearSelection>(onClearSelection)
   const onHoverBoxRef = useRef<typeof onHoverBox>(onHoverBox)
+  const onSelectedBoxScreenRectRef = useRef<typeof onSelectedBoxScreenRect>(onSelectedBoxScreenRect)
+  const lastSelectedBoxScreenRectRef = useRef<SelectedBoxScreenRect | null>(null)
   const selectedManualBoxIdRef = useRef<string | null>(selectedManualBoxId ?? null)
   const visualPropsRef = useRef({ activeLayerId, activeLabelId, selectedBoxId, highlightBoxIds, boxOpacityOverride })
 
@@ -592,6 +602,10 @@ export function ContainerScene({
   useEffect(() => {
     onHoverBoxRef.current = onHoverBox
   }, [onHoverBox])
+
+  useEffect(() => {
+    onSelectedBoxScreenRectRef.current = onSelectedBoxScreenRect
+  }, [onSelectedBoxScreenRect])
 
   useEffect(() => {
     selectedManualBoxIdRef.current = selectedManualBoxId ?? null
@@ -713,6 +727,43 @@ export function ContainerScene({
       x: (worldX + length / 2) / scale,
       y: (worldZ + width / 2) / scale,
     })
+
+    const emitSelectedBoxScreenRect = (rect: SelectedBoxScreenRect | null) => {
+      const last = lastSelectedBoxScreenRectRef.current
+      const changed = !last || !rect
+        ? last !== rect
+        : Math.abs(last.x - rect.x) > 1 || Math.abs(last.y - rect.y) > 1 || last.visible !== rect.visible
+      if (!changed) return
+      lastSelectedBoxScreenRectRef.current = rect
+      onSelectedBoxScreenRectRef.current?.(rect)
+    }
+
+    const updateSelectedBoxScreenRect = () => {
+      if (!manualEditableRef.current) {
+        emitSelectedBoxScreenRect(null)
+        return
+      }
+      const boxId = selectedManualBoxIdRef.current
+      if (!boxId) {
+        emitSelectedBoxScreenRect(null)
+        return
+      }
+      const entry = sceneState.meshEntries.get(boxId)
+      if (!entry || !mount.clientWidth || !mount.clientHeight) {
+        emitSelectedBoxScreenRect(null)
+        return
+      }
+      const topCenter = worldCenterForBox(entry.box, scale, length, width)
+      topCenter.y += entry.box.height * scale / 2
+      const projected = topCenter.project(camera)
+      const x = ((projected.x + 1) / 2) * mount.clientWidth
+      const y = ((1 - projected.y) / 2) * mount.clientHeight
+      emitSelectedBoxScreenRect({
+        x,
+        y,
+        visible: projected.z >= -1 && projected.z <= 1 && x >= 0 && x <= mount.clientWidth && y >= 0 && y <= mount.clientHeight,
+      })
+    }
 
     type DragState = {
       boxId: string
@@ -1160,6 +1211,7 @@ export function ContainerScene({
       if (controls.enabled) {
         controls.update()
       }
+      updateSelectedBoxScreenRect()
       renderer.render(scene, camera)
     }
     animate()
@@ -1227,6 +1279,7 @@ export function ContainerScene({
       renderer.domElement.removeEventListener('drop', onDrop)
       controls.removeEventListener('change', refreshCameraFacingLabels)
       window.removeEventListener('keydown', onKeyDown)
+      emitSelectedBoxScreenRect(null)
       mount.removeChild(renderer.domElement)
       if (sceneStateRef.current === sceneState) {
         sceneStateRef.current = null

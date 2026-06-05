@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, useEffect } from 'react'
 import type { FormEvent, DragEvent as ReactDragEvent } from 'react'
 import * as XLSX from 'xlsx'
 import { ContainerScene } from './components/ContainerScene'
-import type { SceneViewMode } from './components/ContainerScene'
+import type { SceneViewMode, SelectedBoxScreenRect } from './components/ContainerScene'
 import { ContainerPlan2D } from './components/ContainerPlan2D'
 import type { PlanViewMode } from './components/ContainerPlan2D'
 import { ManualPlacement2D } from './components/ManualPlacement2D'
@@ -20,7 +20,7 @@ import { computeRemainingCapacity } from './lib/remainingCapacity'
 import { suggestFillItems } from './lib/fillSuggestion'
 import { buildStandardCargoItem, STANDARD_BOXES, STANDARD_BOX_MAX_PER_CLICK } from './data/standardBoxes'
 import { FillSuggestionPanel } from './components/FillSuggestionPanel'
-import { ManualPrecisePanel } from './components/ManualPrecisePanel'
+import { ManualRotateOverlay } from './components/ManualRotateOverlay'
 import { ReleaseNotesButton } from './components/ReleaseNotesButton'
 import { buildCogOverlay } from './lib/cogVisual'
 import { deriveCogOverlayState } from './lib/cogView'
@@ -31,21 +31,21 @@ import {
   buildPool as manualBuildPool,
   commit as manualCommit,
   dryRunRotation as manualDryRunRotation,
-  dryRunOrientation as manualDryRunOrientation,
   emptyHistory as manualEmptyHistory,
   isBlockingManualIssue,
   makeManualBox,
   redo as manualRedo,
   removeBox as manualRemoveBox,
   rotateBoxDown90 as manualRotateBoxDown90,
+  rotateBoxLeft90 as manualRotateBoxLeft90,
   rotateBoxRight90 as manualRotateBoxRight90,
-  setManualBoxOrientation,
+  rotateBoxUp90 as manualRotateBoxUp90,
   setBoxPosition as manualSetBoxPosition,
   toPlacedBoxes as manualToPlacedBoxes,
   undo as manualUndo,
   validateDraft as manualValidateDraft,
 } from './lib/manualPlacement'
-import type { ManualDraft, ManualHistory, OrientationKey, ValidationIssue } from './lib/manualPlacement'
+import type { ManualDraft, ManualHistory, ManualRotationDirection, OrientationKey, ValidationIssue } from './lib/manualPlacement'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from './data/containers'
 import { buildExportPlanRows } from './lib/exportPlan'
 import type { HistoryPlan } from './lib/historyPlans'
@@ -301,23 +301,17 @@ const copy = {
     remainingFloorLabel: 'Floor used',
     remainingLabel: 'left',
     manualNoIssues: 'No validation issues',
-    manualRotate: 'Rotate 90°',
-    manualRotateAll: 'Cycle orientation',
-    manualDelete: 'Delete',
-    undo: 'Undo',
-    redo: 'Redo',
-    manualHint: 'Drag cargo from the pool. Open keyboard help for Z-axis and shortcut details.',
     manualKeyboardHelp: 'Keyboard help',
     manualKeyboardHelpItems: [
       'Drag: move on X/Y plane',
       'Shift + drag: move on Z axis',
+      'Middle mouse: pan camera; right mouse: rotate camera; wheel: zoom',
       'Arrow keys: move X/Y by 10 mm',
       'PageUp/PageDown: move Z by 10 mm',
       'Modifiers: Shift = 100 mm, Ctrl/Cmd = 1 mm',
       'R: rotate right 90°, Shift + R: rotate down 90°',
       'Delete: remove, Esc: clear selection',
     ],
-    manualRotateHint: 'Drag with left mouse to move boxes; middle mouse pans the camera; right mouse drag rotates; wheel zooms.',
     containerChangedNotice: 'Container changed. Recalculate to refresh the automatic placement.',
     manualIssueBoundary: 'exceeds the effective container bounds',
     manualIssueOverlap: 'overlaps another cargo box',
@@ -549,23 +543,17 @@ const copy = {
     remainingFloorLabel: '占地占用',
     remainingLabel: '剩余',
     manualNoIssues: '当前无校验问题',
-    manualRotate: '旋转 90°',
-    manualRotateAll: '切换六向',
-    manualDelete: '删除',
-    undo: '撤销',
-    redo: '重做',
-    manualHint: '从待放置池拖入货物。打开键盘帮助查看 Z 轴与快捷键。',
     manualKeyboardHelp: '键盘帮助',
     manualKeyboardHelpItems: [
       '拖拽：在 X/Y 平面移动',
       'Shift + 拖拽：沿 Z 轴移动',
+      '中键：平移视角；右键：旋转视角；滚轮：缩放',
       '方向键：X/Y 每次移动 10 mm',
       'PageUp/PageDown：Z 轴每次移动 10 mm',
       '修饰键：Shift = 100 mm，Ctrl/Cmd = 1 mm',
       'R：向右旋转 90°，Shift + R：向下旋转 90°',
       'Delete：删除，Esc：取消选中',
     ],
-    manualRotateHint: '左键拖动可移动箱体；中键平移视角；右键旋转视角；滚轮缩放。',
     containerChangedNotice: '已更换货柜，请重新计算以刷新自动排布。',
     manualIssueBoundary: '超出有效货柜边界',
     manualIssueOverlap: '与其他货物发生碰撞',
@@ -618,7 +606,7 @@ type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback'
 type NavTarget = 'overview' | 'report' | 'cargo' | 'container' | 'history' | 'users'
 
 function buildRotationNotice(
-  dry: ReturnType<typeof manualDryRunRotation> | ReturnType<typeof manualDryRunOrientation>,
+  dry: ReturnType<typeof manualDryRunRotation>,
   container: ContainerSpec,
   locale: Locale,
 ): string {
@@ -667,6 +655,20 @@ function buildRotationNotice(
       : 'Rotated box would rest on non-stackable cargo'
   }
   return locale === 'zh' ? '旋转后不满足校验，已撤销' : 'Rotation rejected by validation'
+}
+
+function rotateManualDraft(draft: ManualDraft, boxId: string, direction: ManualRotationDirection): ManualDraft {
+  switch (direction) {
+    case 'left':
+      return manualRotateBoxLeft90(draft, boxId)
+    case 'down':
+      return manualRotateBoxDown90(draft, boxId)
+    case 'up':
+      return manualRotateBoxUp90(draft, boxId)
+    case 'right':
+    default:
+      return manualRotateBoxRight90(draft, boxId)
+  }
 }
 
 const emptyForm: CargoForm = {
@@ -899,6 +901,7 @@ function Workbench() {
   const [manualHistory, setManualHistory] = useState<ManualHistory>(() => manualEmptyHistory())
   const [manualSelectedId, setManualSelectedId] = useState<string | null>(null)
   const [manualHelpOpen, setManualHelpOpen] = useState(false)
+  const [selectedBoxScreenRect, setSelectedBoxScreenRect] = useState<SelectedBoxScreenRect | null>(null)
   const [manualNotice, setManualNotice] = useState<ManualOperationNotice | null>(null)
   const [measurements, setMeasurements] = useState<MeasurementAnnotation[]>([])
   const [measurementDraftPoint, setMeasurementDraftPoint] = useState<Point3D | null>(null)
@@ -1149,13 +1152,14 @@ function Workbench() {
     () => manualToPlacedBoxes(manualDraft, manualInvalidBoxIds),
     [manualDraft, manualInvalidBoxIds],
   )
+  const selectedManualBox = useMemo(
+    () => manualDraft.boxes.find((box) => box.id === manualSelectedId) ?? null,
+    [manualDraft, manualSelectedId],
+  )
   const manualCapacity = useMemo(
     () => computeRemainingCapacity(manualPlacedBoxes, renderingContainer),
     [manualPlacedBoxes, renderingContainer],
   )
-  const manualCanUndo = manualHistory.past.length > 0
-  const manualCanRedo = manualHistory.future.length > 0
-
   const commitManual = (nextDraft: ManualDraft) => {
     setManualHistory((current) => manualCommit(current, nextDraft))
   }
@@ -1248,41 +1252,19 @@ function Workbench() {
     setPoolDragInfo(null)
   }
 
-  const handleManualUndo = () => {
-    setManualHistory((current) => manualUndo(current))
-  }
-
-  const handleManualRedo = () => {
-    setManualHistory((current) => manualRedo(current))
-  }
-
-  const commitManualOrientation = (boxId: string, orientationKey: OrientationKey) => {
-    const dry = manualDryRunOrientation(manualDraft, boxId, orientationKey, renderingContainer, placementSettings.supportPolicy)
-    if (!dry.ok) {
-      setRotationNotice(buildRotationNotice(dry, renderingContainer, locale))
-      notifyManualRejected('rotate', boxId, undefined, dry.issues)
-      return
-    }
-    const nextDraft = setManualBoxOrientation(manualDraft, boxId, orientationKey)
-    setRotationNotice('')
-    commitManual(nextDraft)
-  }
-
-  const handleManualRotate = (direction: 'right' | 'down' = 'right') => {
+  const handleManualRotate = (direction: ManualRotationDirection = 'right') => {
     if (!manualSelectedId) return
     handleManualRotateBox(manualSelectedId, direction)
   }
 
-  const handleManualRotateBox = (boxId: string, direction: 'right' | 'down' = 'right') => {
+  const handleManualRotateBox = (boxId: string, direction: ManualRotationDirection = 'right') => {
     const dry = manualDryRunRotation(manualDraft, boxId, renderingContainer, direction, placementSettings.supportPolicy)
     if (!dry.ok) {
       setRotationNotice(buildRotationNotice(dry, renderingContainer, locale))
       notifyManualRejected('rotate', boxId, undefined, dry.issues)
       return
     }
-    const nextDraft = direction === 'down'
-      ? manualRotateBoxDown90(manualDraft, boxId)
-      : manualRotateBoxRight90(manualDraft, boxId)
+    const nextDraft = rotateManualDraft(manualDraft, boxId, direction)
     setRotationNotice('')
     setManualNotice(null)
     commitManual(nextDraft)
@@ -1374,7 +1356,7 @@ function Workbench() {
 
       if ((event.key === 'r' || event.key === 'R') && manualSelectedId) {
         event.preventDefault()
-        const direction = event.shiftKey ? 'down' : 'right'
+        const direction: ManualRotationDirection = event.shiftKey ? 'down' : 'right'
         const dry = manualDryRunRotation(manualDraft, manualSelectedId, renderingContainer, direction, placementSettings.supportPolicy)
         if (!dry.ok) {
           setRotationNotice(buildRotationNotice(dry, renderingContainer, locale))
@@ -1386,9 +1368,7 @@ function Workbench() {
           }))
           return
         }
-        const nextDraft = direction === 'down'
-          ? manualRotateBoxDown90(manualDraft, manualSelectedId)
-          : manualRotateBoxRight90(manualDraft, manualSelectedId)
+        const nextDraft = rotateManualDraft(manualDraft, manualSelectedId, direction)
         setRotationNotice('')
         setManualNotice(null)
         setManualHistory((current) => manualCommit(current, nextDraft))
@@ -2939,71 +2919,6 @@ function Workbench() {
             >
               {placementMode === 'manual' ? (
                 <div className="flex h-full w-full flex-col gap-3 p-4" data-testid="manual-workspace" data-workspace-maximized={workspaceMaximized ? 'true' : 'false'}>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      className="archive-button"
-                      type="button"
-                      onClick={handleManualUndo}
-                      disabled={!manualCanUndo}
-                      data-testid="manual-undo"
-                    >
-                      {t.undo}
-                    </button>
-                    <button
-                      className="archive-button"
-                      type="button"
-                      onClick={handleManualRedo}
-                      disabled={!manualCanRedo}
-                      data-testid="manual-redo"
-                    >
-                      {t.redo}
-                    </button>
-                    <button
-                      className="archive-button"
-                      type="button"
-                      onClick={() => handleManualRotate('right')}
-                      disabled={!manualSelectedId}
-                      data-testid="manual-rotate"
-                    >
-                      {t.manualRotate}
-                    </button>
-                    <button
-                      className="archive-button"
-                      type="button"
-                      onClick={handleManualDelete}
-                      disabled={!manualSelectedId}
-                      data-testid="manual-delete"
-                    >
-                      {t.manualDelete}
-                    </button>
-                    <div className="relative">
-                      <button
-                        className="archive-button"
-                        type="button"
-                        aria-expanded={manualHelpOpen}
-                        data-testid="manual-keyboard-help"
-                        onClick={() => setManualHelpOpen((current) => !current)}
-                      >
-                        {t.manualKeyboardHelp}
-                      </button>
-                      {manualHelpOpen && (
-                        <div
-                          className="absolute right-0 z-20 mt-2 w-72 rounded-lg border border-[#cbd5e1] bg-white p-3 text-xs text-[#334155] shadow-xl"
-                          data-testid="manual-keyboard-help-popover"
-                        >
-                          <ul className="list-inside list-disc space-y-1">
-                            {t.manualKeyboardHelpItems.map((item) => (
-                              <li key={item}>{item}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                    <span className="ml-auto text-xs text-[#475569]">{t.manualHint}</span>
-                  </div>
-                  <div className="rounded-xl border border-[#bfdbfe] bg-[#eff6ff] p-3 text-xs font-semibold text-[#1d4ed8]" data-testid="manual-rotate-hint">
-                    {t.manualRotateHint}
-                  </div>
                   {manualNotice && (
                     <div
                       className="rounded-xl border border-[#fbbf24] bg-[#fffbeb] p-3 text-xs font-semibold text-[#92400e]"
@@ -3088,6 +3003,29 @@ function Workbench() {
                       >
                         {workspaceMaximized ? t.restoreManual : t.maximizeManual}
                       </button>
+                      <div className="absolute left-3 top-3 z-30">
+                        <button
+                          className="archive-tab bg-white/95 shadow-lg"
+                          type="button"
+                          aria-expanded={manualHelpOpen}
+                          data-testid="manual-keyboard-help"
+                          onClick={() => setManualHelpOpen((current) => !current)}
+                        >
+                          {t.manualKeyboardHelp}
+                        </button>
+                        {manualHelpOpen && (
+                          <div
+                            className="mt-2 w-72 rounded-lg border border-[#cbd5e1] bg-white p-3 text-xs text-[#334155] shadow-xl"
+                            data-testid="manual-keyboard-help-popover"
+                          >
+                            <ul className="list-inside list-disc space-y-1">
+                              {t.manualKeyboardHelpItems.map((item) => (
+                                <li key={item}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
                       {workspaceView === '3d' ? (
                         <ContainerScene
                           activeLabelId={'all'}
@@ -3111,6 +3049,7 @@ function Workbench() {
                           onManualMove={handleManualMoveBox}
                           onManualOperationRejected={(operation, boxId, cargoId) => notifyManualRejected(operation, boxId, cargoId)}
                           onManualRotate={handleManualRotateBox}
+                          onSelectedBoxScreenRect={setSelectedBoxScreenRect}
                           onSelectBox={setManualSelectedId}
                         />
                       ) : (
@@ -3130,24 +3069,23 @@ function Workbench() {
                           onDropFromPool={handleManualDropFromPool}
                         />
                       )}
-                    </div>
-                    <aside className="flex w-72 shrink-0 flex-col gap-2 overflow-auto">
-                        <ManualPrecisePanel
+                      {workspaceView === '3d' && selectedManualBox && selectedBoxScreenRect?.visible && (
+                        <ManualRotateOverlay
                           container={{ length: renderingContainer.length, width: renderingContainer.width, height: renderingContainer.height }}
                           locale={locale}
                           placementSettings={placementSettings}
-                          selected={manualDraft.boxes.find((b) => b.id === manualSelectedId) ?? null}
-                        onDelete={handleManualDelete}
-                        onMove={(x, y, z) => {
-                          if (!manualSelectedId) return
-                          handleManualMoveBox(manualSelectedId, x, y, z)
-                        }}
-                        onRotate={() => handleManualRotate('right')}
-                        onSetOrientation={(orientationKey) => {
-                          if (!manualSelectedId) return
-                          commitManualOrientation(manualSelectedId, orientationKey)
-                        }}
-                      />
+                          screenRect={selectedBoxScreenRect}
+                          selected={selectedManualBox}
+                          onDelete={handleManualDelete}
+                          onMove={(x, y, z) => {
+                            if (!manualSelectedId) return
+                            handleManualMoveBox(manualSelectedId, x, y, z)
+                          }}
+                          onRotate={handleManualRotate}
+                        />
+                      )}
+                    </div>
+                    <aside className="flex w-72 shrink-0 flex-col gap-2 overflow-auto">
                       <div className="rounded-xl border border-[#e5e7eb] bg-white p-3 text-xs text-[#475569]" data-testid="measurement-list">
                         <div className="mb-2 flex items-center justify-between">
                           <h3 className="text-sm font-bold text-[#0f172a]">{t.measurementList}</h3>

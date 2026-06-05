@@ -9,8 +9,13 @@
   - Grounded boxes now snap back to `z=0` after a height-changing rotation, while x/y still rotate around the footprint centre.
   - Stacked boxes retain the previous vertical centre compensation.
   - Added explicit world-axis left/right yaw and up/down pitch rotations, and extended dry-run validation to all four directions.
-- Verification so far: `npx vitest run src/lib/manualPlacement.test.ts` passed 40 tests.
-- Remaining in this round: selected-box screen projection, floating rotation/precise overlay, old UI removal, E2E migration, full local verification, deploy, and remote E2E.
+- Completed subtask: rebuilt the manual 3D selected-box interaction.
+  - `ContainerScene` now projects the selected manual box to screen coordinates so React can anchor a floating overlay beside the box.
+  - Added `ManualRotateOverlay` with four world-axis rotation buttons, delete, orientation readout, and an expandable XYZ/alignment fine-tune panel.
+  - Removed the old manual toolbar and `ManualPrecisePanel`; keyboard shortcuts remain and are discoverable from the canvas help button.
+  - Updated the notification bar release notes for the shipped manual rotation overlay.
+- Verification so far: `npx vitest run src/lib/manualPlacement.test.ts` passed 40 tests; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "R 与 Shift|浮层|键盘帮助|旋转提示|最大化保留|选中前不显示"` passed 6 tests.
+- Remaining in this round: full local verification, deploy, and remote E2E.
 
 ## 2026-06-04 (Round 32 Top-Layer Visual Offset, Label Facing, Global Stack Limit)
 

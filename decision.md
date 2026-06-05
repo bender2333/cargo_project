@@ -12,6 +12,16 @@
 - 影响：关闭 2026-05-29 第二十九轮记录的手动旋转 `WHL` vs `WLH` 待裁定缺口；贴地箱不再因高度变化旋转被判定悬空。贴角旋转仍可能因 x/y 越界被显式阻断，语义不变。后续 UI 浮层可以直接暴露四向旋转按钮。
 - 验证：新增 `src/lib/manualPlacement.test.ts` 覆盖贴地箱高度变化后 `z=0`、`R` 后 `Shift+R` 可到 `WHL`、left/right 与 up/down 互为逆旋转，以及四方向 dry-run。`npx vitest run src/lib/manualPlacement.test.ts` 通过 40 项。
 
+## 2026-06-05 手动模式 3D 选中箱浮层替代旧工具栏
+
+- 背景：手动模式原工具栏和右侧精调面板把旋转、删除、朝向图和 XYZ 输入分散在画布外，用户需要先理解键盘或侧栏才能调整选中箱体。PRD/Review 本轮目标要求选中货物后在其旁边浮现可操作图标，并移除旧工具栏和精调面板。
+- 选项：
+  - 保留旧工具栏和侧栏，同时增加浮层：短期兼容性高，但会形成两套入口，用户无法判断哪个是主路径。
+  - 移除旧工具栏和侧栏，保留键盘快捷键，把旋转、删除、朝向显示和 XYZ 精调集中到 3D 选中箱浮层。
+- 决策：采用第二种。`ContainerScene` 每帧投影选中箱体顶点并向 `Workbench` 回传屏幕坐标；`ManualRotateOverlay` 在 3D 画布内显示四向世界轴旋转、删除、朝向示意和可展开精调。旧手动工具栏、`manual-rotate-hint` 和 `ManualPrecisePanel` 删除；键盘帮助入口移到画布角落，所有原快捷键继续保留。
+- 影响：手动 3D 的主操作入口从画布外侧栏变为选中箱旁浮层；最大化工作区时仍保留 pool 与测量列表，精调能力只在选中箱体后出现。E2E 断言从旧的空精调面板/旋转提示迁移到新浮层、帮助入口和 `manual-orientation-diagram` 数据载体。
+- 验证：`npx tsc -b` 通过；targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "R 与 Shift|浮层|键盘帮助|旋转提示|最大化保留|选中前不显示"` 通过 6 项，覆盖长期 `WHL` 朝向断言、新浮层出现/点击旋转、选中前隐藏和最大化保留关键工具。
+
 ## 2026-06-04 第三十二轮：全局堆叠层数兜底与 3D 朝向面标签
 
 - 背景：第三十二轮 review 复核 `cargo-debug-snapshot (8).json` 后确认，顶层躺倒箱并非碰撞算法重叠，而是这批手动货物没有携带 `maxStackLayers`；同时 3D 同一标签在不同层显示 full/compact，造成上下大小不一致。

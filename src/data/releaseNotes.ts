@@ -14,6 +14,23 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-06-05-r33-manual-rotation-overlay',
+    date: '2026-06-05',
+    title: { en: 'Manual 3D rotation overlay', zh: '手动 3D 旋转浮层' },
+    items: {
+      en: [
+        'Selected manual cargo now shows a floating 3D control overlay with left/right yaw, up/down pitch, delete, and fine-tune actions.',
+        'Grounded cargo stays on the floor after height-changing rotation, so R then Shift+R can reach the expected WHL orientation instead of being rejected as floating.',
+        'The old manual toolbar and side precise panel were removed; keyboard shortcuts remain available from the canvas help button.',
+      ],
+      zh: [
+        '手动模式选中货物后，现在会在 3D 箱体旁显示浮动操作栏，支持左/右转、上/下翻、删除和精调。',
+        '贴地货物在高度变化旋转后会重新落地，R 后再 Shift+R 可以到达预期的 WHL 朝向，不再因悬空校验被拒绝。',
+        '旧的手动工具栏和右侧精调面板已移除；快捷键仍保留，并可从画布内键盘帮助查看。',
+      ],
+    },
+  },
+  {
     version: '2026-06-04-r32-global-stack-facing-labels',
     date: '2026-06-04',
     title: { en: 'Global stack limit and camera-facing 3D labels', zh: '全局堆叠层数 / 3D 朝向面标签' },
