@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-06-05 (Manual 3D Rotation Overlay and Grounded Rotation)
+
+- Completed subtask: recorded the manual 3D rotation/orientation interaction implementation plan in `REVIEW.md`.
+  - Confirmed the current step scope is floating selected-box rotation controls, grounded rotation semantics, and removal of the old manual toolbar/precise side panel.
+  - Kept ViewCube and the 3D orientation cube as follow-up work, not part of this slice.
+- Completed subtask: fixed manual grounded rotation semantics in `src/lib/manualPlacement.ts`.
+  - Grounded boxes now snap back to `z=0` after a height-changing rotation, while x/y still rotate around the footprint centre.
+  - Stacked boxes retain the previous vertical centre compensation.
+  - Added explicit world-axis left/right yaw and up/down pitch rotations, and extended dry-run validation to all four directions.
+- Verification so far: `npx vitest run src/lib/manualPlacement.test.ts` passed 40 tests.
+- Remaining in this round: selected-box screen projection, floating rotation/precise overlay, old UI removal, E2E migration, full local verification, deploy, and remote E2E.
+
 ## 2026-06-04 (Round 32 Top-Layer Visual Offset, Label Facing, Global Stack Limit)
 
 - Completed subtask: recorded the Round 32 review and implementation plan in `REVIEW.md`.

@@ -18,7 +18,9 @@ import {
   removeBox,
   rotateBox,
   rotateBoxDown90,
+  rotateBoxLeft90,
   rotateBoxRight90,
+  rotateBoxUp90,
   setManualBoxOrientation,
   setBoxPosition,
   toPlacedBoxes,
@@ -350,6 +352,98 @@ describe('manualPlacement', () => {
     ])
   })
 
+  it('rotates left as the inverse of right', () => {
+    const original = addBox(emptyDraft(), makeManualBox({
+      id: 'box-1',
+      cargoId: 'cargo-a',
+      label: 'A',
+      color: '#fff',
+      length: 400,
+      width: 500,
+      height: 600,
+      x: 500,
+      y: 500,
+    }))
+
+    const rightThenLeft = rotateBoxLeft90(rotateBoxRight90(original, 'box-1'), 'box-1').boxes[0]
+    expect(rightThenLeft).toMatchObject({
+      x: 500,
+      y: 500,
+      z: 0,
+      length: 400,
+      width: 500,
+      height: 600,
+      orientationKey: 'LWH',
+      yawQuarterTurn: 0,
+      pitchQuarterTurn: 0,
+      orientationAxes: { x: 'L+', y: 'W+', z: 'H+' },
+    })
+
+    let draft = original
+    for (let i = 0; i < 4; i += 1) {
+      draft = rotateBoxLeft90(draft, 'box-1')
+    }
+
+    expect(draft.boxes[0]).toMatchObject({
+      x: 500,
+      y: 500,
+      z: 0,
+      length: 400,
+      width: 500,
+      height: 600,
+      orientationKey: 'LWH',
+      yawQuarterTurn: 0,
+      pitchQuarterTurn: 0,
+      orientationAxes: { x: 'L+', y: 'W+', z: 'H+' },
+    })
+  })
+
+  it('rotates up as the inverse of down', () => {
+    const original = addBox(emptyDraft(), makeManualBox({
+      id: 'box-1',
+      cargoId: 'cargo-a',
+      label: 'A',
+      color: '#fff',
+      length: 400,
+      width: 500,
+      height: 600,
+      x: 500,
+      y: 500,
+    }))
+
+    const downThenUp = rotateBoxUp90(rotateBoxDown90(original, 'box-1'), 'box-1').boxes[0]
+    expect(downThenUp).toMatchObject({
+      x: 500,
+      y: 500,
+      z: 0,
+      length: 400,
+      width: 500,
+      height: 600,
+      orientationKey: 'LWH',
+      yawQuarterTurn: 0,
+      pitchQuarterTurn: 0,
+      orientationAxes: { x: 'L+', y: 'W+', z: 'H+' },
+    })
+
+    let draft = original
+    for (let i = 0; i < 4; i += 1) {
+      draft = rotateBoxUp90(draft, 'box-1')
+    }
+
+    expect(draft.boxes[0]).toMatchObject({
+      x: 500,
+      y: 500,
+      z: 0,
+      length: 400,
+      width: 500,
+      height: 600,
+      orientationKey: 'LWH',
+      yawQuarterTurn: 0,
+      pitchQuarterTurn: 0,
+      orientationAxes: { x: 'L+', y: 'W+', z: 'H+' },
+    })
+  })
+
   it('dryRunRotation validates the requested spatial rotation direction', () => {
     const draft = addBox(emptyDraft(), makeManualBox({
       id: 'box-1',
@@ -365,6 +459,53 @@ describe('manualPlacement', () => {
 
     expect(dryRunRotation(draft, 'box-1', container(), 'right').rotatedBox?.orientationKey).toBe('WLH')
     expect(dryRunRotation(draft, 'box-1', container(), 'down').rotatedBox?.orientationKey).toBe('LHW')
+    expect(dryRunRotation(draft, 'box-1', container(), 'left').rotatedBox?.orientationKey).toBe('WLH')
+    expect(dryRunRotation(draft, 'box-1', container(), 'up').rotatedBox?.orientationKey).toBe('LHW')
+  })
+
+  it('keeps grounded boxes on the floor when rotation changes height', () => {
+    const draft = addBox(emptyDraft(), makeManualBox({
+      id: 'box-1',
+      cargoId: 'cargo-a',
+      label: 'A',
+      color: '#fff',
+      length: 400,
+      width: 500,
+      height: 600,
+      x: 500,
+      y: 500,
+      z: 0,
+    }))
+
+    const down = rotateBoxDown90(draft, 'box-1')
+    const rotated = down.boxes[0]
+
+    expect(rotated).toMatchObject({ orientationKey: 'LHW', height: 500, z: 0 })
+    expect(validateDraft(down, container()).filter((issue) => issue.boxId === 'box-1')).toEqual([])
+  })
+
+  it('allows grounded R then Shift+R to reach WHL instead of floating back to WLH', () => {
+    const draft = rotateBoxRight90(addBox(emptyDraft(), makeManualBox({
+      id: 'box-1',
+      cargoId: 'cargo-a',
+      label: 'G',
+      color: '#fff',
+      length: 400,
+      width: 500,
+      height: 600,
+      x: 500,
+      y: 500,
+      z: 0,
+    })), 'box-1')
+
+    const dry = dryRunRotation(draft, 'box-1', container(), 'down')
+    const rotated = rotateBoxDown90(draft, 'box-1').boxes[0]
+
+    expect(draft.boxes[0]).toMatchObject({ orientationKey: 'WLH', z: 0 })
+    expect(dry.ok).toBe(true)
+    expect(dry.rotatedBox).toMatchObject({ orientationKey: 'WHL', z: 0 })
+    expect(dry.issues).toEqual([])
+    expect(rotated).toMatchObject({ orientationKey: 'WHL', z: 0 })
   })
 
   it('setManualBoxOrientation maps all six orientations from the original dimensions', () => {

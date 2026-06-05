@@ -7,6 +7,7 @@ export type QuarterTurn = 0 | 1 | 2 | 3
 export type BodyAxis = 'L' | 'W' | 'H'
 export type SignedBodyAxis = 'L+' | 'L-' | 'W+' | 'W-' | 'H+' | 'H-'
 export type OrientationAxes = { x: SignedBodyAxis; y: SignedBodyAxis; z: SignedBodyAxis }
+export type ManualRotationDirection = 'right' | 'left' | 'down' | 'up'
 
 export type ManualPlacedBox = {
   id: string
@@ -159,11 +160,27 @@ function rotateAxesRight(axes: OrientationAxes): OrientationAxes {
   }
 }
 
+function rotateAxesLeft(axes: OrientationAxes): OrientationAxes {
+  return {
+    x: flipAxis(axes.y),
+    y: axes.x,
+    z: axes.z,
+  }
+}
+
 function rotateAxesDown(axes: OrientationAxes): OrientationAxes {
   return {
     x: axes.x,
     y: axes.z,
     z: flipAxis(axes.y),
+  }
+}
+
+function rotateAxesUp(axes: OrientationAxes): OrientationAxes {
+  return {
+    x: axes.x,
+    y: flipAxis(axes.z),
+    z: axes.y,
   }
 }
 
@@ -202,11 +219,11 @@ function applyOrientation(
   const pitchQuarterTurn = turns.pitchQuarterTurn ?? inferred.pitchQuarterTurn
   const orientationAxes = turns.orientationAxes ?? canonicalAxesForOrientation(orientationKey)
   const nextDimensions = dimensionsForManualOrientation(base, orientationKey)
-  // Rotate about the box's geometric centre: the centre (cx,cy,cz) must stay fixed
-  // as the footprint changes, so the min corner shifts by half the dimension delta.
+  // X/Y still rotate about the footprint centre. Grounded boxes snap back to the floor
+  // after a height-changing rotation; stacked boxes keep their vertical centre.
   const x = box.x + (box.length - nextDimensions.length) / 2
   const y = box.y + (box.width - nextDimensions.width) / 2
-  const z = box.z + (box.height - nextDimensions.height) / 2
+  const z = box.z <= EPSILON ? 0 : box.z + (box.height - nextDimensions.height) / 2
   return {
     ...box,
     ...nextDimensions,
@@ -278,6 +295,20 @@ export function rotateBoxRight90(draft: ManualDraft, id: string): ManualDraft {
   }
 }
 
+export function rotateBoxLeft90(draft: ManualDraft, id: string): ManualDraft {
+  const target = draft.boxes.find((box) => box.id === id)
+  if (!target) return draft
+  const yawQuarterTurn = quarterTurn((target.yawQuarterTurn ?? inferTurnsForOrientation(target.orientationKey).yawQuarterTurn) - 1)
+  const pitchQuarterTurn = target.pitchQuarterTurn ?? inferTurnsForOrientation(target.orientationKey).pitchQuarterTurn
+  const orientationAxes = rotateAxesLeft(axesFromBox(target))
+  const orientationKey = orientationKeyForAxes(orientationAxes)
+  return {
+    boxes: draft.boxes.map((box) =>
+      box.id === id ? applyOrientation(box, orientationKey, { yawQuarterTurn, pitchQuarterTurn, orientationAxes }) : box,
+    ),
+  }
+}
+
 export function rotateBoxDown90(draft: ManualDraft, id: string): ManualDraft {
   const target = draft.boxes.find((box) => box.id === id)
   if (!target) return draft
@@ -285,6 +316,21 @@ export function rotateBoxDown90(draft: ManualDraft, id: string): ManualDraft {
   const yawQuarterTurn = target.yawQuarterTurn ?? inferred.yawQuarterTurn
   const pitchQuarterTurn = quarterTurn((target.pitchQuarterTurn ?? inferred.pitchQuarterTurn) + 1)
   const orientationAxes = rotateAxesDown(axesFromBox(target))
+  const orientationKey = orientationKeyForAxes(orientationAxes)
+  return {
+    boxes: draft.boxes.map((box) =>
+      box.id === id ? applyOrientation(box, orientationKey, { yawQuarterTurn, pitchQuarterTurn, orientationAxes }) : box,
+    ),
+  }
+}
+
+export function rotateBoxUp90(draft: ManualDraft, id: string): ManualDraft {
+  const target = draft.boxes.find((box) => box.id === id)
+  if (!target) return draft
+  const inferred = inferTurnsForOrientation(target.orientationKey)
+  const yawQuarterTurn = target.yawQuarterTurn ?? inferred.yawQuarterTurn
+  const pitchQuarterTurn = quarterTurn((target.pitchQuarterTurn ?? inferred.pitchQuarterTurn) - 1)
+  const orientationAxes = rotateAxesUp(axesFromBox(target))
   const orientationKey = orientationKeyForAxes(orientationAxes)
   return {
     boxes: draft.boxes.map((box) =>
@@ -304,14 +350,20 @@ export function cycleBoxOrientation(draft: ManualDraft, id: string): ManualDraft
  * mutating the draft. Used to surface a specific reason ("rotated width exceeds container
  * width by 100 mm" / "overlaps box B") before the user actually rotates.
  */
-export function dryRunRotation(draft: ManualDraft, id: string, container: ContainerSpec, direction: 'right' | 'down' = 'right', supportPolicy?: SupportPolicy): {
+export function dryRunRotation(draft: ManualDraft, id: string, container: ContainerSpec, direction: ManualRotationDirection = 'right', supportPolicy?: SupportPolicy): {
   ok: boolean
   rotatedBox: ManualPlacedBox | null
   issues: ValidationIssue[]
 } {
   const target = draft.boxes.find((b) => b.id === id)
   if (!target) return { ok: false, rotatedBox: null, issues: [] }
-  const rotated = direction === 'down' ? rotateBoxDown90(draft, id) : rotateBoxRight90(draft, id)
+  const rotated = direction === 'down'
+    ? rotateBoxDown90(draft, id)
+    : direction === 'left'
+      ? rotateBoxLeft90(draft, id)
+      : direction === 'up'
+        ? rotateBoxUp90(draft, id)
+        : rotateBoxRight90(draft, id)
   const rotatedBox = rotated.boxes.find((b) => b.id === id) ?? null
   const issues = validateDraft(rotated, container, supportPolicy).filter((issue) => issue.boxId === id)
   return { ok: !issues.some(isBlockingManualIssue), rotatedBox, issues }
