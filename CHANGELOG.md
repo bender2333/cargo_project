@@ -14,8 +14,8 @@
   - Added `ManualRotateOverlay` with four world-axis rotation buttons, delete, orientation readout, and an expandable XYZ/alignment fine-tune panel.
   - Removed the old manual toolbar and `ManualPrecisePanel`; keyboard shortcuts remain and are discoverable from the canvas help button.
   - Updated the notification bar release notes for the shipped manual rotation overlay.
-- Verification so far: `npx vitest run src/lib/manualPlacement.test.ts` passed 40 tests; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "R 与 Shift|浮层|键盘帮助|旋转提示|最大化保留|选中前不显示"` passed 6 tests.
-- Remaining in this round: full local verification, deploy, and remote E2E.
+- Local verification: `npx vitest run src/lib/manualPlacement.test.ts` passed 40 tests; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "R 与 Shift|浮层|键盘帮助|旋转提示|最大化保留|选中前不显示"` passed 6 tests; `npm run lint` passed; `npm test` passed 35 files / 210 tests; `npm run build` passed with the existing Vite chunk-size warning; full local `npm run test:e2e` ran 79 tests with 78 passed / 1 skipped / 0 failed.
+- Remaining in this round: deploy and remote E2E.
 
 ## 2026-06-04 (Round 32 Top-Layer Visual Offset, Label Facing, Global Stack Limit)
 
