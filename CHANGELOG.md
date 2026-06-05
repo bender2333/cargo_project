@@ -9,6 +9,11 @@
   - Removed the superseded HTML `ManualRotateOverlay`, selected-box screen projection callback, and Workbench-side overlay wiring.
   - E2E now verifies manual rotation state through `container-scene` data attributes because scene-native 3D handles have no DOM nodes.
 - Local verification: `npx tsc -b` passed; `npx vitest run src/lib/rotationGizmo.test.ts` passed 4 tests; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "弧形手柄|R 与 Shift|选中前"` passed 3 tests; `npm run lint` passed; `npm test` passed 36 files / 214 tests; `npm run build` passed with the existing Vite chunk-size warning; full local `npm run test:e2e` ran 79 tests with 78 passed / 1 skipped / 0 failed.
+- Completed subtask: deployed and remotely verified the 3D rotation gizmo.
+  - Deployment completed with `npm run deploy`; remote backup created at `/root/cargo_project-backup-20260605-060921`.
+  - Remote health check passed during deploy.
+  - Remote targeted E2E passed: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npx playwright test e2e/manual-3d.spec.ts --grep "弧形手柄|R 与 Shift|选中前"` passed 3 tests.
+  - Remote full E2E passed: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npm run test:e2e` ran 79 tests with 78 passed / 1 skipped / 0 failed.
 
 ## 2026-06-05 (Manual 3D Rotation Overlay and Grounded Rotation)
 
