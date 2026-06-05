@@ -17,6 +17,11 @@
   - OrbitControls camera changes refresh face/material assignment, so rotating the 3D scene moves the label to the newly visible face.
   - 2D label deconfliction remains unchanged; the compact downgrade is no longer used by 3D labels.
 - Verification: `npx vitest run src/lib/packing.test.ts src/lib/cameraFacingLabels.test.ts src/lib/placementSettings.test.ts src/lib/exportPlan.test.ts src/lib/historyPlans.test.ts src/lib/debugSnapshot.test.ts` passed 45 tests; `npx tsc -b` passed; `npm run lint` passed; `npm test` passed 35 files / 206 tests; `npm run build` passed with the existing Vite chunk-size warning; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "global max stack"` passed 1 test; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "moves 3D labels"` passed 1 test. Full local `npm run test:e2e` ran 78 tests with 76 passed / 1 skipped / 1 failed. The remaining failure is the known manual rotation expectation mismatch `WHL` expected vs `WLH` actual in `e2e/manual-3d.spec.ts:170`, unrelated to this automatic packing/global stack/3D label-facing round and already recorded in `decision.md`.
+- Completed subtask: deployed and remotely verified Round 32 on the public host.
+  - Deployment completed with `npm run deploy`; remote backup created at `/root/cargo_project-backup-20260605-014446`.
+  - Remote health check passed during deploy.
+  - Remote targeted E2E passed: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npx playwright test e2e/container-calc.spec.ts --grep "global max stack|moves 3D labels"` passed 2 tests.
+  - Remote full E2E result: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npm run test:e2e` ran 78 tests with 76 passed / 1 skipped / 1 failed. The only failure is the same known manual rotation expectation mismatch `WHL` expected vs `WLH` actual in `e2e/manual-3d.spec.ts:170`.
 
 ## 2026-06-04 (Round 31 Workspace Density and Stacking Parameters Review)
 
