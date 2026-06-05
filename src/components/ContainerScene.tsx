@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { ContainerSpec, PlacedBox } from '../types'
@@ -13,6 +13,12 @@ import { manualMoveCommitArgs } from '../lib/manualMoveCommit'
 import type { BoxLabelMode } from '../lib/labelDeconfliction'
 import { baseDimensionsFromPlaced, orientationAxesOf, orientationRenderingBasisVectors } from '../lib/orientationTransform'
 import { cameraFacingLabelFaces, type LocalBoxFace } from '../lib/cameraFacingLabels'
+import {
+  buildRotationGizmo,
+  disposeRotationGizmo,
+  setRotationGizmoHandleHovered,
+  type RotationGizmo,
+} from '../lib/rotationGizmo'
 
 export type SceneViewMode = 'iso' | 'top' | 'front' | 'side'
 
@@ -28,12 +34,6 @@ export type HoverBoxInfo = {
   z: number
   clientX: number
   clientY: number
-}
-
-export type SelectedBoxScreenRect = {
-  x: number
-  y: number
-  visible: boolean
 }
 
 type ContainerSceneProps = {
@@ -57,7 +57,6 @@ type ContainerSceneProps = {
   onManualDelete?: (boxId: string) => void
   onManualOperationRejected?: (operation: 'move' | 'drop', boxId?: string, cargoId?: string) => void
   selectedManualBoxId?: string | null
-  onSelectedBoxScreenRect?: (rect: SelectedBoxScreenRect | null) => void
   onClearSelection?: () => void
   onHoverBox?: (info: HoverBoxInfo | null) => void
   cogOverlay?: CogOverlay | null
@@ -71,6 +70,9 @@ type MeshEntry = {
   mesh: THREE.Mesh
   edges: THREE.LineSegments
   labelFaces: LocalBoxFace[]
+  animFrom?: THREE.Quaternion
+  animTo?: THREE.Quaternion
+  animStart?: number
 }
 
 type SceneState = {
@@ -86,6 +88,10 @@ type SceneState = {
   hoverBoxId: string | null
   ghost: { mesh: THREE.Mesh; edges: THREE.LineSegments } | null
   cogGroup: THREE.Group | null
+  rotationGizmo: RotationGizmo | null
+  rotationGizmoBoxSignature: string | null
+  rotationGizmoHovered: ManualRotationDirection | null
+  rotationGizmoVisible: boolean
   poolDrop: { x: number; y: number; z: number; invalid: boolean } | null
   scale: number
   length: number
@@ -404,6 +410,91 @@ function overlapAreaXY(
 const GHOST_VALID_COLOR = 0x22c55e
 const GHOST_INVALID_COLOR = 0xef4444
 const HOVER_HIGHLIGHT_COLOR = 0xf59e0b
+const ROTATION_ANIMATION_MS = 200
+
+function selectedAxesAttribute(box: PlacedBox | null) {
+  if (!box) return ''
+  const axes = orientationAxesOf(box)
+  return `X:${axes.x} Y:${axes.y} Z:${axes.z}`
+}
+
+function orientationAnimationSignature(box: PlacedBox) {
+  return `${box.orientationKey}:${selectedAxesAttribute(box)}`
+}
+
+function rotationGizmoSignature(box: PlacedBox) {
+  return `${box.length}:${box.width}:${box.height}`
+}
+
+function ensureRotationGizmo(state: SceneState, box: PlacedBox) {
+  const signature = rotationGizmoSignature(box)
+  if (state.rotationGizmo && state.rotationGizmoBoxSignature === signature) {
+    return state.rotationGizmo
+  }
+  if (state.rotationGizmo) {
+    state.scene.remove(state.rotationGizmo.group)
+    disposeRotationGizmo(state.rotationGizmo)
+  }
+  const gizmo = buildRotationGizmo(
+    { length: box.length, width: box.width, height: box.height },
+    state.scale,
+  )
+  gizmo.group.visible = false
+  state.scene.add(gizmo.group)
+  state.rotationGizmo = gizmo
+  state.rotationGizmoBoxSignature = signature
+  state.rotationGizmoHovered = null
+  return gizmo
+}
+
+function syncRotationGizmo(state: SceneState, boxId: string | null) {
+  const entry = boxId ? state.meshEntries.get(boxId) : null
+  if (!state.rotationGizmoVisible || !entry) {
+    if (state.rotationGizmo) state.rotationGizmo.group.visible = false
+    return
+  }
+  const gizmo = ensureRotationGizmo(state, entry.box)
+  gizmo.group.position.copy(worldCenterForBox(entry.box, state.scale, state.length, state.width))
+  gizmo.group.rotation.set(0, 0, 0)
+  gizmo.group.visible = true
+}
+
+function setRotationGizmoHover(state: SceneState, direction: ManualRotationDirection | null) {
+  if (state.rotationGizmoHovered === direction) return
+  state.rotationGizmoHovered = direction
+  if (!state.rotationGizmo) return
+  for (const handle of state.rotationGizmo.handles) {
+    setRotationGizmoHandleHovered(handle, handle.direction === direction)
+  }
+}
+
+function hitRotationGizmo(state: SceneState, raycaster: THREE.Raycaster): ManualRotationDirection | null {
+  if (!state.rotationGizmoVisible || !state.rotationGizmo) return null
+  const hit = raycaster.intersectObjects(state.rotationGizmo.pickables, false)[0]
+  const direction = hit?.object.userData.direction
+  if (direction === 'left' || direction === 'right' || direction === 'up' || direction === 'down') {
+    return direction
+  }
+  return null
+}
+
+function advanceBoxAnimations(state: SceneState, now: number) {
+  for (const entry of state.meshEntries.values()) {
+    if (!entry.animFrom || !entry.animTo || entry.animStart === undefined) continue
+    const progress = Math.min(1, (now - entry.animStart) / ROTATION_ANIMATION_MS)
+    const eased = 1 - Math.pow(1 - progress, 3)
+    const next = entry.animFrom.clone().slerp(entry.animTo, eased)
+    entry.mesh.quaternion.copy(next)
+    entry.edges.quaternion.copy(next)
+    if (progress >= 1) {
+      entry.mesh.quaternion.copy(entry.animTo)
+      entry.edges.quaternion.copy(entry.animTo)
+      entry.animFrom = undefined
+      entry.animTo = undefined
+      entry.animStart = undefined
+    }
+  }
+}
 
 function ensureGhost(state: SceneState, box: PlacedBox, scale: number, length: number, width: number) {
   if (!state.ghost) {
@@ -505,7 +596,6 @@ export function ContainerScene({
   onManualDelete,
   onManualOperationRejected,
   selectedManualBoxId,
-  onSelectedBoxScreenRect,
   onClearSelection,
   onHoverBox,
   cogOverlay,
@@ -533,10 +623,14 @@ export function ContainerScene({
   const onSelectBoxRef = useRef<typeof onSelectBox>(onSelectBox)
   const onClearSelectionRef = useRef<typeof onClearSelection>(onClearSelection)
   const onHoverBoxRef = useRef<typeof onHoverBox>(onHoverBox)
-  const onSelectedBoxScreenRectRef = useRef<typeof onSelectedBoxScreenRect>(onSelectedBoxScreenRect)
-  const lastSelectedBoxScreenRectRef = useRef<SelectedBoxScreenRect | null>(null)
   const selectedManualBoxIdRef = useRef<string | null>(selectedManualBoxId ?? null)
+  const [gizmoVisible, setGizmoVisible] = useState(false)
+  const gizmoVisibleRef = useRef(false)
   const visualPropsRef = useRef({ activeLayerId, activeLabelId, selectedBoxId, highlightBoxIds, boxOpacityOverride })
+  const selectedManualBox = useMemo(
+    () => boxes.find((box) => box.id === selectedManualBoxId) ?? null,
+    [boxes, selectedManualBoxId],
+  )
 
   useEffect(() => {
     invalidBoxIdsRef.current = invalidBoxIds ?? new Set()
@@ -604,12 +698,24 @@ export function ContainerScene({
   }, [onHoverBox])
 
   useEffect(() => {
-    onSelectedBoxScreenRectRef.current = onSelectedBoxScreenRect
-  }, [onSelectedBoxScreenRect])
-
-  useEffect(() => {
+    if (selectedManualBoxIdRef.current !== (selectedManualBoxId ?? null)) {
+      gizmoVisibleRef.current = false
+      setGizmoVisible(false)
+      if (sceneStateRef.current) {
+        sceneStateRef.current.rotationGizmoVisible = false
+        syncRotationGizmo(sceneStateRef.current, null)
+      }
+    }
     selectedManualBoxIdRef.current = selectedManualBoxId ?? null
   }, [selectedManualBoxId])
+
+  useEffect(() => {
+    gizmoVisibleRef.current = gizmoVisible
+    if (sceneStateRef.current) {
+      sceneStateRef.current.rotationGizmoVisible = gizmoVisible
+      syncRotationGizmo(sceneStateRef.current, selectedManualBoxIdRef.current)
+    }
+  }, [gizmoVisible])
 
   useEffect(() => {
     onSelectBoxRef.current = onSelectBox
@@ -695,6 +801,10 @@ export function ContainerScene({
       hoverBoxId: null,
       ghost: null,
       cogGroup: null,
+      rotationGizmo: null,
+      rotationGizmoBoxSignature: null,
+      rotationGizmoHovered: null,
+      rotationGizmoVisible: gizmoVisibleRef.current,
       poolDrop: null,
       scale,
       length,
@@ -717,7 +827,7 @@ export function ContainerScene({
     const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
     const intersectionPoint = new THREE.Vector3()
 
-    const updatePointer = (event: PointerEvent | DragEvent) => {
+    const updatePointer = (event: PointerEvent | DragEvent | MouseEvent) => {
       const rect = renderer.domElement.getBoundingClientRect()
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
@@ -728,41 +838,11 @@ export function ContainerScene({
       y: (worldZ + width / 2) / scale,
     })
 
-    const emitSelectedBoxScreenRect = (rect: SelectedBoxScreenRect | null) => {
-      const last = lastSelectedBoxScreenRectRef.current
-      const changed = !last || !rect
-        ? last !== rect
-        : Math.abs(last.x - rect.x) > 1 || Math.abs(last.y - rect.y) > 1 || last.visible !== rect.visible
-      if (!changed) return
-      lastSelectedBoxScreenRectRef.current = rect
-      onSelectedBoxScreenRectRef.current?.(rect)
-    }
-
-    const updateSelectedBoxScreenRect = () => {
-      if (!manualEditableRef.current) {
-        emitSelectedBoxScreenRect(null)
-        return
-      }
-      const boxId = selectedManualBoxIdRef.current
-      if (!boxId) {
-        emitSelectedBoxScreenRect(null)
-        return
-      }
-      const entry = sceneState.meshEntries.get(boxId)
-      if (!entry || !mount.clientWidth || !mount.clientHeight) {
-        emitSelectedBoxScreenRect(null)
-        return
-      }
-      const topCenter = worldCenterForBox(entry.box, scale, length, width)
-      topCenter.y += entry.box.height * scale / 2
-      const projected = topCenter.project(camera)
-      const x = ((projected.x + 1) / 2) * mount.clientWidth
-      const y = ((1 - projected.y) / 2) * mount.clientHeight
-      emitSelectedBoxScreenRect({
-        x,
-        y,
-        visible: projected.z >= -1 && projected.z <= 1 && x >= 0 && x <= mount.clientWidth && y >= 0 && y <= mount.clientHeight,
-      })
+    const setSceneGizmoVisible = (visible: boolean, boxId = selectedManualBoxIdRef.current) => {
+      gizmoVisibleRef.current = visible
+      sceneState.rotationGizmoVisible = visible
+      setGizmoVisible(visible)
+      syncRotationGizmo(sceneState, boxId)
     }
 
     type DragState = {
@@ -826,6 +906,16 @@ export function ContainerScene({
       if (event.button !== 0) return
       updatePointer(event)
       raycaster.setFromCamera(pointer, camera)
+      if (manualEditableRef.current) {
+        const gizmoDirection = hitRotationGizmo(sceneState, raycaster)
+        const selectedBoxId = selectedManualBoxIdRef.current
+        if (gizmoDirection && selectedBoxId) {
+          event.preventDefault()
+          event.stopPropagation()
+          onManualRotateRef.current?.(selectedBoxId, gizmoDirection)
+          return
+        }
+      }
       const hit = raycaster.intersectObjects(sceneState.pickables, false)[0]
       const boxId = hit ? sceneState.boxByUuid.get(hit.object.uuid) : undefined
       if (boxId) {
@@ -851,12 +941,38 @@ export function ContainerScene({
       renderer.domElement.setPointerCapture?.(event.pointerId)
     }
 
+    const onDoubleClick = (event: MouseEvent) => {
+      if (!manualEditableRef.current) return
+      updatePointer(event)
+      raycaster.setFromCamera(pointer, camera)
+      const hit = raycaster.intersectObjects(sceneState.pickables, false)[0]
+      const hitBoxId = hit ? sceneState.boxByUuid.get(hit.object.uuid) : undefined
+      const boxId = hitBoxId ?? selectedManualBoxIdRef.current
+      if (!boxId) return
+      if (hitBoxId) {
+        selectedManualBoxIdRef.current = hitBoxId
+        onSelectBoxRef.current?.(hitBoxId)
+      }
+      event.preventDefault()
+      event.stopPropagation()
+      setSceneGizmoVisible(!gizmoVisibleRef.current, boxId)
+    }
+
     const onPointerMove = (event: PointerEvent) => {
       if (!dragState) {
         // hover mode (no drag): update hover highlight + tooltip info
         if (!sceneState.meshEntries.size) return
         updatePointer(event)
         raycaster.setFromCamera(pointer, camera)
+        const gizmoDirection = hitRotationGizmo(sceneState, raycaster)
+        if (gizmoDirection) {
+          setRotationGizmoHover(sceneState, gizmoDirection)
+          sceneState.hoverBoxId = null
+          updateHoverHighlight(sceneState, null, scale, length, width)
+          onHoverBoxRef.current?.(null)
+          return
+        }
+        setRotationGizmoHover(sceneState, null)
         const hit = raycaster.intersectObjects(sceneState.pickables, false)[0]
         const hoveredId = hit ? sceneState.boxByUuid.get(hit.object.uuid) ?? null : null
         if (hoveredId !== sceneState.hoverBoxId) {
@@ -1160,6 +1276,7 @@ export function ContainerScene({
           onManualDeleteRef.current?.(boxId)
           break
         case 'Escape':
+          setSceneGizmoVisible(false)
           onClearSelectionRef.current?.()
           break
         case 'ArrowLeft':
@@ -1196,6 +1313,7 @@ export function ContainerScene({
     }
 
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
+    renderer.domElement.addEventListener('dblclick', onDoubleClick)
     renderer.domElement.addEventListener('pointermove', onPointerMove)
     renderer.domElement.addEventListener('pointerup', onPointerUp)
     renderer.domElement.addEventListener('pointercancel', onPointerUp)
@@ -1211,7 +1329,8 @@ export function ContainerScene({
       if (controls.enabled) {
         controls.update()
       }
-      updateSelectedBoxScreenRect()
+      advanceBoxAnimations(sceneState, performance.now())
+      syncRotationGizmo(sceneState, selectedManualBoxIdRef.current)
       renderer.render(scene, camera)
     }
     animate()
@@ -1234,6 +1353,11 @@ export function ContainerScene({
         ;(sceneState.hoverHighlight.material as THREE.Material).dispose()
         scene.remove(sceneState.hoverHighlight)
         sceneState.hoverHighlight = null
+      }
+      if (sceneState.rotationGizmo) {
+        scene.remove(sceneState.rotationGizmo.group)
+        disposeRotationGizmo(sceneState.rotationGizmo)
+        sceneState.rotationGizmo = null
       }
       sceneState.meshEntries.forEach((entry) => {
         entry.mesh.geometry.dispose()
@@ -1271,6 +1395,7 @@ export function ContainerScene({
       geometries.forEach((geometry) => geometry.dispose())
       renderer.dispose()
       renderer.domElement.removeEventListener('pointerdown', onPointerDown)
+      renderer.domElement.removeEventListener('dblclick', onDoubleClick)
       renderer.domElement.removeEventListener('pointermove', onPointerMove)
       renderer.domElement.removeEventListener('pointerup', onPointerUp)
       renderer.domElement.removeEventListener('pointercancel', onPointerUp)
@@ -1279,7 +1404,6 @@ export function ContainerScene({
       renderer.domElement.removeEventListener('drop', onDrop)
       controls.removeEventListener('change', refreshCameraFacingLabels)
       window.removeEventListener('keydown', onKeyDown)
-      emitSelectedBoxScreenRect(null)
       mount.removeChild(renderer.domElement)
       if (sceneStateRef.current === sceneState) {
         sceneStateRef.current = null
@@ -1311,6 +1435,9 @@ export function ContainerScene({
       const existing = meshEntries.get(box.id)
       const invalid = state.invalidOverride.has(box.id) || invalidBoxIdsRef.current.has(box.id)
       if (existing) {
+        const previousOrientation = orientationAnimationSignature(existing.box)
+        const nextOrientation = orientationAnimationSignature(box)
+        const previousQuaternion = existing.mesh.quaternion.clone()
         existing.box = box
         if (!sameBoxGeometry(box, existing.mesh.geometry, scale)) {
           existing.mesh.geometry.dispose()
@@ -1320,6 +1447,13 @@ export function ContainerScene({
           existing.edges.geometry = new THREE.EdgesGeometry(geometry)
         }
         applyBoxTransform(existing, scale, length, width)
+        if (manualEditableRef.current && previousOrientation !== nextOrientation) {
+          existing.animFrom = previousQuaternion
+          existing.animTo = boxOrientationQuaternion(box)
+          existing.animStart = performance.now()
+          existing.mesh.quaternion.copy(previousQuaternion)
+          existing.edges.quaternion.copy(previousQuaternion)
+        }
         applyBoxVisualState(state, existing, la, lb, sb, hb, invalid, opacityOverride, 'full', labelFacesForBoxCamera(state, box))
         return
       }
@@ -1351,6 +1485,7 @@ export function ContainerScene({
       applyBoxVisualState(state, entry, la, lb, sb, hb, invalid, opacityOverride, 'full', labelFacesForBoxCamera(state, box))
     })
     syncLabelFaceSampleAttribute(state)
+    syncRotationGizmo(state, selectedManualBoxIdRef.current)
   }, [boxes, viewMode])
 
   useEffect(() => {
@@ -1603,6 +1738,8 @@ export function ContainerScene({
   }, [activeLayerId, activeLabelId, selectedBoxId, highlightBoxIds, invalidBoxIds, boxOpacityOverride, boxes, viewMode])
 
   const interactionMode = manualEditable ? 'manual' : 'auto'
+  const selectedOrientation = selectedManualBox?.orientationKey ?? ''
+  const selectedAxes = selectedAxesAttribute(selectedManualBox)
 
   return (
     <div
@@ -1619,6 +1756,10 @@ export function ContainerScene({
       data-pool-ghost-active={poolDragInfo ? 'true' : 'false'}
       data-pool-ghost-invalid="false"
       data-box-count={boxes.length}
+      data-gizmo-visible={gizmoVisible && selectedManualBox ? 'true' : 'false'}
+      data-gizmo-handle-count={selectedManualBox ? 4 : 0}
+      data-selected-orientation={selectedOrientation}
+      data-selected-axes={selectedAxes}
     />
   )
 }

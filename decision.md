@@ -2,6 +2,16 @@
 
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
+## 2026-06-05 手动旋转从 HTML 浮层改为场景内 3D 弧形手柄
+
+- 背景：上一轮 `ManualRotateOverlay` 已把旋转、删除、朝向图和 XYZ 精调集中到选中箱体旁，但它仍是屏幕空间 HTML 面板。用户明确要求参考 EasyCargo，把旋转入口做成 Three.js 场景内弧形手柄，环绕货物本体，而不是把按钮贴到画布上。
+- 选项：
+  - 保留 HTML 浮层并只调整样式：改动小，但仍然不是场景内交互，透视、遮挡和相机跟随都不成立。
+  - 删除 HTML 浮层，改为由 `ContainerScene` 生成 TubeGeometry 弧线和 ConeGeometry 箭头，作为独立 pickable 先于箱体命中。
+- 决策：采用第二种。新增 `src/lib/rotationGizmo.ts` 负责手柄半径、弧形箭头、hover 材质和 dispose；`ContainerScene` 在选中箱体后双击切换手柄显示，手柄固定对应世界轴 left/right/up/down，命中后走既有 `onManualRotate(boxId, direction)`。旋转后的业务数据立即更新，渲染 mesh/edges 用约 200ms quaternion slerp 做视觉补间。
+- 影响：`ManualRotateOverlay.tsx`、选中箱体屏幕投影回调、对齐按钮和 XYZ 精确输入面板被移除；精确移动改由既有快捷键承担（方向键 10mm、Ctrl/Cmd+方向键 1mm、PageUp/PageDown z 轴、Delete、Esc）。3D 手柄没有 DOM 节点，E2E 改为通过 `container-scene` 根上的 `data-gizmo-visible`、`data-gizmo-handle-count`、`data-selected-orientation` 和 `data-selected-axes` 验证状态。
+- 验证：新增 `src/lib/rotationGizmo.test.ts` 覆盖半径、四方向 pickables、yaw/pitch 平面和 hover 材质；targeted 本地验证 `npx tsc -b`、`npx vitest run src/lib/rotationGizmo.test.ts`、`npx playwright test e2e/manual-3d.spec.ts --grep "弧形手柄|R 与 Shift|选中前"` 已通过。
+
 ## 2026-06-05 手动模式贴地旋转改为落地语义
 
 - 背景：手动模式长期存在 `R` 后 `Shift+R` 期望到 `WHL`、实际停在 `WLH` 的 E2E 缺口。复核后确认根因不是朝向 reducer 不会生成 `WHL`，而是贴地箱体高度变化时沿用纯几何中心旋转会把箱体抬到 `z>0`，随后 `validateDraft` 以悬空问题阻断提交，用户看到的结果就是“旋转没反应”。

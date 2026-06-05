@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, useEffect } from 'react'
 import type { FormEvent, DragEvent as ReactDragEvent } from 'react'
 import * as XLSX from 'xlsx'
 import { ContainerScene } from './components/ContainerScene'
-import type { SceneViewMode, SelectedBoxScreenRect } from './components/ContainerScene'
+import type { SceneViewMode } from './components/ContainerScene'
 import { ContainerPlan2D } from './components/ContainerPlan2D'
 import type { PlanViewMode } from './components/ContainerPlan2D'
 import { ManualPlacement2D } from './components/ManualPlacement2D'
@@ -20,7 +20,6 @@ import { computeRemainingCapacity } from './lib/remainingCapacity'
 import { suggestFillItems } from './lib/fillSuggestion'
 import { buildStandardCargoItem, STANDARD_BOXES, STANDARD_BOX_MAX_PER_CLICK } from './data/standardBoxes'
 import { FillSuggestionPanel } from './components/FillSuggestionPanel'
-import { ManualRotateOverlay } from './components/ManualRotateOverlay'
 import { ReleaseNotesButton } from './components/ReleaseNotesButton'
 import { buildCogOverlay } from './lib/cogVisual'
 import { deriveCogOverlayState } from './lib/cogView'
@@ -901,7 +900,6 @@ function Workbench() {
   const [manualHistory, setManualHistory] = useState<ManualHistory>(() => manualEmptyHistory())
   const [manualSelectedId, setManualSelectedId] = useState<string | null>(null)
   const [manualHelpOpen, setManualHelpOpen] = useState(false)
-  const [selectedBoxScreenRect, setSelectedBoxScreenRect] = useState<SelectedBoxScreenRect | null>(null)
   const [manualNotice, setManualNotice] = useState<ManualOperationNotice | null>(null)
   const [measurements, setMeasurements] = useState<MeasurementAnnotation[]>([])
   const [measurementDraftPoint, setMeasurementDraftPoint] = useState<Point3D | null>(null)
@@ -1152,10 +1150,6 @@ function Workbench() {
     () => manualToPlacedBoxes(manualDraft, manualInvalidBoxIds),
     [manualDraft, manualInvalidBoxIds],
   )
-  const selectedManualBox = useMemo(
-    () => manualDraft.boxes.find((box) => box.id === manualSelectedId) ?? null,
-    [manualDraft, manualSelectedId],
-  )
   const manualCapacity = useMemo(
     () => computeRemainingCapacity(manualPlacedBoxes, renderingContainer),
     [manualPlacedBoxes, renderingContainer],
@@ -1252,11 +1246,6 @@ function Workbench() {
     setPoolDragInfo(null)
   }
 
-  const handleManualRotate = (direction: ManualRotationDirection = 'right') => {
-    if (!manualSelectedId) return
-    handleManualRotateBox(manualSelectedId, direction)
-  }
-
   const handleManualRotateBox = (boxId: string, direction: ManualRotationDirection = 'right') => {
     const dry = manualDryRunRotation(manualDraft, boxId, renderingContainer, direction, placementSettings.supportPolicy)
     if (!dry.ok) {
@@ -1268,12 +1257,6 @@ function Workbench() {
     setRotationNotice('')
     setManualNotice(null)
     commitManual(nextDraft)
-  }
-
-  const handleManualDelete = () => {
-    if (!manualSelectedId) return
-    commitManual(manualRemoveBox(manualDraft, manualSelectedId))
-    setManualSelectedId(null)
   }
 
   const handleManualDeleteBox = (boxId: string) => {
@@ -3049,7 +3032,6 @@ function Workbench() {
                           onManualMove={handleManualMoveBox}
                           onManualOperationRejected={(operation, boxId, cargoId) => notifyManualRejected(operation, boxId, cargoId)}
                           onManualRotate={handleManualRotateBox}
-                          onSelectedBoxScreenRect={setSelectedBoxScreenRect}
                           onSelectBox={setManualSelectedId}
                         />
                       ) : (
@@ -3067,21 +3049,6 @@ function Workbench() {
                           onSelectBox={setManualSelectedId}
                           onMoveBox={handleManualMoveBox}
                           onDropFromPool={handleManualDropFromPool}
-                        />
-                      )}
-                      {workspaceView === '3d' && selectedManualBox && selectedBoxScreenRect?.visible && (
-                        <ManualRotateOverlay
-                          container={{ length: renderingContainer.length, width: renderingContainer.width, height: renderingContainer.height }}
-                          locale={locale}
-                          placementSettings={placementSettings}
-                          screenRect={selectedBoxScreenRect}
-                          selected={selectedManualBox}
-                          onDelete={handleManualDelete}
-                          onMove={(x, y, z) => {
-                            if (!manualSelectedId) return
-                            handleManualMoveBox(manualSelectedId, x, y, z)
-                          }}
-                          onRotate={handleManualRotate}
                         />
                       )}
                     </div>

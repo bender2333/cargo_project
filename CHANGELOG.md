@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-06-05 (Manual 3D Rotation Gizmo)
+
+- Completed subtask: implemented the second manual 3D rotation iteration from `REVIEW.md`.
+  - Added `src/lib/rotationGizmo.ts` to build EasyCargo-style in-scene arc handles from Three.js tube arcs and cone arrowheads.
+  - `ContainerScene` now mounts the selected-box gizmo inside the 3D scene, toggles it by double-click, raycasts gizmo pickables before box pickables, and highlights hovered handles.
+  - Manual rotations now animate visually with a short quaternion slerp while the business placement state updates immediately.
+  - Removed the superseded HTML `ManualRotateOverlay`, selected-box screen projection callback, and Workbench-side overlay wiring.
+  - E2E now verifies manual rotation state through `container-scene` data attributes because scene-native 3D handles have no DOM nodes.
+- Local verification: `npx tsc -b` passed; `npx vitest run src/lib/rotationGizmo.test.ts` passed 4 tests; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "弧形手柄|R 与 Shift|选中前"` passed 3 tests; `npm run lint` passed; `npm test` passed 36 files / 214 tests; `npm run build` passed with the existing Vite chunk-size warning; full local `npm run test:e2e` ran 79 tests with 78 passed / 1 skipped / 0 failed.
+
 ## 2026-06-05 (Manual 3D Rotation Overlay and Grounded Rotation)
 
 - Completed subtask: recorded the manual 3D rotation/orientation interaction implementation plan in `REVIEW.md`.

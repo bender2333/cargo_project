@@ -28,6 +28,54 @@ async function enterManualMode(page: Page) {
   await expect(page.getByTestId('manual-workspace')).toBeVisible()
 }
 
+async function placeSingleManualBoxForRotation(page: Page) {
+  await enterManualMode(page)
+  await page.getByRole('button', { name: '2D', exact: true }).click()
+  const poolItem = page.getByTestId('manual-pool-item').first()
+  await expect(poolItem).toHaveAttribute('draggable', 'true')
+  await page.evaluate(() => {
+    const pool = document.querySelector<HTMLElement>('[data-testid="manual-pool-item"]')
+    const svg = document.querySelector<SVGSVGElement>('[data-testid="manual-placement-2d"]')
+    if (!pool || !svg) throw new Error('manual pool item or placement SVG missing')
+
+    const dataTransfer = new DataTransfer()
+    pool.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }))
+    const size = JSON.parse(dataTransfer.getData('application/x-cargo-size') || 'null') as { length?: number; width?: number } | null
+    const viewBox = svg.viewBox.baseVal
+    const ctm = svg.getScreenCTM()
+    if (!size?.length || !size.width || !ctm) throw new Error('manual drag payload or SVG matrix missing')
+
+    const padding = 28
+    const horizontalSpan = viewBox.width - padding * 2
+    const verticalSpan = viewBox.height - padding * 2
+    const topLeftX = Math.min(100, Math.max(0, horizontalSpan - size.length))
+    const topLeftY = Math.min(100, Math.max(0, verticalSpan - size.width))
+    const centerX = topLeftX + size.length / 2
+    const centerY = topLeftY + size.width / 2
+    const clientPoint = new DOMPoint(padding + centerX, padding + verticalSpan - centerY).matrixTransform(ctm)
+
+    for (const type of ['dragenter', 'dragover', 'drop']) {
+      svg.dispatchEvent(new DragEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        clientX: clientPoint.x,
+        clientY: clientPoint.y,
+        dataTransfer,
+      }))
+    }
+    pool.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true, dataTransfer }))
+  })
+  const box = page.locator('[data-box-id]').first()
+  await expect(box).toBeVisible()
+  const boxId = await box.getAttribute('data-box-id')
+  expect(boxId).toBeTruthy()
+  await page.getByRole('button', { name: '3D', exact: true }).click()
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).not.toHaveAttribute('data-selected-orientation', '')
+  const before = await scene.getAttribute('data-selected-orientation')
+  return { boxId, before }
+}
+
 test('默认装载规则为数量优先', async ({ page }) => {
   await ensureChinese(page)
   const select = page.getByLabel('装载规则')
@@ -141,7 +189,7 @@ test('手动模式阻止键盘把箱体移动到悬空位置', async ({ page }) 
   const firstManualBox = page.locator('[data-box-id]').first()
   await firstManualBox.dispatchEvent('pointerdown', { pointerId: 1, clientX: 100, clientY: 100, button: 0 })
   await page.getByRole('button', { name: '3D', exact: true }).click()
-  await expect(page.getByTestId('manual-rotate-overlay')).toBeVisible()
+  await expect(page.getByTestId('container-scene')).toHaveAttribute('data-selected-orientation', 'LWH')
 
   const scene = page.getByTestId('container-scene')
   await expect(scene).toHaveAttribute('data-box-count', '18')
@@ -151,55 +199,45 @@ test('手动模式阻止键盘把箱体移动到悬空位置', async ({ page }) 
   await expect(scene).toHaveAttribute('data-box-count', '18')
 })
 
-test('手动模式 R 与 Shift+R 更新朝向示意图', async ({ page }) => {
+test('手动模式 R 与 Shift+R 更新 3D 场景根朝向状态', async ({ page }) => {
   await ensureChinese(page)
-  await page.getByRole('button', { name: '继续手动微调' }).click()
-  await page.getByRole('button', { name: '2D', exact: true }).click()
-  await page.locator('[data-box-id]').first().dispatchEvent('pointerdown', { pointerId: 1, clientX: 100, clientY: 100, button: 0 })
-  await page.getByRole('button', { name: '3D', exact: true }).click()
-  await expect(page.getByTestId('manual-rotate-overlay')).toBeVisible()
-  await page.getByTestId('manual-precise-toggle').click()
-  await page.getByTestId('manual-precise-input-x').fill('2400')
-  await page.getByTestId('manual-precise-input-y').fill('1200')
-  await page.getByTestId('manual-precise-input-z').fill('0')
-  await page.getByTestId('manual-precise-apply').click()
-  const diagram = page.getByTestId('manual-orientation-diagram')
-  await expect(diagram).toHaveAttribute('data-orientation', 'LWH')
+  const selected = await placeSingleManualBoxForRotation(page)
+  const scene = page.getByTestId('container-scene')
   await page.keyboard.press('R')
-  await expect(diagram).toHaveAttribute('data-orientation', 'WLH')
-  await expect(diagram).toContainText('X:W+')
-  await expect(diagram).toContainText('Y:L-')
-  await expect(diagram).toContainText('Z:T+')
+  await expect(scene).not.toHaveAttribute('data-selected-orientation', selected.before ?? '')
+  const after = await scene.getAttribute('data-selected-orientation')
+  expect(after).toBeTruthy()
+  await expect(scene).not.toHaveAttribute('data-selected-axes', '')
   await page.keyboard.press('Shift+R')
-  await expect(diagram).toHaveAttribute('data-orientation', 'WHL')
-  await expect(diagram).not.toContainText('H')
+  await expect(scene).not.toHaveAttribute('data-selected-orientation', after ?? '')
+  const afterShift = await scene.getAttribute('data-selected-orientation')
+  expect(afterShift).toBeTruthy()
   await page.getByRole('button', { name: '2D', exact: true }).click()
-  await expect(page.getByTestId('manual-orientation-marker').first()).toHaveAttribute('data-orientation', 'WHL')
-  await expect(page.getByTestId('manual-orientation-marker').first()).toContainText(/X:W\+ Y:T\+ Z:L\+/)
+  await expect(page.locator(`[data-box-id="${selected.boxId}"]`).getByTestId('manual-orientation-marker')).toHaveAttribute('data-orientation', afterShift ?? '')
 })
 
-test('手动模式 3D 选中箱体显示浮层并可点击旋转', async ({ page }) => {
+test('手动模式 3D 双击选中箱体切换场景内弧形手柄', async ({ page }) => {
   await ensureChinese(page)
   await page.getByRole('button', { name: '继续手动微调' }).click()
   await page.getByRole('button', { name: '2D', exact: true }).click()
   await page.locator('[data-box-id]').first().dispatchEvent('pointerdown', { pointerId: 1, clientX: 100, clientY: 100, button: 0 })
   await page.getByRole('button', { name: '3D', exact: true }).click()
 
-  const overlay = page.getByTestId('manual-rotate-overlay')
-  await expect(overlay).toBeVisible()
-  const diagram = page.getByTestId('manual-orientation-diagram')
-  const before = await diagram.getAttribute('data-orientation')
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-gizmo-visible', 'false')
+  await expect(scene).toHaveAttribute('data-gizmo-handle-count', '4')
+  const before = await scene.getAttribute('data-selected-orientation')
   expect(before).not.toBeNull()
 
-  await page.getByTestId('manual-precise-toggle').click()
-  await page.getByTestId('manual-precise-input-x').fill('2400')
-  await page.getByTestId('manual-precise-input-y').fill('1200')
-  await page.getByTestId('manual-precise-input-z').fill('0')
-  await page.getByTestId('manual-precise-apply').click()
-  await page.getByTestId('manual-rotate-yaw-right').click()
-  await expect(diagram).not.toHaveAttribute('data-orientation', before ?? '')
+  const box = await scene.boundingBox()
+  expect(box).not.toBeNull()
+  if (!box) return
+  await scene.dblclick({ position: { x: box.width / 2, y: box.height / 2 } })
+  await expect(scene).toHaveAttribute('data-gizmo-visible', 'true')
+  await scene.dblclick({ position: { x: box.width / 2, y: box.height / 2 } })
+  await expect(scene).toHaveAttribute('data-gizmo-visible', 'false')
   await page.keyboard.press('Escape')
-  await expect(overlay).toHaveCount(0)
+  await expect(scene).toHaveAttribute('data-selected-orientation', '')
 })
 
 test('尺规在 2D 中创建固定测量线并可删除', async ({ page }) => {
@@ -507,7 +545,9 @@ test('手动模式默认隐藏容量占用卡以释放画布空间', async ({ pa
 test('手动模式选中前不显示 3D 浮层', async ({ page }) => {
   await ensureChinese(page)
   await enterManualMode(page)
-  await expect(page.getByTestId('manual-rotate-overlay')).toHaveCount(0)
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-gizmo-visible', 'false')
+  await expect(scene).toHaveAttribute('data-selected-orientation', '')
 })
 
 test('补装建议面板提示每次最多 50 件限制', async ({ page }) => {
@@ -543,7 +583,7 @@ test('手动模式最大化保留 pool 与测量列表，仅隐藏报告面板',
   }
   await page.getByTestId('maximize-workspace').click()
   await expect(workspace).toHaveAttribute('data-workspace-maximized', 'true')
-  // Pool and measurement tools must still be visible; selected-box fine tuning now lives in the 3D overlay.
+  // Pool and measurement tools must still be visible; selected-box rotation now lives in the 3D scene.
   await expect(page.getByTestId('manual-pool')).toBeVisible()
   await expect(page.getByTestId('measurement-list')).toBeVisible()
   await expect(page.getByTestId('report-panel')).toBeHidden()
