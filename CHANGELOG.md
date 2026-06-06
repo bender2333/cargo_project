@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-06-06 (Round 23 T3 3D Face Label Cargo Badges)
+
+- Completed subtask: add richer 3D face-label content for cargo properties.
+  - Added `faceLabelContent()` and `faceLabelContentSignature()` to derive badge text, full cargo name, rotate/stack icons, max layer text, orientation text, and weight/dimension text from a `PlacedBox`.
+  - `ContainerScene` face textures now draw the cargo full name, weight/dimensions, rotatable/non-rotatable icon, stack/non-stack icon, and stack layer badge in full label mode; compact labels keep a reduced status icon.
+  - 3D label material cache keys now include the full face-content signature so cargo with different rotation, stack, size, name, or weight metadata cannot reuse stale textures.
+  - `container-scene` exposes `data-face-icons-sample` for browser verification of the first rendered 3D face badge.
+- Verification: `npx vitest run src/lib/faceLabelContent.test.ts` passed 3 tests; `npx vitest run src/lib/faceLabelContent.test.ts src/lib/packing.test.ts src/lib/manualPlacement.test.ts` passed 77 tests; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "moves 3D labels"` passed 1 test.
+
 ## 2026-06-06 (Round 23 T2 3D Rotation Gizmo Visibility)
 
 - Completed subtask: keep the manual 3D rotation gizmo visible above cargo and the floor.

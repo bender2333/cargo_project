@@ -13,6 +13,7 @@ import { manualMoveCommitArgs } from '../lib/manualMoveCommit'
 import type { BoxLabelMode } from '../lib/labelDeconfliction'
 import { baseDimensionsFromPlaced, orientationAxesOf, orientationRenderingBasisVectors } from '../lib/orientationTransform'
 import { cameraFacingLabelFaces, type LocalBoxFace } from '../lib/cameraFacingLabels'
+import { faceLabelContent, faceLabelContentSignature, type FaceLabelContent, type FaceLabelIcon } from '../lib/faceLabelContent'
 import {
   buildRotationGizmo,
   disposeRotationGizmo,
@@ -122,7 +123,78 @@ function getMaterialCache(state: SceneState) {
   return cache
 }
 
-function makeFaceLabelTexture(label: string, color: string, selected: boolean, orientationLabel: string, labelMode: BoxLabelMode) {
+function fitText(context: CanvasRenderingContext2D, text: string, maxWidth: number) {
+  if (context.measureText(text).width <= maxWidth) return text
+  let next = text
+  while (next.length > 1 && context.measureText(`${next}...`).width > maxWidth) {
+    next = next.slice(0, -1)
+  }
+  return `${next}...`
+}
+
+function drawRotateIcon(context: CanvasRenderingContext2D, x: number, y: number, disabled: boolean) {
+  context.save()
+  context.strokeStyle = '#0f172a'
+  context.fillStyle = '#0f172a'
+  context.lineWidth = 5
+  context.beginPath()
+  context.arc(x, y, 20, Math.PI * 0.2, Math.PI * 1.55)
+  context.stroke()
+  context.beginPath()
+  context.moveTo(x - 4, y - 24)
+  context.lineTo(x + 14, y - 24)
+  context.lineTo(x + 6, y - 8)
+  context.closePath()
+  context.fill()
+  if (disabled) {
+    context.strokeStyle = '#b91c1c'
+    context.lineWidth = 7
+    context.beginPath()
+    context.moveTo(x - 24, y + 24)
+    context.lineTo(x + 24, y - 24)
+    context.stroke()
+  }
+  context.restore()
+}
+
+function drawStackIcon(context: CanvasRenderingContext2D, x: number, y: number, disabled: boolean, layersText: string) {
+  context.save()
+  context.strokeStyle = '#0f172a'
+  context.fillStyle = 'rgba(255,255,255,0.72)'
+  context.lineWidth = 4
+  for (const offset of [-12, 4]) {
+    context.beginPath()
+    context.roundRect(x - 21, y + offset, 42, 16, 4)
+    context.fill()
+    context.stroke()
+  }
+  if (layersText) {
+    context.fillStyle = '#0f172a'
+    context.font = 'bold 18px Verdana, sans-serif'
+    context.textAlign = 'center'
+    context.textBaseline = 'middle'
+    context.fillText(layersText, x + 25, y - 15, 28)
+  }
+  if (disabled) {
+    context.strokeStyle = '#b91c1c'
+    context.lineWidth = 7
+    context.beginPath()
+    context.moveTo(x - 25, y + 25)
+    context.lineTo(x + 25, y - 25)
+    context.stroke()
+  }
+  context.restore()
+}
+
+function drawFaceIcon(context: CanvasRenderingContext2D, icon: FaceLabelIcon, x: number, y: number, layersText: string) {
+  if (icon === 'rotate' || icon === 'no-rotate') {
+    drawRotateIcon(context, x, y, icon === 'no-rotate')
+    return
+  }
+  drawStackIcon(context, x, y, icon === 'no-stack', icon === 'stack' ? layersText : '')
+}
+
+function makeFaceLabelTexture(content: FaceLabelContent, color: string, selected: boolean, labelMode: BoxLabelMode) {
   const canvas = document.createElement('canvas')
   canvas.width = 256
   canvas.height = 256
@@ -149,11 +221,32 @@ function makeFaceLabelTexture(label: string, color: string, selected: boolean, o
   context.textAlign = 'center'
   context.textBaseline = 'middle'
   context.translate(compact ? badgeX + badgeSize / 2 : 128, compact ? badgeY + badgeSize / 2 + 3 : 134)
-  context.fillText(label, 0, 0, compact ? 62 : 142)
+  context.fillText(content.badge, 0, 0, compact ? 62 : 142)
+  context.setTransform(1, 0, 0, 1, 0, 0)
+
+  if (!compact) {
+    context.fillStyle = '#0f172a'
+    context.font = 'bold 20px Verdana, sans-serif'
+    context.textAlign = 'center'
+    context.textBaseline = 'middle'
+    context.fillText(fitText(context, content.name, 214), 128, 161, 214)
+    context.font = 'bold 16px Verdana, sans-serif'
+    context.fillText(fitText(context, content.weightDimText, 214), 128, 185, 214)
+    drawFaceIcon(context, content.icons[0], 92, 211, content.stackLayersText)
+    drawFaceIcon(context, content.icons[1], 164, 211, content.stackLayersText)
+  } else {
+    const importantIcon = content.icons.includes('no-rotate')
+      ? 'no-rotate'
+      : content.icons.includes('no-stack')
+        ? 'no-stack'
+        : content.icons[1]
+    drawFaceIcon(context, importantIcon, 198, 56, content.stackLayersText)
+  }
+
   context.fillStyle = '#0f172a'
   context.font = compact ? 'bold 18px Verdana, sans-serif' : 'bold 22px Verdana, sans-serif'
   context.textAlign = 'center'
-  context.fillText(orientationLabel, 128, 222, 226)
+  context.fillText(content.orientationText, 128, compact ? 222 : 242, 226)
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
@@ -191,10 +284,11 @@ function getCachedFaceMaterial(
   const tCache = getTextureCache(state)
   const mCache = getMaterialCache(state)
   const orientationLabel = box.orientationLabel ?? box.orientationKey
-  const textureKey = `${box.label}:${box.color}:${selected}:${orientationLabel}:${labelMode}`
+  const content = faceLabelContent(box)
+  const textureKey = `${box.label}:${box.color}:${selected}:${orientationLabel}:${labelMode}:${faceLabelContentSignature(box)}`
   let texture = tCache.get(textureKey)
   if (!texture) {
-    texture = makeFaceLabelTexture(box.label, box.color, selected, orientationLabel, labelMode)
+    texture = makeFaceLabelTexture(content, box.color, selected, labelMode)
     tCache.set(textureKey, texture)
   }
 
@@ -247,6 +341,7 @@ function getCachedBoxMaterials(
     invalid ? 'inv' : 'ok',
     box.orientationLabel ?? box.orientationKey,
     labelMode,
+    faceLabelContentSignature(box),
     [...labelFaces].sort().join(','),
   ].join(':')
   const cached = mCache.get(materialKey)
@@ -274,6 +369,7 @@ function syncLabelFaceSampleAttribute(state: SceneState) {
   if (!mount) return
   const firstEntry = [...state.meshEntries.values()][0]
   mount.dataset.labelFacesSample = firstEntry?.labelFaces.join(',') ?? ''
+  mount.dataset.faceIconsSample = firstEntry ? faceLabelContent(firstEntry.box).icons.join(',') : ''
 }
 
 function boxVisualState(

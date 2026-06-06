@@ -756,6 +756,7 @@ test('moves 3D labels to camera-facing faces across camera views', async ({ page
   await page.getByRole('button', { name: 'Load', exact: true }).click()
 
   const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-face-icons-sample', 'rotate,stack')
   await expect(scene).toHaveAttribute('data-label-faces-sample', /\+X/)
   await expect(scene).toHaveAttribute('data-label-faces-sample', /\+Z/)
 
