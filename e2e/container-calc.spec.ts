@@ -196,6 +196,8 @@ test('uses real archive-style navigation, menu, and shipment-name history behavi
   await expect(page.getByTestId('workspace-menu')).toBeVisible()
   await expect(page.getByTestId('workspace-menu').getByRole('button', { name: 'Workbench' })).toBeVisible()
   await expect(page.getByTestId('workspace-menu').getByRole('button', { name: 'History' })).toBeVisible()
+  await expect(page.getByTestId('workspace-menu').getByRole('button', { name: 'Cargo library' })).toBeVisible()
+  await expect(page.getByTestId('workspace-menu').getByRole('button', { name: 'Template manager' })).toBeVisible()
   await expect(page.getByTestId('workspace-menu').getByRole('button', { name: 'Cargo items' })).toHaveCount(0)
   await page.getByTestId('workspace-menu').getByRole('button', { name: 'Workbench' }).click()
   await expect(page.locator('header').getByRole('button', { name: 'Workbench' })).toHaveClass(/bg-white/)
@@ -852,7 +854,7 @@ test('creates an import template from the visible manager and reuses it for Exce
   await expect(page.getByText(/800 x 600 x 400 mm/)).toBeVisible()
 })
 
-test('renames and deletes import templates from history template manager', async ({ page }) => {
+test('renames and deletes import templates from top-level template manager', async ({ page }) => {
   await openEnglish(page)
   const filePath = await createTemplateWorkbookFile()
   const templateName = `Template Manage ${Date.now()}`
@@ -869,7 +871,7 @@ test('renames and deletes import templates from history template manager', async
   await expect(page.getByTestId('template-save-status')).toContainText(templateName)
   await page.getByRole('button', { name: 'Cancel' }).click()
 
-  await page.locator('header').getByRole('button', { name: 'History' }).click()
+  await page.getByTestId('nav-template-manager').click()
   await expect(page.getByTestId('template-manager-list')).toBeVisible()
   const savedRow = page.locator('[data-testid^="template-manager-row-"]:has-text("' + templateName + '")')
   await expect(savedRow).toBeVisible()
@@ -892,7 +894,7 @@ test('renames and deletes import templates from history template manager', async
   await expect(page.getByRole('button', { name: /Template only crate/ }).first()).toBeVisible()
   await expect(page.getByText(/60 x 60 x 40 mm/)).toBeVisible()
 
-  await page.locator('header').getByRole('button', { name: 'History' }).click()
+  await page.getByTestId('nav-template-manager').click()
   await page.getByTestId(`template-manager-delete-${templateId}`).click()
   await expect(page.getByTestId(`template-manager-row-${templateId}`)).toHaveCount(0)
 

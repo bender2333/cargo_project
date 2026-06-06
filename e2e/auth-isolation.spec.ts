@@ -126,7 +126,7 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
 
-    await page.getByTestId('nav-history').click()
+    await page.getByTestId('nav-cargo-library').click()
     await expect(page.getByTestId('cargo-library')).toBeVisible()
     await page.getByTestId('cargo-library').getByLabel('名称').fill('CargoLib-User1')
     await page.getByTestId('cargo-library').getByLabel('分组 1').fill('CL')
@@ -138,7 +138,7 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await expect(page.getByText('CargoLib-User1')).toBeVisible()
 
     await page.reload()
-    await page.getByTestId('nav-history').click()
+    await page.getByTestId('nav-cargo-library').click()
     await expect(page.getByText('CargoLib-User1')).toBeVisible()
     const savedRow = page.locator('[data-testid^="cargo-library-row-"]:has-text("CargoLib-User1")')
     await savedRow.getByRole('button', { name: '加入当前工作台' }).click()
@@ -151,7 +151,7 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await page.fill('#confirmPassword', testPassword)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
-    await page.getByTestId('nav-history').click()
+    await page.getByTestId('nav-cargo-library').click()
     await expect(page.getByText('CargoLib-User1')).not.toBeVisible()
   })
 

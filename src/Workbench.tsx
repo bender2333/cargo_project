@@ -88,7 +88,7 @@ const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6'
 
 const copy = {
   en: {
-    nav: ['Workbench', 'History', 'Users'],
+    nav: ['Workbench', 'History', 'Cargo library', 'Template manager', 'Users'],
     title: 'Cargo loading workspace',
     shipment: 'Enter shipment name',
     savedShipment: 'Shipment name is saved with history plans',
@@ -348,7 +348,7 @@ const copy = {
     modeManual3D: '3D Review',
   },
   zh: {
-    nav: ['工作台', '历史方案', '用户管理'],
+    nav: ['工作台', '历史方案', '货物管理', '模板管理', '用户管理'],
     title: '货柜排箱装柜工作台',
     shipment: '输入装运名称',
     savedShipment: '装运名称会随历史方案保存',
@@ -641,7 +641,7 @@ const customContainerDefaults = {
 type CargoForm = Omit<CargoItem, 'id'>
 type WorkspaceView = '3d' | '2d'
 type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback' | 'loadingSteps' | 'cog' | 'compare' | 'fill' | 'reviewChecklist'
-type NavTarget = 'overview' | 'report' | 'cargo' | 'container' | 'history' | 'users'
+type NavTarget = 'overview' | 'report' | 'cargo' | 'container' | 'history' | 'cargo-library' | 'template-manager' | 'users'
 
 function buildRotationNotice(
   dry: ReturnType<typeof manualDryRunRotation>,
@@ -2425,10 +2425,142 @@ function Workbench() {
     setResetViewTick((t) => t + 1)
   }
 
-  const navTargets: NavTarget[] = currentUser?.role === 'admin'
-    ? ['overview', 'history', 'users']
-    : ['overview', 'history']
-  const navLabels = currentUser?.role === 'admin' ? t.nav : t.nav.slice(0, 2)
+  const navItems: Array<{ target: NavTarget; label: string }> = [
+    { target: 'overview', label: t.nav[0] },
+    { target: 'history', label: t.nav[1] },
+    { target: 'cargo-library', label: t.nav[2] },
+    { target: 'template-manager', label: t.nav[3] },
+    ...(currentUser?.role === 'admin' ? [{ target: 'users' as const, label: t.nav[4] }] : []),
+  ]
+
+  const cargoLibraryPanel = (
+    <div className="rounded-lg border border-[#c6c6c6] bg-white p-4" data-testid="cargo-library">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-lg font-bold">{t.cargoLibrary}</h3>
+        {cargoLibraryNotice && <span className="text-xs font-semibold text-[#047857]">{cargoLibraryNotice}</span>}
+      </div>
+      <form className="grid gap-2 text-sm md:grid-cols-6" onSubmit={saveLibraryCargo}>
+        <label>{t.name}<input className="field-input mt-1" value={cargoLibraryForm.name} onChange={(event) => setCargoLibraryForm((current) => ({ ...current, name: event.target.value }))} /></label>
+        <label>{t.group}<input className="field-input mt-1" value={cargoLibraryForm.label ?? ''} onChange={(event) => setCargoLibraryForm((current) => ({ ...current, label: event.target.value.toUpperCase().slice(0, 2) }))} /></label>
+        <label>{t.length}<input className="field-input mt-1" type="number" value={cargoLibraryForm.length} onChange={(event) => updateLibraryNumber('length', event.target.value)} /></label>
+        <label>{t.width}<input className="field-input mt-1" type="number" value={cargoLibraryForm.width} onChange={(event) => updateLibraryNumber('width', event.target.value)} /></label>
+        <label>{t.height}<input className="field-input mt-1" type="number" value={cargoLibraryForm.height} onChange={(event) => updateLibraryNumber('height', event.target.value)} /></label>
+        <label>{t.weight}<input className="field-input mt-1" type="number" value={cargoLibraryForm.weight} onChange={(event) => updateLibraryNumber('weight', event.target.value)} /></label>
+        <label>{t.color}<input className="mt-1 h-10 w-full border border-[#aaa] bg-white" type="color" value={cargoLibraryForm.color} onChange={(event) => setCargoLibraryForm((current) => ({ ...current, color: event.target.value }))} /></label>
+        <label className="flex items-center gap-2 pt-7"><input checked={cargoLibraryForm.canRotate} type="checkbox" onChange={(event) => setCargoLibraryForm((current) => ({ ...current, canRotate: event.target.checked }))} />{t.rotate}</label>
+        <label className="flex items-center gap-2 pt-7"><input checked={cargoLibraryForm.stackable} type="checkbox" onChange={(event) => setCargoLibraryForm((current) => ({ ...current, stackable: event.target.checked, maxStackLayers: event.target.checked ? current.maxStackLayers : undefined }))} />{t.stackable}</label>
+        {cargoLibraryForm.stackable && (
+          <label>{t.maxStackLayers}<input className="field-input mt-1" min={1} type="number" value={cargoLibraryForm.maxStackLayers ?? ''} onChange={(event) => updateLibraryMaxStackLayers(event.target.value)} /></label>
+        )}
+        <div className="flex items-end gap-2 md:col-span-2">
+          <button className="archive-button success w-full" data-testid="cargo-library-add" type="submit">
+            {editingLibraryCargoId ? t.cargoLibraryUpdate : t.cargoLibrarySave}
+          </button>
+          {editingLibraryCargoId && (
+            <button className="archive-button secondary" type="button" onClick={() => { setEditingLibraryCargoId(null); setCargoLibraryForm(emptyForm) }}>
+              {t.cancel}
+            </button>
+          )}
+        </div>
+      </form>
+      {customCargoItems.length === 0 ? (
+        <p className="mt-3 text-sm text-[#64748b]">{t.cargoLibraryEmpty}</p>
+      ) : (
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {customCargoItems.map((item) => (
+            <article className="rounded border border-[#d1d5db] bg-[#f8fafc] p-3 text-sm" data-testid={`cargo-library-row-${item.id}`} key={item.id}>
+              <div className="mb-2 flex items-start gap-2">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded font-bold text-white" style={{ backgroundColor: item.color }}>{item.label}</span>
+                <div>
+                  <strong>{item.name}</strong>
+                  <p className="text-xs text-[#64748b]">{item.length} x {item.width} x {item.height} mm · {item.weight} kg</p>
+                  <p className="text-xs text-[#64748b]">{item.canRotate ? t.rotate : `${t.rotate}: off`} · {item.stackable ? t.stackable : `${t.stackable}: off`}{item.maxStackLayers ? ` · ${t.maxStackLayers}: ${item.maxStackLayers}` : ''}</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button className="archive-button px-2 py-1 text-xs" data-testid={`cargo-library-use-${item.id}`} type="button" onClick={() => addLibraryCargoToWorkbench(item)}>{t.cargoLibraryUse}</button>
+                <button className="archive-button secondary px-2 py-1 text-xs" data-testid={`cargo-library-edit-${item.id}`} type="button" onClick={() => editLibraryCargo(item)}>{t.cargoLibraryEdit}</button>
+                <button className="archive-button px-2 py-1 text-xs text-red-700" data-testid={`cargo-library-delete-${item.id}`} type="button" onClick={() => void removeLibraryCargo(item.id)}>{t.cargoLibraryDelete}</button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
+  const templateManagerPanel = (
+    <div className="rounded-lg border border-[#c6c6c6] bg-white p-4" data-testid="template-manager-list">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-lg font-bold">{t.templateManager}</h3>
+        {templateSaveNotice && <span className="text-xs font-semibold text-[#047857]">{templateSaveNotice}</span>}
+      </div>
+      {importTemplates.length === 0 ? (
+        <p className="text-sm text-[#64748b]">{t.templateEmpty}</p>
+      ) : (
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {importTemplates.map((template) => (
+            <article className="rounded border border-[#d1d5db] bg-[#f8fafc] p-3 text-sm" data-testid={`template-manager-row-${template.id}`} key={template.id}>
+              {editingImportTemplateId === template.id ? (
+                <div className="grid gap-2">
+                  <label className="text-xs font-semibold text-[#475569]">
+                    {t.templateName}
+                    <input
+                      className="field-input mt-1"
+                      data-testid={`template-manager-name-${template.id}`}
+                      value={editingImportTemplateDraft?.name ?? ''}
+                      onChange={(event) => setEditingImportTemplateDraft((current) => current ? { ...current, name: event.target.value } : current)}
+                    />
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-xs font-semibold text-[#475569]">
+                      {t.templateHeaderRow}
+                      <input className="field-input mt-1" min={1} type="number" value={editingImportTemplateDraft?.headerRow ?? 1} onChange={(event) => updateEditingTemplateNumber('headerRow', event.target.value)} />
+                    </label>
+                    <label className="text-xs font-semibold text-[#475569]">
+                      {t.templateStartRow}
+                      <input className="field-input mt-1" min={2} type="number" value={editingImportTemplateDraft?.startRow ?? 2} onChange={(event) => updateEditingTemplateNumber('startRow', event.target.value)} />
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity'] as const).map((field) => (
+                      <label className="text-xs font-semibold text-[#475569]" key={field}>
+                        {field}
+                        <input
+                          className="field-input mt-1"
+                          data-testid={`template-manager-map-${field}-${template.id}`}
+                          value={editingImportTemplateDraft?.mapping[field] ?? ''}
+                          onChange={(event) => updateEditingTemplateMapping(field, event.target.value)}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button className="archive-button success px-2 py-1 text-xs" data-testid={`template-manager-save-${template.id}`} type="button" onClick={() => void saveEditedImportTemplate()}>{t.templateUpdate}</button>
+                    <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => { setEditingImportTemplateId(''); setEditingImportTemplateDraft(null) }}>{t.cancel}</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <strong>{template.name}</strong>
+                  <p className="mt-1 text-xs text-[#64748b]">
+                    {t.templateHeaderRow}: {template.headerRow ?? 1} · {t.templateStartRow}: {template.startRow ?? 2}
+                  </p>
+                  <p className="mt-1 truncate text-xs text-[#64748b]">
+                    {Object.entries(template.mapping).filter(([, value]) => value).map(([key, value]) => `${key}:${value}`).join(', ') || '-'}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button className="archive-button secondary px-2 py-1 text-xs" data-testid={`template-manager-edit-${template.id}`} type="button" onClick={() => editImportTemplate(template)}>{t.templateEdit}</button>
+                    <button className="archive-button px-2 py-1 text-xs text-red-700" data-testid={`template-manager-delete-${template.id}`} type="button" onClick={() => void removeImportTemplate(template.id)}>{t.templateDelete}</button>
+                  </div>
+                </>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 
   if (!loggedIn) {
     if (showRegister) {
@@ -2510,15 +2642,15 @@ function Workbench() {
 
               <div className="hidden md:block w-[1px] h-6 bg-white/20 mx-2"></div>
 
-              {navLabels.map((item, index) => (
+              {navItems.map((item) => (
                 <button
-                  className={`rounded-[10px] px-4 py-2 font-bold ${activeNav === navTargets[index] ? 'bg-white text-[#1d4ed8]' : 'bg-white/20 text-white hover:bg-white/30'}`}
-                  key={item}
+                  className={`rounded-[10px] px-4 py-2 font-bold ${activeNav === item.target ? 'bg-white text-[#1d4ed8]' : 'bg-white/20 text-white hover:bg-white/30'}`}
+                  key={item.target}
                   type="button"
-                  data-testid={`nav-${navTargets[index]}`}
-                  onClick={() => activateNav(navTargets[index])}
+                  data-testid={`nav-${item.target}`}
+                  onClick={() => activateNav(item.target)}
                 >
-                  {item}
+                  {item.label}
                 </button>
               ))}
               {currentUser && (
@@ -2572,129 +2704,6 @@ function Workbench() {
                 <button className="archive-button secondary" type="button" onClick={() => activateNav('overview')}>{t.backToWorkbench}</button>
               </div>
             </div>
-            <div className="mb-5 rounded-lg border border-[#c6c6c6] bg-white p-4" data-testid="cargo-library">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-lg font-bold">{t.cargoLibrary}</h3>
-                {cargoLibraryNotice && <span className="text-xs font-semibold text-[#047857]">{cargoLibraryNotice}</span>}
-              </div>
-              <form className="grid gap-2 text-sm md:grid-cols-6" onSubmit={saveLibraryCargo}>
-                <label>{t.name}<input className="field-input mt-1" value={cargoLibraryForm.name} onChange={(event) => setCargoLibraryForm((current) => ({ ...current, name: event.target.value }))} /></label>
-                <label>{t.group}<input className="field-input mt-1" value={cargoLibraryForm.label ?? ''} onChange={(event) => setCargoLibraryForm((current) => ({ ...current, label: event.target.value.toUpperCase().slice(0, 2) }))} /></label>
-                <label>{t.length}<input className="field-input mt-1" type="number" value={cargoLibraryForm.length} onChange={(event) => updateLibraryNumber('length', event.target.value)} /></label>
-                <label>{t.width}<input className="field-input mt-1" type="number" value={cargoLibraryForm.width} onChange={(event) => updateLibraryNumber('width', event.target.value)} /></label>
-                <label>{t.height}<input className="field-input mt-1" type="number" value={cargoLibraryForm.height} onChange={(event) => updateLibraryNumber('height', event.target.value)} /></label>
-                <label>{t.weight}<input className="field-input mt-1" type="number" value={cargoLibraryForm.weight} onChange={(event) => updateLibraryNumber('weight', event.target.value)} /></label>
-                <label>{t.color}<input className="mt-1 h-10 w-full border border-[#aaa] bg-white" type="color" value={cargoLibraryForm.color} onChange={(event) => setCargoLibraryForm((current) => ({ ...current, color: event.target.value }))} /></label>
-                <label className="flex items-center gap-2 pt-7"><input checked={cargoLibraryForm.canRotate} type="checkbox" onChange={(event) => setCargoLibraryForm((current) => ({ ...current, canRotate: event.target.checked }))} />{t.rotate}</label>
-                <label className="flex items-center gap-2 pt-7"><input checked={cargoLibraryForm.stackable} type="checkbox" onChange={(event) => setCargoLibraryForm((current) => ({ ...current, stackable: event.target.checked, maxStackLayers: event.target.checked ? current.maxStackLayers : undefined }))} />{t.stackable}</label>
-                {cargoLibraryForm.stackable && (
-                  <label>{t.maxStackLayers}<input className="field-input mt-1" min={1} type="number" value={cargoLibraryForm.maxStackLayers ?? ''} onChange={(event) => updateLibraryMaxStackLayers(event.target.value)} /></label>
-                )}
-                <div className="flex items-end gap-2 md:col-span-2">
-                  <button className="archive-button success w-full" data-testid="cargo-library-add" type="submit">
-                    {editingLibraryCargoId ? t.cargoLibraryUpdate : t.cargoLibrarySave}
-                  </button>
-                  {editingLibraryCargoId && (
-                    <button className="archive-button secondary" type="button" onClick={() => { setEditingLibraryCargoId(null); setCargoLibraryForm(emptyForm) }}>
-                      {t.cancel}
-                    </button>
-                  )}
-                </div>
-              </form>
-              {customCargoItems.length === 0 ? (
-                <p className="mt-3 text-sm text-[#64748b]">{t.cargoLibraryEmpty}</p>
-              ) : (
-                <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                  {customCargoItems.map((item) => (
-                    <article className="rounded border border-[#d1d5db] bg-[#f8fafc] p-3 text-sm" data-testid={`cargo-library-row-${item.id}`} key={item.id}>
-                      <div className="mb-2 flex items-start gap-2">
-                        <span className="inline-flex h-8 w-8 items-center justify-center rounded font-bold text-white" style={{ backgroundColor: item.color }}>{item.label}</span>
-                        <div>
-                          <strong>{item.name}</strong>
-                          <p className="text-xs text-[#64748b]">{item.length} x {item.width} x {item.height} mm · {item.weight} kg</p>
-                          <p className="text-xs text-[#64748b]">{item.canRotate ? t.rotate : `${t.rotate}: off`} · {item.stackable ? t.stackable : `${t.stackable}: off`}{item.maxStackLayers ? ` · ${t.maxStackLayers}: ${item.maxStackLayers}` : ''}</p>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button className="archive-button px-2 py-1 text-xs" data-testid={`cargo-library-use-${item.id}`} type="button" onClick={() => addLibraryCargoToWorkbench(item)}>{t.cargoLibraryUse}</button>
-                        <button className="archive-button secondary px-2 py-1 text-xs" data-testid={`cargo-library-edit-${item.id}`} type="button" onClick={() => editLibraryCargo(item)}>{t.cargoLibraryEdit}</button>
-                        <button className="archive-button px-2 py-1 text-xs text-red-700" data-testid={`cargo-library-delete-${item.id}`} type="button" onClick={() => void removeLibraryCargo(item.id)}>{t.cargoLibraryDelete}</button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="mb-5 rounded-lg border border-[#c6c6c6] bg-white p-4" data-testid="template-manager-list">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-lg font-bold">{t.templateManager}</h3>
-                {templateSaveNotice && <span className="text-xs font-semibold text-[#047857]">{templateSaveNotice}</span>}
-              </div>
-              {importTemplates.length === 0 ? (
-                <p className="text-sm text-[#64748b]">{t.templateEmpty}</p>
-              ) : (
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                  {importTemplates.map((template) => (
-                    <article className="rounded border border-[#d1d5db] bg-[#f8fafc] p-3 text-sm" data-testid={`template-manager-row-${template.id}`} key={template.id}>
-                      {editingImportTemplateId === template.id ? (
-                        <div className="grid gap-2">
-                          <label className="text-xs font-semibold text-[#475569]">
-                            {t.templateName}
-                            <input
-                              className="field-input mt-1"
-                              data-testid={`template-manager-name-${template.id}`}
-                              value={editingImportTemplateDraft?.name ?? ''}
-                              onChange={(event) => setEditingImportTemplateDraft((current) => current ? { ...current, name: event.target.value } : current)}
-                            />
-                          </label>
-                          <div className="grid grid-cols-2 gap-2">
-                            <label className="text-xs font-semibold text-[#475569]">
-                              {t.templateHeaderRow}
-                              <input className="field-input mt-1" min={1} type="number" value={editingImportTemplateDraft?.headerRow ?? 1} onChange={(event) => updateEditingTemplateNumber('headerRow', event.target.value)} />
-                            </label>
-                            <label className="text-xs font-semibold text-[#475569]">
-                              {t.templateStartRow}
-                              <input className="field-input mt-1" min={2} type="number" value={editingImportTemplateDraft?.startRow ?? 2} onChange={(event) => updateEditingTemplateNumber('startRow', event.target.value)} />
-                            </label>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            {(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity'] as const).map((field) => (
-                              <label className="text-xs font-semibold text-[#475569]" key={field}>
-                                {field}
-                                <input
-                                  className="field-input mt-1"
-                                  data-testid={`template-manager-map-${field}-${template.id}`}
-                                  value={editingImportTemplateDraft?.mapping[field] ?? ''}
-                                  onChange={(event) => updateEditingTemplateMapping(field, event.target.value)}
-                                />
-                              </label>
-                            ))}
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <button className="archive-button success px-2 py-1 text-xs" data-testid={`template-manager-save-${template.id}`} type="button" onClick={() => void saveEditedImportTemplate()}>{t.templateUpdate}</button>
-                            <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => { setEditingImportTemplateId(''); setEditingImportTemplateDraft(null) }}>{t.cancel}</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <strong>{template.name}</strong>
-                          <p className="mt-1 text-xs text-[#64748b]">
-                            {t.templateHeaderRow}: {template.headerRow ?? 1} · {t.templateStartRow}: {template.startRow ?? 2}
-                          </p>
-                          <p className="mt-1 truncate text-xs text-[#64748b]">
-                            {Object.entries(template.mapping).filter(([, value]) => value).map(([key, value]) => `${key}:${value}`).join(', ') || '-'}
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <button className="archive-button secondary px-2 py-1 text-xs" data-testid={`template-manager-edit-${template.id}`} type="button" onClick={() => editImportTemplate(template)}>{t.templateEdit}</button>
-                            <button className="archive-button px-2 py-1 text-xs text-red-700" data-testid={`template-manager-delete-${template.id}`} type="button" onClick={() => void removeImportTemplate(template.id)}>{t.templateDelete}</button>
-                          </div>
-                        </>
-                      )}
-                    </article>
-                  ))}
-                </div>
-              )}
-            </div>
             {historyPlans.length === 0 ? (
               <p className="border border-[#c6c6c6] bg-white p-3">{t.noHistory}</p>
             ) : (
@@ -2720,6 +2729,22 @@ function Workbench() {
                 ))}
               </div>
             )}
+          </section>
+        ) : activeNav === 'cargo-library' ? (
+          <section className="archive-card overflow-hidden p-[18px]" data-testid="cargo-library-page">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-xl font-bold">{t.cargoLibrary}</h2>
+              <button className="archive-button secondary" type="button" onClick={() => activateNav('overview')}>{t.backToWorkbench}</button>
+            </div>
+            {cargoLibraryPanel}
+          </section>
+        ) : activeNav === 'template-manager' ? (
+          <section className="archive-card overflow-hidden p-[18px]" data-testid="template-manager-page">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-xl font-bold">{t.templateManager}</h2>
+              <button className="archive-button secondary" type="button" onClick={() => activateNav('overview')}>{t.backToWorkbench}</button>
+            </div>
+            {templateManagerPanel}
           </section>
         ) : (
         <section className={sidebarCollapsed ? "flex gap-5 max-lg:flex-col" : "flex gap-5 max-lg:flex-col"} data-testid="workbench-layout">
@@ -2769,6 +2794,11 @@ function Workbench() {
             <div className="grid gap-2 border-b border-[#e5e7eb] bg-[#f8fafc] p-3 text-sm" data-testid="workspace-menu">
               <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('overview')}>{t.nav[0]}</button>
               <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('history')}>{t.nav[1]}</button>
+              <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('cargo-library')}>{t.nav[2]}</button>
+              <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('template-manager')}>{t.nav[3]}</button>
+              {currentUser?.role === 'admin' && (
+                <button className="archive-button secondary text-left" type="button" onClick={() => activateNav('users')}>{t.nav[4]}</button>
+              )}
               <button
                 className="archive-button secondary text-left"
                 type="button"
