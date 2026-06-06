@@ -14,6 +14,27 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-06-07-r36-all-direction-labels',
+    date: '2026-06-07',
+    title: { en: 'All-direction labels and layer clarity', zh: '全向标签与分层清晰度' },
+    items: {
+      en: [
+        '3D cargo labels now render on the fixed exposed faces instead of changing with the camera angle.',
+        'Face-label text, badge, dimensions, weight, and icons now use separated layout bands to avoid overlapping.',
+        'Quantity and volume packing modes now place higher-stack-capacity cargo earlier, helping stackable cargo form lower layers.',
+        'Specific-layer views now fade inactive layers more strongly, and the measurement list no longer appears when the ruler is off and no measurements exist.',
+        'Camera movement no longer triggers the removed full-scene label-face material refresh path.',
+      ],
+      zh: [
+        '3D 货物标签现在固定显示在外露面上，不再跟随相机角度切换标签面。',
+        '面标中的名称、徽标、尺寸、重量和图标改为分区排版，避免压在同一个字母区域上。',
+        '按数量和按体积装箱时，会优先放置堆叠能力更高的货物，帮助可堆叠货物形成底层。',
+        '指定分层视图会更明显地虚化非当前层；关闭尺规且没有测量线时，不再显示空测量列表。',
+        '相机移动不再触发已移除的全场景标签面材质刷新路径。',
+      ],
+    },
+  },
+  {
     version: '2026-06-06-r35-label-stack-template-controls',
     date: '2026-06-06',
     title: { en: '3D labels, stack limits, and template creation', zh: '3D 标签 / 堆叠上限 / 模板新建' },

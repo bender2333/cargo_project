@@ -10,9 +10,10 @@
   - 改为固定外露面全集：行为更稳定，顶面和侧面都能看到标签；底面 `-Y` 仍省略，因为贴地不可见且会增加无业务价值的材质面。
   - 仅 quantity 模式按 stackCapacity 排序：最贴近样本，但 volume 模式仍可能把受限货垫底。
   - quantity 和 volume 模式都先按 stackCapacity 降序：自动模式统一“能多堆的先落底”，weight/input 保留各自语义。
-- 决策：3D 标签采用固定外露面 `+X,-X,+Y,+Z,-Z`，删除 camera-facing 选面逻辑和相机 change 材质刷新监听。面贴图用 `faceLabelLayout()` 固定分区，保证名称、徽标、重量尺寸和图标不重叠。quantity 和 volume 模式排序都先比较有效 `maxStackLayers`，无限视为最高；weight/input 不改。T6 本轮只确认最大热点的代码路径已移除，不声称完成样本帧时优化。
+- 决策：3D 标签采用固定外露面 `+X,-X,+Y,+Z,-Z`，删除 camera-facing 选面逻辑和相机 change 材质刷新监听。面贴图用 `faceLabelLayout()` 固定分区，保证名称、徽标、重量尺寸和图标不重叠。quantity 和 volume 模式排序都先比较有效 `maxStackLayers`，无限视为最高；weight/input 不改。T6 收尾不再增加 RAF 节流：`displayCargoItems`、`manualPool`、`manualIssues`、`manualInvalidBoxIds`、`manualPlacedBoxes`、`manualCapacity` 已经由 `useMemo` 派生，且最大热点已随相机 change 材质刷新监听删除。
 - 影响：相机旋转不再触发全箱材质重分配，标签可见性稳定；材质缓存 key 不再包含相机选面维度。volume 模式放置顺序可能因堆叠能力优先而变化，属于业务导优取舍，现有 packing 回归已通过。分层查看时非当前层更透明，空尺规提示不再占画布。
-- 后续：用 `cargo-debug-snapshot (10).json` 做手动大体量交互前后帧时/响应度度量，记录 T6(b)(c)(d) 是否还需 memo 或 RAF 节流；完成后再跑全量 E2E、部署和远程 E2E，才能关闭 2026-06-07 整体计划。
+- 性能证据边界：`cargo-debug-snapshot (10).json` 通过历史恢复会按当前算法重算为 210 个已渲染箱体，不是原始快照里的 167 个自动 placed boxes，因此本轮性能记录只能作为当前代码 210 箱压力场景。近俯视相机命令前后 `data-label-faces-sample` 保持 `+X,-X,+Y,+Z,-Z`，采样到的标签面变化数为 0；headless Chromium 的 rAF 间隔仍偏高，不作为流畅 FPS 结论。若未来要声称帧率提升，需要在同一机器、同一浏览器下对旧提交和新提交做 A/B。
+- 后续：完成本轮全量本地验证、部署和远程 E2E 后关闭 2026-06-07 整体计划；若用户继续反馈 210+ 箱拖拽卡顿，再单独针对 Three.js instance 化、纹理贴图数量或手动校验节流建新计划。
 
 ## 2026-06-06 第二十三轮：一键放置、模板管理与 3D 尺规取舍
 
