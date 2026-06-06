@@ -879,14 +879,18 @@ test('renames and deletes import templates from history template manager', async
 
   await page.getByTestId(`template-manager-edit-${templateId}`).click()
   await page.getByTestId(`template-manager-name-${templateId}`).fill(renamedTemplateName)
+  await page.getByTestId(`template-manager-map-length-${templateId}`).fill('W')
   await page.getByTestId(`template-manager-save-${templateId}`).click()
   await expect(page.getByTestId(`template-manager-row-${templateId}`)).toContainText(renamedTemplateName)
+  await expect(page.getByTestId(`template-manager-row-${templateId}`)).toContainText('length:W')
 
   await page.locator('header').getByRole('button', { name: 'Workbench' }).click()
   await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
   await expect(page.getByTestId('mapping-modal')).toBeVisible()
   await page.getByTestId('import-template-select').selectOption({ label: renamedTemplateName })
-  await page.getByRole('button', { name: 'Cancel' }).click()
+  await page.getByTestId('confirm-mapping').click()
+  await expect(page.getByRole('button', { name: /Template only crate/ }).first()).toBeVisible()
+  await expect(page.getByText(/60 x 60 x 40 mm/)).toBeVisible()
 
   await page.locator('header').getByRole('button', { name: 'History' }).click()
   await page.getByTestId(`template-manager-delete-${templateId}`).click()

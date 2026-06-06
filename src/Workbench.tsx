@@ -52,6 +52,7 @@ import { createClientId } from './lib/clientId'
 import { parseCargoRows, parseCargoRowsWithTemplate } from './lib/importCargo'
 import type { ImportCargoRow } from './lib/importCargo'
 import { deleteImportTemplate, readImportTemplates, saveImportTemplate, updateImportTemplate } from './lib/importTemplates'
+import type { ImportTemplatePayload } from './lib/importTemplates'
 import { deleteCustomCargo, readCustomCargo, saveCustomCargo, updateCustomCargo } from './lib/customCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
@@ -1033,7 +1034,7 @@ function Workbench() {
   const [templateDefaults, setTemplateDefaults] = useState<ImportTemplateDefaults>({ quantity: 1, canRotate: true, stackable: true })
   const [templateSaveNotice, setTemplateSaveNotice] = useState('')
   const [editingImportTemplateId, setEditingImportTemplateId] = useState('')
-  const [editingImportTemplateName, setEditingImportTemplateName] = useState('')
+  const [editingImportTemplateDraft, setEditingImportTemplateDraft] = useState<ImportTemplatePayload | null>(null)
   const workspaceRef = useRef<HTMLElement | null>(null)
   const reportRef = useRef<HTMLElement | null>(null)
   const cargoRef = useRef<HTMLFormElement | null>(null)
@@ -1918,29 +1919,38 @@ function Workbench() {
     setImportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
     setSelectedImportTemplateId(saved.id)
     setEditingImportTemplateId('')
-    setEditingImportTemplateName('')
+    setEditingImportTemplateDraft(null)
     setTemplateSaveNotice(`${t.templateSaved}: ${saved.name}`)
     setImportMessages((messages) => [`${t.templateSaved}: ${saved.name}`, ...messages])
   }
 
   const editImportTemplate = (template: ImportTemplate) => {
     setEditingImportTemplateId(template.id)
-    setEditingImportTemplateName(template.name)
-  }
-
-  const saveEditedImportTemplate = async () => {
-    const template = importTemplates.find((item) => item.id === editingImportTemplateId)
-    const name = editingImportTemplateName.trim()
-    if (!template || !name) return
-
-    const updated = await updateImportTemplate(template.id, {
-      name,
-      mapping: template.mapping,
-      units: template.units,
+    setEditingImportTemplateDraft({
+      name: template.name,
+      mapping: { ...template.mapping },
+      units: { ...template.units },
       headerRow: template.headerRow,
       startRow: template.startRow,
       mergeRows: template.mergeRows,
       defaultValues: template.defaultValues,
+    })
+  }
+
+  const saveEditedImportTemplate = async () => {
+    const template = importTemplates.find((item) => item.id === editingImportTemplateId)
+    const draft = editingImportTemplateDraft
+    const name = draft?.name.trim()
+    if (!template || !draft || !name) return
+
+    const updated = await updateImportTemplate(template.id, {
+      name,
+      mapping: draft.mapping,
+      units: draft.units,
+      headerRow: draft.headerRow,
+      startRow: draft.startRow,
+      mergeRows: draft.mergeRows,
+      defaultValues: draft.defaultValues,
     })
     if (!updated) {
       alert(locale === 'zh' ? '更新模板失败' : 'Failed to update template')
@@ -1952,7 +1962,21 @@ function Workbench() {
       setTemplateName(updated.name)
     }
     setEditingImportTemplateId('')
-    setEditingImportTemplateName('')
+    setEditingImportTemplateDraft(null)
+  }
+
+  const updateEditingTemplateMapping = (field: string, value: string) => {
+    setEditingImportTemplateDraft((current) => current ? {
+      ...current,
+      mapping: { ...current.mapping, [field]: value },
+    } : current)
+  }
+
+  const updateEditingTemplateNumber = (field: 'headerRow' | 'startRow', value: string) => {
+    const fallback = field === 'headerRow' ? 1 : 2
+    const minimum = fallback
+    const parsed = Math.max(minimum, Number(value) || fallback)
+    setEditingImportTemplateDraft((current) => current ? { ...current, [field]: parsed } : current)
   }
 
   const removeImportTemplate = async (id: string) => {
@@ -1968,7 +1992,7 @@ function Workbench() {
     }
     if (editingImportTemplateId === id) {
       setEditingImportTemplateId('')
-      setEditingImportTemplateName('')
+      setEditingImportTemplateDraft(null)
     }
     setTemplateSaveNotice(t.templateDeleted)
   }
@@ -2620,13 +2644,36 @@ function Workbench() {
                             <input
                               className="field-input mt-1"
                               data-testid={`template-manager-name-${template.id}`}
-                              value={editingImportTemplateName}
-                              onChange={(event) => setEditingImportTemplateName(event.target.value)}
+                              value={editingImportTemplateDraft?.name ?? ''}
+                              onChange={(event) => setEditingImportTemplateDraft((current) => current ? { ...current, name: event.target.value } : current)}
                             />
                           </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="text-xs font-semibold text-[#475569]">
+                              {t.templateHeaderRow}
+                              <input className="field-input mt-1" min={1} type="number" value={editingImportTemplateDraft?.headerRow ?? 1} onChange={(event) => updateEditingTemplateNumber('headerRow', event.target.value)} />
+                            </label>
+                            <label className="text-xs font-semibold text-[#475569]">
+                              {t.templateStartRow}
+                              <input className="field-input mt-1" min={2} type="number" value={editingImportTemplateDraft?.startRow ?? 2} onChange={(event) => updateEditingTemplateNumber('startRow', event.target.value)} />
+                            </label>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity'] as const).map((field) => (
+                              <label className="text-xs font-semibold text-[#475569]" key={field}>
+                                {field}
+                                <input
+                                  className="field-input mt-1"
+                                  data-testid={`template-manager-map-${field}-${template.id}`}
+                                  value={editingImportTemplateDraft?.mapping[field] ?? ''}
+                                  onChange={(event) => updateEditingTemplateMapping(field, event.target.value)}
+                                />
+                              </label>
+                            ))}
+                          </div>
                           <div className="flex flex-wrap gap-2">
                             <button className="archive-button success px-2 py-1 text-xs" data-testid={`template-manager-save-${template.id}`} type="button" onClick={() => void saveEditedImportTemplate()}>{t.templateUpdate}</button>
-                            <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => { setEditingImportTemplateId(''); setEditingImportTemplateName('') }}>{t.cancel}</button>
+                            <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => { setEditingImportTemplateId(''); setEditingImportTemplateDraft(null) }}>{t.cancel}</button>
                           </div>
                         </div>
                       ) : (

@@ -6,6 +6,7 @@
   - Local verification passed: `npm run lint`; `npm test` passed 42 files / 236 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` ran 83 tests with 82 passed / 1 skipped / 0 failed.
   - Remote deployment passed with `npm run deploy`; backup saved at `/root/cargo_project-backup-20260606-020610`; remote HTTP/API health check passed.
   - Remote E2E passed: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npm run test:e2e` ran 83 tests with 82 passed / 1 skipped / 0 failed.
+- Completion audit follow-up: added history-page import-template mapping/header/start editing and recorded Round 23 implementation tradeoffs in `decision.md`. Verification: `npx vitest run src/lib/importTemplates.test.ts` passed 2 tests; `npx tsc -b` passed; `npm run lint` passed; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "renames and deletes import templates"` passed 1 test.
 
 ## 2026-06-06 (Round 23 T8 3D Ruler)
 
