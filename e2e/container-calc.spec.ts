@@ -256,7 +256,17 @@ test('shows custom container fields and effective dimensions', async ({ page }) 
   await page.getByLabel('Top gap mm').fill('100')
   await page.getByLabel('Side gap mm').fill('50')
 
-  await expect(page.getByTestId('visual-workspace').getByText('14,700 × 2,300 × 2,500 mm')).toBeVisible()
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('Name', { exact: true }).fill('Effective length probe')
+  await cargoForm.getByLabel('Length mm').fill('14800')
+  await cargoForm.getByLabel('Width mm').fill('400')
+  await cargoForm.getByLabel('Height mm').fill('400')
+  await cargoForm.getByLabel('Weight kg').fill('10')
+  await cargoForm.getByLabel('Quantity').fill('1')
+  await page.getByRole('button', { name: '+ Add cargo item' }).click()
+  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: 'Details' }).click()
+  await expect(page.getByRole('cell', { name: 'Exceeds container dimensions' })).toBeVisible()
 })
 
 test('adds cargo and recalculates utilization', async ({ page }) => {

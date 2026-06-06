@@ -331,7 +331,10 @@ test('从历史方案恢复自定义柜型后 3D 场景重建并显示新箱体'
   await page.getByRole('button', { name: '恢复' }).first().click()
   await page.waitForTimeout(400)
 
-  await expect(page.getByText('14,000 × 2,350 × 2,600 mm')).toBeVisible({ timeout: 5000 })
+  await expect(page.getByLabel('长 mm').first()).toHaveValue('14000')
+  await expect(page.getByLabel('宽 mm').first()).toHaveValue('2350')
+  await expect(page.getByLabel('高 mm').first()).toHaveValue('2600')
+  await expect(page.getByTestId('container-dimension-badge')).toHaveCount(0)
 
   const canvas = page.locator('canvas').first()
   await expect(canvas).toBeVisible()
