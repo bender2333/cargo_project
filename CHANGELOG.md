@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-06 (Round 23 T7 Manual Quick Place)
+
+- Completed subtask: add one-click manual cargo placement from the pool.
+  - Added `quickPlaceCargo()` as a pure manual-placement helper that builds candidate positions and validates them through the existing `validateDraft()` rules instead of duplicating collision/support logic.
+  - Added one-click arrow buttons to manual pool rows with `pool-quick-place-{cargoId}` test IDs and a stable `data-remaining` attribute for browser verification.
+  - Clicking the arrow adds the next valid cargo box, selects it in the 3D scene, and decrements the pool remaining count; quantity-limit and no-space failures surface as manual operation notices.
+- Verification: `npx vitest run src/lib/quickPlace.test.ts` passed 3 tests; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "一键放置"` passed 1 test.
+
 ## 2026-06-06 (Round 23 T6 Import Template Management)
 
 - Completed subtask: add history-page import template management.

@@ -156,6 +156,24 @@ test('手动模式 3D 暴露 manualEditable canvas，pool 项目可拖拽', asyn
   await expect(poolItems.first()).toHaveAttribute('draggable', 'true')
 })
 
+test('手动模式一键放置从 pool 添加货物并减少剩余数量', async ({ page }) => {
+  await ensureChinese(page)
+  await enterManualMode(page)
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+  const firstPoolItem = page.getByTestId('manual-pool-item').first()
+  const cargoId = await firstPoolItem.getAttribute('data-cargo-id')
+  expect(cargoId).toBeTruthy()
+  const beforeRemaining = Number(await firstPoolItem.getAttribute('data-remaining'))
+  expect(beforeRemaining).toBeGreaterThan(0)
+
+  await page.getByTestId(`pool-quick-place-${cargoId}`).click()
+
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+  await expect(firstPoolItem).toHaveAttribute('data-remaining', String(beforeRemaining - 1))
+  await expect(scene).not.toHaveAttribute('data-selected-orientation', '')
+})
+
 test('手动模式默认即可旋转视角与拖箱，显示旋转提示', async ({ page }) => {
   await ensureChinese(page)
   await enterManualMode(page)

@@ -62,6 +62,7 @@ import {
   formatMeasurement,
 } from './lib/measurement'
 import type { MeasurementAnnotation, Point3D } from './lib/measurement'
+import { quickPlaceCargo } from './lib/quickPlace'
 import { buildReviewChecklist } from './lib/reviewChecklist'
 import type { ReviewChecklist } from './lib/reviewChecklist'
 import { createManualOperationNotice } from './lib/manualFeedback'
@@ -308,6 +309,8 @@ const copy = {
     manualMode: 'Manual placement',
     placementPool: 'Placement pool',
     poolRemaining: 'Remaining',
+    quickPlace: 'Quick place',
+    quickPlaceNoSpace: 'No valid quick placement found',
     manualIssues: 'Validation issues',
     maximizeManual: 'Maximize workspace',
     restoreManual: 'Restore workspace',
@@ -566,6 +569,8 @@ const copy = {
     manualMode: '手动排布',
     placementPool: '待放置池',
     poolRemaining: '剩余',
+    quickPlace: '一键放置',
+    quickPlaceNoSpace: '未找到可用的一键放置位置',
     manualIssues: '校验问题',
     maximizeManual: '最大化工作区',
     restoreManual: '退出最大化',
@@ -1275,6 +1280,38 @@ function Workbench() {
     setManualNotice(null)
     commitManual(nextDraft)
     setManualSelectedId(boxId)
+  }
+
+  const handleQuickPlaceCargo = (cargoId: string) => {
+    const cargoItem = displayCargoItems.find((item) => item.id === cargoId)
+    if (!cargoItem) return
+    const result = quickPlaceCargo({
+      cargo: cargoItem,
+      draft: manualDraft,
+      container: renderingContainer,
+      createId: () => `manual-${cargoId}-${Date.now()}-${manualDraft.boxes.length + 1}`,
+      supportPolicy: placementSettings.supportPolicy,
+      stepMm: placementSettings.gridStepMm,
+    })
+    if (!result.ok) {
+      if (result.reason === 'quantity-limit') {
+        notifyManualRejected('drop', undefined, cargoId, undefined, 'quantity-limit')
+      } else {
+        const now = Date.now()
+        setManualNotice({
+          id: `quick-place-${cargoId}-${now}`,
+          operation: 'drop',
+          cargoId,
+          reasonCode: 'missing-target',
+          message: t.quickPlaceNoSpace,
+          createdAt: now,
+        })
+      }
+      return
+    }
+    setManualNotice(null)
+    commitManual(result.nextDraft)
+    setManualSelectedId(result.box.id)
   }
 
   const handleManualPoolDragStart = (event: ReactDragEvent<HTMLDivElement>, cargoId: string) => {
@@ -3230,6 +3267,7 @@ function Workbench() {
                             draggable={entry.remaining > 0}
                             data-testid="manual-pool-item"
                             data-cargo-id={entry.cargoId}
+                            data-remaining={entry.remaining}
                             onDragStart={(event) => handleManualPoolDragStart(event, entry.cargoId)}
                             onDragEnd={handleManualPoolDragEnd}
                             className={`flex flex-col gap-1 rounded-lg border p-2 text-xs ${
@@ -3243,7 +3281,23 @@ function Workbench() {
                               <span className="h-3 w-3 shrink-0" style={{ backgroundColor: entry.color }} />
                               <span className="ml-auto font-semibold">{t.poolRemaining}: {entry.remaining}</span>
                             </div>
-                            <span className="text-[#64748b]">{entry.length} x {entry.width} x {entry.height} mm</span>
+                            <div className="flex items-center gap-2">
+                              <span className="min-w-0 flex-1 text-[#64748b]">{entry.length} x {entry.width} x {entry.height} mm</span>
+                              <button
+                                className="inline-grid h-7 w-7 shrink-0 place-items-center rounded border border-[#cbd5e1] bg-[#f8fafc] text-sm font-bold text-[#0f172a] hover:bg-[#e0f2fe] disabled:cursor-not-allowed disabled:opacity-40"
+                                type="button"
+                                aria-label={t.quickPlace}
+                                title={t.quickPlace}
+                                data-testid={`pool-quick-place-${entry.cargoId}`}
+                                disabled={entry.remaining <= 0}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  handleQuickPlaceCargo(entry.cargoId)
+                                }}
+                              >
+                                →
+                              </button>
+                            </div>
                           </div>
                         ))
                       )}
