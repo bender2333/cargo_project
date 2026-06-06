@@ -166,13 +166,28 @@ function supportDetails(point: PackingPoint, box: BoxSize, placed: PlacedBox[]) 
   }
 }
 
-function stackLayerForPlacement(point: PackingPoint, box: BoxSize, placed: PlacedBox[]) {
-  return supportDetails(point, box, placed).physicalLayer
-}
-
 function respectsMaxStackLayers(point: PackingPoint, box: BoxSize, placed: PlacedBox[], item: StackLimitCarrier) {
-  if (!item.maxStackLayers || item.maxStackLayers <= 0) return true
-  return stackLayerForPlacement(point, box, placed) <= item.maxStackLayers
+  const support = supportDetails(point, box, placed)
+  const placedById = new Map(placed.map((placedBox) => [placedBox.id, placedBox]))
+  type StackLimitNode = Pick<PlacedBox, 'id' | 'maxStackLayers' | 'physicalLayer' | 'supportedBy'>
+  const candidate: StackLimitNode = {
+    id: '__candidate__',
+    maxStackLayers: item.maxStackLayers,
+    physicalLayer: support.physicalLayer,
+    supportedBy: support.supportedBy.map((supportBox) => supportBox.id),
+  }
+  const stack: StackLimitNode[] = [candidate]
+  const visited = new Set<string>()
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (!current || visited.has(current.id)) continue
+    visited.add(current.id)
+    if (current.maxStackLayers && current.maxStackLayers > 0 && support.physicalLayer - current.physicalLayer + 1 > current.maxStackLayers) {
+      return false
+    }
+    stack.push(...current.supportedBy.map((supportId) => placedById.get(supportId)).filter((supportBox): supportBox is PlacedBox => Boolean(supportBox)))
+  }
+  return true
 }
 
 function canPlace(point: PackingPoint, box: BoxSize, container: ContainerSpec, placed: PlacedBox[], item: StackLimitCarrier) {

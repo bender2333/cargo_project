@@ -755,6 +755,28 @@ describe('manualPlacement', () => {
     ])
   })
 
+  it('validateDraft blocks any cargo stacked above a supporting cargo stack limit', () => {
+    let draft = emptyDraft()
+    draft = addBox(draft, makeManualBox({
+      id: 'limited-base', cargoId: 'cargo-a', label: 'A', color: '#fff',
+      length: 400, width: 500, height: 600, x: 0, y: 0, maxStackLayers: 2,
+    }))
+    draft = setBoxPosition(addBox(draft, makeManualBox({
+      id: 'middle', cargoId: 'cargo-b', label: 'B', color: '#0ea5e9',
+      length: 400, width: 500, height: 600, x: 0, y: 0,
+    })), 'middle', 0, 0, 600)
+    draft = setBoxPosition(addBox(draft, makeManualBox({
+      id: 'top', cargoId: 'cargo-c', label: 'C', color: '#22c55e',
+      length: 400, width: 500, height: 600, x: 0, y: 0,
+    })), 'top', 0, 0, 1200)
+
+    const issues = validateDraft(draft, container())
+
+    expect(issues).toContainEqual(
+      expect.objectContaining({ type: 'max-stack-layers', boxId: 'top', stackLayer: 3, maxStackLayers: 2 }),
+    )
+  })
+
   it('validateDraft returns no issues for non-overlapping in-bounds boxes', () => {
     let draft = emptyDraft()
     draft = addBox(draft, makeManualBox({

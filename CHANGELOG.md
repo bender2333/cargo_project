@@ -4,6 +4,7 @@
 
 - R1 removed orientation text from 3D face-label textures while preserving orientation metadata for manual markers and details. Verification: `npx vitest run src/lib/faceLabelContent.test.ts` passed 3 tests; `npx tsc -b` passed.
 - R2 stabilized iso free-camera near-top labels by locking near-axis camera directions to a single visible face while preserving two-face labels for oblique iso views. Verification: `npx vitest run src/lib/cameraFacingLabels.test.ts` passed 4 tests; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "moves 3D labels|free camera rotates near top"` passed 2 tests.
+- R3 enforced max stack layer limits across the full support chain in both automatic packing and manual validation, so unlimited cargo can no longer be stacked above a supporting cargo whose stack limit has been reached. Verification: `npx vitest run src/lib/packing.test.ts src/lib/manualPlacement.test.ts` passed 76 tests; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "global max stack"` passed 1 test; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "最大堆叠|悬空"` passed 2 tests.
 
 ## 2026-06-06 (Top Label and Management Review)
 

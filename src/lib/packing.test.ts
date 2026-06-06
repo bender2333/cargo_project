@@ -405,6 +405,45 @@ describe('calculatePacking', () => {
     expect(Math.max(...legacy.placed.map((box) => box.z))).toBe(1000)
   })
 
+  it('prevents unlimited cargo from stacking above a supporting cargo stack limit', () => {
+    const container = testContainer({ length: 1000, width: 1000, height: 3000 })
+
+    const result = calculatePacking(container, [
+      cargo({
+        id: 'limited-base',
+        label: 'A',
+        length: 1000,
+        width: 1000,
+        height: 500,
+        quantity: 1,
+        canRotate: false,
+        maxStackLayers: 2,
+      }),
+      cargo({
+        id: 'middle-unlimited',
+        label: 'B',
+        length: 1000,
+        width: 1000,
+        height: 500,
+        quantity: 1,
+        canRotate: false,
+      }),
+      cargo({
+        id: 'top-unlimited',
+        label: 'C',
+        length: 1000,
+        width: 1000,
+        height: 500,
+        quantity: 1,
+        canRotate: false,
+      }),
+    ], { loadingMode: 'input' })
+
+    expectValidPacking(container, result)
+    expect(result.placed.map((box) => box.cargoId)).toEqual(['limited-base', 'middle-unlimited'])
+    expect(result.unplaced[0]).toMatchObject({ cargoId: 'top-unlimited', quantity: 1, reasonCode: UNPLACED_REASON_CODES.NO_SPACE })
+  })
+
   it('applies a global default max stack layer limit only to cargo without its own limit', () => {
     const container = testContainer({ length: 1000, width: 1000, height: 3000 })
 

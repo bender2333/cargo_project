@@ -488,6 +488,23 @@ function stackLayerForManualBox(box: ManualPlacedBox, boxes: ManualPlacedBox[], 
   return Math.max(...supports.map((support) => stackLayerForManualBox(support, boxes, minSupportRatio, new Set(seen)))) + 1
 }
 
+function supportingStackLimitViolation(box: ManualPlacedBox, boxes: ManualPlacedBox[], minSupportRatio: number) {
+  const boxLayer = stackLayerForManualBox(box, boxes, minSupportRatio)
+  const visited = new Set<string>()
+  const stack: ManualPlacedBox[] = [box]
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (!current || visited.has(current.id)) continue
+    visited.add(current.id)
+    const currentLayer = stackLayerForManualBox(current, boxes, minSupportRatio)
+    if (current.maxStackLayers && current.maxStackLayers > 0 && boxLayer - currentLayer + 1 > current.maxStackLayers) {
+      return { limitedBox: current, stackLayer: boxLayer, maxStackLayers: current.maxStackLayers }
+    }
+    stack.push(...directSupportsFor(current, boxes, minSupportRatio))
+  }
+  return null
+}
+
 export function isBlockingManualIssue(issue: ValidationIssue) {
   return issue.severity !== 'warning'
 }
@@ -566,17 +583,17 @@ export function validateDraft(draft: ManualDraft, container: ContainerSpec, supp
     }
   }
 
+  const stackLimitSupportRatio = supportPolicy.allowPartialOverhang ? supportPolicy.minSupportRatio : MIN_SUPPORT_OVERLAP_RATIO
   for (const box of draft.boxes) {
-    if (!box.maxStackLayers || box.maxStackLayers <= 0) continue
-    const stackLayer = stackLayerForManualBox(box, draft.boxes, supportPolicy.allowPartialOverhang ? supportPolicy.minSupportRatio : MIN_SUPPORT_OVERLAP_RATIO)
-    if (stackLayer > box.maxStackLayers) {
+    const violation = supportingStackLimitViolation(box, draft.boxes, stackLimitSupportRatio)
+    if (violation) {
       issues.push({
         type: 'max-stack-layers',
         severity: 'error',
         boxId: box.id,
-        stackLayer,
-        maxStackLayers: box.maxStackLayers,
-        message: `Box ${box.label} is on stack layer ${stackLayer}, above the maximum ${box.maxStackLayers}.`,
+        stackLayer: violation.stackLayer,
+        maxStackLayers: violation.maxStackLayers,
+        message: `Box ${box.label} is on stack layer ${violation.stackLayer}, above the maximum ${violation.maxStackLayers} allowed by supporting cargo ${violation.limitedBox.label}.`,
       })
     }
   }
