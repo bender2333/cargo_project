@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-06 (Round 23 T8 3D Ruler)
+
+- Completed subtask: add 3D ruler measurement support.
+  - Added `snapMeasurementPoint3D()` with deterministic snapping to box corners, box edge midpoints, container walls, and a free-point fallback outside the snap threshold.
+  - `ContainerScene` now accepts the shared measurement state, captures 3D ruler clicks, snaps the measured points, renders fixed 3D measurement lines/markers, and exposes measurement state attributes for browser verification.
+  - The existing measurement list remains shared between 2D and 3D, so 3D-created lines can be deleted from the same side panel.
+- Verification: `npx vitest run src/lib/measureSnap.test.ts` passed 4 tests; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "尺规在 2D|尺规在 3D"` passed 2 tests.
+
 ## 2026-06-06 (Round 23 T7 Manual Quick Place)
 
 - Completed subtask: add one-click manual cargo placement from the pool.

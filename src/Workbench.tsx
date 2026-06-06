@@ -941,6 +941,7 @@ function Workbench() {
   const [manualNotice, setManualNotice] = useState<ManualOperationNotice | null>(null)
   const [measurements, setMeasurements] = useState<MeasurementAnnotation[]>([])
   const [measurementDraftPoint, setMeasurementDraftPoint] = useState<Point3D | null>(null)
+  const measurementDraftPointRef = useRef<Point3D | null>(null)
   const [containerChangeNotice, setContainerChangeNotice] = useState('')
   const [rotationNotice, setRotationNotice] = useState('')
   const previousContainerKeyRef = useRef<string | null>(null)
@@ -1461,18 +1462,20 @@ function Workbench() {
   }, [manualNotice])
 
   const handleMeasurementPoint = (point: Point3D) => {
-    if (!rulerEnabled) return
-    if (!measurementDraftPoint) {
+    const current = measurementDraftPointRef.current
+    if (!current) {
+      measurementDraftPointRef.current = point
       setMeasurementDraftPoint(point)
       return
     }
     const next = createMeasurementAnnotation({
       id: `measure-${Date.now()}`,
-      from: measurementDraftPoint,
+      from: current,
       to: point,
       axis: 'spatial',
     })
-    setMeasurements((current) => [...current, next])
+    setMeasurements((items) => [...items, next])
+    measurementDraftPointRef.current = null
     setMeasurementDraftPoint(null)
   }
 
@@ -3177,6 +3180,7 @@ function Workbench() {
               data-testid="toggle-ruler"
               onClick={() => {
                 setRulerEnabled((enabled) => !enabled)
+                measurementDraftPointRef.current = null
                 setMeasurementDraftPoint(null)
               }}
             >
@@ -3358,6 +3362,10 @@ function Workbench() {
                           onManualMove={handleManualMoveBox}
                           onManualOperationRejected={(operation, boxId, cargoId) => notifyManualRejected(operation, boxId, cargoId)}
                           onManualRotate={handleManualRotateBox}
+                          rulerEnabled={rulerEnabled}
+                          measurements={measurements}
+                          measurementDraftPoint={measurementDraftPoint}
+                          onMeasurementPoint={handleMeasurementPoint}
                           onSelectBox={setManualSelectedId}
                         />
                       ) : (

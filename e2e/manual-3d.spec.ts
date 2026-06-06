@@ -276,6 +276,26 @@ test('尺规在 2D 中创建固定测量线并可删除', async ({ page }) => {
   await expect(page.getByTestId('measurement-line')).toHaveCount(0)
 })
 
+test('尺规在 3D 中创建固定测量线并可删除', async ({ page }) => {
+  await ensureChinese(page)
+  await enterManualMode(page)
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-ruler-enabled', 'false')
+  await page.getByTestId('toggle-ruler').click()
+  await expect(scene).toHaveAttribute('data-ruler-enabled', 'true')
+  const canvas = page.locator('canvas').first()
+  await canvas.click({ position: { x: 160, y: 180 } })
+  await expect(scene).toHaveAttribute('data-measurement-hit-count', '1')
+  await expect(scene).toHaveAttribute('data-measurement-draft', 'true')
+  await canvas.click({ position: { x: 240, y: 220 } })
+  await expect(scene).toHaveAttribute('data-measurement-hit-count', '2')
+  await expect(scene).toHaveAttribute('data-measurement-count', '1')
+  await expect(page.getByTestId('measurement-list-item')).toHaveCount(1)
+
+  await page.getByTestId('measurement-list-item').getByRole('button', { name: '删除' }).click()
+  await expect(scene).toHaveAttribute('data-measurement-count', '0')
+})
+
 test('自动模式默认即可旋转，重置视角按钮可用', async ({ page }) => {
   await ensureChinese(page)
   const scene = page.getByTestId('container-scene')

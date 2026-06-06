@@ -21,6 +21,8 @@ import {
   setRotationGizmoHandleHovered,
   type RotationGizmo,
 } from '../lib/rotationGizmo'
+import type { MeasurementAnnotation, Point3D } from '../lib/measurement'
+import { snapMeasurementPoint3D } from '../lib/measureSnap'
 
 export type SceneViewMode = 'iso' | 'top' | 'front' | 'side'
 
@@ -65,6 +67,10 @@ type ContainerSceneProps = {
   boxOpacityOverride?: number | null
   /** Size/color of the cargo currently being dragged from the pool — drives the dragover ghost. */
   poolDragInfo?: { cargoId: string; length: number; width: number; height: number; color: string } | null
+  rulerEnabled?: boolean
+  measurementDraftPoint?: Point3D | null
+  measurements?: MeasurementAnnotation[]
+  onMeasurementPoint?: (point: Point3D) => void
 }
 
 type MeshEntry = {
@@ -94,6 +100,7 @@ type SceneState = {
   rotationGizmoBoxSignature: string | null
   rotationGizmoHovered: ManualRotationDirection | null
   rotationGizmoVisible: boolean
+  measurementGroup: THREE.Group | null
   poolDrop: { x: number; y: number; z: number; invalid: boolean } | null
   scale: number
   length: number
@@ -431,6 +438,22 @@ function worldCenterForBox(box: PlacedBox, scale: number, length: number, width:
   )
 }
 
+function worldPointFromMm(point: Point3D, scale: number, length: number, width: number) {
+  return new THREE.Vector3(
+    -length / 2 + point.x * scale,
+    point.z * scale,
+    -width / 2 + point.y * scale,
+  )
+}
+
+function containerPointFromWorld(world: THREE.Vector3, scale: number, length: number, width: number): Point3D {
+  return {
+    x: (world.x + length / 2) / scale,
+    y: (world.z + width / 2) / scale,
+    z: world.y / scale,
+  }
+}
+
 function boxOrientationQuaternion(box: PlacedBox) {
   const basis = orientationRenderingBasisVectors(orientationAxesOf(box))
   const matrix = new THREE.Matrix4().makeBasis(
@@ -647,6 +670,70 @@ function clearGhost(state: SceneState) {
   state.ghost.edges.visible = false
 }
 
+function clearMeasurementGroup(state: SceneState) {
+  if (!state.measurementGroup) return
+  state.scene.remove(state.measurementGroup)
+  state.measurementGroup.traverse((obj) => {
+    if (obj instanceof THREE.Line || obj instanceof THREE.Mesh) {
+      obj.geometry.dispose()
+      if (Array.isArray(obj.material)) obj.material.forEach((material) => material.dispose())
+      else (obj.material as THREE.Material).dispose()
+    }
+  })
+  state.measurementGroup = null
+}
+
+function syncMeasurementLines(state: SceneState, measurements: MeasurementAnnotation[], draftPoint: Point3D | null) {
+  clearMeasurementGroup(state)
+  const visible = measurements.filter((line) => !line.hidden)
+  if (visible.length === 0 && !draftPoint) return
+
+  const group = new THREE.Group()
+  const lineMaterial = new THREE.LineBasicMaterial({ color: 0x2563eb, linewidth: 2 })
+  const draftMaterial = new THREE.LineBasicMaterial({ color: 0xf59e0b, linewidth: 2 })
+  const markerMaterial = new THREE.MeshBasicMaterial({ color: 0x2563eb, depthTest: false })
+
+  const addMarker = (point: Point3D) => {
+    const marker = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), markerMaterial)
+    marker.position.copy(worldPointFromMm(point, state.scale, state.length, state.width))
+    marker.renderOrder = 80
+    group.add(marker)
+  }
+
+  for (const measurement of visible) {
+    const from = measurement.from.point
+    const to = measurement.to.point
+    const geometry = new THREE.BufferGeometry().setFromPoints([
+      worldPointFromMm(from, state.scale, state.length, state.width),
+      worldPointFromMm(to, state.scale, state.length, state.width),
+    ])
+    const line = new THREE.Line(geometry, lineMaterial)
+    line.renderOrder = 80
+    line.userData.measurementId = measurement.id
+    line.userData.testId = 'measurement-line-3d'
+    group.add(line)
+    addMarker(from)
+    addMarker(to)
+  }
+
+  if (draftPoint) {
+    const marker = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 8), new THREE.MeshBasicMaterial({ color: 0xf59e0b, depthTest: false }))
+    marker.position.copy(worldPointFromMm(draftPoint, state.scale, state.length, state.width))
+    marker.renderOrder = 90
+    group.add(marker)
+    const geometry = new THREE.BufferGeometry().setFromPoints([
+      worldPointFromMm(draftPoint, state.scale, state.length, state.width),
+      worldPointFromMm({ x: draftPoint.x, y: draftPoint.y, z: Math.min(state.height / state.scale, draftPoint.z + 120) }, state.scale, state.length, state.width),
+    ])
+    const draftLine = new THREE.Line(geometry, draftMaterial)
+    draftLine.renderOrder = 90
+    group.add(draftLine)
+  }
+
+  state.scene.add(group)
+  state.measurementGroup = group
+}
+
 function updateHoverHighlight(state: SceneState, boxId: string | null, scale: number, length: number, width: number) {
   if (!boxId) {
     if (state.hoverHighlight) {
@@ -700,6 +787,10 @@ export function ContainerScene({
   cogOverlay,
   boxOpacityOverride = null,
   poolDragInfo,
+  rulerEnabled = false,
+  measurementDraftPoint = null,
+  measurements = [],
+  onMeasurementPoint,
 }: ContainerSceneProps) {
   const mountRef = useRef<HTMLDivElement | null>(null)
   const sceneStateRef = useRef<SceneState | null>(null)
@@ -722,8 +813,11 @@ export function ContainerScene({
   const onSelectBoxRef = useRef<typeof onSelectBox>(onSelectBox)
   const onClearSelectionRef = useRef<typeof onClearSelection>(onClearSelection)
   const onHoverBoxRef = useRef<typeof onHoverBox>(onHoverBox)
+  const onMeasurementPointRef = useRef<typeof onMeasurementPoint>(onMeasurementPoint)
+  const rulerEnabledRef = useRef(rulerEnabled)
   const selectedManualBoxIdRef = useRef<string | null>(selectedManualBoxId ?? null)
   const [gizmoVisible, setGizmoVisible] = useState(false)
+  const [measurementHitCount, setMeasurementHitCount] = useState(0)
   const gizmoVisibleRef = useRef(false)
   const visualPropsRef = useRef({ activeLayerId, activeLabelId, selectedBoxId, highlightBoxIds, boxOpacityOverride })
   const selectedManualBox = useMemo(
@@ -795,6 +889,14 @@ export function ContainerScene({
   useEffect(() => {
     onHoverBoxRef.current = onHoverBox
   }, [onHoverBox])
+
+  useEffect(() => {
+    onMeasurementPointRef.current = onMeasurementPoint
+  }, [onMeasurementPoint])
+
+  useEffect(() => {
+    rulerEnabledRef.current = rulerEnabled
+  }, [rulerEnabled])
 
   useEffect(() => {
     if (selectedManualBoxIdRef.current !== (selectedManualBoxId ?? null)) {
@@ -904,6 +1006,7 @@ export function ContainerScene({
       rotationGizmoBoxSignature: null,
       rotationGizmoHovered: null,
       rotationGizmoVisible: gizmoVisibleRef.current,
+      measurementGroup: null,
       poolDrop: null,
       scale,
       length,
@@ -1005,6 +1108,34 @@ export function ContainerScene({
       if (event.button !== 0) return
       updatePointer(event)
       raycaster.setFromCamera(pointer, camera)
+      if (rulerEnabledRef.current) {
+        event.preventDefault()
+        event.stopPropagation()
+        const hit = raycaster.intersectObjects(sceneState.pickables, false)[0]
+        const fallbackPoint = raycaster.ray.at(
+          Math.max(1, camera.position.distanceTo(target)),
+          new THREE.Vector3(),
+        )
+        const point = hit
+          ? containerPointFromWorld(hit.point, scale, length, width)
+          : raycaster.ray.intersectPlane(groundPlane, intersectionPoint)
+            ? containerPointFromWorld(intersectionPoint, scale, length, width)
+            : containerPointFromWorld(fallbackPoint, scale, length, width)
+        if (point) {
+          const snapped = snapMeasurementPoint3D({
+            point: {
+              x: Math.max(0, Math.min(container.length, point.x)),
+              y: Math.max(0, Math.min(container.width, point.y)),
+              z: Math.max(0, Math.min(container.height, point.z)),
+            },
+            boxes,
+            container,
+          })
+          onMeasurementPointRef.current?.(snapped.point)
+          setMeasurementHitCount((count) => count + 1)
+        }
+        return
+      }
       if (manualEditableRef.current) {
         const gizmoDirection = hitRotationGizmo(sceneState, raycaster)
         const selectedBoxId = selectedManualBoxIdRef.current
@@ -1458,6 +1589,7 @@ export function ContainerScene({
         disposeRotationGizmo(sceneState.rotationGizmo)
         sceneState.rotationGizmo = null
       }
+      clearMeasurementGroup(sceneState)
       sceneState.meshEntries.forEach((entry) => {
         entry.mesh.geometry.dispose()
         entry.edges.geometry.dispose()
@@ -1595,6 +1727,12 @@ export function ContainerScene({
     state.controls.target.set(0, state.height / 2, 0)
     state.controls.update()
   }, [viewMode, resetViewTick])
+
+  useEffect(() => {
+    const state = sceneStateRef.current
+    if (!state) return
+    syncMeasurementLines(state, measurements, measurementDraftPoint)
+  }, [measurements, measurementDraftPoint])
 
   useEffect(() => {
     const state = sceneStateRef.current
@@ -1859,6 +1997,10 @@ export function ContainerScene({
       data-gizmo-handle-count={selectedManualBox ? 4 : 0}
       data-selected-orientation={selectedOrientation}
       data-selected-axes={selectedAxes}
+      data-ruler-enabled={rulerEnabled ? 'true' : 'false'}
+      data-measurement-count={measurements.filter((line) => !line.hidden).length}
+      data-measurement-draft={measurementDraftPoint ? 'true' : 'false'}
+      data-measurement-hit-count={measurementHitCount}
     />
   )
 }
