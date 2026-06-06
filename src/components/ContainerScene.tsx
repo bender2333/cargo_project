@@ -251,11 +251,6 @@ function makeFaceLabelTexture(content: FaceLabelContent, color: string, selected
     drawFaceIcon(context, importantIcon, 198, 56, content.stackLayersText)
   }
 
-  context.fillStyle = '#0f172a'
-  context.font = compact ? 'bold 18px Verdana, sans-serif' : 'bold 22px Verdana, sans-serif'
-  context.textAlign = 'center'
-  context.fillText(content.orientationText, 128, compact ? 222 : 242, 226)
-
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
   return texture
@@ -291,9 +286,8 @@ function getCachedFaceMaterial(
 ) {
   const tCache = getTextureCache(state)
   const mCache = getMaterialCache(state)
-  const orientationLabel = box.orientationLabel ?? box.orientationKey
   const content = faceLabelContent(box)
-  const textureKey = `${box.label}:${box.color}:${selected}:${orientationLabel}:${labelMode}:${faceLabelContentSignature(box)}`
+  const textureKey = `${box.label}:${box.color}:${selected}:${labelMode}:${faceLabelContentSignature(box)}`
   let texture = tCache.get(textureKey)
   if (!texture) {
     texture = makeFaceLabelTexture(content, box.color, selected, labelMode)
@@ -347,7 +341,6 @@ function getCachedBoxMaterials(
     selected,
     opacity,
     invalid ? 'inv' : 'ok',
-    box.orientationLabel ?? box.orientationKey,
     labelMode,
     faceLabelContentSignature(box),
     [...labelFaces].sort().join(','),

@@ -38,9 +38,9 @@ describe('faceLabelContent', () => {
       name: 'Long product name for display',
       icons: ['rotate', 'stack'],
       stackLayersText: '3',
-      orientationText: 'X:L+ Y:W+ Z:T+',
       weightDimText: '42kg / 1200x800x600',
     })
+    expect('orientationText' in content).toBe(false)
   })
 
   it('uses negative icons when rotation or stacking are disabled', () => {
