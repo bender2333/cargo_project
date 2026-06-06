@@ -852,6 +852,52 @@ test('creates an import template from the visible manager and reuses it for Exce
   await expect(page.getByText(/800 x 600 x 400 mm/)).toBeVisible()
 })
 
+test('renames and deletes import templates from history template manager', async ({ page }) => {
+  await openEnglish(page)
+  const filePath = await createTemplateWorkbookFile()
+  const templateName = `Template Manage ${Date.now()}`
+  const renamedTemplateName = `${templateName} Renamed`
+
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await page.getByTestId('import-template-name').fill(templateName)
+  await page.getByTestId('map-select-name').selectOption('Goods')
+  await page.getByTestId('map-select-length').selectOption('L')
+  await page.getByTestId('map-select-width').selectOption('W')
+  await page.getByTestId('map-select-height').selectOption('H')
+  await page.getByTestId('save-import-template').click()
+  await expect(page.getByTestId('template-save-status')).toContainText(templateName)
+  await page.getByRole('button', { name: 'Cancel' }).click()
+
+  await page.locator('header').getByRole('button', { name: 'History' }).click()
+  await expect(page.getByTestId('template-manager-list')).toBeVisible()
+  const savedRow = page.locator('[data-testid^="template-manager-row-"]:has-text("' + templateName + '")')
+  await expect(savedRow).toBeVisible()
+  const rowTestId = await savedRow.getAttribute('data-testid')
+  expect(rowTestId).toBeTruthy()
+  const templateId = rowTestId!.replace('template-manager-row-', '')
+
+  await page.getByTestId(`template-manager-edit-${templateId}`).click()
+  await page.getByTestId(`template-manager-name-${templateId}`).fill(renamedTemplateName)
+  await page.getByTestId(`template-manager-save-${templateId}`).click()
+  await expect(page.getByTestId(`template-manager-row-${templateId}`)).toContainText(renamedTemplateName)
+
+  await page.locator('header').getByRole('button', { name: 'Workbench' }).click()
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await page.getByTestId('import-template-select').selectOption({ label: renamedTemplateName })
+  await page.getByRole('button', { name: 'Cancel' }).click()
+
+  await page.locator('header').getByRole('button', { name: 'History' }).click()
+  await page.getByTestId(`template-manager-delete-${templateId}`).click()
+  await expect(page.getByTestId(`template-manager-row-${templateId}`)).toHaveCount(0)
+
+  await page.locator('header').getByRole('button', { name: 'Workbench' }).click()
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await expect(page.getByTestId('import-template-select').locator('option', { hasText: renamedTemplateName })).toHaveCount(0)
+})
+
 test('shows localized failure reasons in Chinese mode', async ({ page }) => {
   await openEnglish(page)
   await page.getByLabel('Max payload kg').fill('36')

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-06-06 (Round 23 T6 Import Template Management)
+
+- Completed subtask: add history-page import template management.
+  - Added `updateImportTemplate()` and `deleteImportTemplate()` API client wrappers for the existing backend routes.
+  - Added a history-page `template-manager-list` panel for listing, renaming, and deleting saved import templates while keeping detailed field mapping edits in the existing import modal.
+  - Kept the import modal template dropdown synchronized after rename/delete.
+  - Added browser coverage for creating a template, renaming it in history, selecting the renamed template in the import modal, deleting it, and confirming the dropdown no longer lists it.
+- Verification: `npx vitest run src/lib/importTemplates.test.ts` passed 2 tests; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "renames and deletes import templates"` passed 1 test.
+
 ## 2026-06-06 (Round 23 T5 Cargo Library UI)
 
 - Completed subtask: add the frontend cargo library API and history-page management panel.

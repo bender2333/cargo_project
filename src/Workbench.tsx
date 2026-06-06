@@ -51,7 +51,7 @@ import type { HistoryPlan } from './lib/historyPlans'
 import { createClientId } from './lib/clientId'
 import { parseCargoRows, parseCargoRowsWithTemplate } from './lib/importCargo'
 import type { ImportCargoRow } from './lib/importCargo'
-import { readImportTemplates, saveImportTemplate } from './lib/importTemplates'
+import { deleteImportTemplate, readImportTemplates, saveImportTemplate, updateImportTemplate } from './lib/importTemplates'
 import { deleteCustomCargo, readCustomCargo, saveCustomCargo, updateCustomCargo } from './lib/customCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
@@ -186,6 +186,12 @@ const copy = {
     templateName: 'Template name',
     templateSave: 'Save template',
     templateSaved: 'Template saved',
+    templateUpdated: 'Template updated',
+    templateDeleted: 'Template deleted',
+    templateEmpty: 'No import templates yet',
+    templateEdit: 'Edit',
+    templateDelete: 'Delete',
+    templateUpdate: 'Update template',
     templateHeaderRow: 'Header row',
     templateStartRow: 'Start row',
     templateDefaultLabel: 'Default label',
@@ -438,6 +444,12 @@ const copy = {
     templateName: '模板名称',
     templateSave: '保存模板',
     templateSaved: '模板已保存',
+    templateUpdated: '模板已更新',
+    templateDeleted: '模板已删除',
+    templateEmpty: '暂无导入模板',
+    templateEdit: '编辑',
+    templateDelete: '删除',
+    templateUpdate: '更新模板',
     templateHeaderRow: '表头行',
     templateStartRow: '数据起始行',
     templateDefaultLabel: '默认标识',
@@ -1014,6 +1026,8 @@ function Workbench() {
   const [templateStartRow, setTemplateStartRow] = useState(2)
   const [templateDefaults, setTemplateDefaults] = useState<ImportTemplateDefaults>({ quantity: 1, canRotate: true, stackable: true })
   const [templateSaveNotice, setTemplateSaveNotice] = useState('')
+  const [editingImportTemplateId, setEditingImportTemplateId] = useState('')
+  const [editingImportTemplateName, setEditingImportTemplateName] = useState('')
   const workspaceRef = useRef<HTMLElement | null>(null)
   const reportRef = useRef<HTMLElement | null>(null)
   const cargoRef = useRef<HTMLFormElement | null>(null)
@@ -1860,8 +1874,60 @@ function Workbench() {
     if (!saved) return
     setImportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
     setSelectedImportTemplateId(saved.id)
+    setEditingImportTemplateId('')
+    setEditingImportTemplateName('')
     setTemplateSaveNotice(`${t.templateSaved}: ${saved.name}`)
     setImportMessages((messages) => [`${t.templateSaved}: ${saved.name}`, ...messages])
+  }
+
+  const editImportTemplate = (template: ImportTemplate) => {
+    setEditingImportTemplateId(template.id)
+    setEditingImportTemplateName(template.name)
+  }
+
+  const saveEditedImportTemplate = async () => {
+    const template = importTemplates.find((item) => item.id === editingImportTemplateId)
+    const name = editingImportTemplateName.trim()
+    if (!template || !name) return
+
+    const updated = await updateImportTemplate(template.id, {
+      name,
+      mapping: template.mapping,
+      units: template.units,
+      headerRow: template.headerRow,
+      startRow: template.startRow,
+      mergeRows: template.mergeRows,
+      defaultValues: template.defaultValues,
+    })
+    if (!updated) {
+      alert(locale === 'zh' ? '更新模板失败' : 'Failed to update template')
+      return
+    }
+    setImportTemplates((current) => current.map((item) => item.id === updated.id ? updated : item))
+    setTemplateSaveNotice(`${t.templateUpdated}: ${updated.name}`)
+    if (selectedImportTemplateId === updated.id) {
+      setTemplateName(updated.name)
+    }
+    setEditingImportTemplateId('')
+    setEditingImportTemplateName('')
+  }
+
+  const removeImportTemplate = async (id: string) => {
+    const ok = await deleteImportTemplate(id)
+    if (!ok) {
+      alert(locale === 'zh' ? '删除模板失败' : 'Failed to delete template')
+      return
+    }
+    setImportTemplates((current) => current.filter((item) => item.id !== id))
+    if (selectedImportTemplateId === id) {
+      setSelectedImportTemplateId('')
+      setTemplateName('')
+    }
+    if (editingImportTemplateId === id) {
+      setEditingImportTemplateId('')
+      setEditingImportTemplateName('')
+    }
+    setTemplateSaveNotice(t.templateDeleted)
   }
 
   const canAutoMap = (row: ImportCargoRow): boolean => {
@@ -2488,6 +2554,53 @@ function Workbench() {
                         <button className="archive-button secondary px-2 py-1 text-xs" data-testid={`cargo-library-edit-${item.id}`} type="button" onClick={() => editLibraryCargo(item)}>{t.cargoLibraryEdit}</button>
                         <button className="archive-button px-2 py-1 text-xs text-red-700" data-testid={`cargo-library-delete-${item.id}`} type="button" onClick={() => void removeLibraryCargo(item.id)}>{t.cargoLibraryDelete}</button>
                       </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="mb-5 rounded-lg border border-[#c6c6c6] bg-white p-4" data-testid="template-manager-list">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-lg font-bold">{t.templateManager}</h3>
+                {templateSaveNotice && <span className="text-xs font-semibold text-[#047857]">{templateSaveNotice}</span>}
+              </div>
+              {importTemplates.length === 0 ? (
+                <p className="text-sm text-[#64748b]">{t.templateEmpty}</p>
+              ) : (
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {importTemplates.map((template) => (
+                    <article className="rounded border border-[#d1d5db] bg-[#f8fafc] p-3 text-sm" data-testid={`template-manager-row-${template.id}`} key={template.id}>
+                      {editingImportTemplateId === template.id ? (
+                        <div className="grid gap-2">
+                          <label className="text-xs font-semibold text-[#475569]">
+                            {t.templateName}
+                            <input
+                              className="field-input mt-1"
+                              data-testid={`template-manager-name-${template.id}`}
+                              value={editingImportTemplateName}
+                              onChange={(event) => setEditingImportTemplateName(event.target.value)}
+                            />
+                          </label>
+                          <div className="flex flex-wrap gap-2">
+                            <button className="archive-button success px-2 py-1 text-xs" data-testid={`template-manager-save-${template.id}`} type="button" onClick={() => void saveEditedImportTemplate()}>{t.templateUpdate}</button>
+                            <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => { setEditingImportTemplateId(''); setEditingImportTemplateName('') }}>{t.cancel}</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <strong>{template.name}</strong>
+                          <p className="mt-1 text-xs text-[#64748b]">
+                            {t.templateHeaderRow}: {template.headerRow ?? 1} · {t.templateStartRow}: {template.startRow ?? 2}
+                          </p>
+                          <p className="mt-1 truncate text-xs text-[#64748b]">
+                            {Object.entries(template.mapping).filter(([, value]) => value).map(([key, value]) => `${key}:${value}`).join(', ') || '-'}
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button className="archive-button secondary px-2 py-1 text-xs" data-testid={`template-manager-edit-${template.id}`} type="button" onClick={() => editImportTemplate(template)}>{t.templateEdit}</button>
+                            <button className="archive-button px-2 py-1 text-xs text-red-700" data-testid={`template-manager-delete-${template.id}`} type="button" onClick={() => void removeImportTemplate(template.id)}>{t.templateDelete}</button>
+                          </div>
+                        </>
+                      )}
                     </article>
                   ))}
                 </div>

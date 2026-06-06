@@ -25,3 +25,19 @@ export async function saveImportTemplate(payload: ImportTemplatePayload): Promis
   if (!res.ok) return null
   return res.json()
 }
+
+export async function updateImportTemplate(id: string, payload: ImportTemplatePayload): Promise<ImportTemplate | null> {
+  const res = await fetchWithAuth(`/api/import-templates/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
+export async function deleteImportTemplate(id: string): Promise<boolean> {
+  const res = await fetchWithAuth(`/api/import-templates/${id}`, {
+    method: 'DELETE',
+  })
+  return res.ok
+}
