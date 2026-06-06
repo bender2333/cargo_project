@@ -185,6 +185,10 @@ test('loads the container calculator workspace', async ({ page }) => {
   await expect(page.getByTestId('archive-stat-grid')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Users' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Licenses' })).toHaveCount(0)
+  await expect(page.getByTestId('project-name-input')).toHaveCount(0)
+  await expect(page.getByTestId('new-project-button')).toHaveCount(0)
+  await expect(page.getByTestId('save-project-button')).toHaveCount(0)
+  await expect(page.getByTestId('upload-project-input')).toHaveCount(0)
   await expect(page.getByTestId('container-scene')).toBeVisible()
 })
 

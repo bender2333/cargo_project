@@ -301,11 +301,6 @@ const copy = {
     noFailure: 'None',
     label: 'Label',
     language: '中文',
-    newProjectName: 'New Project',
-    projectNameText: 'Project Name',
-    newProject: 'New Project',
-    saveProject: 'Save Project',
-    uploadProject: 'Upload Project',
     autoMode: 'Auto placement',
     manualMode: 'Manual placement',
     placementPool: 'Placement pool',
@@ -561,11 +556,6 @@ const copy = {
     noFailure: '无',
     label: '标识',
     language: 'English',
-    newProjectName: '新装箱项目',
-    projectNameText: '项目名称',
-    newProject: '新建项目',
-    saveProject: '保存项目',
-    uploadProject: '上传项目',
     autoMode: '自动排布',
     manualMode: '手动排布',
     placementPool: '待放置池',
@@ -875,6 +865,13 @@ function filenameSlug(value: string) {
     .replace(/^-+|-+$/g, '')
 }
 
+function defaultProjectName(locale: Locale) {
+  const now = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`
+  return locale === 'zh' ? `装箱方案-${stamp}` : `Packing plan-${stamp}`
+}
+
 function containerPlacementKey(container: ContainerSpec) {
   const effective = effectiveContainer(container)
   return [
@@ -901,7 +898,7 @@ function localizeManualIssue(issue: ValidationIssue, localeCopy: typeof copy.en)
 function Workbench() {
   const [locale, setLocale] = useState<Locale>('zh')
   const t = copy[locale]
-  const [projectName, setProjectName] = useState(() => locale === 'zh' ? '新装箱项目' : 'New Project')
+  const [projectName, setProjectName] = useState(() => defaultProjectName(locale))
   const [shipmentName, setShipmentName] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeNav, setActiveNav] = useState<NavTarget>('overview')
@@ -2237,7 +2234,7 @@ function Workbench() {
 
   const restorePlan = (plan: HistoryPlan) => {
     suppressContainerChangeNoticeRef.current = true
-    setProjectName(plan.projectName || '新装箱项目')
+    setProjectName(plan.projectName || defaultProjectName(locale))
     setShipmentName(plan.shipmentName)
     setSelectedContainerId(plan.containerId)
     if (plan.containerId === 'custom') {
@@ -2259,103 +2256,6 @@ function Workbench() {
     setContainerChangeNotice('')
     setActiveResultTab('layers')
     setActiveNav('overview')
-  }
-
-  const handleNewProject = () => {
-    suppressContainerChangeNoticeRef.current = true
-    setProjectName(locale === 'zh' ? '新装箱项目' : 'New Project')
-    setShipmentName('')
-    setCargoItems(initialCargo)
-    setSelectedContainerId(containers[0].id)
-    setCustomContainer(customContainerDefaults)
-    setLoadingMode('volume')
-    setPlacementSettings((current) => ({ ...current, defaultMaxStackLayers: undefined }))
-    setActiveLayerId('all')
-    setActiveLabelId('all')
-    setSelectedBoxId(null)
-    setHasCalculated(true)
-    setContainerChangeNotice('')
-    setActiveResultTab('layers')
-  }
-
-  const handleSaveProject = () => {
-    const config = {
-      projectName,
-      shipmentName,
-      selectedContainerId,
-      loadingMode,
-      defaultMaxStackLayers,
-      cargoItems,
-      customContainer,
-    }
-    const jsonString = JSON.stringify(config, null, 2)
-    const blob = new Blob([jsonString], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${filenameSlug(projectName || 'project')}.json`
-    link.click()
-    URL.revokeObjectURL(url)
-
-    // Save to backend history
-    const planData = {
-      containerId: selectedContainer.id,
-      container: selectedContainer,
-      cargoItems: displayCargoItems,
-      placedCount: result.placedCount,
-      totalCargoCount: result.totalCargoCount,
-      layerCount: result.layers.length,
-      labelSummary: result.labelStats.map((item) => `${item.label}:${item.placed}/${item.planned}`).join(', '),
-      defaultMaxStackLayers,
-    }
-    fetchWithAuth('/api/history', {
-      method: 'POST',
-      body: JSON.stringify({
-        projectName,
-        shipmentName,
-        loadingMode,
-        data: planData,
-      }),
-    }).then(() => fetchHistory()).catch(err => console.error('Auto-save history failed:', err))
-  }
-
-  const handleUploadProject = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      try {
-        const raw = event.target?.result as string
-        const config = JSON.parse(raw)
-        
-        if (config.projectName !== undefined) setProjectName(String(config.projectName))
-        if (config.shipmentName !== undefined) setShipmentName(String(config.shipmentName))
-        if (config.selectedContainerId !== undefined) setSelectedContainerId(String(config.selectedContainerId))
-        if (config.loadingMode !== undefined) setLoadingMode(config.loadingMode)
-        const parsedDefaultMaxStackLayers = Number(config.defaultMaxStackLayers)
-        setPlacementSettings((current) => ({
-          ...current,
-          defaultMaxStackLayers: Number.isFinite(parsedDefaultMaxStackLayers) && parsedDefaultMaxStackLayers > 0
-            ? Math.floor(parsedDefaultMaxStackLayers)
-            : undefined,
-        }))
-        if (Array.isArray(config.cargoItems)) setCargoItems(config.cargoItems)
-        if (config.customContainer !== undefined) setCustomContainer(config.customContainer)
-        
-        setActiveLayerId('all')
-        setActiveLabelId('all')
-        setSelectedBoxId(null)
-        suppressContainerChangeNoticeRef.current = true
-        setHasCalculated(true)
-        setContainerChangeNotice('')
-        setActiveResultTab('layers')
-      } catch (err) {
-        console.error('Failed to parse uploaded project file', err)
-        alert(locale === 'zh' ? '上传项目文件解析失败！' : 'Failed to parse uploaded project file!')
-      }
-    }
-    reader.readAsText(file)
-    e.target.value = ''
   }
 
   const deleteCargo = (cargoId: string) => {
@@ -2602,46 +2502,6 @@ function Workbench() {
               <h1 className="m-0 text-[30px] font-bold">{t.title}</h1>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <div className="flex items-center gap-2 rounded-[10px] bg-white/10 px-3 py-1.5 border border-white/20 mr-2">
-                <span className="opacity-90">{t.projectNameText}:</span>
-                <input
-                  type="text"
-                  className="bg-transparent text-white font-bold outline-none border-b border-transparent focus:border-white/50 w-32 text-sm placeholder-white/50"
-                  value={projectName}
-                  placeholder={t.projectNameText}
-                  onChange={(e) => setProjectName(e.target.value)}
-                  data-testid="project-name-input"
-                />
-              </div>
-              <button
-                className="rounded-[10px] bg-white/20 px-3 py-2 font-bold text-white hover:bg-white/30 border border-white/10 transition-colors mr-1"
-                type="button"
-                onClick={handleNewProject}
-                data-testid="new-project-button"
-              >
-                {t.newProject}
-              </button>
-              <button
-                className="rounded-[10px] bg-white/20 px-3 py-2 font-bold text-white hover:bg-white/30 border border-white/10 transition-colors mr-1"
-                type="button"
-                onClick={handleSaveProject}
-                data-testid="save-project-button"
-              >
-                {t.saveProject}
-              </button>
-              <label className="rounded-[10px] bg-white/20 px-3 py-2 font-bold text-white hover:bg-white/30 border border-white/10 transition-colors cursor-pointer mr-2 text-center">
-                {t.uploadProject}
-                <input
-                  type="file"
-                  accept=".json"
-                  className="hidden"
-                  onChange={handleUploadProject}
-                  data-testid="upload-project-input"
-                />
-              </label>
-
-              <div className="hidden md:block w-[1px] h-6 bg-white/20 mx-2"></div>
-
               {navItems.map((item) => (
                 <button
                   className={`rounded-[10px] px-4 py-2 font-bold ${activeNav === item.target ? 'bg-white text-[#1d4ed8]' : 'bg-white/20 text-white hover:bg-white/30'}`}
