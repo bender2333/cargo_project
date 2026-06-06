@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { buildRotationGizmo, rotationGizmoRadius } from './rotationGizmo'
+import { buildRotationGizmo, rotationGizmoAnchorOffsetY, rotationGizmoRadius } from './rotationGizmo'
 
 describe('rotationGizmoRadius', () => {
   it('places the handle outside the selected cargo footprint', () => {
@@ -41,5 +41,27 @@ describe('buildRotationGizmo', () => {
       expect(material).toBeInstanceOf(THREE.MeshStandardMaterial)
       expect(material.emissive.getHex()).toBe(0x000000)
     }
+  })
+
+  it('renders handles above scene geometry instead of being depth-hidden by cargo or floor', () => {
+    const gizmo = buildRotationGizmo({ length: 1200, width: 800, height: 600 }, 0.002)
+
+    expect(gizmo.group.renderOrder).toBeGreaterThan(0)
+    for (const mesh of gizmo.pickables) {
+      expect(mesh.renderOrder).toBeGreaterThan(0)
+      expect(mesh.material).toBeInstanceOf(THREE.MeshStandardMaterial)
+      const material = mesh.material as THREE.MeshStandardMaterial
+      expect(material.depthTest).toBe(false)
+      expect(material.depthWrite).toBe(false)
+    }
+  })
+
+  it('anchors the gizmo above the selected cargo top so lower arcs do not sit on the floor', () => {
+    const scale = 0.002
+    const radius = rotationGizmoRadius({ length: 1200, width: 800, height: 600 }, scale)
+    const offsetY = rotationGizmoAnchorOffsetY({ height: 600 }, scale, radius)
+
+    expect(offsetY).toBeGreaterThan((600 * scale) / 2)
+    expect(offsetY - radius).toBeGreaterThanOrEqual(0)
   })
 })

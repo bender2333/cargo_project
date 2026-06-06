@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-06 (Round 23 T2 3D Rotation Gizmo Visibility)
+
+- Completed subtask: keep the manual 3D rotation gizmo visible above cargo and the floor.
+  - Rotation gizmo materials now render as overlay-style handles with `depthTest=false` and `depthWrite=false`.
+  - Gizmo group and pickable arc/cone meshes now use a high render order so the four handles remain visible from low or bottom-adjacent camera angles.
+  - `ContainerScene` now anchors the gizmo above the selected cargo top instead of the box center, preventing lower arcs from sitting on the floor.
+- Verification: red tests first failed for missing render-order/depth behavior and missing anchor offset; after the fix, `npx vitest run src/lib/rotationGizmo.test.ts` passed 6 tests, `npx tsc -b` passed, and targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "弧形手柄|选中前|R 与 Shift"` passed 3 tests after starting the local backend on port 3010. The first E2E attempt failed only because `/api/auth/login` proxied to a stopped backend (`ECONNREFUSED 127.0.0.1:3010`).
+
 ## 2026-06-06 (Round 23 T1 PlacedBox Rotation Metadata)
 
 - Completed subtask: preserve `canRotate` on every `PlacedBox`.

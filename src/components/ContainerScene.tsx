@@ -16,6 +16,7 @@ import { cameraFacingLabelFaces, type LocalBoxFace } from '../lib/cameraFacingLa
 import {
   buildRotationGizmo,
   disposeRotationGizmo,
+  rotationGizmoAnchorOffsetY,
   setRotationGizmoHandleHovered,
   type RotationGizmo,
 } from '../lib/rotationGizmo'
@@ -454,7 +455,9 @@ function syncRotationGizmo(state: SceneState, boxId: string | null) {
     return
   }
   const gizmo = ensureRotationGizmo(state, entry.box)
-  gizmo.group.position.copy(worldCenterForBox(entry.box, state.scale, state.length, state.width))
+  const center = worldCenterForBox(entry.box, state.scale, state.length, state.width)
+  center.y = entry.box.z * state.scale + rotationGizmoAnchorOffsetY(entry.box, state.scale, gizmo.radius)
+  gizmo.group.position.copy(center)
   gizmo.group.rotation.set(0, 0, 0)
   gizmo.group.visible = true
 }

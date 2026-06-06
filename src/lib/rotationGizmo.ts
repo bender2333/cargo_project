@@ -30,6 +30,7 @@ const GIZMO_MARGIN_WORLD = 0.2
 const GIZMO_TUBE_RADIUS = 0.025
 const GIZMO_ARROW_RADIUS = 0.06
 const GIZMO_ARROW_LENGTH = 0.16
+const GIZMO_RENDER_ORDER = 999
 
 type HandleSpec = {
   direction: ManualRotationDirection
@@ -67,6 +68,8 @@ function material(color = GIZMO_COLOR) {
     metalness: 0.08,
     transparent: true,
     opacity: 0.96,
+    depthTest: false,
+    depthWrite: false,
   })
 }
 
@@ -76,6 +79,10 @@ function orientConeAlong(cone: THREE.Mesh, direction: THREE.Vector3) {
 
 export function rotationGizmoRadius(size: RotationGizmoCargoSize, scale: number) {
   return Math.max(size.length, size.width, size.height) * scale * 0.5 + GIZMO_MARGIN_WORLD
+}
+
+export function rotationGizmoAnchorOffsetY(size: Pick<RotationGizmoCargoSize, 'height'>, scale: number, radius: number) {
+  return Math.max(size.height * scale * 0.5 + radius * 0.15, radius)
 }
 
 export function setRotationGizmoHandleHovered(handle: RotationGizmoHandle, hovered: boolean) {
@@ -101,6 +108,7 @@ export function disposeRotationGizmo(gizmo: RotationGizmo) {
 
 export function buildRotationGizmo(size: RotationGizmoCargoSize, scale: number): RotationGizmo {
   const group = new THREE.Group()
+  group.renderOrder = GIZMO_RENDER_ORDER
   const radius = rotationGizmoRadius(size, scale)
   const tubeRadius = Math.max(GIZMO_TUBE_RADIUS, radius * 0.018)
   const arrowRadius = Math.max(GIZMO_ARROW_RADIUS, radius * 0.043)
@@ -133,6 +141,7 @@ export function buildRotationGizmo(size: RotationGizmoCargoSize, scale: number):
     for (const mesh of [arc, cone]) {
       mesh.userData.rotationGizmo = true
       mesh.userData.direction = spec.direction
+      mesh.renderOrder = GIZMO_RENDER_ORDER
       group.add(mesh)
       pickables.push(mesh)
     }
