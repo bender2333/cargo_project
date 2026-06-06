@@ -194,6 +194,8 @@ const copy = {
     templateEdit: 'Edit',
     templateDelete: 'Delete',
     templateUpdate: 'Update template',
+    templateNew: 'New template',
+    templateCreate: 'Create template',
     templateHeaderRow: 'Header row',
     templateStartRow: 'Start row',
     templateDefaultLabel: 'Default label',
@@ -449,6 +451,8 @@ const copy = {
     templateEdit: '编辑',
     templateDelete: '删除',
     templateUpdate: '更新模板',
+    templateNew: '新建模板',
+    templateCreate: '创建模板',
     templateHeaderRow: '表头行',
     templateStartRow: '数据起始行',
     templateDefaultLabel: '默认标识',
@@ -1032,6 +1036,7 @@ function Workbench() {
   const [templateSaveNotice, setTemplateSaveNotice] = useState('')
   const [editingImportTemplateId, setEditingImportTemplateId] = useState('')
   const [editingImportTemplateDraft, setEditingImportTemplateDraft] = useState<ImportTemplatePayload | null>(null)
+  const [newImportTemplateDraft, setNewImportTemplateDraft] = useState<ImportTemplatePayload | null>(null)
   const workspaceRef = useRef<HTMLElement | null>(null)
   const reportRef = useRef<HTMLElement | null>(null)
   const cargoRef = useRef<HTMLFormElement | null>(null)
@@ -1920,6 +1925,28 @@ function Workbench() {
     setImportMessages((messages) => [`${t.templateSaved}: ${saved.name}`, ...messages])
   }
 
+  const createBlankImportTemplateDraft = (): ImportTemplatePayload => ({
+    name: '',
+    mapping: {
+      label: '',
+      name: '',
+      length: '',
+      width: '',
+      height: '',
+      weight: '',
+      quantity: '',
+    },
+    units: {
+      length: 'auto',
+      width: 'auto',
+      height: 'auto',
+    },
+    headerRow: 1,
+    startRow: 2,
+    mergeRows: 'none',
+    defaultValues: { quantity: 1, canRotate: true, stackable: true },
+  })
+
   const editImportTemplate = (template: ImportTemplate) => {
     setEditingImportTemplateId(template.id)
     setEditingImportTemplateDraft({
@@ -1973,6 +2000,44 @@ function Workbench() {
     const minimum = fallback
     const parsed = Math.max(minimum, Number(value) || fallback)
     setEditingImportTemplateDraft((current) => current ? { ...current, [field]: parsed } : current)
+  }
+
+  const updateNewTemplateMapping = (field: string, value: string) => {
+    setNewImportTemplateDraft((current) => current ? {
+      ...current,
+      mapping: { ...current.mapping, [field]: value },
+    } : current)
+  }
+
+  const updateNewTemplateNumber = (field: 'headerRow' | 'startRow', value: string) => {
+    const fallback = field === 'headerRow' ? 1 : 2
+    const minimum = fallback
+    const parsed = Math.max(minimum, Number(value) || fallback)
+    setNewImportTemplateDraft((current) => current ? { ...current, [field]: parsed } : current)
+  }
+
+  const saveNewImportTemplate = async () => {
+    const draft = newImportTemplateDraft
+    const name = draft?.name.trim()
+    if (!draft || !name) return
+    const saved = await saveImportTemplate({
+      name,
+      mapping: draft.mapping,
+      units: draft.units,
+      headerRow: draft.headerRow,
+      startRow: draft.startRow,
+      mergeRows: draft.mergeRows,
+      defaultValues: draft.defaultValues,
+    })
+    if (!saved) {
+      alert(locale === 'zh' ? '创建模板失败' : 'Failed to create template')
+      return
+    }
+    setImportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
+    setSelectedImportTemplateId(saved.id)
+    setTemplateName(saved.name)
+    setTemplateSaveNotice(`${t.templateSaved}: ${saved.name}`)
+    setNewImportTemplateDraft(null)
   }
 
   const removeImportTemplate = async (id: string) => {
@@ -2393,8 +2458,58 @@ function Workbench() {
     <div className="rounded-lg border border-[#c6c6c6] bg-white p-4" data-testid="template-manager-list">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-lg font-bold">{t.templateManager}</h3>
-        {templateSaveNotice && <span className="text-xs font-semibold text-[#047857]">{templateSaveNotice}</span>}
+        <div className="flex flex-wrap items-center gap-2">
+          {templateSaveNotice && <span className="text-xs font-semibold text-[#047857]">{templateSaveNotice}</span>}
+          <button
+            className="archive-button success px-3 py-1.5 text-xs"
+            data-testid="template-manager-new"
+            type="button"
+            onClick={() => setNewImportTemplateDraft(createBlankImportTemplateDraft())}
+          >
+            {t.templateNew}
+          </button>
+        </div>
       </div>
+      {newImportTemplateDraft && (
+        <div className="mb-4 grid gap-2 rounded border border-[#93c5fd] bg-[#eff6ff] p-3 text-sm" data-testid="template-manager-new-form">
+          <label className="text-xs font-semibold text-[#475569]">
+            {t.templateName}
+            <input
+              className="field-input mt-1"
+              data-testid="template-manager-new-name"
+              value={newImportTemplateDraft.name}
+              onChange={(event) => setNewImportTemplateDraft((current) => current ? { ...current, name: event.target.value } : current)}
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-xs font-semibold text-[#475569]">
+              {t.templateHeaderRow}
+              <input className="field-input mt-1" min={1} type="number" value={newImportTemplateDraft.headerRow ?? 1} onChange={(event) => updateNewTemplateNumber('headerRow', event.target.value)} />
+            </label>
+            <label className="text-xs font-semibold text-[#475569]">
+              {t.templateStartRow}
+              <input className="field-input mt-1" min={2} type="number" value={newImportTemplateDraft.startRow ?? 2} onChange={(event) => updateNewTemplateNumber('startRow', event.target.value)} />
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            {(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity'] as const).map((field) => (
+              <label className="text-xs font-semibold text-[#475569]" key={field}>
+                {field}
+                <input
+                  className="field-input mt-1"
+                  data-testid={`template-manager-new-map-${field}`}
+                  value={newImportTemplateDraft.mapping[field] ?? ''}
+                  onChange={(event) => updateNewTemplateMapping(field, event.target.value)}
+                />
+              </label>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button className="archive-button success px-2 py-1 text-xs" data-testid="template-manager-new-save" type="button" onClick={() => void saveNewImportTemplate()} disabled={!newImportTemplateDraft.name.trim()}>{t.templateCreate}</button>
+            <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => setNewImportTemplateDraft(null)}>{t.cancel}</button>
+          </div>
+        </div>
+      )}
       {importTemplates.length === 0 ? (
         <p className="text-sm text-[#64748b]">{t.templateEmpty}</p>
       ) : (

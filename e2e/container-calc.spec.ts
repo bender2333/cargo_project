@@ -900,6 +900,34 @@ test('creates an import template from the visible manager and reuses it for Exce
   await expect(page.getByText(/800 x 600 x 400 mm/)).toBeVisible()
 })
 
+test('creates an import template from top-level template manager and reuses it for Excel import', async ({ page }) => {
+  await openEnglish(page)
+  const filePath = await createTemplateWorkbookFile()
+  const templateName = `Template Manager New ${Date.now()}`
+
+  await page.getByTestId('nav-template-manager').click()
+  await expect(page.getByTestId('template-manager-list')).toBeVisible()
+  await page.getByTestId('template-manager-new').click()
+  await page.getByTestId('template-manager-new-name').fill(templateName)
+  await page.getByTestId('template-manager-new-map-name').fill('Goods')
+  await page.getByTestId('template-manager-new-map-length').fill('L')
+  await page.getByTestId('template-manager-new-map-width').fill('W')
+  await page.getByTestId('template-manager-new-map-height').fill('H')
+  await page.getByTestId('template-manager-new-save').click()
+
+  const savedRow = page.locator('[data-testid^="template-manager-row-"]:has-text("' + templateName + '")')
+  await expect(savedRow).toBeVisible()
+
+  await page.locator('header').getByRole('button', { name: 'Workbench' }).click()
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await page.getByTestId('import-template-select').selectOption({ label: templateName })
+  await page.getByTestId('confirm-mapping').click()
+  await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Template only crate/ }).first()).toBeVisible()
+  await expect(page.getByText(/80 x 60 x 40 mm/)).toBeVisible()
+})
+
 test('renames and deletes import templates from top-level template manager', async ({ page }) => {
   await openEnglish(page)
   const filePath = await createTemplateWorkbookFile()
