@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cameraFacingLabelFaces, cameraDirectionForViewMode } from './cameraFacingLabels'
+import { cameraFacingLabelFaces, cameraDirectionForViewMode, fixedLabelFacesForViewMode } from './cameraFacingLabels'
 
 describe('camera-facing 3D label faces', () => {
   it('selects only the local box faces whose outward normals face the camera', () => {
@@ -14,5 +14,12 @@ describe('camera-facing 3D label faces', () => {
     expect(faces).toHaveLength(2)
     expect(faces).toEqual(expect.arrayContaining(['+X', '+Z']))
     expect(faces).not.toContain('+Y')
+  })
+
+  it('uses fixed visible faces for orthographic camera modes', () => {
+    expect(fixedLabelFacesForViewMode('top')).toEqual(['+Y'])
+    expect(fixedLabelFacesForViewMode('front')).toEqual(['+Z'])
+    expect(fixedLabelFacesForViewMode('side')).toEqual(['+X'])
+    expect(fixedLabelFacesForViewMode('iso')).toBeNull()
   })
 })

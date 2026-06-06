@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-06 (Top Label and Management Review)
+
+- S1 fixed orthographic 3D label faces: top/front/side views now use fixed visible faces while iso keeps camera-facing labels. Verification: `npx vitest run src/lib/cameraFacingLabels.test.ts` passed 3 tests; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "moves 3D labels"` passed 1 test.
+
 ## 2026-06-06 (Round 23 Final Verification and Deploy)
 
 - Completed full local verification and remote deployment for the Round 23 review scope.

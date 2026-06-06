@@ -12,7 +12,7 @@ import { DEFAULT_PLACEMENT_SETTINGS, type PlacementSettings } from '../lib/place
 import { manualMoveCommitArgs } from '../lib/manualMoveCommit'
 import type { BoxLabelMode } from '../lib/labelDeconfliction'
 import { baseDimensionsFromPlaced, orientationAxesOf, orientationRenderingBasisVectors } from '../lib/orientationTransform'
-import { cameraFacingLabelFaces, type LocalBoxFace } from '../lib/cameraFacingLabels'
+import { cameraFacingLabelFaces, fixedLabelFacesForViewMode, type LocalBoxFace } from '../lib/cameraFacingLabels'
 import { faceLabelContent, faceLabelContentSignature, type FaceLabelContent, type FaceLabelIcon } from '../lib/faceLabelContent'
 import {
   buildRotationGizmo,
@@ -106,6 +106,7 @@ type SceneState = {
   length: number
   width: number
   height: number
+  viewMode: SceneViewMode
 }
 
 const textureCache = new WeakMap<SceneState, Map<string, THREE.Texture>>()
@@ -364,6 +365,10 @@ function getCachedBoxMaterials(
 }
 
 function labelFacesForBoxCamera(state: SceneState, box: PlacedBox) {
+  const fixedFaces = fixedLabelFacesForViewMode(state.viewMode)
+  if (fixedFaces) {
+    return new Set(fixedFaces)
+  }
   const center = worldCenterForBox(box, state.scale, state.length, state.width)
   const cameraDirectionWorld = state.camera.position.clone().sub(center).normalize()
   const inverseBoxRotation = boxOrientationQuaternion(box).invert()
@@ -860,6 +865,9 @@ export function ContainerScene({
 
   useEffect(() => {
     viewModeRef.current = viewMode
+    if (sceneStateRef.current) {
+      sceneStateRef.current.viewMode = viewMode
+    }
   }, [viewMode])
 
   useEffect(() => {
@@ -1012,6 +1020,7 @@ export function ContainerScene({
       length,
       width,
       height,
+      viewMode: viewModeRef.current,
     }
     sceneStateRef.current = sceneState
 

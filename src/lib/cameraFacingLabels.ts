@@ -18,6 +18,13 @@ export function cameraDirectionForViewMode(viewMode: CameraLabelViewMode): Vecto
   return { x: 0.72, y: 0.48, z: 0.82 }
 }
 
+export function fixedLabelFacesForViewMode(viewMode: CameraLabelViewMode): LocalBoxFace[] | null {
+  if (viewMode === 'top') return ['+Y']
+  if (viewMode === 'front') return ['+Z']
+  if (viewMode === 'side') return ['+X']
+  return null
+}
+
 export function cameraFacingLabelFaces(directionLocal: VectorLike, maxFaces = 2): LocalBoxFace[] {
   const horizontal = [
     { axis: 'X' as const, value: directionLocal.x },
