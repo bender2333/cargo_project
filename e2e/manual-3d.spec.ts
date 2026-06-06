@@ -324,8 +324,8 @@ test('从历史方案恢复自定义柜型后 3D 场景重建并显示新箱体'
   await page.waitForTimeout(300)
 
   await page.getByRole('button', { name: '工作台', exact: true }).click()
-  await page.getByRole('button', { name: '新建项目' }).click()
-  await page.waitForTimeout(150)
+  await page.getByLabel('货柜类型').selectOption({ index: 1 })
+  await expect(page.getByTestId('container-scene')).toHaveAttribute('data-box-count', '0')
 
   await page.getByRole('button', { name: '历史方案', exact: true }).click()
   await page.getByRole('button', { name: '恢复' }).first().click()

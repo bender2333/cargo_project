@@ -8,6 +8,7 @@
 - R4 removed the header project name/new/save/upload controls while keeping auto-generated project names for history persistence. Verification: `npx tsc -b` passed; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "loads the container calculator workspace"` passed 1 test.
 - R5 added a top-level template-manager new-template form with free-text source columns and reuse through the Excel import modal. Verification: `npx tsc -b` passed; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "creates an import template from top-level template manager"` passed 1 test.
 - Notifications were updated with the R1-R5 shipped changes. Verification: `npx tsc -b` passed; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "通知栏按钮显示未读红点"` passed 1 test.
+- E2E history-restore coverage was adjusted to stop depending on the removed header new-project button. Verification: targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "从历史方案恢复自定义柜型"` passed 1 test.
 
 ## 2026-06-06 (Top Label and Management Review)
 
