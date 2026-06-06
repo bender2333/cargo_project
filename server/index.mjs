@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url'
 import db from './db.mjs'
 import authRouter from './auth.mjs'
 import { authenticate, requireAdmin } from './middleware.mjs'
+import { parseCustomCargoPayload, serializeCustomCargo } from './customCargo.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -185,7 +186,70 @@ app.delete('/api/containers/custom/:id', authenticate, (req, res) => {
   }
 })
 
-// 4. Excel import templates (user-scoped deterministic mappings)
+// 4. Custom cargo library (user-scoped)
+app.get('/api/custom-cargo', authenticate, (req, res) => {
+  try {
+    const rows = db.prepare('SELECT * FROM custom_cargo WHERE user_id = ? ORDER BY datetime(created_at) DESC').all(req.user.id)
+    res.json(rows.map(serializeCustomCargo))
+  } catch (err) {
+    sendServerError(res, req.path, err)
+  }
+})
+
+app.post('/api/custom-cargo', authenticate, (req, res) => {
+  const payload = parseCustomCargoPayload(req.body)
+  if (!payload) {
+    return res.status(400).json({ error: 'Missing required cargo fields' })
+  }
+  const id = randomUUID()
+  try {
+    db.prepare(`
+      INSERT INTO custom_cargo (id, user_id, name, label, length, width, height, weight, color, can_rotate, stackable, max_stack_layers, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, req.user.id, payload.name, payload.label, payload.length, payload.width, payload.height, payload.weight, payload.color, payload.canRotate ? 1 : 0, payload.stackable ? 1 : 0, payload.maxStackLayers ?? null, new Date().toISOString())
+    const created = db.prepare('SELECT * FROM custom_cargo WHERE id = ? AND user_id = ?').get(id, req.user.id)
+    res.status(201).json(serializeCustomCargo(created))
+  } catch (err) {
+    sendServerError(res, req.path, err)
+  }
+})
+
+app.put('/api/custom-cargo/:id', authenticate, (req, res) => {
+  const payload = parseCustomCargoPayload(req.body)
+  if (!payload) {
+    return res.status(400).json({ error: 'Missing required cargo fields' })
+  }
+  try {
+    const existing = db.prepare('SELECT * FROM custom_cargo WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id)
+    if (!existing) {
+      return res.status(404).json({ error: 'Cargo not found or unauthorized' })
+    }
+    db.prepare(`
+      UPDATE custom_cargo
+      SET name = ?, label = ?, length = ?, width = ?, height = ?, weight = ?, color = ?, can_rotate = ?, stackable = ?, max_stack_layers = ?
+      WHERE id = ? AND user_id = ?
+    `).run(payload.name, payload.label, payload.length, payload.width, payload.height, payload.weight, payload.color, payload.canRotate ? 1 : 0, payload.stackable ? 1 : 0, payload.maxStackLayers ?? null, req.params.id, req.user.id)
+    const updated = db.prepare('SELECT * FROM custom_cargo WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id)
+    res.json(serializeCustomCargo(updated))
+  } catch (err) {
+    sendServerError(res, req.path, err)
+  }
+})
+
+app.delete('/api/custom-cargo/:id', authenticate, (req, res) => {
+  try {
+    const existing = db.prepare('SELECT * FROM custom_cargo WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id)
+    if (!existing) {
+      return res.status(404).json({ error: 'Cargo not found or unauthorized' })
+    }
+    db.prepare('DELETE FROM custom_cargo WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id)
+    res.json({ message: 'Custom cargo deleted' })
+  } catch (err) {
+    sendServerError(res, req.path, err)
+  }
+})
+
+// 5. Excel import templates (user-scoped deterministic mappings)
 const TEMPLATE_FIELDS = new Set(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable', 'maxStackLayers'])
 const TEMPLATE_UNITS = new Set(['auto', 'mm', 'cm'])
 const TEMPLATE_MERGE_ROWS = new Set(['none', 'by-label'])
@@ -304,7 +368,7 @@ app.delete('/api/import-templates/:id', authenticate, (req, res) => {
   }
 })
 
-// 5. History Plan Management (CRUD with auto 5-item retention per user!)
+// 6. History Plan Management (CRUD with auto 5-item retention per user!)
 app.get('/api/history', authenticate, (req, res) => {
   try {
     const list = db.prepare('SELECT id, project_name, shipment_name, loading_mode, data, created_at FROM history_plans WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id)

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-06-06 (Round 23 T4 Custom Cargo Backend)
+
+- Completed subtask: add a user-scoped custom cargo backend.
+  - Added the `custom_cargo` SQLite table and idempotent migration 5.
+  - Added `/api/custom-cargo` GET/POST/PUT/DELETE routes with authentication, `user_id` filtering, and ownership checks before update/delete.
+  - Added `server/customCargo.mjs` to normalize cargo payloads and serialize rows into `CargoItem`-compatible objects with `quantity: 1`.
+  - Added helper tests for payload normalization, invalid field rejection, and row serialization.
+- Verification: `npx vitest run scripts/customCargo.test.mjs` passed 3 tests; `node --check server/customCargo.mjs; node --check server/db.mjs; node --check server/index.mjs` passed; `npx tsc -b` passed. Live API verification against local port 3010 registered two users, created/read/updated/deleted custom cargo as user 1, and confirmed user 2 could not see user 1's cargo (`user2HasCreated=0`).
+
 ## 2026-06-06 (Round 23 T3 3D Face Label Cargo Badges)
 
 - Completed subtask: add richer 3D face-label content for cargo properties.

@@ -61,6 +61,23 @@ db.exec(`
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE(user_id, name)
   );
+
+  CREATE TABLE IF NOT EXISTS custom_cargo (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    label TEXT NOT NULL,
+    length REAL NOT NULL,
+    width REAL NOT NULL,
+    height REAL NOT NULL,
+    weight REAL NOT NULL,
+    color TEXT NOT NULL,
+    can_rotate INTEGER DEFAULT 1,
+    stackable INTEGER DEFAULT 1,
+    max_stack_layers INTEGER,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
 `)
 
 // 1a. Schema migrations (idempotent, version-tracked via PRAGMA user_version)
@@ -128,6 +145,30 @@ const migrations = [
       if (!hasColumn('import_templates', 'defaults')) {
         db.exec("ALTER TABLE import_templates ADD COLUMN defaults TEXT DEFAULT '{}'")
       }
+    },
+  },
+  {
+    version: 5,
+    description: 'Add user-scoped custom cargo library',
+    up: () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS custom_cargo (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          label TEXT NOT NULL,
+          length REAL NOT NULL,
+          width REAL NOT NULL,
+          height REAL NOT NULL,
+          weight REAL NOT NULL,
+          color TEXT NOT NULL,
+          can_rotate INTEGER DEFAULT 1,
+          stackable INTEGER DEFAULT 1,
+          max_stack_layers INTEGER,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `)
     },
   },
 ]
