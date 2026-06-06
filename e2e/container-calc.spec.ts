@@ -751,7 +751,7 @@ test('switches 3D camera views and keeps layer filtering visible', async ({ page
   await expectCanvasHasRenderedPixels(page)
 })
 
-test('moves 3D labels to camera-facing faces across camera views', async ({ page }) => {
+test('keeps 3D labels on all exposed faces across camera views', async ({ page }) => {
   await openEnglish(page)
   await page.getByRole('button', { name: /Delete cargo: Carton A/ }).click()
   await page.getByLabel('Container type').selectOption('custom')
@@ -774,19 +774,25 @@ test('moves 3D labels to camera-facing faces across camera views', async ({ page
   const scene = page.getByTestId('container-scene')
   await expect(scene).toHaveAttribute('data-face-icons-sample', 'rotate,stack')
   await expect(scene).toHaveAttribute('data-label-faces-sample', /\+X/)
+  await expect(scene).toHaveAttribute('data-label-faces-sample', /-X/)
+  await expect(scene).toHaveAttribute('data-label-faces-sample', /\+Y/)
   await expect(scene).toHaveAttribute('data-label-faces-sample', /\+Z/)
+  await expect(scene).toHaveAttribute('data-label-faces-sample', /-Z/)
 
   await page.getByRole('button', { name: 'Front', exact: true }).click()
-  await expect(scene).toHaveAttribute('data-label-faces-sample', '+Z')
+  await expect(scene).toHaveAttribute('data-label-faces-sample', /\+Y/)
+  await expect(scene).toHaveAttribute('data-label-faces-sample', /\+Z/)
 
   await page.getByRole('button', { name: 'Side', exact: true }).click()
-  await expect(scene).toHaveAttribute('data-label-faces-sample', '+X')
+  await expect(scene).toHaveAttribute('data-label-faces-sample', /\+X/)
+  await expect(scene).toHaveAttribute('data-label-faces-sample', /\+Y/)
 
   await page.getByRole('button', { name: 'Top', exact: true }).click()
-  await expect(scene).toHaveAttribute('data-label-faces-sample', '+Y')
+  await expect(scene).toHaveAttribute('data-label-faces-sample', /\+Y/)
+  await expect(scene).toHaveAttribute('data-label-faces-sample', /\+Z/)
 })
 
-test('keeps iso labels on top faces when free camera rotates near top view', async ({ page }) => {
+test('keeps all-direction labels stable when free camera rotates near top view', async ({ page }) => {
   await openEnglish(page)
   await page.getByRole('button', { name: /Delete cargo: Carton A/ }).click()
   await page.getByLabel('Container type').selectOption('custom')
@@ -808,6 +814,7 @@ test('keeps iso labels on top faces when free camera rotates near top view', asy
 
   const scene = page.getByTestId('container-scene')
   await expect(scene).toHaveAttribute('data-label-faces-sample', /\+X/)
+  await expect(scene).toHaveAttribute('data-label-faces-sample', /\+Y/)
   await expect(scene).toHaveAttribute('data-label-faces-sample', /\+Z/)
 
   await scene.evaluate((element) => {
@@ -815,7 +822,9 @@ test('keeps iso labels on top faces when free camera rotates near top view', asy
     element.dispatchEvent(new Event('test-camera-command'))
   })
 
-  await expect(scene).toHaveAttribute('data-label-faces-sample', '+Y')
+  await expect(scene).toHaveAttribute('data-label-faces-sample', /\+X/)
+  await expect(scene).toHaveAttribute('data-label-faces-sample', /\+Y/)
+  await expect(scene).toHaveAttribute('data-label-faces-sample', /\+Z/)
 })
 
 test('supports Excel import/export affordance and Chinese mode', async ({ page }) => {

@@ -190,6 +190,17 @@ describe('calculatePacking', () => {
     expect(defaultLabels).toEqual(['Q', 'Q'])
   })
 
+  it('places higher stack-capacity cargo first in quantity mode so it can form the lower layers', () => {
+    const container = testContainer({ length: 1000, width: 1000, height: 3000 })
+    const result = calculatePacking(container, [
+      cargo({ id: 'limited-many', label: 'L', length: 1000, width: 1000, height: 500, quantity: 3, canRotate: false, maxStackLayers: 2 }),
+      cargo({ id: 'unlimited-few', label: 'U', length: 1000, width: 1000, height: 500, quantity: 2, canRotate: false }),
+    ], { loadingMode: 'quantity' })
+
+    expect(result.workSteps.map((step) => step.label).slice(0, 2)).toEqual(['U', 'U'])
+    expect(result.placed.filter((box) => box.label === 'U').every((box) => box.physicalLayer <= 2)).toBe(true)
+  })
+
   it('supports selectable weight and quantity loading rules', () => {
     const container = testContainer({ length: 5000, width: 1000, height: 1000 })
     const items = [

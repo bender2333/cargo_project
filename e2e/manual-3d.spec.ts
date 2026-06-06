@@ -566,6 +566,14 @@ test('手动模式默认隐藏容量占用卡以释放画布空间', async ({ pa
   await expect(page.getByTestId('remaining-capacity')).toHaveCount(0)
 })
 
+test('手动模式默认不渲染空测量提示面板', async ({ page }) => {
+  await ensureChinese(page)
+  await enterManualMode(page)
+  await expect(page.getByTestId('measurement-list')).toHaveCount(0)
+  await page.getByTestId('toggle-ruler').click()
+  await expect(page.getByTestId('measurement-list')).toBeVisible()
+})
+
 test('手动模式选中前不显示 3D 浮层', async ({ page }) => {
   await ensureChinese(page)
   await enterManualMode(page)
@@ -588,7 +596,7 @@ test('pool ghost 默认存在但无激活；data attribute 完整', async ({ pag
   await expect(scene).toHaveAttribute('data-pool-ghost-invalid', 'false')
 })
 
-test('手动模式最大化保留 pool 与测量列表，仅隐藏报告面板', async ({ page }) => {
+test('手动模式最大化保留 pool 并隐藏空测量面板', async ({ page }) => {
   await ensureChinese(page)
   await enterManualMode(page)
   const workspace = page.getByTestId('manual-workspace')
@@ -607,9 +615,9 @@ test('手动模式最大化保留 pool 与测量列表，仅隐藏报告面板',
   }
   await page.getByTestId('maximize-workspace').click()
   await expect(workspace).toHaveAttribute('data-workspace-maximized', 'true')
-  // Pool and measurement tools must still be visible; selected-box rotation now lives in the 3D scene.
+  // Pool remains visible; empty measurement panel stays hidden until ruler use.
   await expect(page.getByTestId('manual-pool')).toBeVisible()
-  await expect(page.getByTestId('measurement-list')).toBeVisible()
+  await expect(page.getByTestId('measurement-list')).toHaveCount(0)
   await expect(page.getByTestId('report-panel')).toBeHidden()
   await expect(page.getByTestId('archive-stat-grid')).toBeHidden()
   await page.keyboard.press('Escape')

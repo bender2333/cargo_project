@@ -246,7 +246,6 @@ const copy = {
     ruler: 'Ruler',
     rulerOff: 'Ruler off',
     measurementList: 'Measurements',
-    measurementEmpty: 'Turn on ruler and click two points in top view.',
     measurementDelete: 'Delete',
     measurementPending: 'Select the second point to lock the line.',
     clearanceTitle: 'Clearance',
@@ -503,7 +502,6 @@ const copy = {
     ruler: '尺规',
     rulerOff: '关闭尺规',
     measurementList: '测量线',
-    measurementEmpty: '开启尺规后在俯视图点击两个点生成固定测量线。',
     measurementDelete: '删除',
     measurementPending: '请选择第二个点以固定测量线。',
     clearanceTitle: '余量测量',
@@ -3431,15 +3429,14 @@ function Workbench() {
                         />
                       )}
                     </div>
+                    {(rulerEnabled || measurements.length > 0) && (
                     <aside className="flex w-72 shrink-0 flex-col gap-2 overflow-auto">
                       <div className="rounded-xl border border-[#e5e7eb] bg-white p-3 text-xs text-[#475569]" data-testid="measurement-list">
                         <div className="mb-2 flex items-center justify-between">
                           <h3 className="text-sm font-bold text-[#0f172a]">{t.measurementList}</h3>
                           {measurementDraftPoint && <span className="text-[#2563eb]">{t.measurementPending}</span>}
                         </div>
-                        {measurements.length === 0 ? (
-                          <p>{t.measurementEmpty}</p>
-                        ) : (
+                        {measurements.length > 0 && (
                           <div className="space-y-2">
                             {measurements.map((line, index) => (
                               <div key={line.id} className="flex items-center gap-2 rounded border border-[#e5e7eb] p-2" data-testid="measurement-list-item">
@@ -3454,6 +3451,7 @@ function Workbench() {
                         )}
                       </div>
                     </aside>
+                    )}
                   </div>
                 </div>
               ) : workspaceView === '3d' ? (

@@ -12,8 +12,8 @@ import { DEFAULT_PLACEMENT_SETTINGS, type PlacementSettings } from '../lib/place
 import { manualMoveCommitArgs } from '../lib/manualMoveCommit'
 import type { BoxLabelMode } from '../lib/labelDeconfliction'
 import { baseDimensionsFromPlaced, orientationAxesOf, orientationRenderingBasisVectors } from '../lib/orientationTransform'
-import { cameraFacingLabelFaces, dominantAxisFace, fixedLabelFacesForViewMode, type LocalBoxFace } from '../lib/cameraFacingLabels'
-import { faceLabelContent, faceLabelContentSignature, type FaceLabelContent, type FaceLabelIcon } from '../lib/faceLabelContent'
+import { allLabelFaces, type LocalBoxFace } from '../lib/cameraFacingLabels'
+import { faceLabelContent, faceLabelContentSignature, faceLabelLayout, type FaceLabelContent, type FaceLabelIcon } from '../lib/faceLabelContent'
 import {
   buildRotationGizmo,
   disposeRotationGizmo,
@@ -23,6 +23,7 @@ import {
 } from '../lib/rotationGizmo'
 import type { MeasurementAnnotation, Point3D } from '../lib/measurement'
 import { snapMeasurementPoint3D } from '../lib/measureSnap'
+import { boxVisualState } from '../lib/boxVisualState'
 
 export type SceneViewMode = 'iso' | 'top' | 'front' | 'side'
 
@@ -112,6 +113,7 @@ type SceneState = {
 const textureCache = new WeakMap<SceneState, Map<string, THREE.Texture>>()
 const materialCache = new WeakMap<SceneState, Map<string, THREE.Material | THREE.Material[]>>()
 const FACE_MATERIAL_ORDER: LocalBoxFace[] = ['+X', '-X', '+Y', '-Y', '+Z', '-Z']
+const ALL_LABEL_FACES = new Set<LocalBoxFace>(allLabelFaces())
 
 function getTextureCache(state: SceneState) {
   let cache = textureCache.get(state)
@@ -214,9 +216,10 @@ function makeFaceLabelTexture(content: FaceLabelContent, color: string, selected
   context.fillRect(0, 0, canvas.width, canvas.height)
 
   const compact = labelMode === 'compact'
-  const badgeSize = compact ? 88 : 172
-  const badgeX = compact ? 22 : 42
-  const badgeY = compact ? 22 : 42
+  const layout = faceLabelLayout(content, compact ? 'compact' : 'full')
+  const badgeSize = layout.badgeBand.right - layout.badgeBand.left
+  const badgeX = layout.badgeBand.left
+  const badgeY = layout.badgeBand.top
   context.fillStyle = selected ? 'rgba(243, 178, 26, 0.92)' : compact ? 'rgba(255, 255, 255, 0.58)' : 'rgba(255, 255, 255, 0.86)'
   context.strokeStyle = selected ? '#f3b21a' : compact ? 'rgba(15, 23, 42, 0.55)' : '#222222'
   context.lineWidth = selected ? 14 : compact ? 6 : 10
@@ -225,30 +228,41 @@ function makeFaceLabelTexture(content: FaceLabelContent, color: string, selected
   context.fill()
   context.stroke()
   context.fillStyle = '#222222'
-  context.font = compact ? 'bold 44px Verdana, sans-serif' : 'bold 104px Verdana, sans-serif'
+  context.font = `bold ${layout.badgeFontPx}px Verdana, sans-serif`
   context.textAlign = 'center'
   context.textBaseline = 'middle'
-  context.translate(compact ? badgeX + badgeSize / 2 : 128, compact ? badgeY + badgeSize / 2 + 3 : 134)
-  context.fillText(content.badge, 0, 0, compact ? 62 : 142)
+  context.translate(badgeX + badgeSize / 2, badgeY + badgeSize / 2 + (compact ? 3 : 0))
+  context.fillText(content.badge, 0, 0, badgeSize - 18)
   context.setTransform(1, 0, 0, 1, 0, 0)
 
   if (!compact) {
     context.fillStyle = '#0f172a'
-    context.font = 'bold 20px Verdana, sans-serif'
+    context.font = `bold ${layout.nameFontPx}px Verdana, sans-serif`
     context.textAlign = 'center'
     context.textBaseline = 'middle'
-    context.fillText(fitText(context, content.name, 214), 128, 161, 214)
-    context.font = 'bold 16px Verdana, sans-serif'
-    context.fillText(fitText(context, content.weightDimText, 214), 128, 185, 214)
-    drawFaceIcon(context, content.icons[0], 92, 211, content.stackLayersText)
-    drawFaceIcon(context, content.icons[1], 164, 211, content.stackLayersText)
+    const nameWidth = layout.nameBand.right - layout.nameBand.left
+    const nameY = (layout.nameBand.top + layout.nameBand.bottom) / 2
+    context.fillText(fitText(context, content.name, nameWidth), 128, nameY, nameWidth)
+    context.font = `bold ${layout.weightFontPx}px Verdana, sans-serif`
+    const weightWidth = layout.weightBand.right - layout.weightBand.left
+    const weightY = (layout.weightBand.top + layout.weightBand.bottom) / 2
+    context.fillText(fitText(context, content.weightDimText, weightWidth), 128, weightY, weightWidth)
+    const iconY = (layout.iconBand.top + layout.iconBand.bottom) / 2
+    drawFaceIcon(context, content.icons[0], 88, iconY, content.stackLayersText)
+    drawFaceIcon(context, content.icons[1], 168, iconY, content.stackLayersText)
   } else {
     const importantIcon = content.icons.includes('no-rotate')
       ? 'no-rotate'
       : content.icons.includes('no-stack')
         ? 'no-stack'
         : content.icons[1]
-    drawFaceIcon(context, importantIcon, 198, 56, content.stackLayersText)
+    drawFaceIcon(
+      context,
+      importantIcon,
+      (layout.iconBand.left + layout.iconBand.right) / 2,
+      (layout.iconBand.top + layout.iconBand.bottom) / 2,
+      content.stackLayersText,
+    )
   }
 
   const texture = new THREE.CanvasTexture(canvas)
@@ -331,7 +345,6 @@ function getCachedBoxMaterials(
   opacity: number,
   invalid: boolean,
   labelMode: BoxLabelMode,
-  labelFaces: Set<LocalBoxFace>,
 ) {
   const mCache = getMaterialCache(state)
   const materialKey = [
@@ -343,7 +356,7 @@ function getCachedBoxMaterials(
     invalid ? 'inv' : 'ok',
     labelMode,
     faceLabelContentSignature(box),
-    [...labelFaces].sort().join(','),
+    allLabelFaces().join(','),
   ].join(':')
   const cached = mCache.get(materialKey)
   if (Array.isArray(cached)) {
@@ -352,25 +365,9 @@ function getCachedBoxMaterials(
   // BoxGeometry material order: +X, -X, +Y, -Y, +Z, -Z.
   const labelMaterial = getCachedFaceMaterial(state, box, selected, opacity, invalid, labelMode)
   const plainMaterial = getCachedPlainFaceMaterial(state, box, selected, opacity, invalid)
-  const materials = FACE_MATERIAL_ORDER.map((face) => labelFaces.has(face) ? labelMaterial : plainMaterial)
+  const materials = FACE_MATERIAL_ORDER.map((face) => ALL_LABEL_FACES.has(face) ? labelMaterial : plainMaterial)
   mCache.set(materialKey, materials)
   return materials
-}
-
-function labelFacesForBoxCamera(state: SceneState, box: PlacedBox) {
-  const fixedFaces = fixedLabelFacesForViewMode(state.viewMode)
-  if (fixedFaces) {
-    return new Set(fixedFaces)
-  }
-  const center = worldCenterForBox(box, state.scale, state.length, state.width)
-  const cameraDirectionWorld = state.camera.position.clone().sub(center).normalize()
-  const dominantFace = dominantAxisFace(cameraDirectionWorld)
-  if (dominantFace) {
-    return new Set([dominantFace])
-  }
-  const inverseBoxRotation = boxOrientationQuaternion(box).invert()
-  const cameraDirectionLocal = cameraDirectionWorld.applyQuaternion(inverseBoxRotation)
-  return new Set(cameraFacingLabelFaces(cameraDirectionLocal))
 }
 
 function syncLabelFaceSampleAttribute(state: SceneState) {
@@ -379,30 +376,6 @@ function syncLabelFaceSampleAttribute(state: SceneState) {
   const firstEntry = [...state.meshEntries.values()][0]
   mount.dataset.labelFacesSample = firstEntry?.labelFaces.join(',') ?? ''
   mount.dataset.faceIconsSample = firstEntry ? faceLabelContent(firstEntry.box).icons.join(',') : ''
-}
-
-function boxVisualState(
-  box: PlacedBox,
-  activeLayerId: string,
-  activeLabelId: string,
-  selectedBoxId: string | null | undefined,
-  highlightBoxIds: Set<string> | undefined,
-  invalid: boolean,
-) {
-  const selected = box.id === selectedBoxId
-  const highlighted = highlightBoxIds?.has(box.id) ?? false
-  const currentLayer = activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId
-  const currentLabel = activeLabelId === 'all' || box.label === activeLabelId
-  const active = selected || highlighted || (currentLayer && currentLabel)
-  return {
-    selected,
-    highlighted,
-    active,
-    invalid,
-    opacity: active ? 1 : 0.22,
-    edgeColor: invalid ? 0xef4444 : selected || highlighted ? 0xf3b21a : active ? 0x252525 : 0x777777,
-    edgeOpacity: invalid ? 0.95 : active ? 0.72 : 0.14,
-  }
 }
 
 function applyBoxVisualState(
@@ -415,14 +388,13 @@ function applyBoxVisualState(
   invalid: boolean,
   opacityOverride?: number | null,
   labelMode: BoxLabelMode = 'full',
-  labelFaces: Set<LocalBoxFace> = new Set(['+X', '+Z']),
 ) {
   const visual = boxVisualState(entry.box, activeLayerId, activeLabelId, selectedBoxId, highlightBoxIds, invalid)
   const opacity = opacityOverride === null || opacityOverride === undefined
     ? visual.opacity
     : Math.min(1, Math.max(0.45, visual.selected ? Math.max(opacityOverride, 0.75) : opacityOverride))
-  entry.labelFaces = [...labelFaces]
-  entry.mesh.material = getCachedBoxMaterials(state, entry.box, visual.selected, opacity, visual.invalid, labelMode, labelFaces)
+  entry.labelFaces = allLabelFaces()
+  entry.mesh.material = getCachedBoxMaterials(state, entry.box, visual.selected, opacity, visual.invalid, labelMode)
   const material = entry.edges.material
   if (material instanceof THREE.LineBasicMaterial) {
     material.color.setHex(visual.edgeColor)
@@ -1107,7 +1079,7 @@ export function ContainerScene({
     const refreshEntryVisual = (entry: MeshEntry) => {
       const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb, highlightBoxIds: hb, boxOpacityOverride: opacityOverride } = visualPropsRef.current
       const invalid = sceneState.invalidOverride.has(entry.box.id) || invalidBoxIdsRef.current.has(entry.box.id)
-      applyBoxVisualState(sceneState, entry, la, lb, sb, hb, invalid, opacityOverride, 'full', labelFacesForBoxCamera(sceneState, entry.box))
+      applyBoxVisualState(sceneState, entry, la, lb, sb, hb, invalid, opacityOverride, 'full')
     }
 
     const onPointerDown = (event: PointerEvent) => {
@@ -1539,15 +1511,6 @@ export function ContainerScene({
       if (handled) event.preventDefault()
     }
 
-    const refreshCameraFacingLabels = () => {
-      const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb, highlightBoxIds: hb, boxOpacityOverride: opacityOverride } = visualPropsRef.current
-      sceneState.meshEntries.forEach((entry) => {
-        const invalid = sceneState.invalidOverride.has(entry.box.id) || invalidBoxIdsRef.current.has(entry.box.id)
-        applyBoxVisualState(sceneState, entry, la, lb, sb, hb, invalid, opacityOverride, 'full', labelFacesForBoxCamera(sceneState, entry.box))
-      })
-      syncLabelFaceSampleAttribute(sceneState)
-    }
-
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
     renderer.domElement.addEventListener('dblclick', onDoubleClick)
     renderer.domElement.addEventListener('pointermove', onPointerMove)
@@ -1556,7 +1519,6 @@ export function ContainerScene({
     renderer.domElement.addEventListener('dragover', onDragOver)
     renderer.domElement.addEventListener('dragleave', onDragLeave)
     renderer.domElement.addEventListener('drop', onDrop)
-    controls.addEventListener('change', refreshCameraFacingLabels)
     const onTestCameraCommand = () => {
       const command = mount.dataset.cameraCommand
       if (command !== 'near-top') return
@@ -1564,7 +1526,6 @@ export function ContainerScene({
       camera.lookAt(target)
       controls.target.copy(target)
       controls.update()
-      refreshCameraFacingLabels()
     }
     mount.addEventListener('test-camera-command', onTestCameraCommand)
     window.addEventListener('keydown', onKeyDown)
@@ -1649,7 +1610,6 @@ export function ContainerScene({
       renderer.domElement.removeEventListener('dragover', onDragOver)
       renderer.domElement.removeEventListener('dragleave', onDragLeave)
       renderer.domElement.removeEventListener('drop', onDrop)
-      controls.removeEventListener('change', refreshCameraFacingLabels)
       mount.removeEventListener('test-camera-command', onTestCameraCommand)
       window.removeEventListener('keydown', onKeyDown)
       mount.removeChild(renderer.domElement)
@@ -1702,7 +1662,7 @@ export function ContainerScene({
           existing.mesh.quaternion.copy(previousQuaternion)
           existing.edges.quaternion.copy(previousQuaternion)
         }
-        applyBoxVisualState(state, existing, la, lb, sb, hb, invalid, opacityOverride, 'full', labelFacesForBoxCamera(state, box))
+        applyBoxVisualState(state, existing, la, lb, sb, hb, invalid, opacityOverride, 'full')
         return
       }
       const geometry = boxGeometryForPlaced(box, scale)
@@ -1710,7 +1670,7 @@ export function ContainerScene({
       const opacity = opacityOverride === null || opacityOverride === undefined
         ? visualState.opacity
         : Math.min(1, Math.max(0.12, visualState.selected ? Math.max(opacityOverride, 0.75) : opacityOverride))
-      const material = getCachedBoxMaterials(state, box, visualState.selected, opacity, invalid, 'full', labelFacesForBoxCamera(state, box))
+      const material = getCachedBoxMaterials(state, box, visualState.selected, opacity, invalid, 'full')
       const mesh = new THREE.Mesh(geometry, material)
       mesh.castShadow = true
       mesh.receiveShadow = true
@@ -1730,7 +1690,7 @@ export function ContainerScene({
       scene.add(edges)
       const entry = { box, mesh, edges, labelFaces: [] }
       meshEntries.set(box.id, entry)
-      applyBoxVisualState(state, entry, la, lb, sb, hb, invalid, opacityOverride, 'full', labelFacesForBoxCamera(state, box))
+      applyBoxVisualState(state, entry, la, lb, sb, hb, invalid, opacityOverride, 'full')
     })
     syncLabelFaceSampleAttribute(state)
     syncRotationGizmo(state, selectedManualBoxIdRef.current)
@@ -1986,7 +1946,7 @@ export function ContainerScene({
     const { activeLayerId: la, activeLabelId: lb, selectedBoxId: sb, highlightBoxIds: hb, boxOpacityOverride: opacityOverride } = visualPropsRef.current
     state.meshEntries.forEach((entry) => {
       const invalid = state.invalidOverride.has(entry.box.id) || invalidBoxIdsRef.current.has(entry.box.id)
-      applyBoxVisualState(state, entry, la, lb, sb, hb, invalid, opacityOverride, 'full', labelFacesForBoxCamera(state, entry.box))
+      applyBoxVisualState(state, entry, la, lb, sb, hb, invalid, opacityOverride, 'full')
     })
     syncLabelFaceSampleAttribute(state)
   }, [activeLayerId, activeLabelId, selectedBoxId, highlightBoxIds, invalidBoxIds, boxOpacityOverride, boxes, viewMode])

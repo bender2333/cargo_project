@@ -436,6 +436,10 @@ function normalizeDefaultMaxStackLayers(value: number | undefined) {
   return Math.floor(Number(value))
 }
 
+function stackCapacity(item: Pick<CargoItem, 'maxStackLayers'>) {
+  return item.maxStackLayers && item.maxStackLayers > 0 ? item.maxStackLayers : Number.POSITIVE_INFINITY
+}
+
 export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[], options: CalculatePackingOptions = {}): PackingResult {
   const effective = effectiveContainer(container)
   const placed: PlacedBox[] = []
@@ -464,9 +468,12 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         return b.item.weight - a.item.weight || b.item.length * b.item.width * b.item.height - a.item.length * a.item.width * a.item.height
       }
       if (loadingMode === 'quantity') {
-        return b.item.quantity - a.item.quantity || b.item.length * b.item.width * b.item.height - a.item.length * a.item.width * a.item.height
+        return stackCapacity(b.item) - stackCapacity(a.item)
+          || b.item.quantity - a.item.quantity
+          || b.item.length * b.item.width * b.item.height - a.item.length * a.item.width * a.item.height
       }
-      return b.item.length * b.item.width * b.item.height - a.item.length * a.item.width * a.item.height
+      return stackCapacity(b.item) - stackCapacity(a.item)
+        || b.item.length * b.item.width * b.item.height - a.item.length * a.item.width * a.item.height
     })
 
   const markUnplaced = (item: CargoItem, label: string, reasonCode: UnplacedReasonCode) => {

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-06-07 (All-Direction Labels Layout Stack Sorting Layer Fade Measurement Panel)
+
+- Implemented T1/T6(a): 3D box labels now use a fixed all-direction exposed-face set (`+X,-X,+Y,+Z,-Z`) instead of camera-facing face selection. Removed the OrbitControls `change` listener that previously recalculated and reassigned every box material on camera movement; `rg` found no remaining `refreshCameraFacingLabels` / `labelFacesForBoxCamera` references after the change.
+- Implemented T2: face-label texture drawing now consumes `faceLabelLayout()` so name, badge, weight/dimensions, and icons occupy separate vertical bands instead of overlapping the badge letter.
+- Implemented T3: quantity and volume automatic modes now sort expanded cargo by effective stack capacity first, so unlimited or higher-stack cargo is placed earlier and can form lower layers while existing stack-limit validation still prevents illegal support chains.
+- Implemented T4: specific-layer view now fades non-current layers more strongly (`opacity` <= 0.1, edge opacity <= 0.05) while the all-layers view remains fully visible.
+- Implemented T5: the empty measurement aside is no longer rendered when ruler mode is off and there are no measurement lines; opening the ruler or creating measurements still shows the list.
+- Verification passed: `npm run lint`; `npm test` (43 files / 243 tests); `npm run build` with the existing Vite chunk-size warning; targeted E2E `npx playwright test e2e/container-calc.spec.ts -g "3D labels|free camera"` (2 passed); targeted E2E `npx playwright test e2e/manual-3d.spec.ts -g "尺规|测量|最大化|容量"` (8 passed); full local `npm run test:e2e` (85 passed / 1 skipped / 0 failed).
+- Remaining for full 2026-06-07 plan closure: T6(b)(c)(d) needs dedicated sample-based interaction timing / frame-time measurement before claiming the performance item complete end-to-end, and full local/remote E2E plus deployment still need to run after the remaining performance pass.
+
 ## 2026-06-06 (Label Missing Project Controls Stack Limit Template Plan)
 
 - R1 removed orientation text from 3D face-label textures while preserving orientation metadata for manual markers and details. Verification: `npx vitest run src/lib/faceLabelContent.test.ts` passed 3 tests; `npx tsc -b` passed.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PlacedBox } from '../types'
-import { faceLabelContent, faceLabelContentSignature } from './faceLabelContent'
+import { faceLabelContent, faceLabelContentSignature, faceLabelLayout } from './faceLabelContent'
 
 const box = (overrides: Partial<PlacedBox> = {}): PlacedBox => ({
   id: 'box-1',
@@ -57,5 +57,19 @@ describe('faceLabelContent', () => {
     const differentSize = faceLabelContentSignature(box({ length: 1300 }))
 
     expect(new Set([base, differentWeight, differentRotation, differentSize]).size).toBe(4)
+  })
+
+  it('lays out full face labels in non-overlapping vertical bands', () => {
+    const layout = faceLabelLayout(faceLabelContent(box()), 'full')
+
+    expect(layout.nameBand.bottom).toBeLessThanOrEqual(layout.badgeBand.top)
+    expect(layout.badgeBand.bottom).toBeLessThanOrEqual(layout.weightBand.top)
+    expect(layout.weightBand.bottom).toBeLessThanOrEqual(layout.iconBand.top)
+  })
+
+  it('keeps compact face icon outside the badge letter band', () => {
+    const layout = faceLabelLayout(faceLabelContent(box()), 'compact')
+
+    expect(layout.iconBand.left).toBeGreaterThanOrEqual(layout.badgeBand.right)
   })
 })
