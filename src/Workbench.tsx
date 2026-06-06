@@ -52,6 +52,7 @@ import { createClientId } from './lib/clientId'
 import { parseCargoRows, parseCargoRowsWithTemplate } from './lib/importCargo'
 import type { ImportCargoRow } from './lib/importCargo'
 import { readImportTemplates, saveImportTemplate } from './lib/importTemplates'
+import { deleteCustomCargo, readCustomCargo, saveCustomCargo, updateCustomCargo } from './lib/customCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
 import { clearPlacementOnContainerChange } from './lib/containerChange'
@@ -129,6 +130,16 @@ const copy = {
     dropCargo: 'Drop cargo here',
     historyPage: 'History plans',
     backToWorkbench: 'Back to workbench',
+    cargoLibrary: 'Cargo library',
+    cargoLibraryEmpty: 'No saved cargo yet',
+    cargoLibrarySave: 'Save cargo',
+    cargoLibraryUpdate: 'Update cargo',
+    cargoLibraryUse: 'Add to workbench',
+    cargoLibraryEdit: 'Edit',
+    cargoLibraryDelete: 'Delete',
+    cargoLibraryNoticeSaved: 'Cargo saved',
+    cargoLibraryNoticeUpdated: 'Cargo updated',
+    cargoLibraryNoticeDeleted: 'Cargo deleted',
     boundaryRule: 'Effective container boundary',
     payloadRule: 'Max payload',
     supportRule: 'Support and stackability',
@@ -371,6 +382,16 @@ const copy = {
     dropCargo: '拖放到这里',
     historyPage: '历史方案',
     backToWorkbench: '返回工作台',
+    cargoLibrary: '货物管理',
+    cargoLibraryEmpty: '暂无已保存货物',
+    cargoLibrarySave: '保存货物',
+    cargoLibraryUpdate: '更新货物',
+    cargoLibraryUse: '加入当前工作台',
+    cargoLibraryEdit: '编辑',
+    cargoLibraryDelete: '删除',
+    cargoLibraryNoticeSaved: '货物已保存',
+    cargoLibraryNoticeUpdated: '货物已更新',
+    cargoLibraryNoticeDeleted: '货物已删除',
     boundaryRule: '有效货柜边界',
     payloadRule: '最大载重',
     supportRule: '支撑与堆叠限制',
@@ -917,6 +938,10 @@ function Workbench() {
   const [customContainers, setCustomContainers] = useState<ContainerSpec[]>([])
   const [showCustomContainerDialog, setShowCustomContainerDialog] = useState(false)
   const [historyPlans, setHistoryPlans] = useState<HistoryPlan[]>([])
+  const [customCargoItems, setCustomCargoItems] = useState<CargoItem[]>([])
+  const [cargoLibraryForm, setCargoLibraryForm] = useState<CargoForm>(emptyForm)
+  const [editingLibraryCargoId, setEditingLibraryCargoId] = useState<string | null>(null)
+  const [cargoLibraryNotice, setCargoLibraryNotice] = useState('')
   const [recentErrors, setRecentErrors] = useState<string[]>([])
 
   useEffect(() => {
@@ -1064,6 +1089,15 @@ function Workbench() {
     }
   }
 
+  const fetchCustomCargo = async () => {
+    if (!isLoggedIn()) return
+    try {
+      setCustomCargoItems(await readCustomCargo())
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const deleteHistoryPlan = async (id: string) => {
     if (!confirm(locale === 'zh' ? '确认删除该历史方案吗？' : 'Are you sure you want to delete this plan?')) {
       return
@@ -1085,6 +1119,7 @@ function Workbench() {
       fetchHistory()
       fetchCustomContainers()
       fetchImportTemplates()
+      fetchCustomCargo()
     }
   }, [loggedIn])
 
@@ -1620,6 +1655,15 @@ function Workbench() {
     setEditForm((current) => ({ ...current, maxStackLayers: parsed > 0 ? parsed : undefined }))
   }
 
+  const updateLibraryNumber = (field: keyof Pick<CargoForm, 'length' | 'width' | 'height' | 'weight' | 'quantity'>, value: string) => {
+    setCargoLibraryForm((current) => ({ ...current, [field]: Number(value) || 0 }))
+  }
+
+  const updateLibraryMaxStackLayers = (value: string) => {
+    const parsed = Math.floor(Number(value) || 0)
+    setCargoLibraryForm((current) => ({ ...current, maxStackLayers: parsed > 0 ? parsed : undefined }))
+  }
+
   const updateDefaultMaxStackLayers = (value: string) => {
     const parsed = Math.floor(Number(value) || 0)
     setPlacementSettings((current) => ({ ...current, defaultMaxStackLayers: parsed > 0 ? parsed : undefined }))
@@ -1737,6 +1781,68 @@ function Workbench() {
     setTemplateStartRow(template.startRow ?? 2)
     setTemplateDefaults(template.defaultValues ?? { quantity: 1, canRotate: true, stackable: true })
     setTemplateName(template.name)
+  }
+
+  const libraryFormCargo = (): CargoItem => ({
+    ...cargoLibraryForm,
+    id: editingLibraryCargoId ?? createClientId(),
+    name: cargoLibraryForm.name.trim() || (locale === 'zh' ? '库货物' : 'Library cargo'),
+    label: (cargoLibraryForm.label || nextLabel(customCargoItems.length)).toUpperCase().slice(0, 2),
+    quantity: 1,
+    maxStackLayers: cargoLibraryForm.stackable ? cargoLibraryForm.maxStackLayers : undefined,
+  })
+
+  const saveLibraryCargo = async (event: FormEvent) => {
+    event.preventDefault()
+    const item = libraryFormCargo()
+    const saved = editingLibraryCargoId
+      ? await updateCustomCargo(editingLibraryCargoId, item)
+      : await saveCustomCargo(item)
+    if (!saved) {
+      alert(locale === 'zh' ? '保存货物失败' : 'Failed to save cargo')
+      return
+    }
+    setCargoLibraryNotice(editingLibraryCargoId ? t.cargoLibraryNoticeUpdated : t.cargoLibraryNoticeSaved)
+    setEditingLibraryCargoId(null)
+    setCargoLibraryForm(emptyForm)
+    await fetchCustomCargo()
+  }
+
+  const editLibraryCargo = (item: CargoItem) => {
+    setEditingLibraryCargoId(item.id)
+    setCargoLibraryForm({
+      name: item.name,
+      label: item.label,
+      length: item.length,
+      width: item.width,
+      height: item.height,
+      weight: item.weight,
+      quantity: 1,
+      color: item.color,
+      canRotate: item.canRotate,
+      stackable: item.stackable,
+      maxStackLayers: item.maxStackLayers,
+    })
+  }
+
+  const removeLibraryCargo = async (id: string) => {
+    const ok = await deleteCustomCargo(id)
+    if (!ok) {
+      alert(locale === 'zh' ? '删除货物失败' : 'Failed to delete cargo')
+      return
+    }
+    setCargoLibraryNotice(t.cargoLibraryNoticeDeleted)
+    if (editingLibraryCargoId === id) {
+      setEditingLibraryCargoId(null)
+      setCargoLibraryForm(emptyForm)
+    }
+    await fetchCustomCargo()
+  }
+
+  const useLibraryCargo = (item: CargoItem) => {
+    setCargoItems((current) => [...current, { ...item, id: createClientId(), quantity: Math.max(1, item.quantity || 1) }])
+    setHasCalculated(true)
+    setActiveNav('overview')
   }
 
   const handleSaveImportTemplate = async () => {
@@ -2333,6 +2439,59 @@ function Workbench() {
                 <button className="archive-button success" type="button" onClick={saveCurrentPlan}>{t.savePlan}</button>
                 <button className="archive-button secondary" type="button" onClick={() => activateNav('overview')}>{t.backToWorkbench}</button>
               </div>
+            </div>
+            <div className="mb-5 rounded-lg border border-[#c6c6c6] bg-white p-4" data-testid="cargo-library">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-lg font-bold">{t.cargoLibrary}</h3>
+                {cargoLibraryNotice && <span className="text-xs font-semibold text-[#047857]">{cargoLibraryNotice}</span>}
+              </div>
+              <form className="grid gap-2 text-sm md:grid-cols-6" onSubmit={saveLibraryCargo}>
+                <label>{t.name}<input className="field-input mt-1" value={cargoLibraryForm.name} onChange={(event) => setCargoLibraryForm((current) => ({ ...current, name: event.target.value }))} /></label>
+                <label>{t.group}<input className="field-input mt-1" value={cargoLibraryForm.label ?? ''} onChange={(event) => setCargoLibraryForm((current) => ({ ...current, label: event.target.value.toUpperCase().slice(0, 2) }))} /></label>
+                <label>{t.length}<input className="field-input mt-1" type="number" value={cargoLibraryForm.length} onChange={(event) => updateLibraryNumber('length', event.target.value)} /></label>
+                <label>{t.width}<input className="field-input mt-1" type="number" value={cargoLibraryForm.width} onChange={(event) => updateLibraryNumber('width', event.target.value)} /></label>
+                <label>{t.height}<input className="field-input mt-1" type="number" value={cargoLibraryForm.height} onChange={(event) => updateLibraryNumber('height', event.target.value)} /></label>
+                <label>{t.weight}<input className="field-input mt-1" type="number" value={cargoLibraryForm.weight} onChange={(event) => updateLibraryNumber('weight', event.target.value)} /></label>
+                <label>{t.color}<input className="mt-1 h-10 w-full border border-[#aaa] bg-white" type="color" value={cargoLibraryForm.color} onChange={(event) => setCargoLibraryForm((current) => ({ ...current, color: event.target.value }))} /></label>
+                <label className="flex items-center gap-2 pt-7"><input checked={cargoLibraryForm.canRotate} type="checkbox" onChange={(event) => setCargoLibraryForm((current) => ({ ...current, canRotate: event.target.checked }))} />{t.rotate}</label>
+                <label className="flex items-center gap-2 pt-7"><input checked={cargoLibraryForm.stackable} type="checkbox" onChange={(event) => setCargoLibraryForm((current) => ({ ...current, stackable: event.target.checked, maxStackLayers: event.target.checked ? current.maxStackLayers : undefined }))} />{t.stackable}</label>
+                {cargoLibraryForm.stackable && (
+                  <label>{t.maxStackLayers}<input className="field-input mt-1" min={1} type="number" value={cargoLibraryForm.maxStackLayers ?? ''} onChange={(event) => updateLibraryMaxStackLayers(event.target.value)} /></label>
+                )}
+                <div className="flex items-end gap-2 md:col-span-2">
+                  <button className="archive-button success w-full" data-testid="cargo-library-add" type="submit">
+                    {editingLibraryCargoId ? t.cargoLibraryUpdate : t.cargoLibrarySave}
+                  </button>
+                  {editingLibraryCargoId && (
+                    <button className="archive-button secondary" type="button" onClick={() => { setEditingLibraryCargoId(null); setCargoLibraryForm(emptyForm) }}>
+                      {t.cancel}
+                    </button>
+                  )}
+                </div>
+              </form>
+              {customCargoItems.length === 0 ? (
+                <p className="mt-3 text-sm text-[#64748b]">{t.cargoLibraryEmpty}</p>
+              ) : (
+                <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {customCargoItems.map((item) => (
+                    <article className="rounded border border-[#d1d5db] bg-[#f8fafc] p-3 text-sm" data-testid={`cargo-library-row-${item.id}`} key={item.id}>
+                      <div className="mb-2 flex items-start gap-2">
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded font-bold text-white" style={{ backgroundColor: item.color }}>{item.label}</span>
+                        <div>
+                          <strong>{item.name}</strong>
+                          <p className="text-xs text-[#64748b]">{item.length} x {item.width} x {item.height} mm · {item.weight} kg</p>
+                          <p className="text-xs text-[#64748b]">{item.canRotate ? t.rotate : `${t.rotate}: off`} · {item.stackable ? t.stackable : `${t.stackable}: off`}{item.maxStackLayers ? ` · ${t.maxStackLayers}: ${item.maxStackLayers}` : ''}</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button className="archive-button px-2 py-1 text-xs" data-testid={`cargo-library-use-${item.id}`} type="button" onClick={() => useLibraryCargo(item)}>{t.cargoLibraryUse}</button>
+                        <button className="archive-button secondary px-2 py-1 text-xs" data-testid={`cargo-library-edit-${item.id}`} type="button" onClick={() => editLibraryCargo(item)}>{t.cargoLibraryEdit}</button>
+                        <button className="archive-button px-2 py-1 text-xs text-red-700" data-testid={`cargo-library-delete-${item.id}`} type="button" onClick={() => void removeLibraryCargo(item.id)}>{t.cargoLibraryDelete}</button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
             </div>
             {historyPlans.length === 0 ? (
               <p className="border border-[#c6c6c6] bg-white p-3">{t.noHistory}</p>

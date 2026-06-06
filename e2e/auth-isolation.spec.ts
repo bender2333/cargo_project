@@ -114,6 +114,47 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await page.click('text=退出')
   })
 
+  test('persists custom cargo library per user and can add saved cargo to the workbench', async ({ page }) => {
+    const user1 = `u1_cargo_${Math.random().toString(36).substring(7)}`
+    const user2 = `u2_cargo_${Math.random().toString(36).substring(7)}`
+
+    await page.goto('/')
+    await page.click('text=没有账号？立即注册')
+    await page.fill('#username', user1)
+    await page.fill('#password', testPassword)
+    await page.fill('#confirmPassword', testPassword)
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+
+    await page.getByTestId('nav-history').click()
+    await expect(page.getByTestId('cargo-library')).toBeVisible()
+    await page.getByTestId('cargo-library').getByLabel('名称').fill('CargoLib-User1')
+    await page.getByTestId('cargo-library').getByLabel('分组 1').fill('CL')
+    await page.getByTestId('cargo-library').getByLabel('长 mm').fill('900')
+    await page.getByTestId('cargo-library').getByLabel('宽 mm').fill('700')
+    await page.getByTestId('cargo-library').getByLabel('高 mm').fill('500')
+    await page.getByTestId('cargo-library').getByLabel('重量 kg').fill('33')
+    await page.getByTestId('cargo-library-add').click()
+    await expect(page.getByText('CargoLib-User1')).toBeVisible()
+
+    await page.reload()
+    await page.getByTestId('nav-history').click()
+    await expect(page.getByText('CargoLib-User1')).toBeVisible()
+    const savedRow = page.locator('[data-testid^="cargo-library-row-"]:has-text("CargoLib-User1")')
+    await savedRow.getByRole('button', { name: '加入当前工作台' }).click()
+    await expect(page.getByRole('button', { name: /CL CargoLib-User1/ })).toBeVisible()
+
+    await page.click('text=退出')
+    await page.click('text=没有账号？立即注册')
+    await page.fill('#username', user2)
+    await page.fill('#password', testPassword)
+    await page.fill('#confirmPassword', testPassword)
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+    await page.getByTestId('nav-history').click()
+    await expect(page.getByText('CargoLib-User1')).not.toBeVisible()
+  })
+
   test('allows administrator to manage user accounts', async ({ page }) => {
     const adminUser1 = `u1_adm_${Math.random().toString(36).substring(7)}`
     const adminUser2 = `u2_adm_${Math.random().toString(36).substring(7)}`

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-06-06 (Round 23 T5 Cargo Library UI)
+
+- Completed subtask: add the frontend cargo library API and history-page management panel.
+  - Added `src/lib/customCargo.ts` with read/save/update/delete wrappers for `/api/custom-cargo`, preserving the library item as a one-piece cargo template instead of the current workbench quantity.
+  - Added a history-page `cargo-library` panel for adding, editing, deleting, and inserting saved cargo into the current workbench.
+  - Added Chinese and English labels/notices for cargo-library actions.
+  - Added browser coverage proving user-scoped cargo persistence after reload, “加入当前工作台” insertion, and cross-user invisibility.
+- Verification: `npx vitest run src/lib/customCargo.test.ts` passed 3 tests; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/auth-isolation.spec.ts --grep "custom cargo library"` passed 1 test.
+
 ## 2026-06-06 (Round 23 T4 Custom Cargo Backend)
 
 - Completed subtask: add a user-scoped custom cargo backend.
