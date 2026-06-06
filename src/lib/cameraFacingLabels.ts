@@ -25,6 +25,21 @@ export function fixedLabelFacesForViewMode(viewMode: CameraLabelViewMode): Local
   return null
 }
 
+export function dominantAxisFace(directionWorld: VectorLike, threshold = 0.6): LocalBoxFace | null {
+  const length = Math.hypot(directionWorld.x, directionWorld.y, directionWorld.z) || 1
+  const axes = [
+    { axis: 'X' as const, value: directionWorld.x / length },
+    { axis: 'Y' as const, value: directionWorld.y / length },
+    { axis: 'Z' as const, value: directionWorld.z / length },
+  ].sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+
+  const dominant = axes[0]
+  const secondary = axes[1]
+  return Math.abs(dominant.value) > threshold && Math.abs(secondary.value) <= threshold
+    ? signedFace(dominant.axis, dominant.value)
+    : null
+}
+
 export function cameraFacingLabelFaces(directionLocal: VectorLike, maxFaces = 2): LocalBoxFace[] {
   const horizontal = [
     { axis: 'X' as const, value: directionLocal.x },

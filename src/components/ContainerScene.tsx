@@ -12,7 +12,7 @@ import { DEFAULT_PLACEMENT_SETTINGS, type PlacementSettings } from '../lib/place
 import { manualMoveCommitArgs } from '../lib/manualMoveCommit'
 import type { BoxLabelMode } from '../lib/labelDeconfliction'
 import { baseDimensionsFromPlaced, orientationAxesOf, orientationRenderingBasisVectors } from '../lib/orientationTransform'
-import { cameraFacingLabelFaces, fixedLabelFacesForViewMode, type LocalBoxFace } from '../lib/cameraFacingLabels'
+import { cameraFacingLabelFaces, dominantAxisFace, fixedLabelFacesForViewMode, type LocalBoxFace } from '../lib/cameraFacingLabels'
 import { faceLabelContent, faceLabelContentSignature, type FaceLabelContent, type FaceLabelIcon } from '../lib/faceLabelContent'
 import {
   buildRotationGizmo,
@@ -364,6 +364,10 @@ function labelFacesForBoxCamera(state: SceneState, box: PlacedBox) {
   }
   const center = worldCenterForBox(box, state.scale, state.length, state.width)
   const cameraDirectionWorld = state.camera.position.clone().sub(center).normalize()
+  const dominantFace = dominantAxisFace(cameraDirectionWorld)
+  if (dominantFace) {
+    return new Set([dominantFace])
+  }
   const inverseBoxRotation = boxOrientationQuaternion(box).invert()
   const cameraDirectionLocal = cameraDirectionWorld.applyQuaternion(inverseBoxRotation)
   return new Set(cameraFacingLabelFaces(cameraDirectionLocal))
@@ -1553,6 +1557,16 @@ export function ContainerScene({
     renderer.domElement.addEventListener('dragleave', onDragLeave)
     renderer.domElement.addEventListener('drop', onDrop)
     controls.addEventListener('change', refreshCameraFacingLabels)
+    const onTestCameraCommand = () => {
+      const command = mount.dataset.cameraCommand
+      if (command !== 'near-top') return
+      camera.position.set(0.08, Math.max(height * 6, 1), 0.08)
+      camera.lookAt(target)
+      controls.target.copy(target)
+      controls.update()
+      refreshCameraFacingLabels()
+    }
+    mount.addEventListener('test-camera-command', onTestCameraCommand)
     window.addEventListener('keydown', onKeyDown)
 
     let frame = 0
@@ -1636,6 +1650,7 @@ export function ContainerScene({
       renderer.domElement.removeEventListener('dragleave', onDragLeave)
       renderer.domElement.removeEventListener('drop', onDrop)
       controls.removeEventListener('change', refreshCameraFacingLabels)
+      mount.removeEventListener('test-camera-command', onTestCameraCommand)
       window.removeEventListener('keydown', onKeyDown)
       mount.removeChild(renderer.domElement)
       if (sceneStateRef.current === sceneState) {

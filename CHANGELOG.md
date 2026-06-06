@@ -3,6 +3,7 @@
 ## 2026-06-06 (Label Missing Project Controls Stack Limit Template Plan)
 
 - R1 removed orientation text from 3D face-label textures while preserving orientation metadata for manual markers and details. Verification: `npx vitest run src/lib/faceLabelContent.test.ts` passed 3 tests; `npx tsc -b` passed.
+- R2 stabilized iso free-camera near-top labels by locking near-axis camera directions to a single visible face while preserving two-face labels for oblique iso views. Verification: `npx vitest run src/lib/cameraFacingLabels.test.ts` passed 4 tests; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "moves 3D labels|free camera rotates near top"` passed 2 tests.
 
 ## 2026-06-06 (Top Label and Management Review)
 

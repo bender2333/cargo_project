@@ -782,6 +782,38 @@ test('moves 3D labels to camera-facing faces across camera views', async ({ page
   await expect(scene).toHaveAttribute('data-label-faces-sample', '+Y')
 })
 
+test('keeps iso labels on top faces when free camera rotates near top view', async ({ page }) => {
+  await openEnglish(page)
+  await page.getByRole('button', { name: /Delete cargo: Carton A/ }).click()
+  await page.getByLabel('Container type').selectOption('custom')
+  await page.getByLabel('Length mm').first().fill('1000')
+  await page.getByLabel('Width mm').first().fill('1000')
+  await page.getByLabel('Height mm').first().fill('1800')
+  await page.getByLabel('Max payload kg').fill('10000')
+
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('Name', { exact: true }).fill('Iso top label cube')
+  await cargoForm.getByLabel('Label', { exact: true }).fill('IT')
+  await cargoForm.getByLabel('Length mm').fill('1000')
+  await cargoForm.getByLabel('Width mm').fill('1000')
+  await cargoForm.getByLabel('Height mm').fill('600')
+  await cargoForm.getByLabel('Weight kg').fill('10')
+  await cargoForm.getByLabel('Quantity').fill('3')
+  await page.getByRole('button', { name: '+ Add cargo item' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
+
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-label-faces-sample', /\+X/)
+  await expect(scene).toHaveAttribute('data-label-faces-sample', /\+Z/)
+
+  await scene.evaluate((element) => {
+    element.setAttribute('data-camera-command', 'near-top')
+    element.dispatchEvent(new Event('test-camera-command'))
+  })
+
+  await expect(scene).toHaveAttribute('data-label-faces-sample', '+Y')
+})
+
 test('supports Excel import/export affordance and Chinese mode', async ({ page }) => {
   await openEnglish(page)
   await expect(page.getByTestId('import-export-toolbar').getByText('Import XLSX')).toBeVisible()
