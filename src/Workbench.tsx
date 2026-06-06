@@ -1298,14 +1298,17 @@ function Workbench() {
       if (result.reason === 'quantity-limit') {
         notifyManualRejected('drop', undefined, cargoId, undefined, 'quantity-limit')
       } else {
-        const now = Date.now()
         setManualNotice({
-          id: `quick-place-${cargoId}-${now}`,
+          ...createManualOperationNotice({
+            operation: 'drop',
+            cargoId,
+            reasonCode: 'missing-target',
+            locale,
+          }),
           operation: 'drop',
           cargoId,
           reasonCode: 'missing-target',
           message: t.quickPlaceNoSpace,
-          createdAt: now,
         })
       }
       return
@@ -1893,7 +1896,7 @@ function Workbench() {
     await fetchCustomCargo()
   }
 
-  const useLibraryCargo = (item: CargoItem) => {
+  const addLibraryCargoToWorkbench = (item: CargoItem) => {
     setCargoItems((current) => [...current, { ...item, id: createClientId(), quantity: Math.max(1, item.quantity || 1) }])
     setHasCalculated(true)
     setActiveNav('overview')
@@ -2590,7 +2593,7 @@ function Workbench() {
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <button className="archive-button px-2 py-1 text-xs" data-testid={`cargo-library-use-${item.id}`} type="button" onClick={() => useLibraryCargo(item)}>{t.cargoLibraryUse}</button>
+                        <button className="archive-button px-2 py-1 text-xs" data-testid={`cargo-library-use-${item.id}`} type="button" onClick={() => addLibraryCargoToWorkbench(item)}>{t.cargoLibraryUse}</button>
                         <button className="archive-button secondary px-2 py-1 text-xs" data-testid={`cargo-library-edit-${item.id}`} type="button" onClick={() => editLibraryCargo(item)}>{t.cargoLibraryEdit}</button>
                         <button className="archive-button px-2 py-1 text-xs text-red-700" data-testid={`cargo-library-delete-${item.id}`} type="button" onClick={() => void removeLibraryCargo(item.id)}>{t.cargoLibraryDelete}</button>
                       </div>

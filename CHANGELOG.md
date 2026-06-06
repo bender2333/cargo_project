@@ -7,6 +7,7 @@
   - `ContainerScene` now accepts the shared measurement state, captures 3D ruler clicks, snaps the measured points, renders fixed 3D measurement lines/markers, and exposes measurement state attributes for browser verification.
   - The existing measurement list remains shared between 2D and 3D, so 3D-created lines can be deleted from the same side panel.
 - Verification: `npx vitest run src/lib/measureSnap.test.ts` passed 4 tests; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "尺规在 2D|尺规在 3D"` passed 2 tests.
+- Follow-up lint fix: renamed the cargo-library insertion handler so React Hooks lint no longer treats it as a hook, and routed quick-place no-space notices through the existing notice factory. Verification: `npm run lint` passed; `npx vitest run src/lib/quickPlace.test.ts src/lib/customCargo.test.ts` passed 6 tests; `npx tsc -b` passed.
 
 ## 2026-06-06 (Round 23 T7 Manual Quick Place)
 
