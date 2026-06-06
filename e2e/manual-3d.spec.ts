@@ -94,32 +94,15 @@ test('允许堆叠时显示最大堆叠层数输入，取消后隐藏', async ({
   await expect(page.getByTestId('max-stack-layers-field')).toBeVisible()
 })
 
-test('容器尺寸 badge 与场景同步且不遮挡手动画布按钮', async ({ page }) => {
+test('导出视图不再显示容器尺寸徽标且手动画布按钮可见', async ({ page }) => {
   await ensureChinese(page)
-  const badge = page.getByTestId('container-dimension-badge')
-  await expect(badge).toBeVisible()
-  await expect(badge).toContainText('mm')
-
-  await page.getByLabel('货柜类型').selectOption({ index: 1 })
-  await page.waitForTimeout(50)
-  const afterSwitchText = await badge.textContent()
-  expect(afterSwitchText?.length).toBeGreaterThan(0)
+  await expect(page.getByTestId('container-dimension-badge')).toHaveCount(0)
 
   await enterManualMode(page)
-  const badgeBox = await badge.boundingBox()
   const helpButton = page.getByTestId('manual-keyboard-help')
   await expect(helpButton).toBeVisible()
-  const undoBox = await helpButton.boundingBox()
-  expect(badgeBox).not.toBeNull()
-  expect(undoBox).not.toBeNull()
-  if (badgeBox && undoBox) {
-    const overlaps =
-      badgeBox.x < undoBox.x + undoBox.width &&
-      badgeBox.x + badgeBox.width > undoBox.x &&
-      badgeBox.y < undoBox.y + undoBox.height &&
-      badgeBox.y + badgeBox.height > undoBox.y
-    expect(overlaps).toBe(false)
-  }
+  await expect(page.getByTestId('maximize-workspace')).toBeVisible()
+  await expect(page.getByTestId('container-dimension-badge')).toHaveCount(0)
 })
 
 test('手动模式 2D 视角切换前/侧视图，SVG viewBox 随之变化', async ({ page }) => {

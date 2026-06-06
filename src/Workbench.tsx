@@ -3274,15 +3274,6 @@ function Workbench() {
             <button className="archive-button success" type="button" onClick={exportCurrentView}>
               {t.exportView}
             </button>
-            <div
-              className="ml-auto grid max-w-full grid-cols-[auto_auto] items-center gap-x-2 rounded-lg bg-[#f1f5f9] px-3 py-1.5 text-xs text-[#0f172a] shadow-sm"
-              data-testid="container-dimension-badge"
-            >
-              <strong className="min-w-0 truncate text-sm">{selectedContainer.label}</strong>
-              <span className="whitespace-nowrap font-mono tabular-nums text-[#475569]">
-                {renderingContainer.length.toLocaleString()} × {renderingContainer.width.toLocaleString()} × {renderingContainer.height.toLocaleString()} mm
-              </span>
-            </div>
             </div>
             <div
               className={`relative w-full bg-gradient-to-b from-[#eef6ff] to-[#f8fafc] ${
