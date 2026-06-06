@@ -866,6 +866,17 @@ describe('manualPlacement', () => {
     expect(placed[0]).toMatchObject({ weight: 24, stackable: false })
   })
 
+  it('toPlacedBoxes preserves manual rotation eligibility for face-label icons', () => {
+    const draft = addBox(emptyDraft(), makeManualBox({
+      id: 'b1', cargoId: 'cargo-a', label: 'A', color: '#f59e0b',
+      length: 400, width: 500, height: 600, canRotate: false, x: 100, y: 200,
+    }))
+
+    const placed = toPlacedBoxes(draft, new Set())
+
+    expect(placed[0]).toMatchObject({ canRotate: false })
+  })
+
   it('toPlacedBoxes preserves max stack layer metadata', () => {
     const draft = addBox(emptyDraft(), makeManualBox({
       id: 'b1', cargoId: 'cargo-a', label: 'A', color: '#f59e0b',

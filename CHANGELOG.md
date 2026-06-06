@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-06-06 (Round 23 T1 PlacedBox Rotation Metadata)
+
+- Completed subtask: preserve `canRotate` on every `PlacedBox`.
+  - Added `PlacedBox.canRotate` so 3D face-label badges can show rotatable/non-rotatable cargo without looking up the original cargo item.
+  - `calculatePacking()` now copies `CargoItem.canRotate` into automatic placed boxes.
+  - `toPlacedBoxes()` now copies manual box rotation eligibility, defaulting older/manual boxes to rotatable.
+  - Updated existing `PlacedBox` test fixtures with explicit rotation metadata.
+- Verification: red tests first failed for missing `canRotate` in automatic and manual placed boxes; after the fix, `npx vitest run src/lib/packing.test.ts -t "preserves each cargo rotation rule"` passed, `npx vitest run src/lib/manualPlacement.test.ts -t "preserves manual rotation eligibility"` passed, `npx vitest run src/lib/packing.test.ts src/lib/manualPlacement.test.ts` passed 74 tests, and `npx tsc -b` passed.
+
 ## 2026-06-05 (Manual 3D Rotation Gizmo)
 
 - Completed subtask: implemented the second manual 3D rotation iteration from `REVIEW.md`.

@@ -722,6 +722,7 @@ export function toPlacedBoxes(
     orientationLabel: box.orientationLabel ?? orientationLabel(axesFromBox(box)),
     weight: box.weight ?? 0,
     color: box.color,
+    canRotate: box.canRotate ?? true,
     stackable: box.stackable ?? true,
     maxStackLayers: box.maxStackLayers,
     physicalLayer: 1,

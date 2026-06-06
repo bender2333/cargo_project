@@ -19,6 +19,7 @@ function box(overrides: Partial<PlacedBox>): PlacedBox {
     labelRotationDeg: 0,
     weight: 10,
     color: '#f59e0b',
+    canRotate: true,
     stackable: true,
     physicalLayer: 1,
     workStep: 1,

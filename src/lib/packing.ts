@@ -488,6 +488,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       labelRotationDeg: box.labelRotationDeg,
       weight: entry.item.weight,
       color: entry.item.color,
+      canRotate: entry.item.canRotate,
       stackable: entry.item.stackable,
       maxStackLayers: entry.item.maxStackLayers,
       physicalLayer: support.physicalLayer,

@@ -1176,7 +1176,7 @@ export function ContainerScene({
         id: '__pool_ghost__', cargoId: info.cargoId, name: 'pool', label: 'P', index: 0,
         x: dropX, y: dropY, z: dropZ, length: info.length, width: info.width, height: info.height,
         orientationKey: 'LWH', labelRotationDeg: 0, weight: 0, color: info.color,
-        stackable: true, physicalLayer: 1, workStep: 1, supportType: 'floor', supportedBy: [],
+        canRotate: true, stackable: true, physicalLayer: 1, workStep: 1, supportType: 'floor', supportedBy: [],
       }
       ensureGhost(sceneState, ghostBox, scale, length, width)
       const invalid = computeInvalidByGeometry(null, dropX, dropY, dropZ, info.length, info.width, info.height)

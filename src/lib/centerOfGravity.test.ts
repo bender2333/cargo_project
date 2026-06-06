@@ -34,6 +34,7 @@ function makeBox(overrides: Partial<PlacedBox>): PlacedBox {
     labelRotationDeg: 0,
     weight: 100,
     color: '#000',
+    canRotate: true,
     stackable: true,
     physicalLayer: 1,
     workStep: 1,

@@ -115,6 +115,16 @@ describe('calculatePacking', () => {
     expect(result.placed[0].label).toBe('A')
   })
 
+  it('preserves each cargo rotation rule on placed boxes for 3D face badges', () => {
+    const result = calculatePacking(containers[0], [
+      cargo({ id: 'fixed', label: 'F', canRotate: false }),
+      cargo({ id: 'rotatable', label: 'R', canRotate: true }),
+    ])
+
+    expect(result.placed.find((box) => box.cargoId === 'fixed')).toMatchObject({ canRotate: false })
+    expect(result.placed.find((box) => box.cargoId === 'rotatable')).toMatchObject({ canRotate: true })
+  })
+
   it('fills the inner cross-section before moving outward along the container length', () => {
     const container = testContainer({ length: 3000, width: 2000, height: 2000 })
     const result = calculatePacking(container, [

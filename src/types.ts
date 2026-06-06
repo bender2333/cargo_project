@@ -50,6 +50,7 @@ export type PlacedBox = {
   orientationLabel?: string
   weight: number
   color: string
+  canRotate: boolean
   stackable: boolean
   maxStackLayers?: number
   physicalLayer: number

@@ -19,6 +19,7 @@ function makeBox(overrides: Partial<PlacedBox> & Pick<PlacedBox, 'id' | 'workSte
     labelRotationDeg: 0,
     weight: 1,
     color: overrides.color ?? '#f59e0b',
+    canRotate: true,
     stackable: true,
     physicalLayer: overrides.physicalLayer ?? 1,
     workStep: overrides.workStep,

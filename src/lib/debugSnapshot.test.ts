@@ -55,6 +55,7 @@ const manualPlacedBox: PlacedBox = {
   orientationLabel: 'X:L+ Y:W+ Z:T+',
   weight: 120,
   color: '#f59e0b',
+  canRotate: true,
   stackable: true,
   physicalLayer: 1,
   workStep: 1,

@@ -42,7 +42,7 @@ describe('suggestFillItems', () => {
         id: 'big', cargoId: 'c', name: 'big', label: 'B', index: 0,
         x: 0, y: 0, z: 0, length: c.length, width: c.width, height: c.height,
         orientationKey: 'LWH', labelRotationDeg: 0, weight: c.maxWeight, color: '#000',
-        stackable: true, physicalLayer: 1, workStep: 1, supportType: 'floor', supportedBy: [],
+        canRotate: true, stackable: true, physicalLayer: 1, workStep: 1, supportType: 'floor', supportedBy: [],
       }],
     }
     for (const s of suggestFillItems(filled, c)) {

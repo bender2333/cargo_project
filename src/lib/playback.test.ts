@@ -19,6 +19,7 @@ function makeBox(id: string, step: number): PlacedBox {
     orientationKey: 'LWH',
     labelRotationDeg: 0,
     weight: 1,
+    canRotate: true,
     stackable: true,
     physicalLayer: 1,
     workStep: step,
