@@ -14,6 +14,27 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-06-06-r35-label-stack-template-controls',
+    date: '2026-06-06',
+    title: { en: '3D labels, stack limits, and template creation', zh: '3D 标签 / 堆叠上限 / 模板新建' },
+    items: {
+      en: [
+        '3D cargo face badges no longer include orientation-axis text, while manual placement metadata still keeps the orientation information.',
+        'Near-top free-camera 3D labels now stay on the top face instead of switching to side labels during review.',
+        'Max stack layer limits are enforced through the whole support chain in automatic packing and manual validation.',
+        'The header project name, new project, save project, and upload project controls were removed; history still keeps an auto-generated plan name.',
+        'The top-level template manager can now create import templates with free-text source columns and reuse them in Excel import.',
+      ],
+      zh: [
+        '3D 货物面标不再显示朝向轴文字，手动排布和明细仍保留朝向元数据。',
+        '自由相机接近俯视时，3D 标签会稳定停留在顶面，不再切到侧面标签。',
+        '最大堆叠层数现在会沿完整支撑链校验，自动装箱和手动校验都不会越过下层货物限制。',
+        '顶部项目名、新建项目、保存项目、上传项目控件已移除；历史方案仍保留自动生成的方案名。',
+        '顶层导入模板管理现在可用自由文本源列名新建模板，并在 Excel 导入中复用。',
+      ],
+    },
+  },
+  {
     version: '2026-06-05-r34-manual-rotation-gizmo',
     date: '2026-06-05',
     title: { en: 'In-scene 3D rotation handles', zh: '场景内 3D 弧形旋转手柄' },

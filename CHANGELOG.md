@@ -7,6 +7,7 @@
 - R3 enforced max stack layer limits across the full support chain in both automatic packing and manual validation, so unlimited cargo can no longer be stacked above a supporting cargo whose stack limit has been reached. Verification: `npx vitest run src/lib/packing.test.ts src/lib/manualPlacement.test.ts` passed 76 tests; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "global max stack"` passed 1 test; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "最大堆叠|悬空"` passed 2 tests.
 - R4 removed the header project name/new/save/upload controls while keeping auto-generated project names for history persistence. Verification: `npx tsc -b` passed; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "loads the container calculator workspace"` passed 1 test.
 - R5 added a top-level template-manager new-template form with free-text source columns and reuse through the Excel import modal. Verification: `npx tsc -b` passed; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "creates an import template from top-level template manager"` passed 1 test.
+- Notifications were updated with the R1-R5 shipped changes. Verification: `npx tsc -b` passed; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "通知栏按钮显示未读红点"` passed 1 test.
 
 ## 2026-06-06 (Top Label and Management Review)
 
