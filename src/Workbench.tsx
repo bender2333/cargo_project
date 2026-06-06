@@ -1293,7 +1293,6 @@ function Workbench() {
       container: renderingContainer,
       createId: () => `manual-${cargoId}-${Date.now()}-${manualDraft.boxes.length + 1}`,
       supportPolicy: placementSettings.supportPolicy,
-      stepMm: placementSettings.gridStepMm,
     })
     if (!result.ok) {
       if (result.reason === 'quantity-limit') {

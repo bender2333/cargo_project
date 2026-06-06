@@ -1,4 +1,4 @@
-import type { CargoItem, ContainerSpec } from '../types'
+import type { CargoItem, ContainerSpec, PlacedBox } from '../types'
 import {
   addBox,
   isBlockingManualIssue,
@@ -6,6 +6,8 @@ import {
   validateDraft,
 } from './manualPlacement'
 import type { ManualDraft, ManualPlacedBox, ValidationIssue } from './manualPlacement'
+import { orientations, placementScore } from './packing'
+import type { BoxOrientation, PackingPoint } from './packing'
 import type { SupportPolicy } from './placementSettings'
 
 type QuickPlaceInput = {
@@ -14,7 +16,6 @@ type QuickPlaceInput = {
   container: ContainerSpec
   createId: () => string
   supportPolicy?: SupportPolicy
-  stepMm?: number
 }
 
 type QuickPlaceSuccess = {
@@ -34,35 +35,90 @@ type QuickPlaceFailure = {
 
 export type QuickPlaceResult = QuickPlaceSuccess | QuickPlaceFailure
 
-function floorCandidates(cargo: CargoItem, container: ContainerSpec, stepMm: number) {
-  const candidates: Array<{ x: number; y: number; z: number }> = []
-  const maxX = container.length - cargo.length
-  const maxY = container.width - cargo.width
-  if (maxX < 0 || maxY < 0 || container.height < cargo.height) {
-    return candidates
-  }
-
-  for (let y = 0; y <= maxY; y += stepMm) {
-    for (let x = 0; x <= maxX; x += stepMm) {
-      candidates.push({ x, y, z: 0 })
-    }
-  }
-
-  if (maxX % stepMm !== 0 || maxY % stepMm !== 0) {
-    candidates.push({ x: Math.max(0, maxX), y: Math.max(0, maxY), z: 0 })
-  }
-  return candidates
+function pointKey(point: PackingPoint) {
+  return `${Math.round(point.x)}:${Math.round(point.y)}:${Math.round(point.z)}`
 }
 
-function stackCandidates(cargo: CargoItem, draft: ManualDraft, container: ContainerSpec) {
-  return draft.boxes
-    .filter((box) => box.stackable !== false)
-    .map((box) => ({ x: box.x, y: box.y, z: box.z + box.height }))
-    .filter((candidate) => (
-      candidate.x + cargo.length <= container.length &&
-      candidate.y + cargo.width <= container.width &&
-      candidate.z + cargo.height <= container.height
-    ))
+function quickPlaceCandidates(draft: ManualDraft, container: ContainerSpec): PackingPoint[] {
+  const seen = new Set<string>()
+  return [
+    { x: 0, y: 0, z: 0 },
+    ...draft.boxes.flatMap((box) => [
+      { x: box.x + box.length, y: box.y, z: box.z },
+      { x: box.x, y: box.y + box.width, z: box.z },
+      { x: box.x, y: box.y, z: box.z + box.height },
+    ]),
+  ]
+    .filter((point) => point.x <= container.length && point.y <= container.width && point.z <= container.height)
+    .filter((point) => {
+      const key = pointKey(point)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+}
+
+function orientationLabel(orientationKey: BoxOrientation['orientationKey']) {
+  const [x, y, z] = orientationKey.split('')
+  return `X:${x}+ Y:${y}+ Z:${z}+`
+}
+
+function manualBoxAsPlacedBox(box: ManualPlacedBox): PlacedBox {
+  return {
+    id: box.id,
+    cargoId: box.cargoId,
+    name: box.label,
+    label: box.label,
+    index: 1,
+    x: box.x,
+    y: box.y,
+    z: box.z,
+    length: box.length,
+    width: box.width,
+    height: box.height,
+    orientationKey: box.orientationKey,
+    labelRotationDeg: box.labelRotationDeg,
+    yawQuarterTurn: box.yawQuarterTurn,
+    pitchQuarterTurn: box.pitchQuarterTurn,
+    orientationAxes: box.orientationAxes,
+    orientationLabel: box.orientationLabel,
+    weight: box.weight ?? 0,
+    color: box.color,
+    canRotate: box.canRotate ?? true,
+    stackable: box.stackable ?? true,
+    maxStackLayers: box.maxStackLayers,
+    physicalLayer: 1,
+    workStep: 1,
+    supportType: 'floor',
+    supportedBy: [],
+  }
+}
+
+function makeCandidateBox(input: QuickPlaceInput, point: PackingPoint, box: BoxOrientation) {
+  const manualBox = makeManualBox({
+    id: input.createId(),
+    cargoId: input.cargo.id,
+    label: input.cargo.label ?? input.cargo.name,
+    color: input.cargo.color,
+    length: box.length,
+    width: box.width,
+    height: box.height,
+    weight: input.cargo.weight,
+    canRotate: input.cargo.canRotate,
+    stackable: input.cargo.stackable,
+    maxStackLayers: input.cargo.maxStackLayers,
+    x: point.x,
+    y: point.y,
+    z: point.z,
+  })
+  return {
+    ...manualBox,
+    orientationKey: box.orientationKey,
+    labelRotationDeg: 0 as const,
+    yawQuarterTurn: 0 as const,
+    pitchQuarterTurn: 0 as const,
+    orientationLabel: orientationLabel(box.orientationKey),
+  }
 }
 
 export function quickPlaceCargo(input: QuickPlaceInput): QuickPlaceResult {
@@ -71,29 +127,17 @@ export function quickPlaceCargo(input: QuickPlaceInput): QuickPlaceResult {
     return { ok: false, nextDraft: input.draft, box: null, issues: [], reason: 'quantity-limit' }
   }
 
-  const stepMm = Math.max(1, input.stepMm ?? Math.min(input.cargo.length, input.cargo.width, 500))
-  const candidates = [
-    ...floorCandidates(input.cargo, input.container, stepMm),
-    ...stackCandidates(input.cargo, input.draft, input.container),
-  ]
+  const placedForScore = input.draft.boxes.map(manualBoxAsPlacedBox)
+  const candidates = orientations(input.cargo)
+    .flatMap((box) => quickPlaceCandidates(input.draft, input.container).map((point) => ({
+      box,
+      point,
+      score: placementScore(input.cargo, box, point, placedForScore, input.container),
+    })))
+    .sort((a, b) => a.score - b.score || b.box.width - a.box.width || b.box.length * b.box.width - a.box.length * a.box.width)
 
   for (const candidate of candidates) {
-    const box = makeManualBox({
-      id: input.createId(),
-      cargoId: input.cargo.id,
-      label: input.cargo.label ?? input.cargo.name,
-      color: input.cargo.color,
-      length: input.cargo.length,
-      width: input.cargo.width,
-      height: input.cargo.height,
-      weight: input.cargo.weight,
-      canRotate: input.cargo.canRotate,
-      stackable: input.cargo.stackable,
-      maxStackLayers: input.cargo.maxStackLayers,
-      x: candidate.x,
-      y: candidate.y,
-      z: candidate.z,
-    })
+    const box = makeCandidateBox(input, candidate.point, candidate.box)
     const nextDraft = addBox(input.draft, box)
     const issues = validateDraft(nextDraft, input.container, input.supportPolicy).filter((issue) => issue.boxId === box.id)
     if (!issues.some(isBlockingManualIssue)) {

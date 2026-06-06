@@ -34,12 +34,12 @@ export type CalculatePackingOptions = {
 type OrientationKey = PlacedBox['orientationKey']
 type LabelRotationDeg = PlacedBox['labelRotationDeg']
 
-type BoxOrientation = BoxSize & {
+export type BoxOrientation = BoxSize & {
   orientationKey: OrientationKey
   labelRotationDeg: LabelRotationDeg
 }
 
-type Point = {
+export type PackingPoint = {
   x: number
   y: number
   z: number
@@ -106,7 +106,7 @@ export function orientations(item: CargoItem): BoxOrientation[] {
   )
 }
 
-function fitsInsideContainer(point: Point, box: BoxSize, container: ContainerSpec) {
+function fitsInsideContainer(point: PackingPoint, box: BoxSize, container: ContainerSpec) {
   return (
     point.x + box.length <= container.length + EPSILON &&
     point.y + box.width <= container.width + EPSILON &&
@@ -114,7 +114,7 @@ function fitsInsideContainer(point: Point, box: BoxSize, container: ContainerSpe
   )
 }
 
-function overlaps(a: PlacedBox, point: Point, box: BoxSize) {
+function overlaps(a: PlacedBox, point: PackingPoint, box: BoxSize) {
   return !(
     point.x + box.length <= a.x + EPSILON ||
     a.x + a.length <= point.x + EPSILON ||
@@ -125,7 +125,7 @@ function overlaps(a: PlacedBox, point: Point, box: BoxSize) {
   )
 }
 
-function supportOverlap(candidate: PlacedBox, point: Point, box: BoxSize) {
+function supportOverlap(candidate: PlacedBox, point: PackingPoint, box: BoxSize) {
   if (!candidate.stackable || Math.abs(candidate.z + candidate.height - point.z) > EPSILON) {
     return 0
   }
@@ -141,7 +141,7 @@ function supportOverlap(candidate: PlacedBox, point: Point, box: BoxSize) {
   return overlapX * overlapY
 }
 
-function supportDetails(point: Point, box: BoxSize, placed: PlacedBox[]) {
+function supportDetails(point: PackingPoint, box: BoxSize, placed: PlacedBox[]) {
   if (point.z <= EPSILON) {
     return {
       supportedArea: box.length * box.width,
@@ -166,16 +166,16 @@ function supportDetails(point: Point, box: BoxSize, placed: PlacedBox[]) {
   }
 }
 
-function stackLayerForPlacement(point: Point, box: BoxSize, placed: PlacedBox[]) {
+function stackLayerForPlacement(point: PackingPoint, box: BoxSize, placed: PlacedBox[]) {
   return supportDetails(point, box, placed).physicalLayer
 }
 
-function respectsMaxStackLayers(point: Point, box: BoxSize, placed: PlacedBox[], item: StackLimitCarrier) {
+function respectsMaxStackLayers(point: PackingPoint, box: BoxSize, placed: PlacedBox[], item: StackLimitCarrier) {
   if (!item.maxStackLayers || item.maxStackLayers <= 0) return true
   return stackLayerForPlacement(point, box, placed) <= item.maxStackLayers
 }
 
-function canPlace(point: Point, box: BoxSize, container: ContainerSpec, placed: PlacedBox[], item: StackLimitCarrier) {
+function canPlace(point: PackingPoint, box: BoxSize, container: ContainerSpec, placed: PlacedBox[], item: StackLimitCarrier) {
   return (
     fitsInsideContainer(point, box, container) &&
     supportDetails(point, box, placed).supportRatio >= 0.8 &&
@@ -184,11 +184,11 @@ function canPlace(point: Point, box: BoxSize, container: ContainerSpec, placed: 
   )
 }
 
-function pointKey(point: Point) {
+function pointKey(point: PackingPoint) {
   return `${Math.round(point.x)}:${Math.round(point.y)}:${Math.round(point.z)}`
 }
 
-function normalizePoints(points: Point[], container: ContainerSpec) {
+function normalizePoints(points: PackingPoint[], container: ContainerSpec) {
   const seen = new Set<string>()
   return points
     .filter((point) => point.x <= container.length && point.y <= container.width && point.z <= container.height)
@@ -203,10 +203,10 @@ function normalizePoints(points: Point[], container: ContainerSpec) {
     .sort((a, b) => a.x - b.x || a.y - b.y || a.z - b.z)
 }
 
-function placementScore(
+export function placementScore(
   item: CargoItem,
   box: BoxOrientation,
-  point: Point,
+  point: PackingPoint,
   placed: PlacedBox[],
   container: ContainerSpec,
 ) {
@@ -253,7 +253,7 @@ function placementScore(
   )
 }
 
-function bestPlacement(item: CargoItem, container: ContainerSpec, placed: PlacedBox[], points: Point[]) {
+function bestPlacement(item: CargoItem, container: ContainerSpec, placed: PlacedBox[], points: PackingPoint[]) {
   return orientations(item)
     .filter(
       (option) =>
@@ -424,7 +424,7 @@ function normalizeDefaultMaxStackLayers(value: number | undefined) {
 export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[], options: CalculatePackingOptions = {}): PackingResult {
   const effective = effectiveContainer(container)
   const placed: PlacedBox[] = []
-  let extremePoints: Point[] = [{ x: 0, y: 0, z: 0 }]
+  let extremePoints: PackingPoint[] = [{ x: 0, y: 0, z: 0 }]
   const unplacedMap = new Map<string, UnplacedCargo>()
   let usedWeight = 0
   let totalCargoCount = 0
@@ -468,7 +468,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
 
   const placeEntry = (
     entry: { item: CargoItem; itemIndex: number; label: string; index: number },
-    placement: { box: BoxOrientation; point: Point },
+    placement: { box: BoxOrientation; point: PackingPoint },
   ) => {
     const { box, point } = placement
     const support = supportDetails(point, box, placed)
@@ -519,7 +519,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         | {
             score: number
             box: BoxOrientation
-            point: Point
+            point: PackingPoint
             idx: number
           }
         | null = null

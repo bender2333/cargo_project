@@ -3,6 +3,7 @@
 ## 2026-06-06 (Top Label and Management Review)
 
 - S1 fixed orthographic 3D label faces: top/front/side views now use fixed visible faces while iso keeps camera-facing labels. Verification: `npx vitest run src/lib/cameraFacingLabels.test.ts` passed 3 tests; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "moves 3D labels"` passed 1 test.
+- S2 aligned manual quick-place direction with automatic packing scoring while keeping manual candidates and `validateDraft()` legality. Quick-place now tries rotatable orientations and scores manual extreme-point candidates with the shared `placementScore()`. Verification: `npx vitest run src/lib/quickPlace.test.ts` passed 4 tests; `npx tsc -b` passed; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "一键放置"` passed 1 test.
 
 ## 2026-06-06 (Round 23 Final Verification and Deploy)
 

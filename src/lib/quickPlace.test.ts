@@ -37,7 +37,7 @@ function cargo(overrides: Partial<CargoItem> = {}): CargoItem {
 }
 
 describe('quickPlaceCargo', () => {
-  it('places the next cargo at the first valid floor position', () => {
+  it('places the next cargo by automatic depth-first scoring instead of grid scan order', () => {
     const existing = makeManualBox({
       id: 'existing',
       cargoId: 'cargo-a',
@@ -56,13 +56,33 @@ describe('quickPlaceCargo', () => {
       draft,
       container: container(),
       createId: () => 'quick-1',
-      stepMm: 500,
     })
 
     expect(result.ok).toBe(true)
-    expect(result.box).toMatchObject({ id: 'quick-1', x: 500, y: 0, z: 0 })
+    expect(result.box).toMatchObject({ id: 'quick-1', x: 0, y: 500, z: 0 })
     expect(result.nextDraft.boxes).toHaveLength(2)
     expect(validateDraft(result.nextDraft, container()).filter((issue) => issue.boxId === 'quick-1')).toEqual([])
+  })
+
+  it('tries rotatable orientations and chooses the best scored legal placement', () => {
+    const narrowCargo = cargo({
+      length: 700,
+      width: 300,
+      height: 400,
+      quantity: 1,
+      canRotate: true,
+    })
+
+    const result = quickPlaceCargo({
+      cargo: narrowCargo,
+      draft: emptyDraft(),
+      container: container({ length: 500, width: 1000, height: 1200 }),
+      createId: () => 'quick-rotated',
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.box).toMatchObject({ id: 'quick-rotated', length: 300, width: 700, x: 0, y: 0, z: 0 })
+    expect(validateDraft(result.nextDraft, container({ length: 500, width: 1000, height: 1200 })).filter((issue) => issue.boxId === 'quick-rotated')).toEqual([])
   })
 
   it('stacks on an existing compatible top when no floor space remains', () => {
@@ -91,11 +111,10 @@ describe('quickPlaceCargo', () => {
       draft: floor,
       container: container(),
       createId: () => 'quick-stack',
-      stepMm: 500,
     })
 
     expect(result.ok).toBe(true)
-    expect(result.box).toMatchObject({ id: 'quick-stack', x: 0, y: 0, z: 400 })
+    expect(result.box).toMatchObject({ id: 'quick-stack', x: 0, y: 500, z: 400 })
     expect(validateDraft(result.nextDraft, container()).filter((issue) => issue.boxId === 'quick-stack')).toEqual([])
   })
 
