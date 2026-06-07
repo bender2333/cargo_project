@@ -2,6 +2,43 @@
 
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
+## 2026-06-07 已决策：把堆叠规则统一为「堆叠容量」标量 + 彻底合并约束（大重构）
+
+> 状态：**已拍板**（U-1/U-2/U-4/U-5 确认）。定稿已写入 review.md 作为执行计划（升级原 T3）。
+
+- 用户决策：
+  - U-1 不可堆叠采用**含义 A**（不能被压、但自己可做顶层乘客；KLM 能堆到 EF 之上）——本期落地语义。
+  - U-2 **保留含义 B**（仅地面/不能上架）：在数据与约束层加字段支持（如 `groundOnly`），但**本期 UI 不暴露该参数**，默认关闭；为将来留口。
+  - U-4 **彻底统一**：合并约束，删除 `supportOverlap`/`hasStackingViolation` 等处的 `stackable` 布尔特判，收敛到单一支撑链容量判断。这是一次大重构。
+  - U-5 volume 模式也按 stackCapacity 优先。
+  - 单测：必须用「同尺寸、混合堆叠规则」的数据夹具（参照样本(11)：无限/有限/不可堆叠混合）做回归保证。
+- 归一定义：
+  - `stackCapacity(item) = item.stackable===false ? 1 : (effectiveMaxStackLayers(item) ?? ∞)`（∞ 用 `Number.POSITIVE_INFINITY`，序列化仍存 `maxStackLayers=undefined` / `stackable`）。
+  - 含义 B 单独表达：`groundOnly`（true=只能落地，不能被放到任何箱之上）。与 stackCapacity 正交：stackCapacity 管「我上面能压几层」，groundOnly 管「我自己能不能上架」。
+- 约束统一（支撑链）：箱 X 放在第 N 层非法，当且仅当其支撑链（含自身）中某箱 Y 的 `stackCapacity < (N - layerOf(Y) + 1)`；额外，若 X.groundOnly 且 N>1 → 非法。`stackable=false` 自动等价容量1（其正上方那层即违例 → 没人能压它），**删除所有 `!stackable` 特判**。
+- 影响面：`packing.ts`（排序 `:459-470`、`supportOverlap :129`、`respectsMaxStackLayers :169`、`hasStackingViolation :318-321`）、`manualPlacement.ts`（`validateDraft` 堆叠/支撑校验）、`types.ts`（`CargoItem.groundOnly?`、`PlacedBox` 透传）、抽 `src/lib/stackCapacity.ts` 共用纯函数。
+- 风险与回归门槛：动装箱核心约束属高风险。验收双门槛——① 样本(11)类夹具装载数较旧实现**明显提升**且不可堆叠货全部落在各摞顶层；② 现有 `packing.test.ts`/`packing.31pallet.test.ts`/`manualPlacement.test.ts` 全绿。任一不达标先记本文件再决定是否降级为「仅统一排序、保留约束特判」。
+- 实施结果（2026-06-07）：已按统一堆叠容量模型落地并保留垂直支撑关系字段，避免 `assignDepthLayers()` 将 `supportedBy` 改写为装柜深度推入关系后影响容量校验。真实 `cargo-debug-snapshot (11).json` 回放从旧快照 102/268 提升到 182/268，K/L/M/N 不可堆叠货实际装入 14 件，全部位于顶层且支撑链容量/groundOnly 违例数为 0；同轮单元门槛 `packing.test.ts` / `packing.31pallet.test.ts` / `manualPlacement.test.ts` 已通过。
+
+## 2026-06-07 讨论中（未定稿）：把「不可堆叠」统一为「堆叠容量」标量的装箱模型
+
+> 状态：**已被上方「2026-06-07 已决策」条目取代**，保留作为讨论记录与根因分析。
+
+- 背景：用户在样本 `cargo-debug-snapshot (11).json`（26 个货物尺寸全相同 400×500×600，仅堆叠规则不同：A/B/C 无限、D-F=5、G-J=2、K/L/M/N 不可堆叠、O-Z=3；268 件只装 102 件）提出想法——能否把所有货物看成相同的箱子，差别只是堆叠限制，从而把「不可堆叠」统一进同一算法：能堆的放下边、不能堆的放最上边。用户明确「KLM 应可堆在 EF 之上」。
+- 核心发现（已读代码确认）：
+  - 「不可堆叠」现实有两义：**含义 A**「不能被压、但自己可做顶层乘客」（必须在某摞最顶层）；**含义 B**「只能贴地、不能上架」（必须第 1 层）。用户诉求「KLM 能上 EF」属**含义 A**。
+  - 当前代码的不可堆叠**恰好已是含义 A**：`packing.ts:129 supportOverlap` 中 `if (!candidate.stackable) return 0` = 不可堆叠箱提供 0 支撑、没人能压它，但它自己仍可被放到别人顶上。**所以约束方向本就正确，KLM 本就允许放到 EF 上。**
+  - 样本只装 102/268 的真正根因是**放置顺序**，不是约束：`calculatePacking` expanded 排序（`packing.ts:459-470`）quantity 模式只按「数量→体积」，完全不看堆叠容量；不可堆叠的 KLM 可能先放、落底层占地却谁也压不上去，堵死可堆高的列。
+- 提议模型：归一标量 `stackCapacity(item) = item.stackable===false ? 1 : (effectiveMaxStackLayers(item) ?? ∞)`。排序键改 `stackCapacity desc → 数量 → 体积`（容量大的先放沉底、容量1的不可堆叠货最后放浮顶）。可选：把 `respectsMaxStackLayers`（`:169`）与 `supportOverlap` 的 stackable 特判（`:129`）合并成单一支撑链容量判断——`stackable=false` 自动等价容量1，删并行分支、逻辑收敛。
+- 待用户拍板（U-1～U-5）：
+  - U-1 不可堆叠确认为含义 A（倾向：是，与诉求一致、代码现状一致）。
+  - U-2 是否单独做含义 B「仅地面」开关（倾向：暂不做，真有需求再加独立字段，不混进 stackCapacity）。
+  - U-3 ∞ 表示（倾向：`Number.POSITIVE_INFINITY` 排序用，序列化仍存 `maxStackLayers=undefined`）。
+  - U-4 是否合并约束、删 `supportOverlap` 的 stackable 特判（倾向：是，但属中-高风险，需「样本(11)装载数提升」+「packing.test/31pallet.test 全绿」双重回归；降级方案：只统一排序、不动约束）。
+  - U-5 volume 模式是否也按 stackCapacity 优先（倾向：是）。
+- 与现有计划关系：若认可，本模型**取代并加强**「2026-06-07 开发计划」中的 T3（T3 仅让 maxStackLayers 参与排序；本方案进一步把 stackable=false 归一进同一标量并可选合并约束）。其余 T1/T2/T4/T5/T6 不变。
+- 后续：等 U-1～U-5 确认 → 把定稿写入 review.md 升级 T3 → 交 Codex；本条目讨论结束后标记为已决策或归档。
+
 ## 2026-06-07 全向标签、堆叠排序与性能证据边界
 
 - 背景：用户复测后明确要求 3D 标签不要再按角度选面，顶面/侧面/任意角度都能看到标签；同时 quantity 优先场景中有限堆叠货不应先占底层，手动大体量卡顿的首要热点是相机移动触发全箱材质重算。

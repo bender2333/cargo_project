@@ -24,6 +24,7 @@ export type CargoItem = {
   canRotate: boolean
   stackable: boolean
   maxStackLayers?: number
+  groundOnly?: boolean
 }
 
 export type PlacedBox = {
@@ -53,10 +54,13 @@ export type PlacedBox = {
   canRotate: boolean
   stackable: boolean
   maxStackLayers?: number
+  groundOnly?: boolean
   physicalLayer: number
+  verticalLayer?: number
   workStep: number
   supportType: 'floor' | 'fully-supported' | 'partially-supported'
   supportedBy: string[]
+  verticalSupportedBy?: string[]
 }
 
 export type UnplacedCargo = {

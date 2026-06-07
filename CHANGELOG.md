@@ -2,6 +2,10 @@
 
 ## 2026-06-07 (All-Direction Labels Layout Stack Sorting Layer Fade Measurement Panel)
 
+- Implemented the follow-up stack-capacity refactor from `REVIEW.md`: added shared `stackCapacity()` / `violatesStackChain()` helpers, unified automatic and manual stack validation around support-chain capacity, and removed the old direct non-stackable support special-case from automatic packing.
+- `stackable=false` now behaves as stack capacity 1 (may ride as a top passenger, cannot be pressed). Added data-layer `groundOnly` support for the separate "floor only" meaning without exposing a new UI control.
+- Automatic quantity/volume ordering uses stack capacity first, and quantity mode reserves enough top height for pending capacity-1 cargo so low-capacity cargo is not starved by capacity-3 fill. Real `cargo-debug-snapshot (11).json` replay improved from the stored 102/268 to 182/268, with 14 K/L/M/N capacity-1 boxes placed, all top-only, and 0 support-chain violations.
+- Preserved original vertical support metadata (`verticalLayer` / `verticalSupportedBy`) before depth-layer assignment rewrites `physicalLayer` / `supportedBy`, so capacity checks and tests can distinguish vertical stacking from loading-depth pushers.
 - Implemented T1/T6(a): 3D box labels now use a fixed all-direction exposed-face set (`+X,-X,+Y,+Z,-Z`) instead of camera-facing face selection. Removed the OrbitControls `change` listener that previously recalculated and reassigned every box material on camera movement; `rg` found no remaining `refreshCameraFacingLabels` / `labelFacesForBoxCamera` references after the change.
 - Implemented T2: face-label texture drawing now consumes `faceLabelLayout()` so name, badge, weight/dimensions, and icons occupy separate vertical bands instead of overlapping the badge letter.
 - Implemented T3: quantity and volume automatic modes now sort expanded cargo by effective stack capacity first, so unlimited or higher-stack cargo is placed earlier and can form lower layers while existing stack-limit validation still prevents illegal support chains.

@@ -14,21 +14,23 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '2026-06-07-r36-all-direction-labels',
+    version: '2026-06-07-r36-stack-capacity-labels',
     date: '2026-06-07',
     title: { en: 'All-direction labels and layer clarity', zh: '全向标签与分层清晰度' },
     items: {
       en: [
         '3D cargo labels now render on the fixed exposed faces instead of changing with the camera angle.',
         'Face-label text, badge, dimensions, weight, and icons now use separated layout bands to avoid overlapping.',
-        'Quantity and volume packing modes now place higher-stack-capacity cargo earlier, helping stackable cargo form lower layers.',
+        'Stacking rules now use one stack-capacity model: non-stackable cargo can ride as top cargo, while floor-only cargo is reserved for the data layer.',
+        'Quantity and volume packing modes now place higher-stack-capacity cargo earlier, and quantity mode preserves top room for capacity-one cargo.',
         'Specific-layer views now fade inactive layers more strongly, and the measurement list no longer appears when the ruler is off and no measurements exist.',
         'Camera movement no longer triggers the removed full-scene label-face material refresh path.',
       ],
       zh: [
         '3D 货物标签现在固定显示在外露面上，不再跟随相机角度切换标签面。',
         '面标中的名称、徽标、尺寸、重量和图标改为分区排版，避免压在同一个字母区域上。',
-        '按数量和按体积装箱时，会优先放置堆叠能力更高的货物，帮助可堆叠货物形成底层。',
+        '堆叠规则已统一为堆叠容量模型：不可堆叠货物可作为顶层货物上架；仅限地面的含义保留在数据层。',
+        '按数量和按体积装箱时，会优先放置堆叠能力更高的货物；按数量模式还会为容量 1 货物保留顶层空间。',
         '指定分层视图会更明显地虚化非当前层；关闭尺规且没有测量线时，不再显示空测量列表。',
         '相机移动不再触发已移除的全场景标签面材质刷新路径。',
       ],

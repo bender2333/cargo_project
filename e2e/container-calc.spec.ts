@@ -547,7 +547,7 @@ test('shows label detail and diagnostic result tabs', async ({ page }) => {
   await expect(page.getByText('Weight check passed: placed cargo is within the maximum payload.')).toBeVisible()
   await expect(page.getByText('Overlap check passed: placed boxes do not overlap.')).toBeVisible()
   await expect(page.getByText(/Support check (passed|warning):/)).toBeVisible()
-  await expect(page.getByText('Stacking check passed: non-stackable items are not used as supports.')).toBeVisible()
+  await expect(page.getByText('Stacking check passed: stack capacity and ground-only limits are respected.')).toBeVisible()
   await expect(page.getByText(/Optimization suggestion:/)).toBeVisible()
 })
 

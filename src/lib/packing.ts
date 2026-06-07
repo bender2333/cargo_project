@@ -1,6 +1,7 @@
 import type { CargoItem, ContainerSpec, LoadingMode, PackingDiagnostic, PackingResult, PlacedBox, UnplacedCargo } from '../types'
 import { effectiveContainer, getContainerVolume } from '../data/containers'
 import { assignDepthLayers, buildPackingLayers } from './layers'
+import { stackCapacity, violatesStackChain, type StackChainNode } from './stackCapacity'
 
 export const UNPLACED_REASON_CODES = {
   EXCEEDS_DIMENSIONS: 'exceeds-dimensions',
@@ -23,7 +24,9 @@ type BoxSize = {
 }
 
 type StackLimitCarrier = {
+  stackable: boolean
   maxStackLayers?: number
+  groundOnly?: boolean
 }
 
 export type CalculatePackingOptions = {
@@ -126,7 +129,7 @@ function overlaps(a: PlacedBox, point: PackingPoint, box: BoxSize) {
 }
 
 function supportOverlap(candidate: PlacedBox, point: PackingPoint, box: BoxSize) {
-  if (!candidate.stackable || Math.abs(candidate.z + candidate.height - point.z) > EPSILON) {
+  if (Math.abs(candidate.z + candidate.height - point.z) > EPSILON) {
     return 0
   }
 
@@ -166,37 +169,48 @@ function supportDetails(point: PackingPoint, box: BoxSize, placed: PlacedBox[]) 
   }
 }
 
-function respectsMaxStackLayers(point: PackingPoint, box: BoxSize, placed: PlacedBox[], item: StackLimitCarrier) {
-  const support = supportDetails(point, box, placed)
-  const placedById = new Map(placed.map((placedBox) => [placedBox.id, placedBox]))
-  type StackLimitNode = Pick<PlacedBox, 'id' | 'maxStackLayers' | 'physicalLayer' | 'supportedBy'>
-  const candidate: StackLimitNode = {
-    id: '__candidate__',
-    maxStackLayers: item.maxStackLayers,
-    physicalLayer: support.physicalLayer,
-    supportedBy: support.supportedBy.map((supportBox) => supportBox.id),
-  }
-  const stack: StackLimitNode[] = [candidate]
+function respectsMaxStackLayers(
+  support: ReturnType<typeof supportDetails>,
+  placedById: Map<string, StackChainNode>,
+  item: StackLimitCarrier,
+) {
+  if (item.groundOnly && support.physicalLayer > 1) return false
+
+  const stack: StackChainNode[] = [...support.supportedBy]
   const visited = new Set<string>()
   while (stack.length > 0) {
     const current = stack.pop()
     if (!current || visited.has(current.id)) continue
     visited.add(current.id)
-    if (current.maxStackLayers && current.maxStackLayers > 0 && support.physicalLayer - current.physicalLayer + 1 > current.maxStackLayers) {
-      return false
-    }
-    stack.push(...current.supportedBy.map((supportId) => placedById.get(supportId)).filter((supportBox): supportBox is PlacedBox => Boolean(supportBox)))
+
+    if (current.groundOnly && current.physicalLayer > 1) return false
+    if (support.physicalLayer - current.physicalLayer + 1 > stackCapacity(current)) return false
+
+    stack.push(
+      ...current.supportedBy
+        .map((supportId) => placedById.get(supportId))
+        .filter((supportBox): supportBox is StackChainNode => Boolean(supportBox)),
+    )
   }
+
   return true
 }
 
-function canPlace(point: PackingPoint, box: BoxSize, container: ContainerSpec, placed: PlacedBox[], item: StackLimitCarrier) {
-  return (
-    fitsInsideContainer(point, box, container) &&
-    supportDetails(point, box, placed).supportRatio >= 0.8 &&
-    respectsMaxStackLayers(point, box, placed, item) &&
-    placed.every((candidate) => !overlaps(candidate, point, box))
-  )
+function canPlace(
+  point: PackingPoint,
+  box: BoxSize,
+  container: ContainerSpec,
+  placed: PlacedBox[],
+  placedById: Map<string, StackChainNode>,
+  item: StackLimitCarrier,
+  reservedTopPassengerHeight = 0,
+) {
+  if (!fitsInsideContainer(point, box, container)) return false
+  if (reservedTopPassengerHeight > 0 && stackCapacity(item) > 1 && point.z + box.height + reservedTopPassengerHeight > container.height + EPSILON) return false
+  if (!placed.every((candidate) => !overlaps(candidate, point, box))) return false
+
+  const support = supportDetails(point, box, placed)
+  return support.supportRatio >= 0.8 && respectsMaxStackLayers(support, placedById, item)
 }
 
 function pointKey(point: PackingPoint) {
@@ -254,11 +268,33 @@ export function placementScore(
     }
   }
 
+  const topPassengerFloorPenalty = stackCapacity(item) === 1 && point.z <= EPSILON
+    ? container.length * container.width * container.height
+    : 0
+
+  const capacity = stackCapacity(item)
+  if (Number.isFinite(capacity)) {
+    const limitedCapacityFloorPenalty = placed.length > 0 && point.z <= EPSILON
+      ? container.length * container.width * container.height
+      : 0
+    return (
+      tiltPenalty +
+      topPassengerFloorPenalty +
+      limitedCapacityFloorPenalty +
+      (container.height - point.z) * container.length * container.width +
+      point.x * container.width +
+      point.y +
+      snapBonus -
+      box.width * 0.01
+    )
+  }
+
   // Primary ordering: prefer placements deeper into the container (low x), then closer
   // to the side (low y), then lower (low z). Tiebreakers prefer taller and wider boxes
   // so that pinwheel arrangements emerge naturally for tightly packed pallet loads.
   return (
     tiltPenalty +
+    topPassengerFloorPenalty +
     point.x * container.width * container.height +
     point.y * container.height +
     point.z +
@@ -268,7 +304,14 @@ export function placementScore(
   )
 }
 
-function bestPlacement(item: CargoItem, container: ContainerSpec, placed: PlacedBox[], points: PackingPoint[]) {
+function bestPlacement(
+  item: CargoItem,
+  container: ContainerSpec,
+  placed: PlacedBox[],
+  points: PackingPoint[],
+  reservedTopPassengerHeight = 0,
+) {
+  const placedById = new Map<string, StackChainNode>(placed.map((placedBox) => [placedBox.id, placedBox]))
   return orientations(item)
     .filter(
       (option) =>
@@ -278,7 +321,7 @@ function bestPlacement(item: CargoItem, container: ContainerSpec, placed: Placed
     )
     .flatMap((box) =>
       points
-        .filter((point) => canPlace(point, box, container, placed, item))
+        .filter((point) => canPlace(point, box, container, placed, placedById, item, reservedTopPassengerHeight))
         .map((point) => ({
           box,
           point,
@@ -286,6 +329,26 @@ function bestPlacement(item: CargoItem, container: ContainerSpec, placed: Placed
         })),
     )
     .sort((a, b) => a.score - b.score || b.box.width - a.box.width || b.box.length * b.box.width - a.box.length * a.box.width)[0]
+}
+
+function topSurfacePoints(placed: PlacedBox[]) {
+  return placed.flatMap((box) => [
+    { x: box.x, y: box.y, z: box.z + box.height },
+    { x: box.x + box.length, y: box.y, z: box.z + box.height },
+    { x: box.x, y: box.y + box.width, z: box.z + box.height },
+  ])
+}
+
+function minimumFittingHeight(item: CargoItem, container: ContainerSpec) {
+  const fittingHeights = orientations(item)
+    .filter(
+      (box) =>
+        box.length <= container.length &&
+        box.width <= container.width &&
+        box.height <= container.height,
+    )
+    .map((box) => box.height)
+  return fittingHeights.length > 0 ? Math.min(...fittingHeights) : 0
 }
 
 function placedBoxesOverlap(a: PlacedBox, b: PlacedBox) {
@@ -317,7 +380,7 @@ function hasBoundaryViolation(placed: PlacedBox[], container: ContainerSpec) {
 
 function hasStackingViolation(placed: PlacedBox[]) {
   const placedById = new Map(placed.map((box) => [box.id, box]))
-  return placed.some((box) => box.supportedBy.some((supportId) => placedById.get(supportId)?.stackable === false))
+  return placed.some((box) => violatesStackChain(box, placedById) !== null)
 }
 
 function loadingSequenceScore(box: PlacedBox, container: ContainerSpec) {
@@ -394,8 +457,8 @@ function buildDiagnostics(
     id: 'stacking-check',
     severity: stackingViolation ? 'error' : 'info',
     message: stackingViolation
-      ? 'Stacking check failed: cargo was placed on a non-stackable item.'
-      : 'Stacking check passed: non-stackable items are not used as supports.',
+      ? 'Stacking check failed: at least one support chain exceeds stack capacity or ground-only limits.'
+      : 'Stacking check passed: stack capacity and ground-only limits are respected.',
   })
 
   unplaced.forEach((item) => {
@@ -436,10 +499,6 @@ function normalizeDefaultMaxStackLayers(value: number | undefined) {
   return Math.floor(Number(value))
 }
 
-function stackCapacity(item: Pick<CargoItem, 'maxStackLayers'>) {
-  return item.maxStackLayers && item.maxStackLayers > 0 ? item.maxStackLayers : Number.POSITIVE_INFINITY
-}
-
 export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[], options: CalculatePackingOptions = {}): PackingResult {
   const effective = effectiveContainer(container)
   const placed: PlacedBox[] = []
@@ -475,6 +534,17 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       return stackCapacity(b.item) - stackCapacity(a.item)
         || b.item.length * b.item.width * b.item.height - a.item.length * a.item.width * a.item.height
     })
+  const minPendingTopPassengerHeights = new Array<number>(expanded.length).fill(Number.POSITIVE_INFINITY)
+  let minPendingTopPassengerHeight = Number.POSITIVE_INFINITY
+  for (let idx = expanded.length - 1; idx >= 0; idx -= 1) {
+    minPendingTopPassengerHeights[idx] = minPendingTopPassengerHeight
+    if (stackCapacity(expanded[idx].item) === 1) {
+      const height = minimumFittingHeight(expanded[idx].item, effective)
+      if (height > 0) {
+        minPendingTopPassengerHeight = Math.min(minPendingTopPassengerHeight, height)
+      }
+    }
+  }
 
   const markUnplaced = (item: CargoItem, label: string, reasonCode: UnplacedReasonCode) => {
     const current = unplacedMap.get(item.id)
@@ -513,10 +583,13 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       canRotate: entry.item.canRotate,
       stackable: entry.item.stackable,
       maxStackLayers: entry.item.maxStackLayers,
+      groundOnly: entry.item.groundOnly,
       physicalLayer: support.physicalLayer,
+      verticalLayer: support.physicalLayer,
       workStep: placed.length + 1,
       supportType: support.supportType,
       supportedBy: support.supportedBy.map((candidate) => candidate.id),
+      verticalSupportedBy: support.supportedBy.map((candidate) => candidate.id),
     })
 
     extremePoints = normalizePoints(
@@ -537,6 +610,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     // shapes (e.g., pinwheel packing for mixed pallet widths).
     const remaining = [...expanded]
     while (remaining.length > 0) {
+      const placedById = new Map<string, StackChainNode>(placed.map((placedBox) => [placedBox.id, placedBox]))
       let best:
         | {
             score: number
@@ -564,7 +638,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
             continue
           }
           for (const point of extremePoints) {
-            if (!canPlace(point, box, effective, placed, item)) continue
+            if (!canPlace(point, box, effective, placed, placedById, item)) continue
             const score = placementScore(item, box, point, placed, effective)
             if (
               best === null ||
@@ -597,7 +671,9 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       markUnplaced(item, entry.label, UNPLACED_REASON_CODES.NO_SPACE)
     }
   } else {
-    for (const entry of expanded) {
+    const noSpaceEntries: typeof expanded = []
+    for (let entryIndex = 0; entryIndex < expanded.length; entryIndex += 1) {
+      const entry = expanded[entryIndex]
       const item = entry.item
 
       if (orientations(item).every((box) => !fitsInsideContainer({ x: 0, y: 0, z: 0 }, box, effective))) {
@@ -610,12 +686,36 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         continue
       }
 
-      const placement = bestPlacement(item, effective, placed, extremePoints)
+      const topPassengerHeight = loadingMode === 'quantity' && stackCapacity(item) > 1
+        ? minPendingTopPassengerHeights[entryIndex]
+        : Number.POSITIVE_INFINITY
+      const reservedTopPassengerHeight = Number.isFinite(topPassengerHeight) ? topPassengerHeight : 0
+      const placement = bestPlacement(item, effective, placed, extremePoints, reservedTopPassengerHeight)
       if (!placement) {
         markUnplaced(item, entry.label, UNPLACED_REASON_CODES.NO_SPACE)
+        noSpaceEntries.push(entry)
         continue
       }
       placeEntry(entry, placement)
+    }
+
+    const retryEntries = noSpaceEntries.filter((entry) => stackCapacity(entry.item) === 1)
+    for (const entry of retryEntries) {
+      const placement = bestPlacement(
+        entry.item,
+        effective,
+        placed,
+        normalizePoints([...extremePoints, ...topSurfacePoints(placed)], effective),
+      )
+      if (!placement) continue
+      placeEntry(entry, placement)
+      const current = unplacedMap.get(entry.item.id)
+      if (!current) continue
+      if (current.quantity <= 1) {
+        unplacedMap.delete(entry.item.id)
+      } else {
+        unplacedMap.set(entry.item.id, { ...current, quantity: current.quantity - 1 })
+      }
     }
   }
 

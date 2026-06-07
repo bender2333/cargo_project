@@ -715,7 +715,7 @@ describe('manualPlacement', () => {
     expect(issues.some(isBlockingManualIssue)).toBe(false)
   })
 
-  it('validateDraft flags boxes stacked on non-stackable cargo', () => {
+  it('validateDraft flags boxes above capacity-one cargo as stack capacity violations', () => {
     let draft = emptyDraft()
     draft = addBox(draft, makeManualBox({
       id: 'base', cargoId: 'cargo-a', label: 'A', color: '#fff',
@@ -729,7 +729,46 @@ describe('manualPlacement', () => {
     const issues = validateDraft(draft, container())
 
     expect(issues).toEqual([
-      expect.objectContaining({ type: 'stacking', boxId: 'top' }),
+      expect.objectContaining({ type: 'max-stack-layers', boxId: 'top', maxStackLayers: 1 }),
+    ])
+  })
+
+  it('validateDraft uses unified stack capacity for non-stackable and ground-only boxes', () => {
+    let draft = emptyDraft()
+    draft = addBox(draft, makeManualBox({
+      id: 'support', cargoId: 'cargo-a', label: 'A', color: '#fff',
+      length: 400, width: 500, height: 600, x: 0, y: 0, maxStackLayers: 3,
+    }))
+    draft = setBoxPosition(addBox(draft, makeManualBox({
+      id: 'non-stackable-top', cargoId: 'cargo-b', label: 'B', color: '#0ea5e9',
+      length: 400, width: 500, height: 600, x: 0, y: 0, stackable: false,
+    })), 'non-stackable-top', 0, 0, 600)
+    draft = setBoxPosition(addBox(draft, makeManualBox({
+      id: 'above-non-stackable', cargoId: 'cargo-c', label: 'C', color: '#22c55e',
+      length: 400, width: 500, height: 600, x: 0, y: 0,
+    })), 'above-non-stackable', 0, 0, 1200)
+    draft = addBox(draft, makeManualBox({
+      id: 'ground-support', cargoId: 'cargo-e', label: 'E', color: '#a855f7',
+      length: 400, width: 500, height: 600, x: 400, y: 0,
+    }))
+    draft = setBoxPosition(addBox(draft, makeManualBox({
+      id: 'ground-only', cargoId: 'cargo-d', label: 'D', color: '#ef4444',
+      length: 400, width: 500, height: 600, x: 400, y: 0, groundOnly: true,
+    })), 'ground-only', 400, 0, 600)
+
+    const issues = validateDraft(draft, container())
+
+    expect(issues).toEqual([
+      expect.objectContaining({
+        type: 'max-stack-layers',
+        boxId: 'above-non-stackable',
+        stackLayer: 3,
+        maxStackLayers: 1,
+      }),
+      expect.objectContaining({
+        type: 'ground-only',
+        boxId: 'ground-only',
+      }),
     ])
   })
 

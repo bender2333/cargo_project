@@ -1,4 +1,5 @@
 import type { CargoItem, ContainerSpec, PlacedBox } from '../types'
+import { stackCapacity, violatesStackChain, type StackChainNode } from './stackCapacity'
 import { DEFAULT_PLACEMENT_SETTINGS, type SupportPolicy } from './placementSettings'
 
 export type OrientationKey = 'LWH' | 'WLH' | 'LHW' | 'HLW' | 'WHL' | 'HWL'
@@ -33,6 +34,7 @@ export type ManualPlacedBox = {
   canRotate?: boolean
   stackable?: boolean
   maxStackLayers?: number
+  groundOnly?: boolean
 }
 
 export type ManualDraft = {
@@ -40,7 +42,7 @@ export type ManualDraft = {
 }
 
 export type ValidationIssue = {
-  type: 'boundary' | 'overlap' | 'floating' | 'rotation-disabled' | 'stacking' | 'max-stack-layers'
+  type: 'boundary' | 'overlap' | 'floating' | 'rotation-disabled' | 'stacking' | 'max-stack-layers' | 'ground-only'
   severity?: 'warning' | 'error'
   message: string
   boxId: string
@@ -490,19 +492,28 @@ function stackLayerForManualBox(box: ManualPlacedBox, boxes: ManualPlacedBox[], 
 
 function supportingStackLimitViolation(box: ManualPlacedBox, boxes: ManualPlacedBox[], minSupportRatio: number) {
   const boxLayer = stackLayerForManualBox(box, boxes, minSupportRatio)
-  const visited = new Set<string>()
-  const stack: ManualPlacedBox[] = [box]
-  while (stack.length > 0) {
-    const current = stack.pop()
-    if (!current || visited.has(current.id)) continue
-    visited.add(current.id)
-    const currentLayer = stackLayerForManualBox(current, boxes, minSupportRatio)
-    if (current.maxStackLayers && current.maxStackLayers > 0 && boxLayer - currentLayer + 1 > current.maxStackLayers) {
-      return { limitedBox: current, stackLayer: boxLayer, maxStackLayers: current.maxStackLayers }
-    }
-    stack.push(...directSupportsFor(current, boxes, minSupportRatio))
+  const nodes = new Map<string, StackChainNode>()
+  for (const current of boxes) {
+    nodes.set(current.id, {
+      id: current.id,
+      stackable: current.stackable ?? true,
+      maxStackLayers: current.maxStackLayers,
+      groundOnly: current.groundOnly,
+      physicalLayer: stackLayerForManualBox(current, boxes, minSupportRatio),
+      supportedBy: directSupportsFor(current, boxes, minSupportRatio).map((support) => support.id),
+    })
   }
-  return null
+  const node = nodes.get(box.id)
+  if (!node) return null
+  const violation = violatesStackChain(node, nodes)
+  if (!violation) return null
+  const limitedBox = boxes.find((current) => current.id === violation.limitedBoxId) ?? box
+  return {
+    limitedBox,
+    type: violation.type,
+    stackLayer: boxLayer,
+    maxStackLayers: violation.type === 'capacity' ? violation.stackCapacity : stackCapacity(limitedBox),
+  }
 }
 
 export function isBlockingManualIssue(issue: ValidationIssue) {
@@ -566,34 +577,19 @@ export function validateDraft(draft: ManualDraft, container: ContainerSpec, supp
     }
   }
 
-  for (const box of draft.boxes) {
-    if (box.z <= EPSILON) continue
-    for (const support of draft.boxes) {
-      if (support.id === box.id || support.stackable !== false) continue
-      const supportTop = support.z + support.height
-      if (Math.abs(supportTop - box.z) > EPSILON) continue
-      if (overlapAreaXY(box, support) <= 0) continue
-      issues.push({
-        type: 'stacking',
-        severity: 'error',
-        boxId: box.id,
-        message: `Box ${box.label} is stacked on non-stackable cargo ${support.label}.`,
-      })
-      break
-    }
-  }
-
   const stackLimitSupportRatio = supportPolicy.allowPartialOverhang ? supportPolicy.minSupportRatio : MIN_SUPPORT_OVERLAP_RATIO
   for (const box of draft.boxes) {
     const violation = supportingStackLimitViolation(box, draft.boxes, stackLimitSupportRatio)
     if (violation) {
       issues.push({
-        type: 'max-stack-layers',
+        type: violation.type === 'ground-only' ? 'ground-only' : 'max-stack-layers',
         severity: 'error',
         boxId: box.id,
         stackLayer: violation.stackLayer,
         maxStackLayers: violation.maxStackLayers,
-        message: `Box ${box.label} is on stack layer ${violation.stackLayer}, above the maximum ${violation.maxStackLayers} allowed by supporting cargo ${violation.limitedBox.label}.`,
+        message: violation.type === 'ground-only'
+          ? `Box ${box.label} is marked ground-only and cannot be placed above another cargo.`
+          : `Box ${box.label} is on stack layer ${violation.stackLayer}, above stack capacity ${violation.maxStackLayers} allowed by cargo ${violation.limitedBox.label}.`,
       })
     }
   }
@@ -621,6 +617,7 @@ export function buildPool(cargoItems: CargoItem[], draft: ManualDraft): PoolEntr
       canRotate: item.canRotate,
       stackable: item.stackable,
       maxStackLayers: item.maxStackLayers,
+      groundOnly: item.groundOnly,
     }
   })
 }
@@ -675,6 +672,7 @@ export function makeManualBox(params: {
   canRotate?: boolean
   stackable?: boolean
   maxStackLayers?: number
+  groundOnly?: boolean
   x: number
   y: number
   z?: number
@@ -703,6 +701,7 @@ export function makeManualBox(params: {
     canRotate: params.canRotate ?? true,
     stackable: params.stackable ?? true,
     maxStackLayers: params.maxStackLayers,
+    groundOnly: params.groundOnly,
   }
 }
 
@@ -742,9 +741,12 @@ export function toPlacedBoxes(
     canRotate: box.canRotate ?? true,
     stackable: box.stackable ?? true,
     maxStackLayers: box.maxStackLayers,
+    groundOnly: box.groundOnly,
     physicalLayer: 1,
+    verticalLayer: 1,
     workStep: 1,
     supportType: 'floor',
     supportedBy: [],
+    verticalSupportedBy: [],
   }))
 }

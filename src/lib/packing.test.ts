@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from '../data/containers'
 import type { CargoItem, ContainerSpec, PackingResult, PlacedBox } from '../types'
 import { UNPLACED_REASON_CODES, calculatePacking, orientations } from './packing'
+import { violatesStackChain } from './stackCapacity'
 
 const cargo = (overrides: Partial<CargoItem> = {}): CargoItem => ({
   id: 'cargo-1',
@@ -79,6 +80,67 @@ function expectValidPacking(container: ContainerSpec, result: PackingResult) {
       expect(box.supportedBy.length).toBeGreaterThan(0)
     }
   }
+}
+
+function expectValidLargePacking(container: ContainerSpec, result: PackingResult) {
+  const outOfBounds = result.placed.find((box) => (
+    box.x < 0 ||
+    box.y < 0 ||
+    box.z < 0 ||
+    box.x + box.length > container.length ||
+    box.y + box.width > container.width ||
+    box.z + box.height > container.height
+  ))
+  expect(outOfBounds).toBeUndefined()
+
+  let overlapPair: [string, string] | null = null
+  for (let i = 0; i < result.placed.length && !overlapPair; i += 1) {
+    for (let j = i + 1; j < result.placed.length; j += 1) {
+      if (boxesOverlap(result.placed[i], result.placed[j])) {
+        overlapPair = [result.placed[i].id, result.placed[j].id]
+        break
+      }
+    }
+  }
+  expect(overlapPair).toBeNull()
+
+  const usedVolume = result.placed.reduce((sum, box) => sum + box.length * box.width * box.height, 0)
+  const usedWeight = result.placed.reduce((sum, box) => sum + box.weight, 0)
+  expect(result.usedVolume).toBe(usedVolume)
+  expect(result.usedWeight).toBe(usedWeight)
+  expect(result.usedWeight).toBeLessThanOrEqual(container.maxWeight)
+}
+
+function verticalSupportGraph(placed: PlacedBox[]) {
+  return new Map(placed.map((box) => [box.id, {
+    ...box,
+    physicalLayer: box.verticalLayer ?? box.physicalLayer,
+    supportedBy: box.verticalSupportedBy ?? [],
+  }]))
+}
+
+function maxSupportedDistance(box: PlacedBox, graph: Map<string, PlacedBox>) {
+  let maxDistance = 1
+  for (const candidate of graph.values()) {
+    const stack: PlacedBox[] = [candidate]
+    const visited = new Set<string>()
+    while (stack.length > 0) {
+      const current = stack.pop()
+      if (!current || visited.has(current.id)) continue
+      visited.add(current.id)
+      if (current.id === box.id) {
+        maxDistance = Math.max(
+          maxDistance,
+          (candidate.physicalLayer ?? 1) - (box.physicalLayer ?? 1) + 1,
+        )
+        break
+      }
+      stack.push(...current.supportedBy
+        .map((supportId) => graph.get(supportId))
+        .filter((support): support is PlacedBox => Boolean(support)))
+    }
+  }
+  return maxDistance
 }
 
 describe('container specs', () => {
@@ -199,6 +261,18 @@ describe('calculatePacking', () => {
 
     expect(result.workSteps.map((step) => step.label).slice(0, 2)).toEqual(['U', 'U'])
     expect(result.placed.filter((box) => box.label === 'U').every((box) => box.physicalLayer <= 2)).toBe(true)
+  })
+
+  it('uses stack capacity before volume ties in volume mode', () => {
+    const container = testContainer({ length: 1000, width: 1000, height: 1500 })
+    const result = calculatePacking(container, [
+      cargo({ id: 'limited', label: 'L', length: 1000, width: 1000, height: 500, quantity: 1, canRotate: false, maxStackLayers: 1 }),
+      cargo({ id: 'unlimited', label: 'U', length: 1000, width: 1000, height: 500, quantity: 1, canRotate: false }),
+    ], { loadingMode: 'volume' })
+
+    expect(result.workSteps.map((step) => step.label)).toEqual(['U', 'L'])
+    expect(result.placed.find((box) => box.cargoId === 'unlimited')).toMatchObject({ z: 0 })
+    expect(result.placed.find((box) => box.cargoId === 'limited')).toMatchObject({ z: 500 })
   })
 
   it('supports selectable weight and quantity loading rules', () => {
@@ -368,15 +442,70 @@ describe('calculatePacking', () => {
     expect(result.placed.filter((box) => box.z === 0).length).toBe(1)
   })
 
-  it('does not stack on boxes marked as non-stackable', () => {
+  it('does not place cargo above boxes marked as non-stackable', () => {
     const result = calculatePacking(containers[0], [
       cargo({ id: 'base-a', label: 'A', length: containers[0].length, width: containers[0].width, height: 500, quantity: 1, canRotate: false, stackable: false }),
       cargo({ id: 'top', label: 'B', length: containers[0].length, width: containers[0].width, height: 500, quantity: 1, canRotate: false }),
-    ])
+    ], { loadingMode: 'input' })
 
     expectValidPacking(containers[0], result)
     expect(result.placed.some((box) => box.z > 0)).toBe(false)
     expect(result.unplaced[0]).toMatchObject({ quantity: 1, reasonCode: UNPLACED_REASON_CODES.NO_SPACE })
+  })
+
+  it('treats non-stackable cargo as capacity-one top cargo in a snapshot-11 style mixed stack-capacity load', () => {
+    const container = containers[0]
+    const result = calculatePacking(container, [
+      cargo({ id: 'unlimited-a', label: 'A', length: 400, width: 500, height: 600, quantity: 18, canRotate: true }),
+      cargo({ id: 'unlimited-b', label: 'B', length: 400, width: 500, height: 600, quantity: 10, canRotate: true }),
+      cargo({ id: 'unlimited-c', label: 'C', length: 400, width: 500, height: 600, quantity: 10, canRotate: true }),
+      ...['D', 'E', 'F'].map((label) => cargo({ id: `capacity-five-${label}`, label, length: 400, width: 500, height: 600, quantity: 10, canRotate: true, maxStackLayers: 5 })),
+      ...['G', 'H', 'I', 'J'].map((label) => cargo({ id: `capacity-two-${label}`, label, length: 400, width: 500, height: 600, quantity: 10, canRotate: true, maxStackLayers: 2 })),
+      ...['K', 'L', 'M', 'N'].map((label) => cargo({ id: `top-only-${label}`, label, length: 400, width: 500, height: 600, quantity: 10, canRotate: true, stackable: false })),
+      ...['O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'].map((label) => cargo({ id: `capacity-three-${label}`, label, length: 400, width: 500, height: 600, quantity: 10, canRotate: true, maxStackLayers: 3 })),
+    ], { loadingMode: 'quantity' })
+
+    expectValidLargePacking(container, result)
+    expect(result.placedCount).toBeGreaterThan(150)
+
+    const verticalById = verticalSupportGraph(result.placed)
+    for (const box of verticalById.values()) {
+      expect(violatesStackChain(box, verticalById)).toBeNull()
+    }
+
+    const nonStackable = result.placed.filter((box) => box.cargoId.startsWith('top-only-'))
+    const unlimited = result.placed.filter((box) => box.cargoId.startsWith('unlimited-'))
+    const capacityTwo = result.placed.filter((box) => box.cargoId.startsWith('capacity-two-'))
+    expect(nonStackable.length).toBeGreaterThan(0)
+    expect(nonStackable.every((box) => result.placed.every((other) => (
+      other.id === box.id ||
+      other.z !== box.z + box.height ||
+      other.x + other.length <= box.x ||
+      box.x + box.length <= other.x ||
+      other.y + other.width <= box.y ||
+      box.y + box.width <= other.y
+    )))).toBe(true)
+    expect(capacityTwo.every((box) => maxSupportedDistance(box, verticalById) <= 2)).toBe(true)
+    const averageZ = (boxes: PlacedBox[]) => boxes.reduce((sum, box) => sum + box.z, 0) / boxes.length
+    expect(averageZ(unlimited)).toBeLessThan(averageZ(nonStackable))
+  })
+
+  it('keeps ground-only cargo on the floor while still allowing other capacity-one cargo as top passengers', () => {
+    const container = testContainer({ length: 1000, width: 1000, height: 1800 })
+    const result = calculatePacking(container, [
+      cargo({ id: 'support', label: 'S', length: 500, width: 500, height: 600, quantity: 4, canRotate: false }),
+      cargo({ id: 'ground-only', label: 'G', length: 500, width: 500, height: 600, quantity: 1, canRotate: false, groundOnly: true, stackable: false }),
+      cargo({ id: 'top-only', label: 'T', length: 500, width: 500, height: 600, quantity: 1, canRotate: false, stackable: false }),
+    ], { loadingMode: 'quantity' })
+
+    expectValidPacking(container, result)
+    const graph = verticalSupportGraph(result.placed)
+    for (const box of graph.values()) {
+      expect(violatesStackChain(box, graph)).toBeNull()
+    }
+
+    expect(result.placed.find((box) => box.cargoId === 'ground-only')).toMatchObject({ z: 0 })
+    expect(result.placed.find((box) => box.cargoId === 'top-only')?.z).toBeGreaterThan(0)
   })
 
   it('honors cargo max stack layers while preserving unlimited legacy behavior by default', () => {
