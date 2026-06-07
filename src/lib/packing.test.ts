@@ -477,14 +477,9 @@ describe('calculatePacking', () => {
     const unlimited = result.placed.filter((box) => box.cargoId.startsWith('unlimited-'))
     const capacityTwo = result.placed.filter((box) => box.cargoId.startsWith('capacity-two-'))
     expect(nonStackable.length).toBeGreaterThan(0)
-    expect(nonStackable.every((box) => result.placed.every((other) => (
-      other.id === box.id ||
-      other.z !== box.z + box.height ||
-      other.x + other.length <= box.x ||
-      box.x + box.length <= other.x ||
-      other.y + other.width <= box.y ||
-      box.y + box.width <= other.y
-    )))).toBe(true)
+    expect(nonStackable.every((box) =>
+      result.placed.every((other) => !(other.verticalSupportedBy ?? []).includes(box.id)),
+    )).toBe(true)
     expect(capacityTwo.every((box) => maxSupportedDistance(box, verticalById) <= 2)).toBe(true)
     const averageZ = (boxes: PlacedBox[]) => boxes.reduce((sum, box) => sum + box.z, 0) / boxes.length
     expect(averageZ(unlimited)).toBeLessThan(averageZ(nonStackable))

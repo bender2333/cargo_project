@@ -196,6 +196,32 @@ function respectsMaxStackLayers(
   return true
 }
 
+function preservesReservedTopPassengerStackSlot(
+  support: ReturnType<typeof supportDetails>,
+  placedById: Map<string, StackChainNode>,
+) {
+  const stack: StackChainNode[] = [...support.supportedBy]
+  const visited = new Set<string>()
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (!current || visited.has(current.id)) continue
+    visited.add(current.id)
+
+    const capacity = stackCapacity(current)
+    if (Number.isFinite(capacity) && support.physicalLayer - current.physicalLayer + 1 >= capacity) {
+      return false
+    }
+
+    stack.push(
+      ...current.supportedBy
+        .map((supportId) => placedById.get(supportId))
+        .filter((supportBox): supportBox is StackChainNode => Boolean(supportBox)),
+    )
+  }
+
+  return true
+}
+
 function canPlace(
   point: PackingPoint,
   box: BoxSize,
@@ -204,12 +230,14 @@ function canPlace(
   placedById: Map<string, StackChainNode>,
   item: StackLimitCarrier,
   reservedTopPassengerHeight = 0,
+  reserveTopPassengerStackSlot = false,
 ) {
   if (!fitsInsideContainer(point, box, container)) return false
   if (reservedTopPassengerHeight > 0 && stackCapacity(item) > 1 && point.z + box.height + reservedTopPassengerHeight > container.height + EPSILON) return false
   if (!placed.every((candidate) => !overlaps(candidate, point, box))) return false
 
   const support = supportDetails(point, box, placed)
+  if (reserveTopPassengerStackSlot && !preservesReservedTopPassengerStackSlot(support, placedById)) return false
   return support.supportRatio >= 0.8 && respectsMaxStackLayers(support, placedById, item)
 }
 
@@ -220,7 +248,14 @@ function pointKey(point: PackingPoint) {
 function normalizePoints(points: PackingPoint[], container: ContainerSpec) {
   const seen = new Set<string>()
   return points
-    .filter((point) => point.x <= container.length && point.y <= container.width && point.z <= container.height)
+    .filter((point) => (
+      point.x >= 0 &&
+      point.y >= 0 &&
+      point.z >= 0 &&
+      point.x <= container.length &&
+      point.y <= container.width &&
+      point.z <= container.height
+    ))
     .filter((point) => {
       const key = pointKey(point)
       if (seen.has(key)) {
@@ -310,9 +345,12 @@ function bestPlacement(
   placed: PlacedBox[],
   points: PackingPoint[],
   reservedTopPassengerHeight = 0,
+  preferCapacityOneTopPassenger = false,
+  reserveTopPassengerStackSlot = false,
+  deferCapacityOneFloorFallback = false,
 ) {
   const placedById = new Map<string, StackChainNode>(placed.map((placedBox) => [placedBox.id, placedBox]))
-  return orientations(item)
+  const bestFromPoints = (candidatePoints: PackingPoint[]) => orientations(item)
     .filter(
       (option) =>
         option.length <= container.length &&
@@ -320,8 +358,17 @@ function bestPlacement(
         option.height <= container.height,
     )
     .flatMap((box) =>
-      points
-        .filter((point) => canPlace(point, box, container, placed, placedById, item, reservedTopPassengerHeight))
+      candidatePoints
+        .filter((point) => canPlace(
+          point,
+          box,
+          container,
+          placed,
+          placedById,
+          item,
+          reservedTopPassengerHeight,
+          reserveTopPassengerStackSlot,
+        ))
         .map((point) => ({
           box,
           point,
@@ -329,14 +376,47 @@ function bestPlacement(
         })),
     )
     .sort((a, b) => a.score - b.score || b.box.width - a.box.width || b.box.length * b.box.width - a.box.length * a.box.width)[0]
+
+  if (preferCapacityOneTopPassenger && stackCapacity(item) === 1 && !item.groundOnly && placed.length > 0) {
+    const topPlacement = bestFromPoints(normalizePoints(topSurfacePoints(placed, item, container.height - item.height), container))
+    if (topPlacement) return topPlacement
+    if (deferCapacityOneFloorFallback) return undefined
+  }
+
+  return bestFromPoints(points)
 }
 
-function topSurfacePoints(placed: PlacedBox[]) {
-  return placed.flatMap((box) => [
-    { x: box.x, y: box.y, z: box.z + box.height },
-    { x: box.x + box.length, y: box.y, z: box.z + box.height },
-    { x: box.x, y: box.y + box.width, z: box.z + box.height },
-  ])
+function topSurfacePoints(placed: PlacedBox[], item?: CargoItem, minZ = 0) {
+  const levels = new Map<number, { x: Set<number>; y: Set<number> }>()
+  for (const box of placed) {
+    const z = box.z + box.height
+    if (z < minZ - EPSILON) continue
+    const level = levels.get(z) ?? { x: new Set<number>(), y: new Set<number>() }
+    level.x.add(box.x)
+    level.x.add(box.x + box.length)
+    level.y.add(box.y)
+    level.y.add(box.y + box.width)
+    levels.set(z, level)
+  }
+
+  const xOffsets = new Set([0])
+  const yOffsets = new Set([0])
+  if (item) {
+    for (const box of orientations(item)) {
+      xOffsets.add(-box.length)
+      yOffsets.add(-box.width)
+    }
+  }
+
+  return [...levels.entries()].flatMap(([z, level]) =>
+    [...level.x].flatMap((edgeX) =>
+      [...level.y].flatMap((edgeY) =>
+        [...xOffsets].flatMap((xOffset) =>
+          [...yOffsets].map((yOffset) => ({ x: edgeX + xOffset, y: edgeY + yOffset, z })),
+        ),
+      ),
+    ),
+  )
 }
 
 function minimumFittingHeight(item: CargoItem, container: ContainerSpec) {
@@ -410,6 +490,7 @@ function buildDiagnostics(
   container: ContainerSpec,
   usedWeight: number,
   volumeUtilization: number,
+  cargoById: Map<string, CargoItem>,
 ): PackingDiagnostic[] {
   const diagnostics: PackingDiagnostic[] = []
   const boundaryViolation = hasBoundaryViolation(placed, container)
@@ -475,6 +556,27 @@ function buildDiagnostics(
       message: `${item.label} ${item.name}: ${item.quantity} unplaced because ${item.reason}.`,
     })
   })
+
+  const totalUnplacedQuantity = unplaced.reduce((sum, item) => sum + item.quantity, 0)
+  const noSpaceUnplaced = unplaced.filter((item) => item.reasonCode === UNPLACED_REASON_CODES.NO_SPACE)
+  const noSpaceQuantity = noSpaceUnplaced.reduce((sum, item) => sum + item.quantity, 0)
+  const lowCapacityNoSpaceQuantity = noSpaceUnplaced.reduce((sum, item) => {
+    const cargo = cargoById.get(item.cargoId)
+    return cargo && stackCapacity(cargo) <= 1 ? sum + item.quantity : sum
+  }, 0)
+
+  if (
+    totalUnplacedQuantity > 0 &&
+    noSpaceQuantity === totalUnplacedQuantity &&
+    lowCapacityNoSpaceQuantity / totalUnplacedQuantity >= 0.5 &&
+    usedWeight <= container.maxWeight + EPSILON
+  ) {
+    diagnostics.push({
+      id: 'stack-capacity-limit',
+      severity: 'warning',
+      message: 'stack capacity limit: unplaced cargo is mainly constrained by too many non-stackable or capacity-1 boxes after floor and top positions are exhausted. 堆叠容量提示：未放置货物主要受不可堆叠/容量 1 货物过多限制，地面与可用顶面位置已耗尽。',
+    })
+  }
 
   diagnostics.push({
     id: 'optimization-suggestion',
@@ -637,15 +739,21 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
           ) {
             continue
           }
-          for (const point of extremePoints) {
-            if (!canPlace(point, box, effective, placed, placedById, item)) continue
-            const score = placementScore(item, box, point, placed, effective)
-            if (
-              best === null ||
-              score < best.score ||
-              (score === best.score && box.width > best.box.width)
-            ) {
-              best = { score, box, point, idx }
+          const topPassengerPoints = stackCapacity(item) === 1 && !item.groundOnly && placed.length > 0
+            ? normalizePoints(topSurfacePoints(placed, item, effective.height - item.height), effective)
+            : []
+          const candidatePointSets = topPassengerPoints.length > 0 ? [topPassengerPoints, extremePoints] : [extremePoints]
+          for (const candidatePoints of candidatePointSets) {
+            for (const point of candidatePoints) {
+              if (!canPlace(point, box, effective, placed, placedById, item)) continue
+              const score = placementScore(item, box, point, placed, effective)
+              if (
+                best === null ||
+                score < best.score ||
+                (score === best.score && box.width > best.box.width)
+              ) {
+                best = { score, box, point, idx }
+              }
             }
           }
         }
@@ -690,7 +798,17 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         ? minPendingTopPassengerHeights[entryIndex]
         : Number.POSITIVE_INFINITY
       const reservedTopPassengerHeight = Number.isFinite(topPassengerHeight) ? topPassengerHeight : 0
-      const placement = bestPlacement(item, effective, placed, extremePoints, reservedTopPassengerHeight)
+      const reserveTopPassengerStackSlot = loadingMode === 'quantity' && reservedTopPassengerHeight > 0 && stackCapacity(item) > 1
+      const placement = bestPlacement(
+        item,
+        effective,
+        placed,
+        extremePoints,
+        reservedTopPassengerHeight,
+        loadingMode === 'quantity',
+        reserveTopPassengerStackSlot,
+        loadingMode === 'quantity',
+      )
       if (!placement) {
         markUnplaced(item, entry.label, UNPLACED_REASON_CODES.NO_SPACE)
         noSpaceEntries.push(entry)
@@ -705,7 +823,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         entry.item,
         effective,
         placed,
-        normalizePoints([...extremePoints, ...topSurfacePoints(placed)], effective),
+        normalizePoints([...extremePoints, ...topSurfacePoints(placed, entry.item)], effective),
       )
       if (!placement) continue
       placeEntry(entry, placement)
@@ -726,7 +844,17 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   const weightUtilization = effective.maxWeight ? (usedWeight / effective.maxWeight) * 100 : 0
 
   // 1. Generate compliance diagnostics under original Z-gravity physical support relations
-  const diagnostics = buildDiagnostics(placed, unplaced, effective, usedWeight, volumeUtilization)
+  const diagnostics = buildDiagnostics(
+    placed,
+    unplaced,
+    effective,
+    usedWeight,
+    volumeUtilization,
+    new Map(cargoItems.map((item) => [item.id, {
+      ...item,
+      maxStackLayers: effectiveMaxStackLayers(item, defaultMaxStackLayers),
+    }])),
+  )
 
   // 2. Perform inward physical layer mapping and pusher updates (depth layers)
   assignDepthLayers(placed)

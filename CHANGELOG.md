@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-06-08 (Stack Fill Optimization Capacity Diagnostics)
+
+- Implemented the `plans/2026-06-08-stack-fill-optimization.md` stack-fill optimization for automatic quantity/volume packing without changing stack-capacity legality semantics.
+- Capacity-1 cargo now prefers valid high top-surface passenger slots before falling back to floor placement; quantity mode also preserves one stack-capacity slot on finite-capacity support chains when pending capacity-1 cargo needs a top passenger position.
+- Expanded top-surface candidate generation from single box corners to same-height edge grids, with negative/out-of-container candidate filtering before scoring.
+- Added the `stack-capacity-limit` diagnostic when unplaced cargo is no-space constrained mainly by non-stackable / capacity-1 items rather than weight or dimensions.
+- Snapshot(12)-style fixture improved from the recorded 109/218 baseline to 118/218 in the current implementation. Real `cargo-debug-snapshot (12).json` replay measured 118/218 placed, cap=1 top passengers 22 (was 8), cap=1 locked floor boxes 28 (was 33), and 0 stack-chain violations. This is a clear improvement above 109 but below the earlier approximate 120 target, so the decision record documents the measured ceiling for this heuristic.
+- Verification so far: `npx vitest run src/lib/packing.stackfill.test.ts src/lib/packing.test.ts src/lib/packing.31pallet.test.ts src/lib/manualPlacement.test.ts` passed 85 tests.
+
 ## 2026-06-07 (All-Direction Labels Layout Stack Sorting Layer Fade Measurement Panel)
 
 - Implemented the follow-up stack-capacity refactor from `REVIEW.md`: added shared `stackCapacity()` / `violatesStackChain()` helpers, unified automatic and manual stack validation around support-chain capacity, and removed the old direct non-stackable support special-case from automatic packing.

@@ -14,6 +14,25 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-06-08-r37-stack-fill-diagnostics',
+    date: '2026-06-08',
+    title: { en: 'Stack-fill optimization and capacity diagnostics', zh: '堆叠填充优化与容量诊断' },
+    items: {
+      en: [
+        'Automatic quantity packing now keeps finite stack-capacity columns available for capacity-1 top cargo instead of letting low-capacity cargo lock too many floor positions early.',
+        'Capacity-1 cargo now tries valid high top-surface passenger positions before falling back to floor placement in automatic quantity and volume modes.',
+        'The snapshot-12 style load improves from the recorded 109 boxes to 118 boxes, with capacity-1 top passengers increasing from 8 to 22 while stack-chain legality remains intact.',
+        'Compliance diagnostics now explain when remaining cargo is mainly constrained by too many non-stackable or capacity-1 items, not by weight or dimensions.',
+      ],
+      zh: [
+        '按数量自动装箱现在会为容量 1 顶层货预留有限堆叠列，不再让低容量货过早锁死过多地面位。',
+        '容量 1 货物在按数量和按体积自动装箱中会先尝试合法的高位顶面乘客位置，再回退到地面。',
+        'snapshot(12) 类装载从记录的 109 件提升到 118 件，容量 1 顶层乘客从 8 件提升到 22 件，支撑链合法性保持不变。',
+        '合规与诊断现在会提示剩余货物主要受不可堆叠/容量 1 货物过多限制，而不是重量或尺寸限制。',
+      ],
+    },
+  },
+  {
     version: '2026-06-07-r36-stack-capacity-labels',
     date: '2026-06-07',
     title: { en: 'All-direction labels and layer clarity', zh: '全向标签与分层清晰度' },
