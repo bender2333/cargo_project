@@ -19,6 +19,9 @@ const payload: ImportTemplatePayload = {
   headerRow: 1,
   startRow: 2,
   mergeRows: 'none',
+  dimensionMode: 'combined',
+  combinedColumn: '外箱尺寸（mm）',
+  dimensionOrder: ['length', 'width', 'height'],
   defaultValues: { quantity: 1, canRotate: true, stackable: true },
 }
 

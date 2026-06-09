@@ -55,6 +55,9 @@ db.exec(`
     header_row INTEGER DEFAULT 1,
     start_row INTEGER DEFAULT 2,
     merge_rows TEXT DEFAULT 'none',
+    dimension_mode TEXT DEFAULT 'separate',
+    combined_column TEXT,
+    dimension_order TEXT DEFAULT '["length","width","height"]',
     defaults TEXT DEFAULT '{}',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -169,6 +172,21 @@ const migrations = [
           FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )
       `)
+    },
+  },
+  {
+    version: 6,
+    description: 'Add irregular import template dimension metadata',
+    up: () => {
+      if (!hasColumn('import_templates', 'dimension_mode')) {
+        db.exec("ALTER TABLE import_templates ADD COLUMN dimension_mode TEXT DEFAULT 'separate'")
+      }
+      if (!hasColumn('import_templates', 'combined_column')) {
+        db.exec('ALTER TABLE import_templates ADD COLUMN combined_column TEXT')
+      }
+      if (!hasColumn('import_templates', 'dimension_order')) {
+        db.exec('ALTER TABLE import_templates ADD COLUMN dimension_order TEXT DEFAULT \'[\"length\",\"width\",\"height\"]\'')
+      }
     },
   },
 ]

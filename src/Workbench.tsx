@@ -85,6 +85,7 @@ import { CustomContainerDialog } from './components/CustomContainerDialog'
 import { buildCargoDebugSnapshot } from './lib/debugSnapshot'
 
 const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
+type WorksheetCell = string | number | boolean | null | undefined
 
 const copy = {
   en: {
@@ -204,6 +205,10 @@ const copy = {
     templateDefaultRotate: 'Default rotatable',
     templateDefaultStackable: 'Default stackable',
     templateDefaultMaxStackLayers: 'Default max stack layers',
+    templateDimensionMode: 'Dimension mode',
+    templateDimensionSeparate: 'Separate L/W/H columns',
+    templateDimensionCombined: 'Combined size column',
+    templateCombinedColumn: 'Combined size column',
     mappingFieldLabel: 'Cargo label',
     mappingFieldName: 'Cargo name',
     mappingFieldLength: 'Length',
@@ -460,6 +465,10 @@ const copy = {
     templateDefaultRotate: '默认可旋转',
     templateDefaultStackable: '默认可堆叠',
     templateDefaultMaxStackLayers: '默认最大堆叠层数',
+    templateDimensionMode: '尺寸模式',
+    templateDimensionSeparate: '长宽高分列',
+    templateDimensionCombined: '合并尺寸列',
+    templateCombinedColumn: '合并尺寸列',
     mappingFieldLabel: '货物标识',
     mappingFieldName: '货物名称',
     mappingFieldLength: '长度',
@@ -1018,6 +1027,7 @@ function Workbench() {
     canRotate: '',
     stackable: '',
     maxStackLayers: '',
+    dimensions: '',
   })
   type DimensionUnit = 'auto' | 'mm' | 'cm'
   const [customUnits, setCustomUnits] = useState<Record<'length' | 'width' | 'height', DimensionUnit>>({
@@ -1025,6 +1035,8 @@ function Workbench() {
     width: 'auto',
     height: 'auto',
   })
+  const [templateDimensionMode, setTemplateDimensionMode] = useState<'separate' | 'combined'>('separate')
+  const [templateCombinedColumn, setTemplateCombinedColumn] = useState('')
   const [importTemplates, setImportTemplates] = useState<ImportTemplate[]>([])
   const [selectedImportTemplateId, setSelectedImportTemplateId] = useState('')
   const [templateName, setTemplateName] = useState('')
@@ -1805,6 +1817,9 @@ function Workbench() {
       headerRow: templateHeaderRow,
       startRow: templateStartRow,
       mergeRows: 'none',
+      dimensionMode: templateDimensionMode,
+      combinedColumn: templateCombinedColumn,
+      dimensionOrder: ['length', 'width', 'height'],
       defaultValues: templateDefaults,
     }, { colors })
     setImportMessages([
@@ -1828,7 +1843,7 @@ function Workbench() {
     setSelectedImportTemplateId(templateId)
     const template = importTemplates.find((item) => item.id === templateId)
     if (!template) return
-    setCustomMapping((current) => ({ ...current, ...template.mapping }))
+    setCustomMapping((current) => ({ ...current, ...template.mapping, dimensions: template.combinedColumn ?? template.mapping.dimensions ?? '' }))
     setCustomUnits({
       length: template.units.length,
       width: template.units.width,
@@ -1836,6 +1851,8 @@ function Workbench() {
     })
     setTemplateHeaderRow(template.headerRow ?? 1)
     setTemplateStartRow(template.startRow ?? 2)
+    setTemplateDimensionMode(template.dimensionMode ?? 'separate')
+    setTemplateCombinedColumn(template.combinedColumn ?? template.mapping.dimensions ?? '')
     setTemplateDefaults(template.defaultValues ?? { quantity: 1, canRotate: true, stackable: true })
     setTemplateName(template.name)
   }
@@ -1912,6 +1929,9 @@ function Workbench() {
       headerRow: templateHeaderRow,
       startRow: templateStartRow,
       mergeRows: 'none',
+      dimensionMode: templateDimensionMode,
+      combinedColumn: templateCombinedColumn || customMapping.dimensions || '',
+      dimensionOrder: ['length', 'width', 'height'],
       defaultValues: templateDefaults,
     })
     if (!saved) return
@@ -1942,6 +1962,9 @@ function Workbench() {
     headerRow: 1,
     startRow: 2,
     mergeRows: 'none',
+    dimensionMode: 'separate',
+    combinedColumn: '',
+    dimensionOrder: ['length', 'width', 'height'],
     defaultValues: { quantity: 1, canRotate: true, stackable: true },
   })
 
@@ -1954,6 +1977,9 @@ function Workbench() {
       headerRow: template.headerRow,
       startRow: template.startRow,
       mergeRows: template.mergeRows,
+      dimensionMode: template.dimensionMode ?? 'separate',
+      combinedColumn: template.combinedColumn ?? '',
+      dimensionOrder: template.dimensionOrder ?? ['length', 'width', 'height'],
       defaultValues: template.defaultValues,
     })
   }
@@ -1971,6 +1997,9 @@ function Workbench() {
       headerRow: draft.headerRow,
       startRow: draft.startRow,
       mergeRows: draft.mergeRows,
+      dimensionMode: draft.dimensionMode,
+      combinedColumn: draft.combinedColumn,
+      dimensionOrder: draft.dimensionOrder,
       defaultValues: draft.defaultValues,
     })
     if (!updated) {
@@ -2025,6 +2054,9 @@ function Workbench() {
       headerRow: draft.headerRow,
       startRow: draft.startRow,
       mergeRows: draft.mergeRows,
+      dimensionMode: draft.dimensionMode,
+      combinedColumn: draft.combinedColumn,
+      dimensionOrder: draft.dimensionOrder,
       defaultValues: draft.defaultValues,
     })
     if (!saved) {
@@ -2057,6 +2089,7 @@ function Workbench() {
   }
 
   const canAutoMap = (row: ImportCargoRow): boolean => {
+    if (Array.isArray(row)) return false
     const keys = Object.keys(row).map(k => k.toLowerCase())
     const fieldsToCheck = {
       length: ['length', '长', '長', '长度', '長度', 'outer_length_mm', '厘米'],
@@ -2084,6 +2117,28 @@ function Workbench() {
     return columns.find(col => candidates.some(cand => col.toLowerCase().includes(cand.toLowerCase()))) || ''
   }
 
+  const importColumnsForHeaderRow = (rows: ImportCargoRow[], headerRow: number): string[] => {
+    if (rows.some(Array.isArray)) {
+      const header = rows[Math.max(0, headerRow - 1)]
+      return Array.isArray(header)
+        ? header.map((cell) => String(cell ?? '').trim()).filter(Boolean)
+        : []
+    }
+    return Object.keys(rows[0] ?? {})
+  }
+
+  const importPreviewRows = (rows: ImportCargoRow[], headerRow: number, startRow: number): Record<string, string | number | boolean | null | undefined>[] => {
+    if (!rows.some(Array.isArray)) return rows.filter((row): row is Record<string, string | number | boolean | null | undefined> => !Array.isArray(row))
+    const columns = importColumnsForHeaderRow(rows, headerRow)
+    return rows.slice(Math.max(headerRow, startRow - 1)).filter(Array.isArray).map((row) => {
+      const next: Record<string, string | number | boolean | null | undefined> = {}
+      columns.forEach((column, index) => {
+        next[column] = row[index]
+      })
+      return next
+    })
+  }
+
   const importExcel = async (file: File | null) => {
     if (!file) return
     const MAX_BYTES = 5 * 1024 * 1024
@@ -2093,11 +2148,11 @@ function Workbench() {
       setActiveNav('report')
       return
     }
-    let rows: Record<string, string | number>[]
+    let rows: ImportCargoRow[]
     try {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      rows = sheet ? XLSX.utils.sheet_to_json<Record<string, string | number>>(sheet) : []
+      rows = sheet ? XLSX.utils.sheet_to_json<WorksheetCell[]>(sheet, { header: 1, raw: true }) : []
     } catch (error) {
       // xlsx@0.18.5 has known prototype-pollution / ReDoS issues; keep the catch tight and
       // do not surface the raw error message to the user.
@@ -2115,7 +2170,7 @@ function Workbench() {
       return
     }
 
-    const rowKeys = Object.keys(rows[0] ?? {})
+    const rowKeys = importColumnsForHeaderRow(rows, 1)
     const autoMappable = canAutoMap(rows[0] ?? {})
 
     if (autoMappable) {
@@ -2148,8 +2203,9 @@ function Workbench() {
         canRotate: '',
         stackable: '',
         maxStackLayers: '',
+        dimensions: '',
       }
-      const requiredFields = ['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable', 'maxStackLayers']
+      const requiredFields = ['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable', 'maxStackLayers', 'dimensions']
       requiredFields.forEach((fieldKey) => {
         initialMap[fieldKey] = preSelectCol(fieldKey, rowKeys)
       })
@@ -2159,6 +2215,8 @@ function Workbench() {
       setTemplateSaveNotice('')
       setTemplateHeaderRow(1)
       setTemplateStartRow(2)
+      setTemplateDimensionMode('separate')
+      setTemplateCombinedColumn('')
       setTemplateDefaults({ quantity: 1, canRotate: true, stackable: true })
       setShowMappingModal(true)
     }
@@ -2489,8 +2547,31 @@ function Workbench() {
               <input className="field-input mt-1" min={2} type="number" value={newImportTemplateDraft.startRow ?? 2} onChange={(event) => updateNewTemplateNumber('startRow', event.target.value)} />
             </label>
           </div>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-xs font-semibold text-[#475569]">
+              {t.templateDimensionMode}
+              <select
+                className="field-input mt-1"
+                value={newImportTemplateDraft.dimensionMode ?? 'separate'}
+                data-testid="template-manager-new-dimension-mode"
+                onChange={(event) => setNewImportTemplateDraft((current) => current ? { ...current, dimensionMode: event.target.value as 'separate' | 'combined' } : current)}
+              >
+                <option value="separate">{t.templateDimensionSeparate}</option>
+                <option value="combined">{t.templateDimensionCombined}</option>
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-[#475569]">
+              {t.templateCombinedColumn}
+              <input
+                className="field-input mt-1"
+                data-testid="template-manager-new-combined-column"
+                value={newImportTemplateDraft.combinedColumn ?? ''}
+                onChange={(event) => setNewImportTemplateDraft((current) => current ? { ...current, combinedColumn: event.target.value, mapping: { ...current.mapping, dimensions: event.target.value } } : current)}
+              />
+            </label>
+          </div>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            {(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity'] as const).map((field) => (
+            {(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'dimensions'] as const).map((field) => (
               <label className="text-xs font-semibold text-[#475569]" key={field}>
                 {field}
                 <input
@@ -2536,7 +2617,30 @@ function Workbench() {
                     </label>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    {(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity'] as const).map((field) => (
+                    <label className="text-xs font-semibold text-[#475569]">
+                      {t.templateDimensionMode}
+                      <select
+                        className="field-input mt-1"
+                        value={editingImportTemplateDraft?.dimensionMode ?? 'separate'}
+                        data-testid={`template-manager-dimension-mode-${template.id}`}
+                        onChange={(event) => setEditingImportTemplateDraft((current) => current ? { ...current, dimensionMode: event.target.value as 'separate' | 'combined' } : current)}
+                      >
+                        <option value="separate">{t.templateDimensionSeparate}</option>
+                        <option value="combined">{t.templateDimensionCombined}</option>
+                      </select>
+                    </label>
+                    <label className="text-xs font-semibold text-[#475569]">
+                      {t.templateCombinedColumn}
+                      <input
+                        className="field-input mt-1"
+                        data-testid={`template-manager-combined-column-${template.id}`}
+                        value={editingImportTemplateDraft?.combinedColumn ?? ''}
+                        onChange={(event) => setEditingImportTemplateDraft((current) => current ? { ...current, combinedColumn: event.target.value, mapping: { ...current.mapping, dimensions: event.target.value } } : current)}
+                      />
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'dimensions'] as const).map((field) => (
                       <label className="text-xs font-semibold text-[#475569]" key={field}>
                         {field}
                         <input
@@ -2557,7 +2661,7 @@ function Workbench() {
                 <>
                   <strong>{template.name}</strong>
                   <p className="mt-1 text-xs text-[#64748b]">
-                    {t.templateHeaderRow}: {template.headerRow ?? 1} · {t.templateStartRow}: {template.startRow ?? 2}
+                    {t.templateHeaderRow}: {template.headerRow ?? 1} · {t.templateStartRow}: {template.startRow ?? 2} · {t.templateDimensionMode}: {template.dimensionMode ?? 'separate'}
                   </p>
                   <p className="mt-1 truncate text-xs text-[#64748b]">
                     {Object.entries(template.mapping).filter(([, value]) => value).map(([key, value]) => `${key}:${value}`).join(', ') || '-'}
@@ -3982,6 +4086,37 @@ function Workbench() {
                     />
                   </label>
                 )}
+                <label className="font-semibold text-slate-700">
+                  {t.templateDimensionMode}
+                  <select
+                    className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                    value={templateDimensionMode}
+                    data-testid="template-dimension-mode"
+                    onChange={(event) => setTemplateDimensionMode(event.target.value as 'separate' | 'combined')}
+                  >
+                    <option value="separate">{t.templateDimensionSeparate}</option>
+                    <option value="combined">{t.templateDimensionCombined}</option>
+                  </select>
+                </label>
+                {templateDimensionMode === 'combined' && (
+                  <label className="font-semibold text-slate-700">
+                    {t.templateCombinedColumn}
+                    <select
+                      className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                      value={templateCombinedColumn}
+                      data-testid="template-combined-column"
+                      onChange={(event) => {
+                        setTemplateCombinedColumn(event.target.value)
+                        setCustomMapping((current) => ({ ...current, dimensions: event.target.value }))
+                      }}
+                    >
+                      <option value="">{t.mappingSelectColumn}</option>
+                      {importColumnsForHeaderRow(importRows, templateHeaderRow).map((col) => (
+                        <option key={col} value={col}>{col}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-3" data-testid="mapping-fields">
@@ -3999,7 +4134,7 @@ function Workbench() {
                       stackable: t.stackable,
                       maxStackLayers: t.maxStackLayers,
                     }
-                    const excelColumns = Object.keys(importRows[0] ?? {})
+                    const excelColumns = importColumnsForHeaderRow(importRows, templateHeaderRow)
                     const isDimension = fieldKey === 'length' || fieldKey === 'width' || fieldKey === 'height'
                     const dimensionKey = fieldKey as 'length' | 'width' | 'height'
                     return (
@@ -4046,15 +4181,15 @@ function Workbench() {
                     <table className="min-w-full border-collapse text-xs">
                       <thead className="sticky top-0 bg-slate-100">
                         <tr>
-                          {Object.keys(importRows[0] ?? {}).map((col) => (
+                          {importColumnsForHeaderRow(importRows, templateHeaderRow).map((col) => (
                             <th key={col} className="border border-slate-200 px-2 py-1 text-left font-semibold text-slate-700 whitespace-nowrap">{col}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {importRows.slice(0, 5).map((row, rowIndex) => (
+                        {importPreviewRows(importRows, templateHeaderRow, templateStartRow).slice(0, 5).map((row, rowIndex) => (
                           <tr key={rowIndex} className="odd:bg-white even:bg-slate-50">
-                            {Object.keys(importRows[0] ?? {}).map((col) => (
+                            {importColumnsForHeaderRow(importRows, templateHeaderRow).map((col) => (
                               <td key={col} className="border border-slate-200 px-2 py-1 text-slate-700 whitespace-nowrap">
                                 {row[col] === undefined || row[col] === null ? '' : String(row[col])}
                               </td>

@@ -2,7 +2,7 @@ import type { CargoItem, ImportTemplateDefaults } from '../types'
 import { createClientId } from './clientId'
 
 type RowValue = string | number | boolean | null | undefined
-export type ImportCargoRow = Record<string, RowValue>
+export type ImportCargoRow = Record<string, RowValue> | RowValue[]
 
 export const IMPORT_CODES = {
   CM_CONVERTED: 'cm-converted',
@@ -31,6 +31,7 @@ export type ImportCargoResult = {
     importedRows: number
     mappedFields: string[]
     convertedCentimeterRows: number
+    skippedRows: number
   }
 }
 
@@ -46,6 +47,9 @@ export type ImportTemplateConfig = {
   startRow?: number
   mergeRows?: 'none' | 'by-label'
   defaultValues?: ImportTemplateDefaults
+  dimensionMode?: 'separate' | 'combined'
+  combinedColumn?: string
+  dimensionOrder?: Array<'length' | 'width' | 'height'>
 }
 
 const defaultColors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
@@ -67,7 +71,9 @@ const fields = {
   maxStackLayers: ['maxStackLayers', 'max stack layers', 'Max stack layers', '最大堆叠层数', '最大堆疊層數', '堆叠层数', '堆疊層數'],
 }
 
-function valueFor(row: ImportCargoRow, candidates: string[]) {
+const summaryRowPattern = /^(汇总|合计|小计|total|合計)$/i
+
+function valueFor(row: Record<string, RowValue>, candidates: string[]) {
   for (const key of candidates) {
     const value = row[key]
     if (value !== undefined && value !== null && String(value).trim() !== '') {
@@ -77,7 +83,7 @@ function valueFor(row: ImportCargoRow, candidates: string[]) {
   return undefined
 }
 
-function hasValueFor(row: ImportCargoRow, candidates: string[]) {
+function hasValueFor(row: Record<string, RowValue>, candidates: string[]) {
   return valueFor(row, candidates) !== undefined
 }
 
@@ -86,7 +92,7 @@ function numberValue(value: RowValue) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-function positiveNumber(row: ImportCargoRow, mmKeys: string[], cmKeys: string[]) {
+function positiveNumber(row: Record<string, RowValue>, mmKeys: string[], cmKeys: string[]) {
   const mm = numberValue(valueFor(row, mmKeys))
   if (mm > 0) {
     return { value: mm, convertedFromCm: false }
@@ -119,6 +125,25 @@ function fallbackLabel(index: number) {
   return alphabet[index % alphabet.length]
 }
 
+function sanitizeText(value: RowValue, maxLength: number) {
+  // eslint-disable-next-line no-control-regex
+  return String(value ?? '').replace(/[\x00-\x1F<>]/g, '').trim().slice(0, maxLength)
+}
+
+function isObjectRow(row: ImportCargoRow): row is Record<string, RowValue> {
+  return !Array.isArray(row) && row !== null && typeof row === 'object'
+}
+
+function normalizeObjectRows(rows: ImportCargoRow[]): Record<string, RowValue>[] {
+  return rows.filter(isObjectRow)
+}
+
+function isSummaryRow(row: Record<string, RowValue>) {
+  const nameValue = valueFor(row, fields.name)
+  const labelValue = valueFor(row, fields.label)
+  return [nameValue, labelValue].some((value) => summaryRowPattern.test(String(value ?? '').trim()))
+}
+
 export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {}): ImportCargoResult {
   const colors = options.colors ?? defaultColors
   const createId = options.createId ?? createClientId
@@ -127,15 +152,31 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
   const items: CargoItem[] = []
   const mappedFields = new Set<string>()
   let convertedCentimeterRows = 0
+  let skippedRows = 0
 
-  rows.forEach((row, index) => {
+  normalizeObjectRows(rows).forEach((row, index) => {
     const rowNumber = index + 2
+    if (isSummaryRow(row)) {
+      skippedRows += 1
+      return
+    }
+
     const length = positiveNumber(row, fields.lengthMm, fields.lengthCm)
     const width = positiveNumber(row, fields.widthMm, fields.widthCm)
     const height = positiveNumber(row, fields.heightMm, fields.heightCm)
     const convertedFromCm = length.convertedFromCm || width.convertedFromCm || height.convertedFromCm
 
     if (length.value <= 0 || width.value <= 0 || height.value <= 0) {
+      const hasAnyDimensionValue = [
+        valueFor(row, [...fields.lengthMm, ...fields.lengthCm]),
+        valueFor(row, [...fields.widthMm, ...fields.widthCm]),
+        valueFor(row, [...fields.heightMm, ...fields.heightCm]),
+      ].some((value) => value !== undefined)
+      const allEmpty = Object.values(row).every((value) => value === undefined || value === null || String(value).trim() === '')
+      if (allEmpty || !hasAnyDimensionValue) {
+        skippedRows += 1
+        return
+      }
       errors.push({
         row: rowNumber,
         code: IMPORT_CODES.INVALID_DIMENSIONS,
@@ -196,12 +237,8 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
       }
     })
 
-    const rawLabel = String(valueFor(row, fields.label) ?? fallbackLabel(index))
-    // eslint-disable-next-line no-control-regex
-    const label = rawLabel.replace(/[\x00-\x1F<>]/g, '').toUpperCase().slice(0, 2) || fallbackLabel(index)
-    const rawName = String(valueFor(row, fields.name) ?? `Cargo ${index + 1}`)
-    // eslint-disable-next-line no-control-regex
-    const name = rawName.replace(/[\x00-\x1F<>]/g, '').slice(0, 200)
+    const label = sanitizeText(valueFor(row, fields.label), 80) || fallbackLabel(index)
+    const name = sanitizeText(valueFor(row, fields.name) ?? `Cargo ${index + 1}`, 200)
     const rawColor = String(valueFor(row, fields.color) ?? colors[index % colors.length])
     const colorPattern = /^#[0-9a-f]{3,8}$|^rgba?\([\d\s.,%/]+\)$|^[a-z]{3,30}$/i
     const color = colorPattern.test(rawColor.trim()) ? rawColor.trim() : colors[index % colors.length]
@@ -230,6 +267,7 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
       importedRows: items.length,
       mappedFields: [...mappedFields].sort(),
       convertedCentimeterRows,
+      skippedRows,
     },
   }
 }
@@ -239,8 +277,8 @@ export function parseCargoRowsWithMapping(
   mapping: Record<string, string>,
   options: ParseOptions = {}
 ): ImportCargoResult {
-  const virtualRows = rows.map((row) => {
-    const virtualRow: ImportCargoRow = {}
+  const virtualRows = normalizeObjectRows(rows).map((row) => {
+    const virtualRow: Record<string, RowValue> = {}
     
     Object.entries(mapping).forEach(([fieldKey, colName]) => {
       if (!colName) return
@@ -256,6 +294,8 @@ export function parseCargoRowsWithMapping(
       } else if (fieldKey === 'height') {
         const isCm = colName.toLowerCase().includes('cm') || colName.includes('厘米')
         virtualRow[isCm ? 'Height cm' : 'height'] = value
+      } else if (fieldKey === 'dimensions') {
+        virtualRow.dimensions = value
       } else {
         virtualRow[fieldKey] = value
       }
@@ -267,6 +307,41 @@ export function parseCargoRowsWithMapping(
   return parseCargoRows(virtualRows, options)
 }
 
+function matrixRowsToObjectRows(rows: ImportCargoRow[], template: ImportTemplateConfig): Record<string, RowValue>[] {
+  if (!rows.some(Array.isArray)) return normalizeObjectRows(rows)
+  const headerIndex = Math.max(0, Math.floor((template.headerRow ?? 1) - 1))
+  const startIndex = Math.max(headerIndex + 1, Math.floor((template.startRow ?? headerIndex + 2) - 1))
+  const header = Array.isArray(rows[headerIndex]) ? rows[headerIndex] : []
+  return rows.slice(startIndex).filter(Array.isArray).map((row) => {
+    const next: Record<string, RowValue> = {}
+    header.forEach((cell, index) => {
+      const key = String(cell ?? '').trim()
+      if (!key) return
+      next[key] = row[index]
+    })
+    return next
+  })
+}
+
+function splitCombinedDimensions(value: RowValue): [number, number, number] | null {
+  const parts = String(value ?? '')
+    .trim()
+    .split(/\s*[xX*＊×]\s*|\s+/)
+    .filter(Boolean)
+    .map((part) => Number(String(part).replace(',', '.')))
+  if (parts.length !== 3 || parts.some((part) => !Number.isFinite(part) || part <= 0)) return null
+  return [parts[0], parts[1], parts[2]]
+}
+
+function dimensionUnitMultiplier(template: ImportTemplateConfig, columnName: string) {
+  const explicit = template.units?.length ?? template.units?.width ?? template.units?.height ?? 'auto'
+  if (explicit === 'cm') return 10
+  if (explicit === 'mm') return 1
+  const normalized = columnName.toLowerCase()
+  if (normalized.includes('cm') || columnName.includes('厘米')) return 10
+  return 1
+}
+
 export function parseCargoRowsWithTemplate(
   rows: ImportCargoRow[],
   template: ImportTemplateConfig,
@@ -274,10 +349,11 @@ export function parseCargoRowsWithTemplate(
 ): ImportCargoResult {
   const dimensionFields: Array<'length' | 'width' | 'height'> = ['length', 'width', 'height']
   const effectiveMapping: Record<string, string> = { ...template.mapping }
-  const startIndex = Math.max(0, Math.floor((template.startRow ?? 2) - 2))
+  const objectRows = matrixRowsToObjectRows(rows, template)
+  const startIndex = rows.some(Array.isArray) ? 0 : Math.max(0, Math.floor((template.startRow ?? 2) - 2))
   const defaults = template.defaultValues ?? {}
-  const effectiveRows = rows.slice(startIndex).map((row) => {
-    const next: ImportCargoRow = { ...row }
+  const effectiveRows = objectRows.slice(startIndex).map((row) => {
+    const next: Record<string, RowValue> = { ...row }
     const applyDefault = (field: keyof ImportTemplateDefaults, key: string, value: RowValue) => {
       const mapped = template.mapping[field]
       if (mapped) {
@@ -305,6 +381,24 @@ export function parseCargoRowsWithTemplate(
   if (defaults.stackable !== undefined && !effectiveMapping.stackable) effectiveMapping.stackable = '__default_stackable'
   if (defaults.maxStackLayers !== undefined && !effectiveMapping.maxStackLayers) effectiveMapping.maxStackLayers = '__default_maxStackLayers'
 
+  if (template.dimensionMode === 'combined') {
+    const combinedColumn = template.combinedColumn ?? template.mapping.dimensions
+    const order = template.dimensionOrder ?? dimensionFields
+    if (combinedColumn) {
+      const multiplier = dimensionUnitMultiplier(template, combinedColumn)
+      effectiveMapping.length = '__combined_length'
+      effectiveMapping.width = '__combined_width'
+      effectiveMapping.height = '__combined_height'
+      effectiveRows.forEach((row) => {
+        const dimensions = splitCombinedDimensions(row[combinedColumn])
+        if (!dimensions) return
+        order.forEach((field, index) => {
+          row[`__combined_${field}`] = dimensions[index] * multiplier
+        })
+      })
+    }
+  }
+
   dimensionFields.forEach((field) => {
     const colName = template.mapping[field]
     const unit = template.units?.[field] ?? 'auto'
@@ -314,7 +408,7 @@ export function parseCargoRowsWithTemplate(
     const syntheticKey = `${sanitized}__unit${suffix}`
     effectiveMapping[field] = syntheticKey
     effectiveRows.forEach((row, index) => {
-      row[syntheticKey] = rows[startIndex + index]?.[colName]
+      row[syntheticKey] = objectRows[startIndex + index]?.[colName]
     })
   })
 

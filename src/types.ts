@@ -195,6 +195,9 @@ export interface ImportTemplate {
   headerRow: number
   startRow: number
   mergeRows: 'none' | 'by-label'
+  dimensionMode: 'separate' | 'combined'
+  combinedColumn?: string
+  dimensionOrder: Array<'length' | 'width' | 'height'>
   defaultValues: ImportTemplateDefaults
   createdAt: string
   updatedAt: string

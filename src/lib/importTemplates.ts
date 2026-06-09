@@ -8,6 +8,9 @@ export type ImportTemplatePayload = {
   headerRow?: number
   startRow?: number
   mergeRows?: ImportTemplate['mergeRows']
+  dimensionMode?: ImportTemplate['dimensionMode']
+  combinedColumn?: string
+  dimensionOrder?: ImportTemplate['dimensionOrder']
   defaultValues?: ImportTemplateDefaults
 }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { IMPORT_CODES, parseCargoRows, parseCargoRowsWithMapping, parseCargoRowsWithTemplate } from './importCargo'
+import type { ImportTemplateConfig } from './importCargo'
 
 describe('parseCargoRows', () => {
   it('maps Chinese headers and converts centimeter dimensions to millimeters', () => {
@@ -25,7 +26,7 @@ describe('parseCargoRows', () => {
     expect(result.items).toEqual([
       {
         id: 'import-1',
-        label: 'P1',
+        label: 'p1',
         name: '整托货物',
         length: 900,
         width: 700,
@@ -50,6 +51,7 @@ describe('parseCargoRows', () => {
       importedRows: 1,
       mappedFields: ['canRotate', 'color', 'height', 'label', 'name', 'quantity', 'stackable', 'maxStackLayers', 'weight', 'width', 'length'].sort(),
       convertedCentimeterRows: 1,
+      skippedRows: 0,
     })
   })
 
@@ -228,7 +230,7 @@ describe('parseCargoRowsWithMapping', () => {
     expect(result.items).toEqual([
       expect.objectContaining({
         id: 'template-meta-1',
-        label: 'TP',
+        label: 'TPL',
         name: 'Template crate',
         length: 800,
         width: 600,
@@ -270,5 +272,114 @@ describe('parseCargoRowsWithMapping', () => {
         quantity: 3,
       }),
     ])
+  })
+
+  it('uses template headerRow on raw worksheet matrices and preserves full SKU labels', () => {
+    const rows = [
+      ['越南第十一批海运', null, null, null, null, null],
+      ['物料名称', '物料代码SKU', '预计发货数量', '箱数', '外箱尺寸（mm）', '毛重kg'],
+      ['EV charging cable', 'TB-C10-EV_v1.1', 7056, 126, '530*305*310', 12.5],
+      ['汇总', '', 7056, 126, '', ''],
+    ]
+
+    const result = parseCargoRowsWithTemplate(
+      rows,
+      {
+        headerRow: 2,
+        startRow: 3,
+        mapping: {
+          name: '物料名称',
+          label: '物料代码SKU',
+          quantity: '箱数',
+          dimensions: '外箱尺寸（mm）',
+          weight: '毛重kg',
+        },
+        units: { length: 'mm', width: 'mm', height: 'mm' },
+        dimensionMode: 'combined',
+        combinedColumn: '外箱尺寸（mm）',
+        dimensionOrder: ['length', 'width', 'height'],
+      },
+      { createId: () => 'vietnam-1' },
+    )
+
+    expect(result.errors).toEqual([])
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: 'vietnam-1',
+        name: 'EV charging cable',
+        label: 'TB-C10-EV_v1.1',
+        length: 530,
+        width: 305,
+        height: 310,
+        quantity: 126,
+        weight: 12.5,
+      }),
+    ])
+    expect(result.items[0].label).not.toBe('TB')
+    expect(result.summary.skippedRows).toBe(1)
+  })
+
+  it('splits combined dimensions across common separators and converts cm units', () => {
+    const baseTemplate = {
+      headerRow: 1,
+      startRow: 2,
+      mapping: {
+        name: 'Name',
+        label: 'SKU',
+        quantity: 'Cartons',
+        dimensions: 'Size',
+      },
+      units: { length: 'cm', width: 'cm', height: 'cm' },
+      dimensionMode: 'combined' as const,
+      combinedColumn: 'Size',
+      dimensionOrder: ['length', 'width', 'height'],
+    } satisfies ImportTemplateConfig
+
+    const result = parseCargoRowsWithTemplate(
+      [
+        ['Name', 'SKU', 'Cartons', 'Size'],
+        ['star', 'SKU-STAR', 1, '53＊30.5＊31'],
+        ['cross', 'SKU-CROSS', 2, '530×305×310'],
+        ['space', 'SKU-SPACE', 3, '530 305 310'],
+      ],
+      baseTemplate,
+      { createId: () => 'dimension-id' },
+    )
+
+    expect(result.errors).toEqual([])
+    expect(result.items.map((item) => [item.label, item.length, item.width, item.height, item.quantity])).toEqual([
+      ['SKU-STAR', 530, 305, 310, 1],
+      ['SKU-CROSS', 5300, 3050, 3100, 2],
+      ['SKU-SPACE', 5300, 3050, 3100, 3],
+    ])
+  })
+
+  it('prefers carton count over planned quantity unless an explicit mapping says otherwise', () => {
+    const row = {
+      物料名称: 'Cable',
+      物料代码SKU: 'TB-C10-EV_v1.1',
+      预计发货数量: 7056,
+      箱数: 126,
+      Length: 530,
+      Width: 305,
+      Height: 310,
+    }
+
+    const inferred = parseCargoRows([row], { createId: () => 'carton-inferred' })
+    const explicit = parseCargoRowsWithMapping(
+      [row],
+      {
+        name: '物料名称',
+        label: '物料代码SKU',
+        quantity: '预计发货数量',
+        length: 'Length',
+        width: 'Width',
+        height: 'Height',
+      },
+      { createId: () => 'carton-explicit' },
+    )
+
+    expect(inferred.items[0]?.quantity).toBe(126)
+    expect(explicit.items[0]?.quantity).toBe(7056)
   })
 })

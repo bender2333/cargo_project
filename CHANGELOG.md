@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-09 (Import Template System Irregular Excel Parsing)
+
+- Implemented the first slice of `plans/2026-06-09-import-template-system.md`: import parsing now accepts raw worksheet matrices, honors `headerRow` / `startRow`, splits combined dimension columns, skips summary/empty rows with `skippedRows`, prefers carton-count aliases, and preserves full SKU labels instead of uppercasing/truncating them.
+- Extended import-template persistence with `dimensionMode`, `combinedColumn`, and `dimensionOrder`, including SQLite migration 6 and backwards-compatible serialization defaults.
+- Updated the import mapping UI and template manager to expose combined-dimension templates and to preview columns from the selected header row.
+- Verification: `npm test -- src/lib/importCargo.test.ts src/lib/importTemplates.test.ts` passed 13 tests; `npm run build` passed with the existing Vite chunk-size warning.
+
 ## 2026-06-08 (Stack Fill Optimization Capacity Diagnostics)
 
 - Implemented the `plans/2026-06-08-stack-fill-optimization.md` stack-fill optimization for automatic quantity/volume packing without changing stack-capacity legality semantics.
