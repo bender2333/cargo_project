@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ContainerSpec, PlacedBox } from '../types'
 import {
+  deriveClearanceAnnotations,
   createMeasurementAnnotation,
   deleteMeasurementAnnotation,
   formatMeasurement,
@@ -75,6 +76,62 @@ describe('measurement', () => {
 
     expect(clearance.nearestX).toBe(200)
     expect(clearance.nearestY).toBe(150)
+  })
+
+  it('derives visible clearance directions and hides contact within epsilon', () => {
+    const selected = box({ id: 'selected', x: 0, y: 200, z: 0 })
+    const clearance = measureBoxClearance(selected, container, [selected])
+
+    const annotations = deriveClearanceAnnotations(clearance, 'zh')
+
+    expect(annotations.map((item) => item.direction)).not.toContain('front')
+    expect(annotations.map((item) => item.direction)).not.toContain('floor')
+    expect(annotations.find((item) => item.direction === 'left')).toMatchObject({
+      value: 200,
+      target: 'wall',
+      label: '左侧 200 mm',
+    })
+  })
+
+  it('uses the smaller usable gap between container wall and nearest neighbor', () => {
+    const selected = box({ id: 'selected', x: 100, y: 100, z: 100, length: 1000, width: 500, height: 600 })
+    const neighborTowardDoor = box({ id: 'door-neighbor', x: 1300, y: 120, z: 150, length: 400, width: 300, height: 300 })
+    const neighborRight = box({ id: 'right-neighbor', x: 200, y: 900, z: 150, length: 400, width: 300, height: 300 })
+    const clearance = measureBoxClearance(selected, container, [selected, neighborTowardDoor, neighborRight])
+
+    const annotations = deriveClearanceAnnotations(clearance, 'en')
+
+    expect(annotations.find((item) => item.direction === 'door')).toMatchObject({
+      value: 200,
+      target: 'neighbor',
+      label: 'door 200 mm',
+    })
+    expect(annotations.find((item) => item.direction === 'right')).toMatchObject({
+      value: 300,
+      target: 'neighbor',
+    })
+  })
+
+  it('treats one millimeter as contact and two millimeters as visible clearance', () => {
+    const annotations = deriveClearanceAnnotations({
+      left: 1,
+      right: 2,
+      front: 1,
+      door: 2,
+      floor: 1,
+      top: 2,
+      nearestX: null,
+      nearestY: null,
+      nearestZ: null,
+      nearestLeft: null,
+      nearestRight: null,
+      nearestFront: null,
+      nearestDoor: null,
+      nearestFloor: null,
+      nearestTop: null,
+    }, 'en')
+
+    expect(annotations.map((item) => item.direction).sort()).toEqual(['door', 'right', 'top'])
   })
 
   it('measures 3D point distance', () => {

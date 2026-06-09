@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-09 (3D Clearance Annotation)
+
+- Replaced the manual two-point ruler flow with selected-box clearance annotations from `plans/2026-06-09-clearance-annotation-3d.md`: the `m` shortcut and toolbar toggle now show deterministic AABB-based clearance for the current box, hide contact directions within the 1mm epsilon, and expose the active annotation directions/labels through scene test hooks.
+- Added directional nearest-neighbor clearance selection in `src/lib/measurement.ts`, keeping wall clearance and neighbor clearance separate so each direction displays the smaller usable gap.
+- Updated `ContainerScene` to render clearance lines, endpoint markers, and camera-facing canvas text labels for each visible clearance value; old ruler capture UI and 2D ruler props were removed from the manual workspace path.
+- Verification: `npm test -- src/lib/measurement.test.ts src/lib/debugSnapshot.test.ts` passed 10 tests; targeted E2E `npx playwright test e2e/manual-3d.spec.ts --grep "余量标注|复核清单|旧测量|最大化保留"` passed 4 tests; `npm run lint` passed; `npm run build` passed with the existing Vite chunk-size warning.
+
 ## 2026-06-09 (Import Template System Irregular Excel Parsing)
 
 - Implemented the first slice of `plans/2026-06-09-import-template-system.md`: import parsing now accepts raw worksheet matrices, honors `headerRow` / `startRow`, splits combined dimension columns, skips summary/empty rows with `skippedRows`, prefers carton-count aliases, and preserves full SKU labels instead of uppercasing/truncating them.

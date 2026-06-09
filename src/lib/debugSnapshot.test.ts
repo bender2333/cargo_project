@@ -131,7 +131,7 @@ describe('debug snapshot', () => {
       ui: {
         gridSnap: true,
         edgeSnap: true,
-        rulerEnabled: false,
+        clearanceEnabled: false,
         workspaceMaximized: false,
       },
       historyCount: 0,

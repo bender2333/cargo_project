@@ -70,7 +70,7 @@ export type CargoDebugSnapshot = {
   ui: {
     gridSnap: boolean
     edgeSnap: boolean
-    rulerEnabled: boolean
+    clearanceEnabled: boolean
     workspaceMaximized: boolean
   }
   historyCount: number
@@ -131,7 +131,7 @@ export type BuildCargoDebugSnapshotInput = {
   ui: {
     gridSnap: boolean
     edgeSnap: boolean
-    rulerEnabled: boolean
+    clearanceEnabled: boolean
     workspaceMaximized: boolean
   }
   historyCount: number

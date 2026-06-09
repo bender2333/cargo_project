@@ -241,42 +241,26 @@ test('手动模式 3D 双击选中箱体切换场景内弧形手柄', async ({ p
   await expect(scene).toHaveAttribute('data-selected-orientation', '')
 })
 
-test('尺规在 2D 中创建固定测量线并可删除', async ({ page }) => {
+test('余量标注按选中盒子切换并拆除旧两点尺规 UI', async ({ page }) => {
   await ensureChinese(page)
-  await enterManualMode(page)
-  await page.getByRole('button', { name: '2D', exact: true }).click()
-  await page.getByTestId('toggle-ruler').click()
-  const capture = page.getByTestId('measurement-capture')
-  const box = await capture.boundingBox()
-  expect(box).not.toBeNull()
-  if (!box) return
-  await capture.click({ force: true, position: { x: 120, y: 120 } })
-  await expect(page.getByTestId('measurement-draft-point')).toBeVisible()
-  await capture.click({ force: true, position: { x: 260, y: 170 } })
-  await expect(page.getByTestId('measurement-line')).toHaveCount(1)
-  await expect(page.getByTestId('measurement-list-item')).toHaveCount(1)
-  await page.getByTestId('measurement-list-item').getByRole('button', { name: '删除' }).click()
-  await expect(page.getByTestId('measurement-line')).toHaveCount(0)
-})
-
-test('尺规在 3D 中创建固定测量线并可删除', async ({ page }) => {
-  await ensureChinese(page)
-  await enterManualMode(page)
+  await placeSingleManualBoxForRotation(page)
   const scene = page.getByTestId('container-scene')
-  await expect(scene).toHaveAttribute('data-ruler-enabled', 'false')
-  await page.getByTestId('toggle-ruler').click()
-  await expect(scene).toHaveAttribute('data-ruler-enabled', 'true')
-  const canvas = page.locator('canvas').first()
-  await canvas.click({ position: { x: 160, y: 180 } })
-  await expect(scene).toHaveAttribute('data-measurement-hit-count', '1')
-  await expect(scene).toHaveAttribute('data-measurement-draft', 'true')
-  await canvas.click({ position: { x: 240, y: 220 } })
-  await expect(scene).toHaveAttribute('data-measurement-hit-count', '2')
-  await expect(scene).toHaveAttribute('data-measurement-count', '1')
-  await expect(page.getByTestId('measurement-list-item')).toHaveCount(1)
+  await expect(scene).toHaveAttribute('data-clearance-enabled', 'false')
+  await expect(page.getByTestId('toggle-ruler')).toHaveCount(0)
+  await expect(page.getByTestId('measurement-capture')).toHaveCount(0)
 
-  await page.getByTestId('measurement-list-item').getByRole('button', { name: '删除' }).click()
-  await expect(scene).toHaveAttribute('data-measurement-count', '0')
+  await page.keyboard.press('m')
+  await expect(scene).toHaveAttribute('data-clearance-enabled', 'true')
+  await expect(scene).not.toHaveAttribute('data-clearance-annotation-count', '0')
+  const directions = await scene.getAttribute('data-clearance-directions')
+  expect(directions).toContain('front')
+  expect(directions).not.toMatch(/floor/)
+  await expect(scene).toHaveAttribute('data-clearance-labels', /mm/)
+
+  await page.getByTestId('toggle-clearance').click()
+  await expect(scene).toHaveAttribute('data-clearance-enabled', 'false')
+  await expect(scene).toHaveAttribute('data-clearance-annotation-count', '0')
+  await expect(scene).toHaveAttribute('data-clearance-labels', '')
 })
 
 test('自动模式默认即可旋转，重置视角按钮可用', async ({ page }) => {
@@ -539,20 +523,12 @@ test('装载重心 overlay 离开页签即停止且重心场已下线', async ({
   await expect(scene).toHaveAttribute('data-gravity-field', 'off')
 })
 
-test('复核清单汇总测量线并支持 JSON 导出', async ({ page }) => {
+test('复核清单在拆除手动测量线后仍支持 JSON 导出', async ({ page }) => {
   await ensureChinese(page)
   await enterManualMode(page)
-  await page.getByRole('button', { name: '2D', exact: true }).click()
-  await page.getByTestId('toggle-ruler').click()
-  const capture = page.getByTestId('measurement-capture')
-  const box = await capture.boundingBox()
-  expect(box).not.toBeNull()
-  if (!box) return
-  await capture.click({ force: true, position: { x: 120, y: 120 } })
-  await capture.click({ force: true, position: { x: 280, y: 120 } })
   await page.getByRole('button', { name: '复核清单' }).click()
   await expect(page.getByTestId('review-checklist-panel')).toBeVisible()
-  await expect(page.getByTestId('review-checklist-item').filter({ hasText: 'measurement' }).first()).toBeVisible()
+  await expect(page.getByTestId('review-checklist-item').filter({ hasText: 'measurement' })).toHaveCount(0)
   await expect(page.locator('[data-testid="review-checklist-item"][data-source="diagnostic"]')).toHaveCount(0)
   const downloadPromise = page.waitForEvent('download')
   await page.getByTestId('export-review-json').click()
@@ -566,12 +542,12 @@ test('手动模式默认隐藏容量占用卡以释放画布空间', async ({ pa
   await expect(page.getByTestId('remaining-capacity')).toHaveCount(0)
 })
 
-test('手动模式默认不渲染空测量提示面板', async ({ page }) => {
+test('手动模式不再渲染旧测量提示面板', async ({ page }) => {
   await ensureChinese(page)
   await enterManualMode(page)
   await expect(page.getByTestId('measurement-list')).toHaveCount(0)
-  await page.getByTestId('toggle-ruler').click()
-  await expect(page.getByTestId('measurement-list')).toBeVisible()
+  await expect(page.getByTestId('toggle-ruler')).toHaveCount(0)
+  await expect(page.getByTestId('toggle-clearance')).toBeVisible()
 })
 
 test('手动模式选中前不显示 3D 浮层', async ({ page }) => {
@@ -615,7 +591,7 @@ test('手动模式最大化保留 pool 并隐藏空测量面板', async ({ page 
   }
   await page.getByTestId('maximize-workspace').click()
   await expect(workspace).toHaveAttribute('data-workspace-maximized', 'true')
-  // Pool remains visible; empty measurement panel stays hidden until ruler use.
+  // Pool remains visible; old measurement panel stays removed.
   await expect(page.getByTestId('manual-pool')).toBeVisible()
   await expect(page.getByTestId('measurement-list')).toHaveCount(0)
   await expect(page.getByTestId('report-panel')).toBeHidden()

@@ -58,11 +58,9 @@ import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
 import { clearPlacementOnContainerChange } from './lib/containerChange'
 import {
-  createMeasurementAnnotation,
-  deleteMeasurementAnnotation,
-  formatMeasurement,
+  deriveClearanceAnnotations,
+  measureBoxClearance,
 } from './lib/measurement'
-import type { MeasurementAnnotation, Point3D } from './lib/measurement'
 import { quickPlaceCargo } from './lib/quickPlace'
 import { buildReviewChecklist } from './lib/reviewChecklist'
 import type { ReviewChecklist } from './lib/reviewChecklist'
@@ -931,7 +929,7 @@ function Workbench() {
   const [snapSettingsOpen, setSnapSettingsOpen] = useState(false)
   const gridSnap = placementSettings.snapEnabled && placementSettings.gridSnapEnabled
   const edgeSnap = placementSettings.snapEnabled && placementSettings.edgeSnapEnabled
-  const [rulerEnabled, setRulerEnabled] = useState(false)
+  const [clearanceEnabled, setClearanceEnabled] = useState(false)
   const [hoverInfo, setHoverInfo] = useState<{ id: string; label: string; length: number; width: number; height: number; orientationKey: OrientationKey; x: number; y: number; z: number; clientX: number; clientY: number } | null>(null)
   const [poolDragInfo, setPoolDragInfo] = useState<{ cargoId: string; length: number; width: number; height: number; color: string } | null>(null)
   const [workspaceMaximized, setWorkspaceMaximized] = useState(false)
@@ -948,9 +946,6 @@ function Workbench() {
   const [manualSelectedId, setManualSelectedId] = useState<string | null>(null)
   const [manualHelpOpen, setManualHelpOpen] = useState(false)
   const [manualNotice, setManualNotice] = useState<ManualOperationNotice | null>(null)
-  const [measurements, setMeasurements] = useState<MeasurementAnnotation[]>([])
-  const [measurementDraftPoint, setMeasurementDraftPoint] = useState<Point3D | null>(null)
-  const measurementDraftPointRef = useRef<Point3D | null>(null)
   const [containerChangeNotice, setContainerChangeNotice] = useState('')
   const [rotationNotice, setRotationNotice] = useState('')
   const previousContainerKeyRef = useRef<string | null>(null)
@@ -1412,7 +1407,6 @@ function Workbench() {
   }, [placementMode])
 
   useEffect(() => {
-    if (placementMode !== 'manual') return
     const handleKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
       if (target) {
@@ -1439,7 +1433,7 @@ function Workbench() {
         return
       }
 
-      if ((event.key === 'r' || event.key === 'R') && manualSelectedId) {
+      if ((event.key === 'r' || event.key === 'R') && placementMode === 'manual' && manualSelectedId) {
         event.preventDefault()
         const direction: ManualRotationDirection = event.shiftKey ? 'down' : 'right'
         const dry = manualDryRunRotation(manualDraft, manualSelectedId, renderingContainer, direction, placementSettings.supportPolicy)
@@ -1460,6 +1454,12 @@ function Workbench() {
         return
       }
 
+      if (event.key === 'm' || event.key === 'M') {
+        event.preventDefault()
+        setClearanceEnabled((enabled) => !enabled)
+        return
+      }
+
       if (event.key === 'Escape') {
         setManualSelectedId(null)
         return
@@ -1475,28 +1475,6 @@ function Workbench() {
     const timer = window.setTimeout(() => setManualNotice(null), 5000)
     return () => window.clearTimeout(timer)
   }, [manualNotice])
-
-  const handleMeasurementPoint = (point: Point3D) => {
-    const current = measurementDraftPointRef.current
-    if (!current) {
-      measurementDraftPointRef.current = point
-      setMeasurementDraftPoint(point)
-      return
-    }
-    const next = createMeasurementAnnotation({
-      id: `measure-${Date.now()}`,
-      from: current,
-      to: point,
-      axis: 'spatial',
-    })
-    setMeasurements((items) => [...items, next])
-    measurementDraftPointRef.current = null
-    setMeasurementDraftPoint(null)
-  }
-
-  const deleteMeasurement = (id: string) => {
-    setMeasurements((current) => deleteMeasurementAnnotation(current, id))
-  }
 
   const activeLayer = result.layers.find((layer) => layer.id === activeLayerId)
   const playbackSequence = useMemo(() => buildPlaybackSequence(hasCalculated ? result : null), [result, hasCalculated])
@@ -1569,15 +1547,28 @@ function Workbench() {
     () => suggestFillItems(hasCalculated ? result : null, selectedContainer),
     [hasCalculated, result, selectedContainer],
   )
+  const clearanceSelectedBox = useMemo(() => {
+    if (placementMode === 'manual') {
+      return manualSelectedId ? manualPlacedBoxes.find((box) => box.id === manualSelectedId) ?? null : null
+    }
+    return selectedBoxId ? visibleAutoBoxes.find((box) => box.id === selectedBoxId) ?? null : null
+  }, [manualPlacedBoxes, manualSelectedId, placementMode, selectedBoxId, visibleAutoBoxes])
+  const clearanceBoxes = placementMode === 'manual' ? manualPlacedBoxes : visibleAutoBoxes
+  const clearanceAnnotations = useMemo(
+    () => clearanceEnabled && clearanceSelectedBox
+      ? deriveClearanceAnnotations(measureBoxClearance(clearanceSelectedBox, renderingContainer, clearanceBoxes), locale)
+      : [],
+    [clearanceBoxes, clearanceEnabled, clearanceSelectedBox, locale, renderingContainer],
+  )
   const reviewChecklist: ReviewChecklist = useMemo(
     () => buildReviewChecklist({
       result,
-      measurements,
+      measurements: [],
       cog: cogResult,
       manualIssues,
       locale,
     }),
-    [result, measurements, cogResult, manualIssues, locale],
+    [result, cogResult, manualIssues, locale],
   )
   const debugSnapshot = useMemo(
     () => buildCargoDebugSnapshot({
@@ -1618,11 +1609,11 @@ function Workbench() {
         notice: manualNotice,
         capacity: manualCapacity,
       },
-      measurements,
+      measurements: [],
       ui: {
         gridSnap,
         edgeSnap,
-        rulerEnabled,
+        clearanceEnabled,
         workspaceMaximized,
       },
       historyCount: historyPlans.length,
@@ -1632,6 +1623,7 @@ function Workbench() {
       activeLabelId,
       activeLayerId,
       activeResultTab,
+      clearanceEnabled,
       currentUser,
       defaultMaxStackLayers,
       displayCargoItems,
@@ -1649,7 +1641,6 @@ function Workbench() {
       manualPlacedBoxes,
       manualPool,
       manualSelectedId,
-      measurements,
       placementMode,
       placementSettings,
       planViewMode,
@@ -1662,7 +1653,6 @@ function Workbench() {
       result.placedCount,
       result.totalCargoCount,
       result.unplaced,
-      rulerEnabled,
       sceneViewMode,
       selectedContainer,
       shipmentName,
@@ -3330,15 +3320,11 @@ function Workbench() {
               </>
             )}
             <button
-              className={`archive-tab inline-flex items-center gap-2 ${rulerEnabled ? 'active' : ''}`}
+              className={`archive-tab inline-flex items-center gap-2 ${clearanceEnabled ? 'active' : ''}`}
               type="button"
-              aria-pressed={rulerEnabled}
-              data-testid="toggle-ruler"
-              onClick={() => {
-                setRulerEnabled((enabled) => !enabled)
-                measurementDraftPointRef.current = null
-                setMeasurementDraftPoint(null)
-              }}
+              aria-pressed={clearanceEnabled}
+              data-testid="toggle-clearance"
+              onClick={() => setClearanceEnabled((enabled) => !enabled)}
             >
               <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
                 <path d="M4 17 17 4l3 3L7 20z" />
@@ -3346,7 +3332,7 @@ function Workbench() {
                 <path d="m11 10 2 2" />
                 <path d="m8 13 3 3" />
               </svg>
-              {rulerEnabled ? t.ruler : t.rulerOff}
+              {t.clearanceTitle}
             </button>
             <button className="archive-button success" type="button" onClick={exportCurrentView}>
               {t.exportView}
@@ -3509,10 +3495,8 @@ function Workbench() {
                           onManualMove={handleManualMoveBox}
                           onManualOperationRejected={(operation, boxId, cargoId) => notifyManualRejected(operation, boxId, cargoId)}
                           onManualRotate={handleManualRotateBox}
-                          rulerEnabled={rulerEnabled}
-                          measurements={measurements}
-                          measurementDraftPoint={measurementDraftPoint}
-                          onMeasurementPoint={handleMeasurementPoint}
+                          clearanceEnabled={clearanceEnabled}
+                          clearanceAnnotations={clearanceAnnotations}
                           onSelectBox={setManualSelectedId}
                         />
                       ) : (
@@ -3521,41 +3505,14 @@ function Workbench() {
                           draft={manualDraft}
                           selectedBoxId={manualSelectedId}
                           issues={manualIssues}
-                          measurements={measurements}
-                          measurementDraftPoint={measurementDraftPoint}
-                          rulerEnabled={rulerEnabled}
                           viewMode={planViewMode}
                           placementSettings={placementSettings}
-                          onMeasurementPoint={handleMeasurementPoint}
                           onSelectBox={setManualSelectedId}
                           onMoveBox={handleManualMoveBox}
                           onDropFromPool={handleManualDropFromPool}
                         />
                       )}
                     </div>
-                    {(rulerEnabled || measurements.length > 0) && (
-                    <aside className="flex w-72 shrink-0 flex-col gap-2 overflow-auto">
-                      <div className="rounded-xl border border-[#e5e7eb] bg-white p-3 text-xs text-[#475569]" data-testid="measurement-list">
-                        <div className="mb-2 flex items-center justify-between">
-                          <h3 className="text-sm font-bold text-[#0f172a]">{t.measurementList}</h3>
-                          {measurementDraftPoint && <span className="text-[#2563eb]">{t.measurementPending}</span>}
-                        </div>
-                        {measurements.length > 0 && (
-                          <div className="space-y-2">
-                            {measurements.map((line, index) => (
-                              <div key={line.id} className="flex items-center gap-2 rounded border border-[#e5e7eb] p-2" data-testid="measurement-list-item">
-                                <span className="font-mono font-bold">{line.label || `M${index + 1}`}</span>
-                                <span className="ml-auto font-mono">{formatMeasurement(line.distance, locale)}</span>
-                                <button className="archive-button px-2 py-1 text-[11px]" type="button" onClick={() => deleteMeasurement(line.id)}>
-                                  {t.measurementDelete}
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </aside>
-                    )}
                   </div>
                 </div>
               ) : workspaceView === '3d' ? (
@@ -3575,7 +3532,7 @@ function Workbench() {
                     >
                       {workspaceMaximized ? t.restoreManual : t.maximizeManual}
                     </button>
-                    <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} boxOpacityOverride={cogViewState.boxOpacity} cogOverlay={cogOverlay} container={renderingContainer} edgeSnap={edgeSnap} gridSnap={gridSnap} highlightBoxIds={loadingStepsActive ? activeLoadingGroupBoxIds : undefined} placementSettings={placementSettings} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
+                    <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} boxOpacityOverride={cogViewState.boxOpacity} clearanceAnnotations={clearanceAnnotations} clearanceEnabled={clearanceEnabled} cogOverlay={cogOverlay} container={renderingContainer} edgeSnap={edgeSnap} gridSnap={gridSnap} highlightBoxIds={loadingStepsActive ? activeLoadingGroupBoxIds : undefined} placementSettings={placementSettings} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
                   </div>
                 </>
               ) : (

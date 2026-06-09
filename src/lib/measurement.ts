@@ -7,6 +7,12 @@ export type ClearanceMeasurements = {
   door: number
   floor: number
   top: number
+  nearestLeft: number | null
+  nearestRight: number | null
+  nearestFront: number | null
+  nearestDoor: number | null
+  nearestFloor: number | null
+  nearestTop: number | null
   nearestX: number | null
   nearestY: number | null
   nearestZ: number | null
@@ -16,6 +22,14 @@ export type Point3D = {
   x: number
   y: number
   z: number
+}
+
+export type ClearanceDirection = 'left' | 'right' | 'front' | 'door' | 'floor' | 'top'
+export type ClearanceAnnotation = {
+  direction: ClearanceDirection
+  value: number
+  target: 'wall' | 'neighbor'
+  label: string
 }
 
 export type MeasurementAxis = 'x' | 'y' | 'z' | 'spatial'
@@ -117,22 +131,16 @@ export function measureBoxClearance(
   const others = boxes.filter((other) => other.id !== box.id)
   const xGaps = others
     .filter((other) => overlapsOnAxes(box, other, ['y', 'z']))
-    .flatMap((other) => [
-      other.x - (box.x + box.length),
-      box.x - (other.x + other.length),
-    ])
+  const doorGaps = xGaps.map((other) => other.x - (box.x + box.length)).filter((gap) => gap >= 0)
+  const frontGaps = xGaps.map((other) => box.x - (other.x + other.length)).filter((gap) => gap >= 0)
   const yGaps = others
     .filter((other) => overlapsOnAxes(box, other, ['x', 'z']))
-    .flatMap((other) => [
-      other.y - (box.y + box.width),
-      box.y - (other.y + other.width),
-    ])
+  const rightGaps = yGaps.map((other) => other.y - (box.y + box.width)).filter((gap) => gap >= 0)
+  const leftGaps = yGaps.map((other) => box.y - (other.y + other.width)).filter((gap) => gap >= 0)
   const zGaps = others
     .filter((other) => overlapsOnAxes(box, other, ['x', 'y']))
-    .flatMap((other) => [
-      other.z - (box.z + box.height),
-      box.z - (other.z + other.height),
-    ])
+  const topGaps = zGaps.map((other) => other.z - (box.z + box.height)).filter((gap) => gap >= 0)
+  const floorGaps = zGaps.map((other) => box.z - (other.z + other.height)).filter((gap) => gap >= 0)
 
   return {
     left: clampClearance(box.y),
@@ -141,10 +149,65 @@ export function measureBoxClearance(
     door: clampClearance(container.length - box.x - box.length),
     floor: clampClearance(box.z),
     top: clampClearance(container.height - box.z - box.height),
-    nearestX: nearestPositiveGap(xGaps),
-    nearestY: nearestPositiveGap(yGaps),
-    nearestZ: nearestPositiveGap(zGaps),
+    nearestLeft: nearestPositiveGap(leftGaps),
+    nearestRight: nearestPositiveGap(rightGaps),
+    nearestFront: nearestPositiveGap(frontGaps),
+    nearestDoor: nearestPositiveGap(doorGaps),
+    nearestFloor: nearestPositiveGap(floorGaps),
+    nearestTop: nearestPositiveGap(topGaps),
+    nearestX: nearestPositiveGap([...frontGaps, ...doorGaps]),
+    nearestY: nearestPositiveGap([...leftGaps, ...rightGaps]),
+    nearestZ: nearestPositiveGap([...floorGaps, ...topGaps]),
   }
+}
+
+const clearanceDirectionLabels: Record<Locale, Record<ClearanceDirection, string>> = {
+  en: {
+    left: 'left',
+    right: 'right',
+    front: 'front',
+    door: 'door',
+    floor: 'floor',
+    top: 'top',
+  },
+  zh: {
+    left: '左侧',
+    right: '右侧',
+    front: '前端',
+    door: '门侧',
+    floor: '底部',
+    top: '顶部',
+  },
+}
+
+function nearestForDirection(clearance: ClearanceMeasurements, direction: ClearanceDirection) {
+  if (direction === 'front') return clearance.nearestFront
+  if (direction === 'door') return clearance.nearestDoor
+  if (direction === 'left') return clearance.nearestLeft
+  if (direction === 'right') return clearance.nearestRight
+  if (direction === 'floor') return clearance.nearestFloor
+  return clearance.nearestTop
+}
+
+export function deriveClearanceAnnotations(
+  clearance: ClearanceMeasurements,
+  locale: Locale,
+  epsilon = 1,
+): ClearanceAnnotation[] {
+  const directions: ClearanceDirection[] = ['left', 'right', 'front', 'door', 'floor', 'top']
+  return directions.flatMap((direction) => {
+    const wallGap = clearance[direction]
+    const neighborGap = nearestForDirection(clearance, direction)
+    const target = neighborGap !== null && neighborGap < wallGap ? 'neighbor' : 'wall'
+    const value = target === 'neighbor' && neighborGap !== null ? neighborGap : wallGap
+    if (value <= epsilon) return []
+    return [{
+      direction,
+      value,
+      target,
+      label: `${clearanceDirectionLabels[locale][direction]} ${formatMeasurement(value, locale)}`,
+    }]
+  })
 }
 
 export function formatMeasurement(value: number | null, locale: Locale) {
