@@ -2168,10 +2168,18 @@ function Workbench() {
     }
 
     const rowKeys = importColumnsForHeaderRow(rows, 1)
-    const autoMappable = canAutoMap(rows[0] ?? {})
+    const autoRows = importPreviewRows(rows, 1, 2)
+    const autoMappable = canAutoMap(autoRows[0] ?? {})
+
+    if (autoRows.length === 0) {
+      setImportMessages([`${t.importIssue}: ${t.importNoData}`])
+      setActiveResultTab('importLog')
+      setActiveNav('report')
+      return
+    }
 
     if (autoMappable) {
-      const imported = parseCargoRows(rows, { colors })
+      const imported = parseCargoRows(autoRows, { colors })
       setImportMessages([
         `${t.importSuccess}: ${imported.summary.importedRows}`,
         `${t.importMappedFields}: ${imported.summary.mappedFields.join(', ') || '-'}`,

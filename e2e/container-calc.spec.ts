@@ -272,7 +272,7 @@ test('shows custom container fields and effective dimensions', async ({ page }) 
   await cargoForm.getByLabel('Weight kg').fill('10')
   await cargoForm.getByLabel('Quantity').fill('1')
   await page.getByRole('button', { name: '+ Add cargo item' }).click()
-  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
   await page.getByRole('button', { name: 'Details' }).click()
   await expect(page.getByRole('cell', { name: 'Exceeds container dimensions' })).toBeVisible()
 })
@@ -287,7 +287,7 @@ test('adds cargo and recalculates utilization', async ({ page }) => {
   await cargoForm.getByLabel('Weight kg').fill('42')
   await cargoForm.getByLabel('Quantity').fill('3')
   await page.getByRole('button', { name: '+ Add cargo item' }).click()
-  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
 
   await expect(page.getByRole('button', { name: /Tall crate/ }).first()).toBeVisible()
   await expect(page.getByText(/Volume utilization: \d+\.\d%/)).toBeVisible()
@@ -375,11 +375,11 @@ test('deletes cargo and updates downstream details and export', async ({ page })
   await cargoForm.getByLabel('Weight kg').fill('30')
   await cargoForm.getByLabel('Quantity').fill('1')
   await page.getByRole('button', { name: '+ Add cargo item' }).click()
-  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
   await expect(page.getByText('Cargo types: 2')).toBeVisible()
 
   await page.getByRole('button', { name: 'Delete cargo: Delete me' }).click()
-  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
   await expect(page.getByRole('button', { name: /Delete me/ })).toHaveCount(0)
   await expect(page.getByText('Cargo types: 1')).toBeVisible()
 
@@ -427,7 +427,7 @@ test('edits cargo item details and keeps cancel as a no-op', async ({ page }) =>
 
   await expect(page.getByRole('button', { name: /Edited crate/ }).first()).toBeVisible()
   await expect(page.getByText('1100 x 800 x 550 mm, 44 kg, qty 2')).toBeVisible()
-  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
   await page.getByRole('button', { name: 'Details' }).click()
   await expect(page.getByRole('cell', { name: 'Edited crate' })).toBeVisible()
   await expect(page.getByRole('cell', { name: 'Z' }).first()).toBeVisible()
@@ -445,7 +445,7 @@ test('supports input-order loading mode for work-step planning', async ({ page }
   await cargoForm.getByLabel('Weight kg').fill('42')
   await cargoForm.getByLabel('Quantity').fill('1')
   await page.getByRole('button', { name: '+ Add cargo item' }).click()
-  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
 
   await expect(page.getByRole('button', { name: /^1 A/ }).first()).toBeVisible()
 })
@@ -468,7 +468,7 @@ test('drags cargo order and changes input-order work steps', async ({ page }) =>
   await page.getByTestId('cargo-list-item').last().dragTo(firstBefore)
   await expect(page.getByTestId('cargo-list-item').first()).toContainText('Order crate')
 
-  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
   await expect(page.getByRole('button', { name: /^1 O/ }).first()).toBeVisible()
 })
 
@@ -484,7 +484,7 @@ test('selectable loading rules change work-step ordering', async ({ page }) => {
   await cargoForm.getByLabel('Quantity').fill('1')
   await page.getByRole('button', { name: '+ Add cargo item' }).click()
   await page.getByLabel('Loading rules').selectOption('weight')
-  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
 
   await expect(page.getByRole('button', { name: /^1 W/ }).first()).toBeVisible()
 })
@@ -558,7 +558,7 @@ test('shows label detail and diagnostic result tabs', async ({ page }) => {
 test('shows failure reason in the detail table for unplaced cargo', async ({ page }) => {
   await openEnglish(page)
   await page.getByLabel('Max payload kg').fill('36')
-  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
 
   await page.getByRole('button', { name: 'Details' }).click()
   await expect(page.getByRole('cell', { name: 'Exceeds maximum payload' })).toBeVisible()
@@ -652,7 +652,7 @@ test('rotates 2D labels using packing orientation metadata', async ({ page }) =>
   await cargoForm.getByLabel('Quantity').fill('1')
   await page.getByRole('button', { name: '+ Add cargo item' }).click()
   await page.getByLabel('Loading rules').selectOption('volume')
-  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
   await page.getByRole('button', { name: '2D' }).click()
 
   const rotatedLabel = page.locator('g[data-orientation="WLH"][data-label-rotation="90"] text').filter({ hasText: 'R' }).first()
@@ -671,7 +671,7 @@ test('filters the plan view by cargo label', async ({ page }) => {
   await cargoForm.getByLabel('Weight kg').fill('42')
   await cargoForm.getByLabel('Quantity').fill('2')
   await page.getByRole('button', { name: '+ Add cargo item' }).click()
-  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
 
   await page.getByRole('button', { name: '2D' }).click()
   await page.getByLabel('Label filter', { exact: true }).selectOption('B')
@@ -749,7 +749,7 @@ test('switches 3D camera views and keeps layer filtering visible', async ({ page
   await cargoForm.getByLabel('Weight kg').fill('20')
   await cargoForm.getByLabel('Quantity').fill('80')
   await page.getByRole('button', { name: '+ Add cargo item' }).click()
-  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
 
   await expect(page.getByText('Loading steps')).toBeVisible()
   await page.getByRole('button', { name: 'Next', exact: true }).click()
@@ -1044,7 +1044,7 @@ test('imports Vietnam irregular workbook through a reusable combined-dimension t
 test('shows localized failure reasons in Chinese mode', async ({ page }) => {
   await openEnglish(page)
   await page.getByLabel('Max payload kg').fill('36')
-  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
   await page.getByRole('button', { name: '中文' }).click()
 
   await page.getByRole('button', { name: '明细表' }).click()
@@ -1095,7 +1095,7 @@ test('imports the real business workbook fixture into the cargo dataset', async 
   await expect(page.getByTestId('import-log-panel').getByText('Import success: 31')).toBeVisible()
   await expect(page.getByTestId('import-log-panel').getByText(/Rows converted from cm: 31/)).toBeVisible()
   await expect(page.getByTestId('cargo-list-item').first()).toBeVisible()
-  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
 
   await page.getByRole('button', { name: 'Details' }).click()
   await expect(page.getByRole('cell', { name: '1', exact: true }).first()).toBeVisible()
@@ -1109,7 +1109,7 @@ test('imports CSV cargo rows into the same packing flow', async ({ page }) => {
 
   await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
   await expect(page.getByRole('button', { name: /CSV crate/ }).first()).toBeVisible()
-  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
 
   await page.getByRole('button', { name: 'Details' }).click()
   await expect(page.getByRole('cell', { name: 'C', exact: true })).toBeVisible()
@@ -1136,7 +1136,7 @@ test('saves and restores history plans with labels and layers intact', async ({ 
   await cargoForm.getByLabel('Weight kg').fill('42')
   await cargoForm.getByLabel('Quantity').fill('3')
   await page.getByRole('button', { name: '+ Add cargo item' }).click()
-  await page.getByRole('button', { name: 'Load' }).click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
 
   await page.getByRole('button', { name: 'History', exact: true }).click()
   await page.getByRole('button', { name: 'Save plan' }).click()

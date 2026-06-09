@@ -2,6 +2,64 @@
 
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
+## 2026-06-09 已决策：三议题（作业分解图导出 / Excel 导入模板系统 / 3D 余量自动标注）
+
+> 状态：**已拍板**。三份定稿计划分别写入 `plans/2026-06-09-loading-sheet-pdf.md`、`plans/2026-06-09-import-template-system.md`、`plans/2026-06-09-clearance-annotation-3d.md`，交 Codex 分别执行。
+
+调研由三个并行子代理完成，根因均已定位到 file:line（见下方各条）。用户逐条决策如下。
+
+### 议题 1 · 装柜步骤 → 作业分解图导出（多页 PDF）
+
+- 背景：用户希望「装柜步骤」能导出成纸质作业分解图（参考 `test-data/越南40尺装柜分解图2026.6.2.pdf`：首页物料清单图例 + 后续多页编号步骤卡片网格，每卡片=一次作业累加快照，标注标签+件数+俯视示意）。
+- 现状（基础已具备）：
+  - `src/lib/loadingTaskGroups.ts:106` `buildLoadingTaskGroups()` 已把逐箱步骤合并成「作业批次」`LoadingTaskGroup`（带件数、bounds、支撑、标签）——对应 PDF 一张卡片。
+  - `src/lib/playback.ts:41` `visibleBoxesAt(cursor)` 现成支持「已装+本步新增」累加快照。
+  - `src/components/ContainerPlan2D.tsx:47` 纯 SVG 俯/正/侧视图，入参 `boxes[]`，可传子集、可高亮——直接当每格视图。
+  - 缺口：`package.json` 无任何 PDF 库（无 jsPDF/html2canvas）；当前导出全是纯前端 download。
+- 用户决策：
+  - **输出格式**：单一**多页 PDF**，引入 **jsPDF**（不走打印 HTML、不走图片打包）。
+  - **每格视图**：**俯视图 + 累加快照**（深色=已装、高亮=本步新增），不画侧视图、不只画本步新增。
+  - **首页**：要一页**物料清单图例**（描述/件数/长宽高/重量/标签色），照搬 PDF 形态。
+  - **步骤粒度**：用现有 `LoadingTaskGroup` 作为一步（不另设粒度）。
+- 影响：新增前端依赖 jsPDF（+ SVG→canvas/image 栅格化）；新增组织层 `src/lib/loadingSheet.ts`（复用 loadingTaskGroups + playback，不重算装箱）；`Workbench` 加导出按钮。
+- 后续：尺寸单位、A4 每页格数、双语标注等版式细节在计划文件内定默认值，必要时复核。
+
+### 议题 2 · Excel 导入模板系统（适配异形客户表）
+
+- 背景：客户 Excel 五花八门，现有解析无法稳定支持。参考 `test-data/excel/越南第十一批6.2海运.xlsx`：**第 1 行合并标题、真表头在第 2 行**；长宽高挤在同一格 `530*305*310`（mm）；数量有 `预计发货数量`(总件)/`箱数`(真正装箱数)/`箱规` 三列陷阱；无独立标签列只有 SKU(`TB-C10-EV_v1.1`)；末行 `汇总` 合计行；含换行备注列。
+- 现状失败点（致命）：
+  - `Workbench.tsx:2100` `sheet_to_json` 用电子表格第 1 行做列名 → 合并标题导致列名变 `__EMPTY` 垃圾 → `canAutoMap`(`:2059`) 自动导入失效。
+  - `ImportTemplateConfig.headerRow`(`importCargo.ts:46`) 声明了但**全程未被使用**（`parseCargoRowsWithTemplate:270` 只用 `startRow` 切片）→ 手动映射也救不回表头。
+  - 合并尺寸 `530*305*310` → `positiveNumber`(`importCargo.ts:89`) 期望独立列 → `Number()`=NaN → 每行 `INVALID_DIMENSIONS`(`:138`)。无按 `*×x` 拆分能力。
+  - 数量别名 `fields.quantity`(`importCargo.ts:63`) 命中 `预计发货数量` 而非 `箱数`。
+  - 标签 `slice(0,2)`(`importCargo.ts:201`) 把所有 `TB-xxx` SKU 塌成 `"TB"`，破坏核心业务字段。
+  - 合计行未剔除 → 噪声错误。
+- 用户决策：
+  - **走「模板系统」路线**（不要求客户按标准模板填）：设计能适配某一类客户 Excel 的解析模板（表头行 + 合并尺寸列拆分 + 列→字段映射 + 单位 + 标签列），存下来后**同类 Excel 后续直接套用对应模板导入**。
+  - **模板匹配方式**：**导入时用户手动从下拉选模板**（不做按表头指纹自动匹配）。
+  - **标签来源**：**导入时让用户指定哪一列**作标签（不默认整列 SKU、不默认 SKU 前缀分组、不再 `slice(0,2)`）。
+- 影响：`importCargo.ts` 需让 `headerRow` 真正生效（用 `header:1` 矩阵按指定行重建列名）、新增合并尺寸列拆分、剔除合计/空行、数量列别名优先级修正；`Workbench` 导入流程改为「选模板→预览→确认」，映射 UI 需暴露表头行、合并尺寸列、标签列指定。本轮**重新设计一轮**导入，不是小修。
+- 后续遗留歧义（计划内给默认值，必要时复核）：合并尺寸分隔符集合与顺序约定、合计/备注行处理细节、模板与现有 `importTemplates`(`src/lib/importTemplates.ts` + 服务端 `/api/import-templates`) 持久化结构如何扩展。
+
+#### 2026-06-09 执行补充：越南夹具行数按当前文件事实验收
+
+- 背景：`plans/2026-06-09-import-template-system.md` 的验收描述提到越南样例约 25 条 SKU，但当前 `test-data/excel/越南第十一批6.2海运.xlsx` 实测为 27 行：第 1 行标题、第 2 行表头、第 3-26 行 24 条 SKU、第 27 行 `汇总`。
+- 决策：E2E 和导入日志按当前夹具事实验收：`Import success: 24`，`Skipped non-data rows: 1`。不为了贴合计划文字伪造第 25 条 SKU，也不把 `汇总` 计入业务货物。
+- 影响：模板系统的业务语义更明确：汇总行必须跳过，完整 SKU 标签必须原样流入货物列表、装箱结果、明细和导出链路。
+
+### 议题 3 · 3D 余量自动标注（拆除手动尺规）
+
+- 背景：现有两点尺规「不正确」，用户想直接在 3D 看边缘空隙尺寸。
+- 现状根因：
+  - `Workbench.tsx:1478` 写死 `axis:'spatial'` → `measurement.ts:80` 永远算 3D 斜边而非轴向间隙 → 手点两点几乎不在同一轴线 → 系统性偏大（主因）。
+  - 空中取点退化到地板平面(`ContainerScene.tsx:1099`)、兜底取相机距离处一点(`:1093`)无几何意义；吸附只认边中点 + 默认 80mm 阈值导致跳变。
+  - 关键发现：所有盒子精确 AABB（`PlacedBox.x/y/z+length/width/height`，`types.ts:30`）与容器内壁全已知；`measurement.ts:112` `measureBoxClearance()` 已能算六向余量+最近邻间距、**有单测但零调用方，是死代码**。
+- 用户决策：
+  - **方案 C 为主**：**选中盒子 → 在 3D 自动用带数值标注线显示可用方向的余量**；某向若与相邻盒/内壁**直接接触（余量≈0）则该向不显示**；整个功能用**快捷键开关**。
+  - **拆除现有手动两点尺规**（不保留、不修轴向版本）。
+- 影响：接线 `measureBoxClearance`（消除死代码）；`ContainerScene` 新增带数值的 3D 标注线渲染（替换 `syncMeasurementLines` 的两点连线）；`Workbench` 移除 ruler 两点状态/UI，新增快捷键 + 复用 `selectedBoxId`(`Workbench.tsx:1002`)；接触阈值（余量近 0 不显示）需定一个 epsilon。
+- 后续：`decision.md` 已记 `measureBoxClearance` 由死代码转为正式启用；正交视图(方案 D)本轮不做。
+
 ## 2026-06-08 已决策：cap=1 货优先做「顶层乘客」以逼近装载理论上限 + 合规诊断提示
 
 > 状态：**已拍板**。定稿写入 `plans/2026-06-08-stack-fill-optimization.md` 交 Codex。

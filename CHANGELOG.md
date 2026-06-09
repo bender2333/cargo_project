@@ -7,7 +7,9 @@
 - Recorded the fixture mismatch: the current workbook contains 24 SKU data rows plus one `汇总` row, not 25 SKU data rows.
 - Updated the in-app notification head entry to `2026-06-09-r38-import-sheet-clearance`, covering irregular import templates, loading-sheet PDF export, and selected-box 3D clearance annotations.
 - Hardened the 31-pallet regression test to read the intended Russian workbook fixture explicitly, so Excel lock files under `test-data/excel` cannot be mistaken for the business fixture.
-- Verification: `npm test -- src/lib/labels.test.ts src/lib/packing.test.ts` passed 41 tests; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "Vietnam irregular"` passed 1 test; full `npm test` passed 46 files / 264 tests.
+- Restored one-click auto import for standard XLSX/CSV workbooks after the raw-matrix reader change, while keeping irregular workbooks on the template-mapping path.
+- Hardened container E2E tests to click the exact `Load` button so the new `Export loading sheet PDF` button is not matched by Playwright's substring role lookup.
+- Verification: `npm test -- src/lib/labels.test.ts src/lib/packing.test.ts` passed 41 tests; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "Vietnam irregular"` passed 1 test; full `npm test` passed 46 files / 264 tests; targeted E2E import/load regression subset passed 18 tests and then 5 tests after the auto-import fix. Final local gates passed: `npm run lint`; `npm test` (46 files / 264 tests); `npm run build` with the existing chunk-size warning; full `npm run test:e2e` using local API on port 3010 and isolated Playwright port 5188 (86 passed / 1 skipped / 0 failed).
 
 ## 2026-06-09 (Loading Sheet PDF Export)
 
