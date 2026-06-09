@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-09 (Loading Sheet Data Model)
+
+- Added the pure `LoadingSheetModel` builder for `plans/2026-06-09-loading-sheet-pdf.md`, deriving legend rows, summary metrics, loading-task steps, new box ids, and cumulative box ids from `PackingResult`, `buildLoadingTaskGroups()`, and playback visibility without rerunning packing.
+- Added intent-focused unit coverage for task-group alignment, cumulative step deltas, legend count conservation, result-sourced summary metrics, loaded length, and empty results.
+- Verification: `npm test -- src/lib/loadingSheet.test.ts` passed 4 tests.
+
 ## 2026-06-09 (3D Clearance Annotation)
 
 - Replaced the manual two-point ruler flow with selected-box clearance annotations from `plans/2026-06-09-clearance-annotation-3d.md`: the `m` shortcut and toolbar toggle now show deterministic AABB-based clearance for the current box, hide contact directions within the 1mm epsilon, and expose the active annotation directions/labels through scene test hooks.
