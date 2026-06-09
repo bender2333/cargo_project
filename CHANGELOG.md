@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-09 (Loading Sheet PDF Export)
+
+- Implemented the multi-page loading sheet PDF export from `plans/2026-06-09-loading-sheet-pdf.md`: the workbench now exposes `export-loading-sheet-pdf`, builds a result-sourced loading sheet model, renders a legend/summary page plus 2 x 3 step-card pages, and downloads `loading-sheet.pdf`.
+- Added a DOM-aware `exportLoadingSheetPdf()` helper using `jspdf` and canvas-rendered pages so Chinese/English labels, legend rows, cumulative top-view snapshots, and highlighted current-step boxes are embedded as images without server-side export.
+- Verification: `npm run lint` passed; `npm test -- src/lib/loadingSheet.test.ts` passed 4 tests; `npm run build` passed with the existing Vite chunk-size warning and jsPDF-related chunks; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "loading sheet PDF"` passed 1 test.
+
 ## 2026-06-09 (Loading Sheet Data Model)
 
 - Added the pure `LoadingSheetModel` builder for `plans/2026-06-09-loading-sheet-pdf.md`, deriving legend rows, summary metrics, loading-task steps, new box ids, and cumulative box ids from `PackingResult`, `buildLoadingTaskGroups()`, and playback visibility without rerunning packing.

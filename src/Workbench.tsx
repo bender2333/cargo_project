@@ -12,6 +12,8 @@ import { CenterOfGravityPanel } from './components/CenterOfGravityPanel'
 import { ContainerComparisonPanel } from './components/ContainerComparisonPanel'
 import { buildPlaybackSequence, visibleBoxesAt } from './lib/playback'
 import { buildLoadingTaskGroups } from './lib/loadingTaskGroups'
+import { buildLoadingSheetModel } from './lib/loadingSheet'
+import { exportLoadingSheetPdf } from './lib/exportLoadingSheet'
 import { usePlaybackController } from './hooks/usePlaybackController'
 import type { PlaybackSpeed } from './hooks/usePlaybackController'
 import { computeCenterOfGravity } from './lib/centerOfGravity'
@@ -161,6 +163,7 @@ const copy = {
     importExcel: 'Import XLSX',
     exportExcel: 'Export XLSX',
     exportView: 'Export view',
+    exportLoadingSheetPdf: 'Export loading sheet PDF',
     importIssue: 'Import issue',
     importWarning: 'Import warning',
     importParseFailed: 'Import parse failed',
@@ -421,6 +424,7 @@ const copy = {
     importExcel: '导入 XLSX',
     exportExcel: '导出 XLSX',
     exportView: '导出视图',
+    exportLoadingSheetPdf: '导出作业分解图 PDF',
     importIssue: '导入问题',
     importWarning: '导入提醒',
     importParseFailed: '导入解析失败',
@@ -2261,6 +2265,20 @@ function Workbench() {
     XLSX.writeFile(workbook, `${prefix ? `${prefix}-` : ''}loading-instructions.xlsx`)
   }
 
+  const exportLoadingSheet = () => {
+    if (!loadingStepsAvailable) return
+    const model = buildLoadingSheetModel(result, renderingContainer)
+    const prefix = filenameSlug(shipmentName)
+    const blob = exportLoadingSheetPdf({
+      model,
+      boxes: result.placed,
+      container: renderingContainer,
+      locale,
+      title: shipmentName || projectName,
+    })
+    downloadBlob(blob, `${prefix ? `${prefix}-` : ''}loading-sheet.pdf`)
+  }
+
   const exportReviewChecklistJson = () => {
     const prefix = filenameSlug(shipmentName)
     downloadBlob(
@@ -3336,6 +3354,15 @@ function Workbench() {
             </button>
             <button className="archive-button success" type="button" onClick={exportCurrentView}>
               {t.exportView}
+            </button>
+            <button
+              className="archive-button success"
+              type="button"
+              data-testid="export-loading-sheet-pdf"
+              disabled={!loadingStepsAvailable}
+              onClick={exportLoadingSheet}
+            >
+              {t.exportLoadingSheetPdf}
             </button>
             </div>
             <div

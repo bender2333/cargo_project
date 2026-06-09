@@ -588,6 +588,17 @@ test('switches to 2D plan views and keeps labels visible', async ({ page }) => {
   expect(pngDownload.suggestedFilename()).toBe('packing-plan-iso.png')
 })
 
+test('exports loading sheet PDF from current loading steps', async ({ page }) => {
+  await openEnglish(page)
+  const exportButton = page.getByTestId('export-loading-sheet-pdf')
+  await expect(exportButton).toBeEnabled()
+
+  const downloadPromise = page.waitForEvent('download')
+  await exportButton.click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toBe('loading-sheet.pdf')
+})
+
 test('downgrades covered all-layer 2D labels while keeping top labels readable', async ({ page }) => {
   await openEnglish(page)
 
