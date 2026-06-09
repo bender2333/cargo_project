@@ -5,7 +5,9 @@
 - Completed the Vietnam irregular workbook coverage for `plans/2026-06-09-import-template-system.md`: the reusable combined-dimension template imports `test-data/excel/越南第十一批6.2海运.xlsx`, reports `Import success: 24`, and surfaces the skipped summary row in the import log.
 - Preserved full SKU labels such as `TB-C10-EV_v1.1` through cargo-list normalization, automatic packing placed boxes, loading steps, label stats, unplaced rows, and the details table instead of collapsing business labels to two-character prefixes.
 - Recorded the fixture mismatch: the current workbook contains 24 SKU data rows plus one `汇总` row, not 25 SKU data rows.
-- Verification: `npm test -- src/lib/labels.test.ts src/lib/packing.test.ts` passed 41 tests; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "Vietnam irregular"` passed 1 test.
+- Updated the in-app notification head entry to `2026-06-09-r38-import-sheet-clearance`, covering irregular import templates, loading-sheet PDF export, and selected-box 3D clearance annotations.
+- Hardened the 31-pallet regression test to read the intended Russian workbook fixture explicitly, so Excel lock files under `test-data/excel` cannot be mistaken for the business fixture.
+- Verification: `npm test -- src/lib/labels.test.ts src/lib/packing.test.ts` passed 41 tests; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "Vietnam irregular"` passed 1 test; full `npm test` passed 46 files / 264 tests.
 
 ## 2026-06-09 (Loading Sheet PDF Export)
 

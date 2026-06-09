@@ -14,6 +14,25 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-06-09-r38-import-sheet-clearance',
+    date: '2026-06-09',
+    title: { en: 'Import templates, loading sheets, and clearance labels', zh: '导入模板、作业分解图与余量标注' },
+    items: {
+      en: [
+        'Irregular Excel imports now support reusable templates with custom header rows, start rows, combined dimension columns, and explicit label-column mapping.',
+        'Imported SKU labels such as TB-C10-EV_v1.1 now remain intact through the cargo list, packing result, loading steps, stats, unplaced rows, and details table.',
+        'The loading-step panel can export a multi-page PDF loading sheet with a legend page and cumulative top-view step cards.',
+        'The old manual two-point ruler has been replaced by selected-box 3D clearance annotations that hide contact directions and show usable gaps.',
+      ],
+      zh: [
+        '异形 Excel 导入现在支持可复用模板，可配置表头行、起始行、合并尺寸列和明确的标签列映射。',
+        '导入的 SKU 标签（如 TB-C10-EV_v1.1）会完整保留到货物列表、装箱结果、装载步骤、统计、未装货物和明细表，不再压缩成两位前缀。',
+        '装柜步骤现在可以导出多页 PDF 作业分解图，包含首页图例和逐步累加的俯视步骤卡片。',
+        '旧的手动两点尺规已替换为选中货物的 3D 余量标注；接触方向自动隐藏，只显示可用间隙。',
+      ],
+    },
+  },
+  {
     version: '2026-06-08-r37-stack-fill-diagnostics',
     date: '2026-06-08',
     title: { en: 'Stack-fill optimization and capacity diagnostics', zh: '堆叠填充优化与容量诊断' },

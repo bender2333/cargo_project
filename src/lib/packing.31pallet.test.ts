@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { dirname, resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -12,10 +12,7 @@ const moduleDir = dirname(fileURLToPath(import.meta.url))
 describe('calculatePacking — 31 Russian pallets in a custom 13400×2450×2650 container', () => {
   it('fits all 31 pallets without violating boundary, overlap, weight, or container limits', () => {
     const fixtureDir = resolve(moduleDir, '../../test-data/excel')
-    const fixtures = readdirSync(fixtureDir).filter((name: string) => name.endsWith('.xlsx'))
-    expect(fixtures.length).toBeGreaterThan(0)
-
-    const buffer = readFileSync(join(fixtureDir, fixtures[0]))
+    const buffer = readFileSync(join(fixtureDir, '俄罗斯整托装柜尺寸.xlsx'))
     const workbook = XLSX.read(buffer, { type: 'buffer' })
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
     const rows = XLSX.utils.sheet_to_json(sheet) as Record<string, string | number | null>[]
