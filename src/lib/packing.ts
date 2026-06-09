@@ -61,6 +61,11 @@ function labelForIndex(index: number) {
   return label
 }
 
+function labelForCargoItem(item: CargoItem, itemIndex: number) {
+  const rawLabel = String(item.label || labelForIndex(itemIndex)).trim()
+  return rawLabel.length <= 2 ? rawLabel.toUpperCase() : rawLabel
+}
+
 function labelRotationForOrientation(orientationKey: OrientationKey): LabelRotationDeg {
   const rotations: Record<OrientationKey, LabelRotationDeg> = {
     LWH: 0,
@@ -614,7 +619,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   const expanded = cargoItems
     .flatMap((item, itemIndex) => {
       totalCargoCount += item.quantity
-      const label = (item.label || labelForIndex(itemIndex)).toUpperCase().slice(0, 2)
+      const label = labelForCargoItem(item, itemIndex)
       const effectiveItem = {
         ...item,
         maxStackLayers: effectiveMaxStackLayers(item, defaultMaxStackLayers),
@@ -862,7 +867,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   const layers = buildPackingLayers(placed)
 
   const labelStats = cargoItems.map((item, itemIndex) => {
-    const label = (item.label || labelForIndex(itemIndex)).toUpperCase().slice(0, 2)
+    const label = labelForCargoItem(item, itemIndex)
     const placedBoxes = placed.filter((box) => box.cargoId === item.id)
     const unplacedQuantity = unplaced.find((entry) => entry.cargoId === item.id)?.quantity ?? 0
     return {

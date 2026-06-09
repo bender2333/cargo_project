@@ -57,6 +57,10 @@ function realWorkbookPath() {
   return path.join(process.cwd(), 'test-data', 'excel', '俄罗斯整托装柜尺寸.xlsx')
 }
 
+function vietnamWorkbookPath() {
+  return path.join(process.cwd(), 'test-data', 'excel', '越南第十一批6.2海运.xlsx')
+}
+
 async function createCsvFile() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cargo-calc-csv-'))
   const filePath = path.join(dir, 'cargo-import.csv')
@@ -996,6 +1000,45 @@ test('renames and deletes import templates from top-level template manager', asy
   await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
   await expect(page.getByTestId('mapping-modal')).toBeVisible()
   await expect(page.getByTestId('import-template-select').locator('option', { hasText: renamedTemplateName })).toHaveCount(0)
+})
+
+test('imports Vietnam irregular workbook through a reusable combined-dimension template', async ({ page }) => {
+  test.slow()
+  await openEnglish(page)
+  const templateName = `Vietnam Sheet ${Date.now()}`
+
+  await page.locator('input[accept*="xlsx"]').setInputFiles(vietnamWorkbookPath())
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await page.getByTestId('import-template-name').fill(templateName)
+  await page.getByTestId('template-header-row').fill('2')
+  await page.getByTestId('template-start-row').fill('3')
+  await page.getByTestId('template-dimension-mode').selectOption('combined')
+  await page.getByTestId('template-combined-column').selectOption('外箱尺寸（mm）')
+  await page.getByTestId('map-select-label').selectOption('物料代码SKU')
+  await page.getByTestId('map-select-name').selectOption('物料名称')
+  await page.getByTestId('map-select-weight').selectOption('产品毛重(KG)/箱')
+  await page.getByTestId('map-select-quantity').selectOption('箱数')
+  await page.getByTestId('save-import-template').click()
+  await expect(page.getByTestId('template-save-status')).toContainText(templateName)
+  await page.getByTestId('confirm-mapping').click()
+
+  await expect(page.getByTestId('import-log-panel').getByText('Import success: 24')).toBeVisible()
+  await expect(page.getByTestId('import-log-panel').getByText(/Skipped non-data rows: 1/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /世喜PPSU款新生儿奶瓶-防胀气系列160mL越南版（0-1）/ }).first()).toBeVisible()
+  await expect(page.getByText(/TB-C10-EV_v1\.1/).first()).toBeVisible()
+  await expect(page.getByText(/530 x 305 x 310 mm/).first()).toBeVisible()
+  await expect(page.getByText(/qty 126/).first()).toBeVisible()
+
+  await page.locator('input[accept*="xlsx"]').setInputFiles(vietnamWorkbookPath())
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await page.getByTestId('import-template-select').selectOption({ label: templateName })
+  await page.getByTestId('confirm-mapping').click()
+
+  await expect(page.getByTestId('import-log-panel').getByText('Import success: 24')).toBeVisible()
+  await expect(page.getByText(/TB-C10-EV_v1\.1/).first()).toBeVisible()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
+  await page.getByRole('button', { name: 'Details' }).click()
+  await expect(page.getByRole('cell', { name: 'TB-C10-EV_v1.1', exact: true })).toBeVisible()
 })
 
 test('shows localized failure reasons in Chinese mode', async ({ page }) => {

@@ -173,6 +173,7 @@ const copy = {
     importSuccess: 'Import success',
     importMappedFields: 'Mapped fields',
     importConvertedRows: 'Rows converted from cm',
+    importSkippedRows: 'Skipped non-data rows',
     mappingTitle: 'Smart field mapping',
     mappingSubtitle: 'Match the source columns to required fields and choose units before importing.',
     mappingPreview: 'Source data preview',
@@ -434,6 +435,7 @@ const copy = {
     importSuccess: '导入成功',
     importMappedFields: '识别字段',
     importConvertedRows: '厘米换算行数',
+    importSkippedRows: '跳过非数据行',
     mappingTitle: '智能字段映射',
     mappingSubtitle: '请关联源文件列并选择单位以开始导入。',
     mappingPreview: '原始数据预览',
@@ -1820,6 +1822,7 @@ function Workbench() {
       `${t.importSuccess}: ${imported.summary.importedRows}`,
       `${t.importMappedFields}: ${imported.summary.mappedFields.join(', ') || '-'}`,
       `${t.importConvertedRows}: ${imported.summary.convertedCentimeterRows}`,
+      `${t.importSkippedRows}: ${imported.summary.skippedRows}`,
       ...imported.errors.map((issue) => `${t.importIssue} row ${issue.row}: ${translateImportIssue(issue, locale)}`),
       ...imported.warnings.map((issue) => `${t.importWarning} row ${issue.row}: ${translateImportIssue(issue, locale)}`),
     ])
@@ -2173,6 +2176,7 @@ function Workbench() {
         `${t.importSuccess}: ${imported.summary.importedRows}`,
         `${t.importMappedFields}: ${imported.summary.mappedFields.join(', ') || '-'}`,
         `${t.importConvertedRows}: ${imported.summary.convertedCentimeterRows}`,
+        `${t.importSkippedRows}: ${imported.summary.skippedRows}`,
         ...imported.errors.map((issue) => `${t.importIssue} row ${issue.row}: ${translateImportIssue(issue, locale)}`),
         ...imported.warnings.map((issue) => `${t.importWarning} row ${issue.row}: ${translateImportIssue(issue, locale)}`),
       ])

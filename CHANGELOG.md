@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-09 (Import Template Vietnam Fixture and SKU Labels)
+
+- Completed the Vietnam irregular workbook coverage for `plans/2026-06-09-import-template-system.md`: the reusable combined-dimension template imports `test-data/excel/越南第十一批6.2海运.xlsx`, reports `Import success: 24`, and surfaces the skipped summary row in the import log.
+- Preserved full SKU labels such as `TB-C10-EV_v1.1` through cargo-list normalization, automatic packing placed boxes, loading steps, label stats, unplaced rows, and the details table instead of collapsing business labels to two-character prefixes.
+- Recorded the fixture mismatch: the current workbook contains 24 SKU data rows plus one `汇总` row, not 25 SKU data rows.
+- Verification: `npm test -- src/lib/labels.test.ts src/lib/packing.test.ts` passed 41 tests; targeted E2E `npx playwright test e2e/container-calc.spec.ts --grep "Vietnam irregular"` passed 1 test.
+
 ## 2026-06-09 (Loading Sheet PDF Export)
 
 - Implemented the multi-page loading sheet PDF export from `plans/2026-06-09-loading-sheet-pdf.md`: the workbench now exposes `export-loading-sheet-pdf`, builds a result-sourced loading sheet model, renders a legend/summary page plus 2 x 3 step-card pages, and downloads `loading-sheet.pdf`.

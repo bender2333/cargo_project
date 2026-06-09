@@ -33,4 +33,18 @@ describe('normalizeCargoLabelColors', () => {
       { id: 'third', label: 'B', color: '#333333' },
     ])
   })
+
+  it('preserves full imported SKU labels while matching colors case-insensitively', () => {
+    const items = normalizeCargoLabelColors([
+      cargo({ id: 'first', label: 'TB-C10-EV_v1.1', color: '#111111' }),
+      cargo({ id: 'second', label: 'tb-c10-ev_v1.1', color: '#222222' }),
+      cargo({ id: 'third', label: 'TN-D01-EV_v1.1', color: '#333333' }),
+    ])
+
+    expect(items.map((item) => ({ id: item.id, label: item.label, color: item.color }))).toEqual([
+      { id: 'first', label: 'TB-C10-EV_v1.1', color: '#111111' },
+      { id: 'second', label: 'tb-c10-ev_v1.1', color: '#111111' },
+      { id: 'third', label: 'TN-D01-EV_v1.1', color: '#333333' },
+    ])
+  })
 })

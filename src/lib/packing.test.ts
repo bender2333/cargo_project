@@ -187,6 +187,29 @@ describe('calculatePacking', () => {
     expect(result.placed.find((box) => box.cargoId === 'rotatable')).toMatchObject({ canRotate: true })
   })
 
+  it('preserves full imported SKU labels through placed boxes, loading steps, stats, and unplaced rows', () => {
+    const container = testContainer({ length: 1000, width: 1000, height: 1000, maxWeight: 150 })
+    const sku = 'TB-C10-EV_v1.1'
+    const result = calculatePacking(container, [
+      cargo({
+        id: 'sku-carton',
+        name: 'Vietnam carton',
+        label: sku,
+        length: 1000,
+        width: 1000,
+        height: 500,
+        weight: 100,
+        quantity: 2,
+        canRotate: false,
+      }),
+    ])
+
+    expect(result.placed[0]).toMatchObject({ cargoId: 'sku-carton', label: sku })
+    expect(result.workSteps[0]).toMatchObject({ cargoId: 'sku-carton', label: sku })
+    expect(result.labelStats[0]).toMatchObject({ label: sku, planned: 2, placed: 1, unplaced: 1 })
+    expect(result.unplaced[0]).toMatchObject({ cargoId: 'sku-carton', label: sku, quantity: 1 })
+  })
+
   it('fills the inner cross-section before moving outward along the container length', () => {
     const container = testContainer({ length: 3000, width: 2000, height: 2000 })
     const result = calculatePacking(container, [
