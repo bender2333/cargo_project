@@ -2,6 +2,44 @@
 
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
+## 2026-06-09 已决策：反馈轮次 2（尺规样式 / PDF 位置与视角 / 手动模式步骤 / 模板帮助）
+
+> 状态：**已拍板**。定稿计划写入 `plans/2026-06-09-feedback-round2.md`，交 Codex 执行。
+
+用户对上轮 Codex 实现的三个功能提出四点改进反馈：
+
+### A · 尺规改为 AutoCAD 测距线样式 + 可见按钮 + 键盘帮助
+
+- 背景：当前余量标注用 512×160 canvas 画大白底圆角矩形 + 52px 粗体数字（`ContainerScene.tsx:652`），遮挡视角。名称也不该叫"余量"——应沿用"尺规"。
+- 决策：
+  - 数字改为**小字号、无背景**的 AutoCAD 测距线风格（extension lines + 紧凑数字）。
+  - 保留已有的可见切换按钮（`data-testid="toggle-clearance"`），保留 `m` 快捷键。
+  - **自动模式** 3D 视图补一个键盘帮助按钮（列出 M 等快捷键）；手动模式帮助补上 M 条目。
+- 影响：重写 `createClearanceLabelSprite` + `syncClearanceAnnotations` 中端点渲染；新增 auto-mode 帮助 UI。
+
+### B · PDF 导出移入「装柜步骤」tab + 改 3D 轴测视角
+
+- 背景：PDF 按钮放在顶部工具栏语义不对；每步图是 2D 俯视，用户期望 3D 轴测。
+- 决策：
+  - 按钮移入 `LoadingStepsPanel` 组件内。
+  - 新建离屏正交等轴渲染器（`offscreenIsoRenderer.ts`），替换 `drawBoxPlan` 2D 俯视。
+- 影响：新增 Three.js offscreen renderer 模块；修改 `exportLoadingSheet.ts`；修改 `LoadingStepsPanel` props。
+
+### C · 装柜步骤/作业回放支持手动模式
+
+- 背景：手动模式下 `buildLoadingTaskGroups` 和 `buildPlaybackSequence` 接收 `null` → 步骤/回放不可用。
+- 决策：
+  - 新增 `manualSteps.ts`：对手动盒子跑 `assignDepthLayers` 推导真实层级，再按「层→z↑→y↑」推导 workSteps，组装一个最小 `PackingResult`。
+  - 手动模式步骤/回放消费该 result，与自动模式共享后续管线。
+  - **手动装柜顺序 = 按支撑层 + 从下到上**（用户选择）。
+- 影响：新增纯逻辑模块 + Workbench 接线；不改 `buildLoadingTaskGroups` 本身。
+
+### D · 模板管理添加帮助引导（问号 tooltip）
+
+- 背景：映射 modal 无任何字段级说明，用户不知道如何配置。
+- 决策：关键字段旁加小圆问号 tooltip（表头行、数据起始行、尺寸模式、合并尺寸列、标签列），hover/click 弹出简短说明。用极简自有组件，不引入第三方库。
+- 影响：新增 `HelpTooltip` 组件 + i18n 帮助文案。
+
 ## 2026-06-09 已决策：三议题（作业分解图导出 / Excel 导入模板系统 / 3D 余量自动标注）
 
 > 状态：**已拍板**。三份定稿计划分别写入 `plans/2026-06-09-loading-sheet-pdf.md`、`plans/2026-06-09-import-template-system.md`、`plans/2026-06-09-clearance-annotation-3d.md`，交 Codex 分别执行。
