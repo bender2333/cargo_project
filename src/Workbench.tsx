@@ -3405,15 +3405,6 @@ function Workbench() {
             <button className="archive-button success" type="button" onClick={exportCurrentView}>
               {t.exportView}
             </button>
-            <button
-              className="archive-button success"
-              type="button"
-              data-testid="export-loading-sheet-pdf"
-              disabled={!loadingStepsAvailable}
-              onClick={exportLoadingSheet}
-            >
-              {t.exportLoadingSheetPdf}
-            </button>
             </div>
             <div
               className={`relative w-full bg-gradient-to-b from-[#eef6ff] to-[#f8fafc] ${
@@ -3878,9 +3869,11 @@ function Workbench() {
                 <LoadingStepsPanel
                   activeIndex={activeLoadingGroupIndex}
                   available={loadingStepsAvailable}
+                  exportDisabled={!loadingStepsAvailable}
                   groups={loadingTaskGroups}
                   locale={locale}
                   playing={loadingGroupsPlaying}
+                  onExportPdf={exportLoadingSheet}
                   onSelectGroup={(index) => {
                     const nextIndex = Math.max(0, Math.min(index, loadingTaskGroups.length - 1))
                     const group = loadingTaskGroups[nextIndex]

@@ -24,6 +24,7 @@ const T = {
     fullySupported: 'fully supported',
     partiallySupported: 'partial support',
     supportedBy: 'Supported by',
+    exportPdf: 'Export loading sheet PDF',
   },
   zh: {
     title: '装柜步骤',
@@ -47,6 +48,7 @@ const T = {
     fullySupported: '完全支撑',
     partiallySupported: '部分支撑',
     supportedBy: '支撑来源',
+    exportPdf: '导出作业分解图 PDF',
   },
 } as const
 
@@ -56,8 +58,10 @@ type Props = {
   playing: boolean
   locale: Locale
   available: boolean
+  exportDisabled?: boolean
   onSelectGroup: (index: number) => void
   onTogglePlay: () => void
+  onExportPdf?: () => void
 }
 
 function rangeLabel(start: number, end: number) {
@@ -75,7 +79,7 @@ function supportLabel(type: LoadingTaskGroup['supportTypes'][number], locale: Lo
   return t.partiallySupported
 }
 
-export function LoadingStepsPanel({ groups, activeIndex, playing, locale, available, onSelectGroup, onTogglePlay }: Props) {
+export function LoadingStepsPanel({ groups, activeIndex, playing, locale, available, exportDisabled = false, onSelectGroup, onTogglePlay, onExportPdf }: Props) {
   const t = T[locale]
 
   if (!available || groups.length === 0) {
@@ -114,6 +118,17 @@ export function LoadingStepsPanel({ groups, activeIndex, playing, locale, availa
         <button className="archive-button" type="button" data-testid="loading-steps-next" onClick={() => onSelectGroup(activeIndex + 1)} disabled={activeIndex >= groups.length - 1}>
           {t.next}
         </button>
+        {onExportPdf && (
+          <button
+            className="archive-button success ml-auto"
+            type="button"
+            data-testid="export-loading-sheet-pdf"
+            disabled={exportDisabled}
+            onClick={onExportPdf}
+          >
+            {t.exportPdf}
+          </button>
+        )}
       </div>
 
       <div className="rounded-lg border border-[#bae6fd] bg-[#f0f9ff] p-3 text-xs text-[#0c4a6e]" data-testid="loading-steps-current">

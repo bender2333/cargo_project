@@ -594,7 +594,11 @@ test('switches to 2D plan views and keeps labels visible', async ({ page }) => {
 
 test('exports loading sheet PDF from current loading steps', async ({ page }) => {
   await openEnglish(page)
-  const exportButton = page.getByTestId('export-loading-sheet-pdf')
+  await expect(page.getByTestId('visual-workspace').getByTestId('export-loading-sheet-pdf')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Stage Plan' }).click()
+  const stepsPanel = page.getByTestId('loading-steps-panel')
+  await expect(stepsPanel).toBeVisible()
+  const exportButton = stepsPanel.getByTestId('export-loading-sheet-pdf')
   await expect(exportButton).toBeEnabled()
 
   const downloadPromise = page.waitForEvent('download')

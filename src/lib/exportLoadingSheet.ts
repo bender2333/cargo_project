@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf'
 import type { ContainerSpec, Locale, PlacedBox } from '../types'
 import type { LoadingSheetModel, LoadingSheetStep } from './loadingSheet'
+import { renderIsoSnapshot } from './offscreenIsoRenderer'
 
 type ExportLoadingSheetPdfInput = {
   model: LoadingSheetModel
@@ -49,6 +50,19 @@ const copy = {
     noSteps: '暂无装柜步骤',
   },
 } satisfies Record<Locale, Record<string, string>>
+
+type PdfImageOverlay = {
+  imageData: string
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+type RenderedPage = {
+  canvas: HTMLCanvasElement
+  overlays: PdfImageOverlay[]
+}
 
 function drawText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, options: { size?: number; bold?: boolean; color?: string; align?: CanvasTextAlign } = {}) {
   ctx.fillStyle = options.color ?? '#0f172a'
@@ -113,9 +127,12 @@ function drawBoxPlan(ctx: CanvasRenderingContext2D, input: {
   }
 }
 
-function addCanvasPage(pdf: jsPDF, canvas: HTMLCanvasElement, firstPage: boolean) {
+function addCanvasPage(pdf: jsPDF, canvas: HTMLCanvasElement, firstPage: boolean, overlays: PdfImageOverlay[] = []) {
   if (!firstPage) pdf.addPage()
   pdf.addImage(pdfImageFromCanvas(canvas), 'PNG', 0, 0, pageWidth, pageHeight)
+  for (const overlay of overlays) {
+    pdf.addImage(overlay.imageData, 'PNG', overlay.x, overlay.y, overlay.width, overlay.height)
+  }
 }
 
 function renderLegendPage(input: ExportLoadingSheetPdfInput) {
@@ -153,18 +170,25 @@ function stepSummary(step: LoadingSheetStep) {
   return step.labelSummary.map((item) => `${item.label} x${item.count}`).join(', ')
 }
 
-function renderStepsPage(input: ExportLoadingSheetPdfInput, steps: LoadingSheetStep[]) {
+function renderStepsPage(input: ExportLoadingSheetPdfInput, steps: LoadingSheetStep[]): RenderedPage {
   const t = copy[input.locale]
   const { canvas, ctx } = makeCanvas(1800, 1273)
   const px = (value: number) => value * (canvas.width / pageWidth)
   const py = (value: number) => value * (canvas.height / pageHeight)
   const boxesById = new Map(input.boxes.map((box) => [box.id, box]))
+  const overlays: PdfImageOverlay[] = []
 
   steps.forEach((step, index) => {
     const col = index % cardColumns
     const row = Math.floor(index / cardColumns)
-    const x = px(margin + col * (cardWidth + cardGap))
-    const y = py(margin + row * (cardHeight + cardGap))
+    const cardX = margin + col * (cardWidth + cardGap)
+    const cardY = margin + row * (cardHeight + cardGap)
+    const imageX = cardX + 4
+    const imageY = cardY + 9.5
+    const imageWidth = cardWidth - 8
+    const imageHeight = cardHeight - 18.5
+    const x = px(cardX)
+    const y = py(cardY)
     const w = px(cardWidth)
     const h = py(cardHeight)
     ctx.fillStyle = '#ffffff'
@@ -175,28 +199,51 @@ function renderStepsPage(input: ExportLoadingSheetPdfInput, steps: LoadingSheetS
     drawText(ctx, `${t.step} ${step.sequence}`, x + 24, y + 34, { size: 25, bold: true })
     drawText(ctx, `${t.newCargo}: ${stepSummary(step)}`, x + 24, y + h - 32, { size: 19, color: '#334155' })
     const currentBoxes = step.cumulativeBoxIds.map((id) => boxesById.get(id)).filter((box): box is PlacedBox => !!box)
-    drawBoxPlan(ctx, {
-      boxes: currentBoxes,
-      newBoxIds: new Set(step.newBoxIds),
-      container: input.container,
-      x: x + 24,
-      y: y + 58,
-      width: w - 48,
-      height: h - 112,
-    })
+    const newBoxIds = new Set(step.newBoxIds)
+    try {
+      ctx.fillStyle = '#f8fafc'
+      ctx.fillRect(px(imageX), py(imageY), px(imageWidth), py(imageHeight))
+      ctx.strokeStyle = '#e2e8f0'
+      ctx.lineWidth = 2
+      ctx.strokeRect(px(imageX), py(imageY), px(imageWidth), py(imageHeight))
+      overlays.push({
+        imageData: renderIsoSnapshot({
+          boxes: currentBoxes,
+          highlightIds: newBoxIds,
+          container: input.container,
+          width: Math.round(px(imageWidth)),
+          height: Math.round(py(imageHeight)),
+        }),
+        x: imageX,
+        y: imageY,
+        width: imageWidth,
+        height: imageHeight,
+      })
+    } catch {
+      drawBoxPlan(ctx, {
+        boxes: currentBoxes,
+        newBoxIds,
+        container: input.container,
+        x: px(imageX),
+        y: py(imageY),
+        width: px(imageWidth),
+        height: py(imageHeight),
+      })
+    }
   })
 
   if (steps.length === 0) {
     drawText(ctx, t.noSteps, canvas.width / 2, canvas.height / 2, { size: 34, bold: true, align: 'center' })
   }
-  return canvas
+  return { canvas, overlays }
 }
 
 export function exportLoadingSheetPdf(input: ExportLoadingSheetPdfInput): Blob {
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   addCanvasPage(pdf, renderLegendPage(input), true)
   for (let i = 0; i < input.model.steps.length; i += cardColumns * cardRows) {
-    addCanvasPage(pdf, renderStepsPage(input, input.model.steps.slice(i, i + cardColumns * cardRows)), false)
+    const page = renderStepsPage(input, input.model.steps.slice(i, i + cardColumns * cardRows))
+    addCanvasPage(pdf, page.canvas, false, page.overlays)
   }
   return pdf.output('blob')
 }
