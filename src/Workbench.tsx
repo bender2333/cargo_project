@@ -15,6 +15,7 @@ import { buildPlaybackSequence, visibleBoxesAt } from './lib/playback'
 import { buildLoadingTaskGroups } from './lib/loadingTaskGroups'
 import { buildLoadingSheetModel } from './lib/loadingSheet'
 import { exportLoadingSheetPdf } from './lib/exportLoadingSheet'
+import { buildManualPackingResult } from './lib/manualSteps'
 import { usePlaybackController } from './hooks/usePlaybackController'
 import type { PlaybackSpeed } from './hooks/usePlaybackController'
 import { computeCenterOfGravity } from './lib/centerOfGravity'
@@ -1245,6 +1246,10 @@ function Workbench() {
     () => manualToPlacedBoxes(manualDraft, manualInvalidBoxIds),
     [manualDraft, manualInvalidBoxIds],
   )
+  const manualResult = useMemo(
+    () => buildManualPackingResult(manualPlacedBoxes, renderingContainer),
+    [manualPlacedBoxes, renderingContainer],
+  )
   const manualCapacity = useMemo(
     () => computeRemainingCapacity(manualPlacedBoxes, renderingContainer),
     [manualPlacedBoxes, renderingContainer],
@@ -1509,12 +1514,15 @@ function Workbench() {
   }, [manualNotice])
 
   const activeLayer = result.layers.find((layer) => layer.id === activeLayerId)
-  const playbackSequence = useMemo(() => buildPlaybackSequence(hasCalculated ? result : null), [result, hasCalculated])
-  const playbackAvailable = placementMode === 'auto' && hasCalculated && playbackSequence.total > 0
+  const activeStepsResult = placementMode === 'manual'
+    ? (manualResult.placed.length > 0 ? manualResult : null)
+    : (hasCalculated ? result : null)
+  const playbackSequence = useMemo(() => buildPlaybackSequence(activeStepsResult), [activeStepsResult])
+  const playbackAvailable = playbackSequence.total > 0
   const playback = usePlaybackController(playbackSequence)
   const playbackActive = playbackAvailable && activeResultTab === 'playback'
-  const loadingTaskGroups = useMemo(() => buildLoadingTaskGroups(placementMode === 'auto' && hasCalculated ? result : null), [placementMode, hasCalculated, result])
-  const loadingStepsAvailable = placementMode === 'auto' && hasCalculated && loadingTaskGroups.length > 0
+  const loadingTaskGroups = useMemo(() => buildLoadingTaskGroups(activeStepsResult), [activeStepsResult])
+  const loadingStepsAvailable = loadingTaskGroups.length > 0
   const activeLoadingGroup = loadingTaskGroups[Math.max(0, Math.min(activeLoadingGroupIndex, loadingTaskGroups.length - 1))] ?? null
   const activeLoadingGroupBoxIds = useMemo(() => activeLoadingGroup ? new Set(activeLoadingGroup.boxIds) : undefined, [activeLoadingGroup])
   const loadingStepsActive = loadingStepsAvailable && activeResultTab === 'loadingSteps'
@@ -1522,6 +1530,10 @@ function Workbench() {
     if (playbackActive) return visibleBoxesAt(playbackSequence, playback.cursor)
     return hasCalculated ? result.placed : []
   }, [playbackActive, playbackSequence, playback.cursor, hasCalculated, result.placed])
+  const visibleManualBoxes = useMemo(() => {
+    if (placementMode === 'manual' && playbackActive) return visibleBoxesAt(playbackSequence, playback.cursor)
+    return manualPlacedBoxes
+  }, [manualPlacedBoxes, placementMode, playback.cursor, playbackActive, playbackSequence])
   const visibleBoxes = hasCalculated
     ? result.placed.filter((box) => (activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId) && (activeLabelId === 'all' || box.label === activeLabelId))
     : []
@@ -2304,12 +2316,12 @@ function Workbench() {
   }
 
   const exportLoadingSheet = () => {
-    if (!loadingStepsAvailable) return
-    const model = buildLoadingSheetModel(result, renderingContainer)
+    if (!loadingStepsAvailable || !activeStepsResult) return
+    const model = buildLoadingSheetModel(activeStepsResult, renderingContainer)
     const prefix = filenameSlug(shipmentName)
     const blob = exportLoadingSheetPdf({
       model,
-      boxes: result.placed,
+      boxes: activeStepsResult.placed,
       container: renderingContainer,
       locale,
       title: shipmentName || projectName,
@@ -3541,7 +3553,7 @@ function Workbench() {
                         <ContainerScene
                           activeLabelId={'all'}
                           activeLayerId={'all'}
-                          boxes={manualPlacedBoxes}
+                          boxes={visibleManualBoxes}
                           container={renderingContainer}
                           gridSnap={gridSnap}
                           edgeSnap={edgeSnap}
@@ -3549,6 +3561,7 @@ function Workbench() {
                           invalidBoxIds={manualInvalidBoxIds}
                           manualEditable
                           poolDragInfo={poolDragInfo}
+                          highlightBoxIds={loadingStepsActive ? activeLoadingGroupBoxIds : undefined}
                           resetViewTick={resetViewTick}
                           selectedBoxId={manualSelectedId}
                           selectedManualBoxId={manualSelectedId}
@@ -3875,7 +3888,11 @@ function Workbench() {
                     setLoadingGroupsPlaying(false)
                     if (group) {
                       setActiveLayerId(String(group.physicalLayer))
-                      setSelectedBoxId(group.boxIds[0] ?? null)
+                      if (placementMode === 'manual') {
+                        setManualSelectedId(group.boxIds[0] ?? null)
+                      } else {
+                        setSelectedBoxId(group.boxIds[0] ?? null)
+                      }
                     }
                   }}
                   onTogglePlay={() => setLoadingGroupsPlaying((current) => !current)}

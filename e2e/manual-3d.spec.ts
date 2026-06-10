@@ -458,11 +458,26 @@ test('装柜步骤按阶段合并显示并高亮当前阶段', async ({ page }) 
   await expect(page.getByTestId('loading-steps-current')).toContainText('步骤')
 })
 
-test('手动模式作业回放面板提示不可用', async ({ page }) => {
+test('手动模式作业回放和装柜步骤使用当前手动摆放结果', async ({ page }) => {
   await ensureChinese(page)
-  await enterManualMode(page)
+  await page.getByRole('button', { name: '继续手动微调' }).click()
+  await expect(page.getByTestId('manual-workspace')).toBeVisible()
+  await expect(page.getByTestId('container-scene')).toHaveAttribute('data-box-count', /[3-9]|\d{2,}/)
+
+  await page.getByRole('button', { name: '装柜步骤' }).click()
+  const stepsPanel = page.getByTestId('loading-steps-panel')
+  await expect(stepsPanel).toBeVisible()
+  await expect(page.getByTestId('loading-step-group').first()).toBeVisible()
+
   await page.getByRole('button', { name: '作业回放' }).click()
-  await expect(page.getByTestId('playback-panel-empty')).toContainText('自动排布完成后')
+  await expect(page.getByTestId('playback-panel')).toBeVisible()
+  const scene = page.getByTestId('container-scene')
+  await page.getByTestId('playback-slider').fill('0')
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+  await page.getByTestId('playback-next').click()
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+  await page.getByTestId('playback-next').click()
+  await expect(scene).toHaveAttribute('data-box-count', '2')
 })
 
 test('装载重心面板显示三轴偏移与状态', async ({ page }) => {
