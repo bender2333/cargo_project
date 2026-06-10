@@ -14,6 +14,25 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-06-10-r39-feedback-round2',
+    date: '2026-06-10',
+    title: { en: 'Template help, manual steps, and 3D loading sheets', zh: '模板帮助 / 手动步骤 / 3D 作业分解图' },
+    items: {
+      en: [
+        'Import mapping now shows inline help for header rows, data start rows, dimension mode, combined size columns, and cargo label columns.',
+        'Selected-box clearance annotations now use smaller AutoCAD-style dimension text with extension lines instead of large white labels and endpoint markers.',
+        'Manual placement now supports loading steps and playback using the current manual layout, including step-by-step 3D reveal.',
+        'The loading-sheet PDF export button now lives in the Stage Plan tab, and step cards render orthographic 3D isometric snapshots with highlighted newly loaded cargo.',
+      ],
+      zh: [
+        '导入映射现在为表头行、数据起始行、尺寸模式、合并尺寸列和货物标签列提供字段级帮助。',
+        '选中货物的余量标注改为小号 AutoCAD 风格测距文字和两端延伸线，不再使用大白底标签和端点圆球。',
+        '手动排布现在支持装柜步骤和作业回放，可基于当前手动布局逐步显示 3D 装载过程。',
+        '作业分解图 PDF 导出按钮已移入装柜步骤页签，步骤卡片改为带高亮新装货物的 3D 轴测快照。',
+      ],
+    },
+  },
+  {
     version: '2026-06-09-r38-import-sheet-clearance',
     date: '2026-06-09',
     title: { en: 'Import templates, loading sheets, and clearance labels', zh: '导入模板、作业分解图与余量标注' },
