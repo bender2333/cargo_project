@@ -178,6 +178,8 @@ test('手动模式键盘帮助展示 Z 轴与快捷键说明', async ({ page }) 
   await expect(popover).toContainText('Shift + R')
   await expect(popover).toContainText('Delete')
   await expect(popover).toContainText('Esc')
+  await expect(popover).toContainText('M')
+  await expect(popover).toContainText('尺规')
 })
 
 test('手动模式阻止键盘把箱体移动到悬空位置', async ({ page }) => {
@@ -252,6 +254,7 @@ test('余量标注按选中盒子切换并拆除旧两点尺规 UI', async ({ pa
   await page.keyboard.press('m')
   await expect(scene).toHaveAttribute('data-clearance-enabled', 'true')
   await expect(scene).not.toHaveAttribute('data-clearance-annotation-count', '0')
+  await expect(scene).toHaveAttribute('data-clearance-line-counts', /^([3-9]\d*)(,[3-9]\d*)*$/)
   const directions = await scene.getAttribute('data-clearance-directions')
   expect(directions).toContain('front')
   expect(directions).not.toMatch(/floor/)
@@ -271,6 +274,15 @@ test('自动模式默认即可旋转，重置视角按钮可用', async ({ page 
   await expect(scene).toHaveAttribute('data-controls-enabled', 'true')
   await page.getByTestId('reset-view').click()
   await expect(scene).toHaveAttribute('data-interaction-mode', 'auto')
+})
+
+test('自动模式 3D 视图提供键盘帮助并说明尺规快捷键', async ({ page }) => {
+  await ensureChinese(page)
+  await expect(page.getByTestId('auto-view-container')).toBeVisible()
+  await page.getByTestId('auto-keyboard-help').click()
+  const popover = page.getByTestId('auto-keyboard-help-popover')
+  await expect(popover).toContainText('M')
+  await expect(popover).toContainText('尺规')
 })
 
 test('自动模式更换货柜后清空旧画布并提示重新计算', async ({ page }) => {

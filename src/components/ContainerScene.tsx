@@ -99,6 +99,7 @@ type SceneState = {
   rotationGizmoHovered: ManualRotationDirection | null
   rotationGizmoVisible: boolean
   measurementGroup: THREE.Group | null
+  clearanceLineCounts: string
   poolDrop: { x: number; y: number; z: number; invalid: boolean } | null
   scale: number
   length: number
@@ -647,33 +648,32 @@ function clearMeasurementGroup(state: SceneState) {
     }
   })
   state.measurementGroup = null
+  state.clearanceLineCounts = ''
 }
 
 function createClearanceLabelSprite(label: string) {
   const canvas = document.createElement('canvas')
-  canvas.width = 512
-  canvas.height = 160
+  canvas.width = 256
+  canvas.height = 64
   const ctx = canvas.getContext('2d')
   if (ctx) {
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.94)'
-    ctx.strokeStyle = 'rgba(37, 99, 235, 0.9)'
-    ctx.lineWidth = 8
-    ctx.beginPath()
-    ctx.roundRect(16, 24, canvas.width - 32, canvas.height - 48, 24)
-    ctx.fill()
-    ctx.stroke()
-    ctx.fillStyle = '#1d4ed8'
-    ctx.font = '700 52px Arial, sans-serif'
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.9)'
+    ctx.shadowBlur = 4
+    ctx.lineWidth = 3
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)'
+    ctx.fillStyle = 'rgba(30, 64, 175, 0.88)'
+    ctx.font = '600 22px Verdana, sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
+    ctx.strokeText(label, canvas.width / 2, canvas.height / 2, canvas.width - 12)
     ctx.fillText(label, canvas.width / 2, canvas.height / 2)
   }
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
   const material = new THREE.SpriteMaterial({ map: texture, depthTest: false, depthWrite: false })
   const sprite = new THREE.Sprite(material)
-  sprite.scale.set(1.35, 0.42, 1)
+  sprite.scale.set(0.72, 0.18, 1)
   sprite.renderOrder = 90
   sprite.userData.testId = 'clearance-label-3d'
   return sprite
@@ -693,38 +693,56 @@ function clearanceLinePoints(box: PlacedBox, annotation: ClearanceAnnotation): [
 
 function syncClearanceAnnotations(state: SceneState, box: PlacedBox | null, annotations: ClearanceAnnotation[]) {
   clearMeasurementGroup(state)
-  if (!box || annotations.length === 0) return
+  if (!box || annotations.length === 0) return ''
 
   const group = new THREE.Group()
   const lineMaterial = new THREE.LineBasicMaterial({ color: 0x2563eb, linewidth: 2, depthTest: false })
-  const markerMaterial = new THREE.MeshBasicMaterial({ color: 0x2563eb, depthTest: false })
+  const lineCounts: number[] = []
 
-  const addMarker = (point: Point3D) => {
-    const marker = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 8), markerMaterial)
-    marker.position.copy(worldPointFromMm(point, state.scale, state.length, state.width))
-    marker.renderOrder = 80
-    group.add(marker)
+  const addLine = (points: THREE.Vector3[], direction: ClearanceAnnotation['direction'], role: 'main' | 'extension') => {
+    const geometry = new THREE.BufferGeometry().setFromPoints(points)
+    const line = new THREE.Line(geometry, lineMaterial)
+    line.renderOrder = 80
+    line.userData.clearanceDirection = direction
+    line.userData.clearanceRole = role
+    line.userData.testId = role === 'main' ? 'clearance-line-3d' : 'clearance-extension-line-3d'
+    group.add(line)
+    return line
+  }
+
+  const extensionAxis = (fromWorld: THREE.Vector3, toWorld: THREE.Vector3) => {
+    const delta = toWorld.clone().sub(fromWorld)
+    const main = delta.lengthSq() > 0 ? delta.normalize() : new THREE.Vector3(1, 0, 0)
+    const reference = Math.abs(main.dot(new THREE.Vector3(0, 1, 0))) > 0.85
+      ? new THREE.Vector3(1, 0, 0)
+      : new THREE.Vector3(0, 1, 0)
+    return main.cross(reference).normalize()
   }
 
   for (const annotation of annotations) {
     const [from, to] = clearanceLinePoints(box, annotation)
     const fromWorld = worldPointFromMm(from, state.scale, state.length, state.width)
     const toWorld = worldPointFromMm(to, state.scale, state.length, state.width)
-    const geometry = new THREE.BufferGeometry().setFromPoints([fromWorld, toWorld])
-    const line = new THREE.Line(geometry, lineMaterial)
-    line.renderOrder = 80
-    line.userData.clearanceDirection = annotation.direction
-    line.userData.testId = 'clearance-line-3d'
-    group.add(line)
-    addMarker(from)
-    addMarker(to)
+    const axis = extensionAxis(fromWorld, toWorld)
+    const extensionLength = Math.max(0.05, Math.min(0.18, fromWorld.distanceTo(toWorld) * 0.08))
+    const extension = axis.clone().multiplyScalar(extensionLength / 2)
+    let count = 0
+    addLine([fromWorld, toWorld], annotation.direction, 'main')
+    count += 1
+    addLine([fromWorld.clone().sub(extension), fromWorld.clone().add(extension)], annotation.direction, 'extension')
+    count += 1
+    addLine([toWorld.clone().sub(extension), toWorld.clone().add(extension)], annotation.direction, 'extension')
+    count += 1
     const label = createClearanceLabelSprite(annotation.label)
-    label.position.copy(fromWorld).add(toWorld).multiplyScalar(0.5)
+    label.position.copy(fromWorld).add(toWorld).multiplyScalar(0.5).add(axis.clone().multiplyScalar(extensionLength * 1.15))
     group.add(label)
+    lineCounts.push(count)
   }
 
   state.scene.add(group)
   state.measurementGroup = group
+  state.clearanceLineCounts = lineCounts.join(',')
+  return state.clearanceLineCounts
 }
 
 function updateHoverHighlight(state: SceneState, boxId: string | null, scale: number, length: number, width: number) {
@@ -806,6 +824,7 @@ export function ContainerScene({
   const onHoverBoxRef = useRef<typeof onHoverBox>(onHoverBox)
   const selectedManualBoxIdRef = useRef<string | null>(selectedManualBoxId ?? null)
   const [gizmoVisible, setGizmoVisible] = useState(false)
+  const [clearanceLineCounts, setClearanceLineCounts] = useState('')
   const gizmoVisibleRef = useRef(false)
   const visualPropsRef = useRef({ activeLayerId, activeLabelId, selectedBoxId, highlightBoxIds, boxOpacityOverride })
   const selectedManualBox = useMemo(
@@ -990,6 +1009,7 @@ export function ContainerScene({
       rotationGizmoHovered: null,
       rotationGizmoVisible: gizmoVisibleRef.current,
       measurementGroup: null,
+      clearanceLineCounts: '',
       poolDrop: null,
       scale,
       length,
@@ -1688,7 +1708,7 @@ export function ContainerScene({
     if (!state) return
     const boxId = selectedManualBoxId ?? selectedBoxId ?? null
     const box = boxId ? boxes.find((item) => item.id === boxId) ?? null : null
-    syncClearanceAnnotations(state, clearanceEnabled ? box : null, clearanceAnnotations)
+    setClearanceLineCounts(syncClearanceAnnotations(state, clearanceEnabled ? box : null, clearanceAnnotations))
   }, [boxes, clearanceAnnotations, clearanceEnabled, selectedBoxId, selectedManualBoxId])
 
   useEffect(() => {
@@ -1958,6 +1978,7 @@ export function ContainerScene({
       data-clearance-annotation-count={clearanceEnabled ? clearanceAnnotations.length : 0}
       data-clearance-directions={clearanceEnabled ? clearanceAnnotations.map((item) => item.direction).join(',') : ''}
       data-clearance-labels={clearanceEnabled ? clearanceAnnotations.map((item) => item.label).join('|') : ''}
+      data-clearance-line-counts={clearanceEnabled ? clearanceLineCounts : ''}
     />
   )
 }

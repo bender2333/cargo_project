@@ -4,6 +4,8 @@
 
 - Task D: added inline field help for the import mapping modal, covering header row, start row, dimension mode, combined size column, and label column with bilingual copy and stable `help-tooltip-*` test hooks.
 - Verification: targeted red/green E2E `npm run test:e2e -- --grep "explains template mapping fields"` first failed on missing `help-tooltip-header-row`, then passed after implementation. Subtask gates passed: `npm run lint`; `npm test` (46 files / 264 tests); `npm run build` with the existing Vite chunk-size warning.
+- Task A: changed selected-box clearance annotations to AutoCAD-style dimension lines with two extension lines per measurement, smaller transparent text labels, no endpoint sphere markers, and keyboard-help entries for the `M` ruler shortcut in manual and automatic 3D views.
+- Verification: targeted red/green E2E `npm run test:e2e -- e2e/manual-3d.spec.ts --grep "键盘帮助|余量标注|自动模式 3D"` first failed on missing `M` help text, missing `data-clearance-line-counts`, and missing `auto-keyboard-help`; after implementation it passed 3 tests. Subtask gates passed: `npm run lint`; `npm test` (46 files / 264 tests); `npm run build` with the existing Vite chunk-size warning.
 
 ## 2026-06-09 (Import Template Vietnam Fixture and SKU Labels)
 

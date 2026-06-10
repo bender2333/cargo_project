@@ -339,7 +339,14 @@ const copy = {
       'PageUp/PageDown: move Z by 10 mm',
       'Modifiers: Shift = 100 mm, Ctrl/Cmd = 1 mm',
       'R: rotate right 90°, Shift + R: rotate down 90°',
+      'M: toggle clearance ruler',
       'Delete: remove, Esc: clear selection',
+    ],
+    autoKeyboardHelp: 'Keyboard help',
+    autoKeyboardHelpItems: [
+      'M: toggle clearance ruler',
+      'Ctrl/Cmd + Z: undo',
+      'Ctrl/Cmd + Y: redo',
     ],
     containerChangedNotice: 'Container changed. Recalculate to refresh the automatic placement.',
     manualIssueBoundary: 'exceeds the effective container bounds',
@@ -606,7 +613,14 @@ const copy = {
       'PageUp/PageDown：Z 轴每次移动 10 mm',
       '修饰键：Shift = 100 mm，Ctrl/Cmd = 1 mm',
       'R：向右旋转 90°，Shift + R：向下旋转 90°',
+      'M：尺规开关',
       'Delete：删除，Esc：取消选中',
+    ],
+    autoKeyboardHelp: '键盘帮助',
+    autoKeyboardHelpItems: [
+      'M：尺规开关',
+      'Ctrl/Cmd + Z：撤销',
+      'Ctrl/Cmd + Y：重做',
     ],
     containerChangedNotice: '已更换货柜，请重新计算以刷新自动排布。',
     manualIssueBoundary: '超出有效货柜边界',
@@ -962,6 +976,7 @@ function Workbench() {
   const [manualHistory, setManualHistory] = useState<ManualHistory>(() => manualEmptyHistory())
   const [manualSelectedId, setManualSelectedId] = useState<string | null>(null)
   const [manualHelpOpen, setManualHelpOpen] = useState(false)
+  const [autoHelpOpen, setAutoHelpOpen] = useState(false)
   const [manualNotice, setManualNotice] = useState<ManualOperationNotice | null>(null)
   const [containerChangeNotice, setContainerChangeNotice] = useState('')
   const [rotationNotice, setRotationNotice] = useState('')
@@ -3573,6 +3588,29 @@ function Workbench() {
                     </div>
                   )}
                   <div className="relative h-full w-full" data-testid="auto-view-container">
+                    <div className="absolute left-3 top-3 z-30">
+                      <button
+                        className="archive-tab bg-white/95 shadow-lg"
+                        type="button"
+                        aria-expanded={autoHelpOpen}
+                        data-testid="auto-keyboard-help"
+                        onClick={() => setAutoHelpOpen((current) => !current)}
+                      >
+                        {t.autoKeyboardHelp}
+                      </button>
+                      {autoHelpOpen && (
+                        <div
+                          className="mt-2 w-64 rounded-lg border border-[#cbd5e1] bg-white p-3 text-xs text-[#334155] shadow-xl"
+                          data-testid="auto-keyboard-help-popover"
+                        >
+                          <ul className="list-inside list-disc space-y-1">
+                            {t.autoKeyboardHelpItems.map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
                     <button
                       className={`archive-tab absolute right-3 top-3 z-30 inline-flex items-center gap-2 bg-white/95 shadow-lg ${workspaceMaximized ? 'active' : ''}`}
                       type="button"
