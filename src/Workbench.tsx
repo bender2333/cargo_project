@@ -8,6 +8,7 @@ import type { PlanViewMode } from './components/ContainerPlan2D'
 import { ManualPlacement2D } from './components/ManualPlacement2D'
 import { PlaybackPanel } from './components/PlaybackPanel'
 import { LoadingStepsPanel } from './components/LoadingStepsPanel'
+import { HelpTooltip } from './components/HelpTooltip'
 import { CenterOfGravityPanel } from './components/CenterOfGravityPanel'
 import { ContainerComparisonPanel } from './components/ContainerComparisonPanel'
 import { buildPlaybackSequence, visibleBoxesAt } from './lib/playback'
@@ -211,6 +212,11 @@ const copy = {
     templateDimensionSeparate: 'Separate L/W/H columns',
     templateDimensionCombined: 'Combined size column',
     templateCombinedColumn: 'Combined size column',
+    templateHelpHeaderRow: 'The Excel row number that contains the real column titles, starting from 1. If row 1 is a merged title, the real header is often row 2.',
+    templateHelpStartRow: 'The row where actual cargo data begins, starting from 1. It is usually the header row plus 1.',
+    templateHelpDimensionMode: 'Separate mode maps length, width, and height to different columns. Combined mode reads all three dimensions from one cell, such as 530*305*310.',
+    templateHelpCombinedColumn: 'The column that contains a combined length x width x height value. Separators such as *, x, and × are detected automatically.',
+    templateHelpLabelColumn: 'Choose the source column used as the cargo label. Labels flow through calculation, display, export, and loading steps. Leave blank to auto-assign A/B/C.',
     mappingFieldLabel: 'Cargo label',
     mappingFieldName: 'Cargo name',
     mappingFieldLength: 'Length',
@@ -473,6 +479,11 @@ const copy = {
     templateDimensionSeparate: '长宽高分列',
     templateDimensionCombined: '合并尺寸列',
     templateCombinedColumn: '合并尺寸列',
+    templateHelpHeaderRow: 'Excel 中真正的列标题所在行号（从 1 开始）。如果第 1 行是合并标题，真表头通常在第 2 行。',
+    templateHelpStartRow: '实际货物数据从哪一行开始（从 1 开始）。通常是表头行 + 1。',
+    templateHelpDimensionMode: '分列：长、宽、高在不同列。合并：长宽高写在同一格，例如 530*305*310。',
+    templateHelpCombinedColumn: '包含“长 x 宽 x 高”合并值的列名。系统会自动识别 *、x、× 等分隔符。',
+    templateHelpLabelColumn: '用哪一列的值作为货物标签。标签贯穿计算、显示、导出和装柜步骤。留空则自动分配 A/B/C。',
     mappingFieldLabel: '货物标识',
     mappingFieldName: '货物名称',
     mappingFieldLength: '长度',
@@ -3997,7 +4008,10 @@ function Workbench() {
               </div>
               <div className="mb-4 grid gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm md:grid-cols-4" data-testid="import-template-manager">
                 <label className="font-semibold text-slate-700">
-                  {t.templateHeaderRow}
+                  <span className="inline-flex items-center gap-1.5">
+                    {t.templateHeaderRow}
+                    <HelpTooltip text={t.templateHelpHeaderRow} testId="help-tooltip-header-row" />
+                  </span>
                   <input
                     className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
                     type="number"
@@ -4008,7 +4022,10 @@ function Workbench() {
                   />
                 </label>
                 <label className="font-semibold text-slate-700">
-                  {t.templateStartRow}
+                  <span className="inline-flex items-center gap-1.5">
+                    {t.templateStartRow}
+                    <HelpTooltip text={t.templateHelpStartRow} testId="help-tooltip-start-row" />
+                  </span>
                   <input
                     className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
                     type="number"
@@ -4083,7 +4100,10 @@ function Workbench() {
                   </label>
                 )}
                 <label className="font-semibold text-slate-700">
-                  {t.templateDimensionMode}
+                  <span className="inline-flex items-center gap-1.5">
+                    {t.templateDimensionMode}
+                    <HelpTooltip text={t.templateHelpDimensionMode} testId="help-tooltip-dimension-mode" />
+                  </span>
                   <select
                     className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
                     value={templateDimensionMode}
@@ -4096,7 +4116,10 @@ function Workbench() {
                 </label>
                 {templateDimensionMode === 'combined' && (
                   <label className="font-semibold text-slate-700">
-                    {t.templateCombinedColumn}
+                    <span className="inline-flex items-center gap-1.5">
+                      {t.templateCombinedColumn}
+                      <HelpTooltip text={t.templateHelpCombinedColumn} testId="help-tooltip-combined-column" />
+                    </span>
                     <select
                       className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
                       value={templateCombinedColumn}
@@ -4136,7 +4159,10 @@ function Workbench() {
                     return (
                       <div key={fieldKey} className="rounded-md border border-slate-200 bg-white p-3">
                         <label className="block text-sm font-semibold text-slate-700">
-                          {labelMap[fieldKey] || fieldKey}
+                          <span className="inline-flex items-center gap-1.5">
+                            {labelMap[fieldKey] || fieldKey}
+                            {fieldKey === 'label' && <HelpTooltip text={t.templateHelpLabelColumn} testId="help-tooltip-label-column" />}
+                          </span>
                           <select
                             className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                             value={customMapping[fieldKey]}

@@ -924,6 +924,30 @@ test('creates an import template from the visible manager and reuses it for Exce
   await expect(page.getByText(/800 x 600 x 400 mm/)).toBeVisible()
 })
 
+test('explains template mapping fields with inline help tooltips', async ({ page }) => {
+  await openEnglish(page)
+  const filePath = await createTemplateWorkbookFile()
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+
+  const tooltipIds = [
+    'help-tooltip-header-row',
+    'help-tooltip-start-row',
+    'help-tooltip-dimension-mode',
+    'help-tooltip-label-column',
+  ]
+  for (const testId of tooltipIds) {
+    await expect(page.getByTestId(testId)).toBeVisible()
+  }
+  await page.getByTestId('template-dimension-mode').selectOption('combined')
+  await expect(page.getByTestId('help-tooltip-combined-column')).toBeVisible()
+
+  await page.getByTestId('help-tooltip-header-row').hover()
+  const popover = page.getByTestId('help-tooltip-popover')
+  await expect(popover).toBeVisible()
+  await expect(popover).toContainText(/column title|Excel/)
+})
+
 test('creates an import template from top-level template manager and reuses it for Excel import', async ({ page }) => {
   await openEnglish(page)
   const filePath = await createTemplateWorkbookFile()

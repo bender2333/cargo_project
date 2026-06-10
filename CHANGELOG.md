@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-10 (Feedback Round 2)
+
+- Task D: added inline field help for the import mapping modal, covering header row, start row, dimension mode, combined size column, and label column with bilingual copy and stable `help-tooltip-*` test hooks.
+- Verification: targeted red/green E2E `npm run test:e2e -- --grep "explains template mapping fields"` first failed on missing `help-tooltip-header-row`, then passed after implementation. Subtask gates passed: `npm run lint`; `npm test` (46 files / 264 tests); `npm run build` with the existing Vite chunk-size warning.
+
 ## 2026-06-09 (Import Template Vietnam Fixture and SKU Labels)
 
 - Completed the Vietnam irregular workbook coverage for `plans/2026-06-09-import-template-system.md`: the reusable combined-dimension template imports `test-data/excel/越南第十一批6.2海运.xlsx`, reports `Import success: 24`, and surfaces the skipped summary row in the import log.
