@@ -382,4 +382,41 @@ describe('parseCargoRowsWithMapping', () => {
     expect(inferred.items[0]?.quantity).toBe(126)
     expect(explicit.items[0]?.quantity).toBe(7056)
   })
+
+  it('uses the mapped label column value as-is (no truncation or slice)', () => {
+    const result = parseCargoRowsWithMapping(
+      [
+        { '物料名称': 'TB-C10-EV_v1.1 Battery Module', '长mm': 530, '宽mm': 305, '高mm': 310, '箱数': 1 },
+      ],
+      { label: '物料名称', length: '长mm', width: '宽mm', height: '高mm', quantity: '箱数' },
+      { createId: () => 'label-mapped' },
+    )
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0]!.label).toBe('TB-C10-EV_v1.1 Battery Module')
+    expect(result.items[0]!.name).toBe('Cargo 1')
+  })
+
+  it('falls back to unique excel-style labels when no label column is mapped', () => {
+    const result = parseCargoRowsWithMapping(
+      Array.from({ length: 30 }, (_, i) => ({ '长mm': 100, '宽mm': 100, '高mm': 100, '数量': 1 })),
+      { length: '长mm', width: '宽mm', height: '高mm', quantity: '数量' },
+      { createId: () => `u-` },
+    )
+    const labels = result.items.map((item) => item.label)
+    expect(labels.length).toBe(30)
+    expect(new Set(labels).size).toBe(30)
+    expect(labels[0]).toBe('A')
+    expect(labels[25]).toBe('Z')
+    expect(labels[26]).toBe('AA')
+  })
+
+  it('name field preserves original text independent of label processing', () => {
+    const result = parseCargoRowsWithMapping(
+      [{ 'SKU': 'ABC-123-XYZ', '品名': '散热器组件 Type-A 2026 款', '长mm': 100, '宽mm': 100, '高mm': 100, '数量': 1 }],
+      { label: 'SKU', name: '品名', length: '长mm', width: '宽mm', height: '高mm', quantity: '数量' },
+      { createId: () => 'name-test' },
+    )
+    expect(result.items[0]!.label).toBe('ABC-123-XYZ')
+    expect(result.items[0]!.name).toBe('散热器组件 Type-A 2026 款')
+  })
 })
