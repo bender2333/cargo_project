@@ -22,6 +22,10 @@ describe('placementSettings', () => {
     expect(loadPlacementSettings('u-1', localStorage)).toEqual(DEFAULT_PLACEMENT_SETTINGS)
   })
 
+  it('default edge tolerance is 80mm for easier snap discovery', () => {
+    expect(DEFAULT_PLACEMENT_SETTINGS.edgeToleranceMm).toBe(80)
+  })
+
   it('round-trips user placement settings through storage', () => {
     const storage = new Map<string, string>()
     const localStorage = {

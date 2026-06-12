@@ -24,7 +24,7 @@ export const DEFAULT_PLACEMENT_SETTINGS: PlacementSettings = {
   gridSnapEnabled: true,
   gridStepMm: 50,
   edgeSnapEnabled: true,
-  edgeToleranceMm: 30,
+  edgeToleranceMm: 80,
   zSnapEnabled: true,
   zStepMm: 50,
   surfaceSnapEnabled: true,

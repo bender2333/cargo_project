@@ -61,8 +61,19 @@ describe('snapToEdges', () => {
     expect(r.snappedAxes).toEqual([])
   })
 
-  it('uses the documented 30mm default tolerance', () => {
-    expect(EDGE_SNAP_TOLERANCE_MM).toBe(30)
+  it('uses the documented 80mm default tolerance', () => {
+    expect(EDGE_SNAP_TOLERANCE_MM).toBe(80)
+  })
+
+  it('a 70mm gap snaps with tolerance 80 but not with tolerance 30', () => {
+    const others = [makeBox({ id: 'n', x: 2070, y: 0, length: 1000, width: 1000 })]
+    const snapped = snapToEdges({ x: 2000, y: 200, length: 600, width: 400, others, container, tolerance: 80 })
+    expect(snapped.x).toBe(2070)
+    expect(snapped.snappedAxes).toContain('x')
+
+    const notSnapped = snapToEdges({ x: 2000, y: 200, length: 600, width: 400, others, container, tolerance: 30 })
+    expect(notSnapped.x).toBe(2000)
+    expect(notSnapped.snappedAxes).not.toContain('x')
   })
 
   it('uses a caller supplied edge tolerance from placement settings', () => {

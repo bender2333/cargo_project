@@ -1,6 +1,6 @@
 import type { ContainerSpec, PlacedBox } from '../types'
 
-export const EDGE_SNAP_TOLERANCE_MM = 30
+export const EDGE_SNAP_TOLERANCE_MM = 80
 
 type EdgeSnapBox = Pick<PlacedBox, 'x' | 'y' | 'length' | 'width'>
 
