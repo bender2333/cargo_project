@@ -520,6 +520,88 @@ export function isBlockingManualIssue(issue: ValidationIssue) {
   return issue.severity !== 'warning'
 }
 
+/**
+ * Incremental validation: checks only the given box against all others.
+ * Produces the same set of issues (for the given boxId) as validateDraft does,
+ * but in O(n²) worst-case instead of O(n³).
+ *
+ * Use in hot paths (pointer-move / drop) where only one box's validity matters.
+ */
+export function validateBox(
+  draft: ManualDraft,
+  boxId: string,
+  container: ContainerSpec,
+  supportPolicy: SupportPolicy = DEFAULT_PLACEMENT_SETTINGS.supportPolicy,
+): ValidationIssue[] {
+  const target = draft.boxes.find((b) => b.id === boxId)
+  if (!target) return []
+
+  const issues: ValidationIssue[] = []
+
+  // 1. Boundary
+  if (isOutOfBounds(target, container)) {
+    issues.push({
+      type: 'boundary',
+      severity: 'error',
+      boxId,
+      message: `Box ${target.label} exceeds the effective container bounds.`,
+    })
+  }
+
+  // 2. Overlap — check target against each other box (once)
+  for (const other of draft.boxes) {
+    if (other.id === boxId) continue
+    if (overlapsXY(target, other) && overlapsZ(target, other)) {
+      issues.push({
+        type: 'overlap',
+        severity: 'error',
+        boxId,
+        message: `Box ${target.label} overlaps with ${other.label}.`,
+      })
+    }
+  }
+
+  // 3. Support (floating)
+  const minRatio = supportPolicy.allowPartialOverhang ? supportPolicy.minSupportRatio : MIN_SUPPORT_OVERLAP_RATIO
+  const support = findSupport(target, draft.boxes, minRatio)
+  const supportRatio = support?.overlapRatio ?? 0
+  if (!support || supportRatio < supportPolicy.minSupportRatio) {
+    issues.push({
+      type: 'floating',
+      severity: 'error',
+      boxId,
+      supportRatio,
+      message: `Box ${target.label} is floating and needs at least ${Math.round(supportPolicy.minSupportRatio * 100)}% base support.`,
+    })
+  } else if (supportPolicy.allowPartialOverhang && supportRatio < supportPolicy.warningSupportRatio) {
+    issues.push({
+      type: 'floating',
+      severity: 'warning',
+      boxId,
+      supportRatio,
+      message: `Box ${target.label} has partial support (${Math.round(supportRatio * 100)}%) and needs field review.`,
+    })
+  }
+
+  // 4. Stack limit
+  const stackLimitRatio = supportPolicy.allowPartialOverhang ? supportPolicy.minSupportRatio : MIN_SUPPORT_OVERLAP_RATIO
+  const violation = supportingStackLimitViolation(target, draft.boxes, stackLimitRatio)
+  if (violation) {
+    issues.push({
+      type: violation.type === 'ground-only' ? 'ground-only' : 'max-stack-layers',
+      severity: 'error',
+      boxId,
+      stackLayer: violation.stackLayer,
+      maxStackLayers: violation.maxStackLayers,
+      message: violation.type === 'ground-only'
+        ? `Box ${target.label} is marked ground-only and cannot be placed above another cargo.`
+        : `Box ${target.label} is on stack layer ${violation.stackLayer}, above stack capacity ${violation.maxStackLayers} allowed by cargo ${violation.limitedBox.label}.`,
+    })
+  }
+
+  return issues
+}
+
 export function validateDraft(draft: ManualDraft, container: ContainerSpec, supportPolicy: SupportPolicy = DEFAULT_PLACEMENT_SETTINGS.supportPolicy): ValidationIssue[] {
   const issues: ValidationIssue[] = []
 

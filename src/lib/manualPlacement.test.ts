@@ -1006,3 +1006,85 @@ describe('makeManualBox z parameter', () => {
     expect(box.z).toBe(750)
   })
 })
+
+import { validateBox as validateBoxFn } from './manualPlacement'
+import { DEFAULT_PLACEMENT_SETTINGS } from './placementSettings'
+
+describe('validateBox equivalence', () => {
+  it('produces the same issues for a single box as validateDraft filtered to that box', () => {
+    const c = container()
+    const draft = {
+      boxes: [
+        makeManualBox({ id: 'b1', cargoId: 'c1', label: 'A', color: '#000', length: 1000, width: 1000, height: 500, x: 0, y: 0, z: 0 }),
+        makeManualBox({ id: 'b2', cargoId: 'c2', label: 'B', color: '#111', length: 800, width: 800, height: 500, x: 500, y: 0, z: 0, stackable: false }),
+        makeManualBox({ id: 'b3', cargoId: 'c3', label: 'C', color: '#222', length: 600, width: 600, height: 500, x: 0, y: 0, z: 0 }),
+      ],
+    }
+    for (const box of draft.boxes) {
+      const fromFull = validateDraft(draft, c).filter((i) => i.boxId === box.id)
+      const fromIncr = validateBoxFn(draft, box.id, c)
+      expect(fromIncr.map(issueKey)).toEqual(fromFull.map(issueKey))
+    }
+  })
+
+  it('catches boundary issue for out-of-bounds box', () => {
+    const c = container({ length: 5000, width: 2000 })
+    const draft = {
+      boxes: [makeManualBox({ id: 'b1', cargoId: 'c1', label: 'A', color: '#000', length: 2000, width: 1000, height: 500, x: 4000, y: 0, z: 0 })],
+    }
+    const issues = validateBoxFn(draft, 'b1', c)
+    expect(issues.some((i) => i.type === 'boundary')).toBe(true)
+  })
+
+  it('catches floating issue for unsupported box', () => {
+    const c = container()
+    const draft = {
+      boxes: [makeManualBox({ id: 'b1', cargoId: 'c1', label: 'A', color: '#000', length: 1000, width: 1000, height: 500, x: 0, y: 0, z: 1000 })],
+    }
+    const issues = validateBoxFn(draft, 'b1', c)
+    expect(issues.some((i) => i.type === 'floating')).toBe(true)
+  })
+
+  it('does not flag issues for unrelated boxes', () => {
+    const c = container()
+    const draft = {
+      boxes: [
+        makeManualBox({ id: 'b1', cargoId: 'c1', label: 'A', color: '#000', length: 1000, width: 1000, height: 500, x: 0, y: 0, z: 0 }),
+        makeManualBox({ id: 'b2', cargoId: 'c2', label: 'B', color: '#111', length: 1000, width: 1000, height: 500, x: 2000, y: 0, z: 500 }),
+      ],
+    }
+    // b2 at z=500 with no floor support should be floating
+    const issuesForB1 = validateBoxFn(draft, 'b1', c)
+    expect(issuesForB1.every((i) => i.boxId === 'b1')).toBe(true)
+  })
+
+  it('equivalence holds over random drafts', () => {
+    const c = container()
+    // Create 10 random boxes and verify equivalence for each
+    const boxes = Array.from({ length: 10 }, (_, i) =>
+      makeManualBox({
+        id: `rand-${i}`,
+        cargoId: `cr-${i}`,
+        label: String.fromCharCode(65 + i),
+        color: '#333',
+        length: 400 + Math.floor(Math.random() * 800),
+        width: 400 + Math.floor(Math.random() * 600),
+        height: 200 + Math.floor(Math.random() * 400),
+        x: Math.floor(Math.random() * 8000),
+        y: Math.floor(Math.random() * 1500),
+        z: Math.floor(Math.random() * 3) * 400,
+        stackable: true,
+      }),
+    )
+    const draft = { boxes }
+    for (const box of boxes) {
+      const fromFull = validateDraft(draft, c, DEFAULT_PLACEMENT_SETTINGS.supportPolicy).filter((i) => i.boxId === box.id)
+      const fromIncr = validateBoxFn(draft, box.id, c, DEFAULT_PLACEMENT_SETTINGS.supportPolicy)
+      expect(fromIncr.map(issueKey)).toEqual(fromFull.map(issueKey))
+    }
+  })
+})
+
+function issueKey(issue: { type: string; boxId: string; severity?: string }) {
+  return `${issue.boxId}:${issue.type}:${issue.severity ?? 'error'}`
+}

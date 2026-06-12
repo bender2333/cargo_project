@@ -46,6 +46,7 @@ import {
   setBoxPosition as manualSetBoxPosition,
   toPlacedBoxes as manualToPlacedBoxes,
   undo as manualUndo,
+  validateBox as manualValidateBox,
   validateDraft as manualValidateDraft,
 } from './lib/manualPlacement'
 import type { ManualDraft, ManualHistory, ManualRotationDirection, OrientationKey, ValidationIssue } from './lib/manualPlacement'
@@ -1283,7 +1284,7 @@ function Workbench() {
     const clampedY = box ? Math.max(0, Math.min(renderingContainer.width - box.width, y)) : y
     const clampedZ = (z !== undefined && box) ? Math.max(0, Math.min(renderingContainer.height - box.height, z)) : z
     const nextDraft = manualSetBoxPosition(manualDraft, id, clampedX, clampedY, clampedZ)
-    const issues = manualValidateDraft(nextDraft, renderingContainer, placementSettings.supportPolicy).filter((issue) => issue.boxId === id)
+    const issues = manualValidateBox(nextDraft, id, renderingContainer, placementSettings.supportPolicy)
     if (issues.some(isBlockingManualIssue)) {
       notifyManualRejected('move', id, undefined, issues)
       return
@@ -1324,7 +1325,7 @@ function Workbench() {
       z: supplyZ ? dropZ : 0,
     })
     const nextDraft = manualAddBox(manualDraft, newBox)
-    const issues = manualValidateDraft(nextDraft, renderingContainer, placementSettings.supportPolicy).filter((issue) => issue.boxId === boxId)
+    const issues = manualValidateBox(nextDraft, boxId, renderingContainer, placementSettings.supportPolicy)
     if (issues.some(isBlockingManualIssue)) {
       notifyManualRejected('drop', boxId, cargoId, issues)
       return
