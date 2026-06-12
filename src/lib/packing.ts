@@ -283,6 +283,11 @@ export function placementScore(
   // so realistic upright placement wins when both orientations fit comparably.
   const tiltPenalty = box.height === item.height ? 0 : container.length * container.width * container.height
 
+  // Prefer LWH orientation (original length along container length) so cargo labels
+  // face the inspection door. ~1mm penalty for floor-rotated (WLH) is enough to
+  // break ties without blocking WLH when LWH would not fit.
+  const labelFacingPenalty = box.orientationKey !== 'LWH' && box.height === item.height ? 1 : 0
+
   // Edge-snap bonuses: prefer placements that snap to container or neighbor boundaries.
   let snapBonus = 0
   if (Math.abs(point.y + box.width - container.width) <= EPSILON) {
@@ -319,6 +324,7 @@ export function placementScore(
       : 0
     return (
       tiltPenalty +
+      labelFacingPenalty +
       topPassengerFloorPenalty +
       limitedCapacityFloorPenalty +
       (container.height - point.z) * container.length * container.width +
@@ -334,6 +340,7 @@ export function placementScore(
   // so that pinwheel arrangements emerge naturally for tightly packed pallet loads.
   return (
     tiltPenalty +
+    labelFacingPenalty +
     topPassengerFloorPenalty +
     point.x * container.width * container.height +
     point.y * container.height +
