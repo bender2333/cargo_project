@@ -14,6 +14,28 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-06-12-r41-import-template-redesign',
+    date: '2026-06-12',
+    title: { en: 'Import template redesign', zh: '导入模板重构' },
+    items: {
+      en: [
+        'Row labels now use Excel-style column IDs (A, B, C… Z, AA, AB…) — no more collision when importing 27+ cargo rows.',
+        'Mapped label columns keep original values; unmapped rows fall back to unique auto-generated labels.',
+        'Combined-dimension columns support configurable split order (L×W×H, W×L×H, etc.) via dropdown.',
+        'Required fields highlighted; Confirm Import stays disabled with hints until dimensions and quantity are configured.',
+        'Last-used template remembered and auto-selected on next modal open.',
+      ],
+      zh: [
+        '导入行标签使用 Excel 列号式生成（A/B/C…Z/AA/AB…），27+ 件货物不再标签撞车。',
+        '映射标签列时保留原始值；未映射时自动生成唯一标签。',
+        '合并尺寸列支持自定义拆分顺序下拉，适配不同客户表单。',
+        '必填项高亮；未配齐时确认按钮置灰并提示缺项。',
+        '上次使用的模板自动记忆并默认选中预填。',
+      ],
+    },
+  },
+
+  {
     version: '2026-06-12-r40-snap-render-perf',
     date: '2026-06-12',
     title: { en: 'Snap feedback, render fixes, and manual performance', zh: '吸附反馈 / 渲染修正 / 手动性能优化' },
