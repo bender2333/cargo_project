@@ -840,7 +840,7 @@ describe('orientation preference and clustering', () => {
     expectValidPacking(container, result)
     let sameHeightStacks = 0
     for (const box of result.placed) {
-      const below = box.verticalSupportedBy
+      const below = (box.verticalSupportedBy ?? [])
         .map((id) => result.placed.find((b) => b.id === id))
         .filter(Boolean) as PlacedBox[]
       for (const supporter of below) {
