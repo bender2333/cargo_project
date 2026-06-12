@@ -1304,10 +1304,19 @@ export function ContainerScene({
         let finalXmm = (entry.mesh.position.x + length / 2) / scale - entry.box.length / 2
         let finalYmm = (entry.mesh.position.z + width / 2) / scale - entry.box.width / 2
         let finalZmm = entry.mesh.position.y / scale - entry.box.height / 2
+        let snappedAxesFinal: Set<string> = new Set()
+        if (edgeSnapRef.current && mode === 'plane') {
+          const othersFinal: PlacedBox[] = []
+          sceneState.meshEntries.forEach((e) => { if (e.box.id !== entry.box.id) othersFinal.push(e.box) })
+          const snapped = snapToEdges({ x: finalXmm, y: finalYmm, length: entry.box.length, width: entry.box.width, others: othersFinal, container, tolerance: placementSettingsRef.current.edgeToleranceMm })
+          finalXmm = snapped.x
+          finalYmm = snapped.y
+          snappedAxesFinal = new Set(snapped.snappedAxes)
+        }
         if (gridSnapRef.current) {
           if (mode === 'plane') {
-            finalXmm = snapToGrid(finalXmm, placementSettingsRef.current.gridStepMm)
-            finalYmm = snapToGrid(finalYmm, placementSettingsRef.current.gridStepMm)
+            if (!snappedAxesFinal.has('x')) finalXmm = snapToGrid(finalXmm, placementSettingsRef.current.gridStepMm)
+            if (!snappedAxesFinal.has('y')) finalYmm = snapToGrid(finalYmm, placementSettingsRef.current.gridStepMm)
           } else if (placementSettingsRef.current.snapEnabled && placementSettingsRef.current.zSnapEnabled) {
             finalZmm = snapToGrid(finalZmm, placementSettingsRef.current.zStepMm)
           }
