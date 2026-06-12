@@ -1402,27 +1402,22 @@ function Workbench() {
     const nextDraft = {
       boxes: result.placed.map((box) => {
         const cargo = displayCargoItems.find((item) => item.id === box.cargoId)
-        return {
+        return makeManualBox({
           id: `manual-${box.id}`,
           cargoId: box.cargoId,
           label: box.label,
           color: box.color,
-          x: box.x,
-          y: box.y,
-          z: box.z,
           length: box.length,
           width: box.width,
           height: box.height,
-          baseLength: cargo?.length ?? box.length,
-          baseWidth: cargo?.width ?? box.width,
-          baseHeight: cargo?.height ?? box.height,
-          orientationKey: box.orientationKey,
-          labelRotationDeg: box.labelRotationDeg,
           weight: box.weight,
           canRotate: cargo?.canRotate ?? true,
           stackable: cargo?.stackable ?? box.stackable,
           maxStackLayers: cargo?.maxStackLayers ?? box.maxStackLayers,
-        }
+          x: box.x,
+          y: box.y,
+          z: box.z,
+        })
       }),
     }
     setManualHistory((current) => manualCommit(current, nextDraft))
