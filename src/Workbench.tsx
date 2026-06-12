@@ -85,6 +85,7 @@ import { RegisterPage } from './components/RegisterPage'
 import { UserManagement } from './components/UserManagement'
 import { DebugPanel } from './components/DebugPanel'
 import { CustomContainerDialog } from './components/CustomContainerDialog'
+import { excelStyleLabel } from './lib/excelStyleLabel'
 import { buildCargoDebugSnapshot } from './lib/debugSnapshot'
 
 const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
@@ -756,9 +757,8 @@ const emptyForm: CargoForm = {
   stackable: true,
   maxStackLayers: undefined,
 }
-
 function nextLabel(index: number) {
-  return String.fromCharCode(65 + (index % 26))
+  return excelStyleLabel(index)
 }
 
 function layerName(layer: PackingLayer, locale: Locale) {

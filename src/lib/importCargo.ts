@@ -1,5 +1,6 @@
 import type { CargoItem, ImportTemplateDefaults } from '../types'
 import { createClientId } from './clientId'
+import { excelStyleLabel } from './excelStyleLabel'
 
 type RowValue = string | number | boolean | null | undefined
 export type ImportCargoRow = Record<string, RowValue> | RowValue[]
@@ -121,8 +122,7 @@ function boolValue(value: RowValue, fallback: boolean) {
 }
 
 function fallbackLabel(index: number) {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-  return alphabet[index % alphabet.length]
+  return excelStyleLabel(index)
 }
 
 function sanitizeText(value: RowValue, maxLength: number) {
