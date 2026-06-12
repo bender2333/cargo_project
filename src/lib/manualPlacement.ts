@@ -490,8 +490,7 @@ function stackLayerForManualBox(box: ManualPlacedBox, boxes: ManualPlacedBox[], 
   return Math.max(...supports.map((support) => stackLayerForManualBox(support, boxes, minSupportRatio, new Set(seen)))) + 1
 }
 
-function supportingStackLimitViolation(box: ManualPlacedBox, boxes: ManualPlacedBox[], minSupportRatio: number) {
-  const boxLayer = stackLayerForManualBox(box, boxes, minSupportRatio)
+function buildSupportChainNodes(boxes: ManualPlacedBox[], minSupportRatio: number): Map<string, StackChainNode> {
   const nodes = new Map<string, StackChainNode>()
   for (const current of boxes) {
     nodes.set(current.id, {
@@ -503,6 +502,17 @@ function supportingStackLimitViolation(box: ManualPlacedBox, boxes: ManualPlaced
       supportedBy: directSupportsFor(current, boxes, minSupportRatio).map((support) => support.id),
     })
   }
+  return nodes
+}
+
+function supportingStackLimitViolation(
+  box: ManualPlacedBox,
+  boxes: ManualPlacedBox[],
+  minSupportRatio: number,
+  prebuiltNodes?: Map<string, StackChainNode>,
+) {
+  const boxLayer = stackLayerForManualBox(box, boxes, minSupportRatio)
+  const nodes = prebuiltNodes ?? buildSupportChainNodes(boxes, minSupportRatio)
   const node = nodes.get(box.id)
   if (!node) return null
   const violation = violatesStackChain(node, nodes)
@@ -660,8 +670,9 @@ export function validateDraft(draft: ManualDraft, container: ContainerSpec, supp
   }
 
   const stackLimitSupportRatio = supportPolicy.allowPartialOverhang ? supportPolicy.minSupportRatio : MIN_SUPPORT_OVERLAP_RATIO
+  const supportNodes = buildSupportChainNodes(draft.boxes, stackLimitSupportRatio)
   for (const box of draft.boxes) {
-    const violation = supportingStackLimitViolation(box, draft.boxes, stackLimitSupportRatio)
+    const violation = supportingStackLimitViolation(box, draft.boxes, stackLimitSupportRatio, supportNodes)
     if (violation) {
       issues.push({
         type: violation.type === 'ground-only' ? 'ground-only' : 'max-stack-layers',
