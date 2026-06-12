@@ -219,6 +219,21 @@ const copy = {
     templateHelpStartRow: 'The row where actual cargo data begins, starting from 1. It is usually the header row plus 1.',
     templateHelpDimensionMode: 'Separate mode maps length, width, and height to different columns. Combined mode reads all three dimensions from one cell, such as 530*305*310.',
     templateHelpCombinedColumn: 'The column that contains a combined length x width x height value. Separators such as *, x, and × are detected automatically.',
+    templateDimensionOrder: 'Split order',
+    templateDimensionOrderLWH: 'LWH',
+    templateDimensionOrderLHW: 'LHW',
+    templateDimensionOrderWLH: 'WLH',
+    templateDimensionOrderWHL: 'WHL',
+    templateDimensionOrderHLW: 'HLW',
+    templateDimensionOrderHWL: 'HWL',
+    mappingRequiredHint: 'Please configure required fields',
+    mappingMissingLength: 'Missing: length column',
+    mappingMissingWidth: 'Missing: width column',
+    mappingMissingHeight: 'Missing: height column',
+    mappingMissingDimensions: 'Missing: combined size column',
+    mappingMissingDimensionOrder: 'Missing: split order',
+    mappingMissingQuantity: 'Missing: quantity column or default',
+    mappingConfirmReady: 'All required fields configured',
     templateHelpLabelColumn: 'Choose the source column used as the cargo label. Labels flow through calculation, display, export, and loading steps. Leave blank to auto-assign A/B/C.',
     mappingFieldLabel: 'Cargo label',
     mappingFieldName: 'Cargo name',
@@ -480,6 +495,21 @@ const copy = {
     templateCreate: '创建模板',
     templateHeaderRow: '表头行',
     templateStartRow: '数据起始行',
+    templateDimensionOrder: '拆分顺序',
+    templateDimensionOrderLWH: '长宽高',
+    templateDimensionOrderLHW: '长高宽',
+    templateDimensionOrderWLH: '宽长高',
+    templateDimensionOrderWHL: '宽高长',
+    templateDimensionOrderHLW: '高长宽',
+    templateDimensionOrderHWL: '高宽长',
+    mappingRequiredHint: '请配置必填项',
+    mappingMissingLength: '缺少：长度列',
+    mappingMissingWidth: '缺少：宽度列',
+    mappingMissingHeight: '缺少：高度列',
+    mappingMissingDimensions: '缺少：合并尺寸列',
+    mappingMissingDimensionOrder: '缺少：拆分顺序',
+    mappingMissingQuantity: '缺少：数量列或默认值',
+    mappingConfirmReady: '必填项已配置完成',
     templateDefaultLabel: '默认标识',
     templateDefaultQuantity: '默认数量',
     templateDefaultColor: '默认颜色',
@@ -1068,6 +1098,15 @@ function Workbench() {
   })
   const [templateDimensionMode, setTemplateDimensionMode] = useState<'separate' | 'combined'>('separate')
   const [templateCombinedColumn, setTemplateCombinedColumn] = useState('')
+  const [templateDimensionOrder, setTemplateDimensionOrder] = useState<Array<'length' | 'width' | 'height'>>(['length', 'width', 'height'])
+  const LAST_USED_TEMPLATE_KEY = 'cargo_last_used_template_id'
+  const [lastUsedTemplateId, setLastUsedTemplateId] = useState(() => {
+    try {
+      return localStorage.getItem(LAST_USED_TEMPLATE_KEY) ?? ''
+    } catch {
+      return ''
+    }
+  })
   const [importTemplates, setImportTemplates] = useState<ImportTemplate[]>([])
   const [selectedImportTemplateId, setSelectedImportTemplateId] = useState('')
   const [templateName, setTemplateName] = useState('')
@@ -1078,6 +1117,39 @@ function Workbench() {
   const [editingImportTemplateId, setEditingImportTemplateId] = useState('')
   const [editingImportTemplateDraft, setEditingImportTemplateDraft] = useState<ImportTemplatePayload | null>(null)
   const [newImportTemplateDraft, setNewImportTemplateDraft] = useState<ImportTemplatePayload | null>(null)
+  const { canConfirm: canConfirmMapping, missingFieldsHint } = useMemo(() => {
+    const isCombined = templateDimensionMode === 'combined'
+    const missing: string[] = []
+    let canConfirm = true
+    if (isCombined) {
+      if (!templateCombinedColumn) {
+        missing.push(t.mappingMissingDimensions)
+        canConfirm = false
+      }
+    } else {
+      if (!customMapping.length) {
+        missing.push(t.mappingMissingLength)
+        canConfirm = false
+      }
+      if (!customMapping.width) {
+        missing.push(t.mappingMissingWidth)
+        canConfirm = false
+      }
+      if (!customMapping.height) {
+        missing.push(t.mappingMissingHeight)
+        canConfirm = false
+      }
+    }
+    const hasQuantity = customMapping.quantity !== '' || (templateDefaults.quantity ?? 0) > 0
+    if (!hasQuantity) {
+      missing.push(t.mappingMissingQuantity)
+      canConfirm = false
+    }
+    return {
+      canConfirm,
+      missingFieldsHint: missing.length > 0 ? `${t.mappingRequiredHint}: ${missing.join(', ')}` : t.mappingConfirmReady,
+    }
+  }, [templateDimensionMode, customMapping.length, customMapping.width, customMapping.height, customMapping.quantity, templateCombinedColumn, templateDimensionOrder, templateDefaults.quantity, t, locale])
   const workspaceRef = useRef<HTMLElement | null>(null)
   const reportRef = useRef<HTMLElement | null>(null)
   const cargoRef = useRef<HTMLFormElement | null>(null)
@@ -1855,7 +1927,7 @@ function Workbench() {
       mergeRows: 'none',
       dimensionMode: templateDimensionMode,
       combinedColumn: templateCombinedColumn,
-      dimensionOrder: ['length', 'width', 'height'],
+      dimensionOrder: templateDimensionOrder,
       defaultValues: templateDefaults,
     }, { colors })
     setImportMessages([
@@ -1873,6 +1945,13 @@ function Workbench() {
     }
     setShowMappingModal(false)
     setActiveResultTab('importLog')
+    // Remember last used template
+    if (selectedImportTemplateId) {
+      try {
+        localStorage.setItem(LAST_USED_TEMPLATE_KEY, selectedImportTemplateId)
+      } catch { /* ignore */ }
+      setLastUsedTemplateId(selectedImportTemplateId)
+    }
     setActiveNav('report')
   }
 
@@ -1892,6 +1971,7 @@ function Workbench() {
     setTemplateCombinedColumn(template.combinedColumn ?? template.mapping.dimensions ?? '')
     setTemplateDefaults(template.defaultValues ?? { quantity: 1, canRotate: true, stackable: true })
     setTemplateName(template.name)
+    setTemplateDimensionOrder(template.dimensionOrder ?? ['length', 'width', 'height'])
   }
 
   const libraryFormCargo = (): CargoItem => ({
@@ -1968,7 +2048,7 @@ function Workbench() {
       mergeRows: 'none',
       dimensionMode: templateDimensionMode,
       combinedColumn: templateCombinedColumn || customMapping.dimensions || '',
-      dimensionOrder: ['length', 'width', 'height'],
+      dimensionOrder: templateDimensionOrder,
       defaultValues: templateDefaults,
     })
     if (!saved) return
@@ -2001,7 +2081,7 @@ function Workbench() {
     mergeRows: 'none',
     dimensionMode: 'separate',
     combinedColumn: '',
-    dimensionOrder: ['length', 'width', 'height'],
+    dimensionOrder: templateDimensionOrder,
     defaultValues: { quantity: 1, canRotate: true, stackable: true },
   })
 
@@ -2019,6 +2099,7 @@ function Workbench() {
       dimensionOrder: template.dimensionOrder ?? ['length', 'width', 'height'],
       defaultValues: template.defaultValues,
     })
+    setTemplateDimensionOrder(template.dimensionOrder ?? ['length', 'width', 'height'])
   }
 
   const saveEditedImportTemplate = async () => {
@@ -2268,6 +2349,11 @@ function Workbench() {
       setTemplateDimensionMode('separate')
       setTemplateCombinedColumn('')
       setTemplateDefaults({ quantity: 1, canRotate: true, stackable: true })
+      // Auto-select last used template if it still exists
+      const lastUsedExists = lastUsedTemplateId && importTemplates.some((item) => item.id === lastUsedTemplateId)
+      if (lastUsedExists) {
+        applyImportTemplate(lastUsedTemplateId)
+      }
       setShowMappingModal(true)
     }
   }
@@ -4168,26 +4254,49 @@ function Workbench() {
                   </select>
                 </label>
                 {templateDimensionMode === 'combined' && (
-                  <label className="font-semibold text-slate-700">
-                    <span className="inline-flex items-center gap-1.5">
-                      {t.templateCombinedColumn}
-                      <HelpTooltip text={t.templateHelpCombinedColumn} testId="help-tooltip-combined-column" />
-                    </span>
-                    <select
-                      className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                      value={templateCombinedColumn}
-                      data-testid="template-combined-column"
-                      onChange={(event) => {
-                        setTemplateCombinedColumn(event.target.value)
-                        setCustomMapping((current) => ({ ...current, dimensions: event.target.value }))
-                      }}
-                    >
-                      <option value="">{t.mappingSelectColumn}</option>
-                      {importColumnsForHeaderRow(importRows, templateHeaderRow).map((col) => (
-                        <option key={col} value={col}>{col}</option>
-                      ))}
-                    </select>
-                  </label>
+                  <div>
+                    <label className="font-semibold text-slate-700">
+                      <span className="inline-flex items-center gap-1.5">
+                        {t.templateCombinedColumn}
+                        <HelpTooltip text={t.templateHelpCombinedColumn} testId="help-tooltip-combined-column" />
+                      </span>
+                      <select
+                        className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                        value={templateCombinedColumn}
+                        data-testid="template-combined-column"
+                        onChange={(event) => {
+                          setTemplateCombinedColumn(event.target.value)
+                          setCustomMapping((current) => ({ ...current, dimensions: event.target.value }))
+                        }}
+                      >
+                        <option value="">{t.mappingSelectColumn}</option>
+                        {importColumnsForHeaderRow(importRows, templateHeaderRow).map((col) => (
+                          <option key={col} value={col}>{col}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="font-semibold text-slate-700">
+                      <span className="inline-flex items-center gap-1.5">
+                        {t.templateDimensionOrder}
+                      </span>
+                      <select
+                        className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                        value={templateDimensionOrder.join(',')}
+                        data-testid="template-dimension-order"
+                        onChange={(event) => {
+                          const val = event.target.value.split(',').filter(Boolean) as Array<'length' | 'width' | 'height'>
+                          setTemplateDimensionOrder(val)
+                        }}
+                      >
+                        <option value="length,width,height">{t.templateDimensionOrderLWH}</option>
+                        <option value="length,height,width">{t.templateDimensionOrderLHW}</option>
+                        <option value="width,length,height">{t.templateDimensionOrderWLH}</option>
+                        <option value="width,height,length">{t.templateDimensionOrderWHL}</option>
+                        <option value="height,length,width">{t.templateDimensionOrderHLW}</option>
+                        <option value="height,width,length">{t.templateDimensionOrderHWL}</option>
+                      </select>
+                    </label>
+                  </div>
                 )}
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -4289,10 +4398,16 @@ function Workbench() {
                 >
                   {t.mappingCancel}
                 </button>
+                {!canConfirmMapping && (
+                  <span className="mr-auto text-xs font-semibold text-amber-600" data-testid="mapping-missing-hint">
+                    {missingFieldsHint}
+                  </span>
+                )}
                 <button
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   type="button"
                   data-testid="confirm-mapping"
+                  disabled={!canConfirmMapping}
                   onClick={confirmMappingImport}
                 >
                   {t.mappingConfirm}

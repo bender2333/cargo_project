@@ -398,7 +398,7 @@ describe('parseCargoRowsWithMapping', () => {
 
   it('falls back to unique excel-style labels when no label column is mapped', () => {
     const result = parseCargoRowsWithMapping(
-      Array.from({ length: 30 }, (_, i) => ({ '长mm': 100, '宽mm': 100, '高mm': 100, '数量': 1 })),
+      Array.from({ length: 30 }, () => ({ '长mm': 100, '宽mm': 100, '高mm': 100, '数量': 1 })),
       { length: '长mm', width: '宽mm', height: '高mm', quantity: '数量' },
       { createId: () => `u-` },
     )
