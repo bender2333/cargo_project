@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { snapGuides, type SnapGuide } from './snapGuides'
+import { snapGuides } from './snapGuides'
 import type { PlacedBox, ContainerSpec } from '../types'
 
 function container(): Pick<ContainerSpec, 'length' | 'width'> {
