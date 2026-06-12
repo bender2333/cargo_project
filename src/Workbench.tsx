@@ -1276,7 +1276,11 @@ function Workbench() {
   }
 
   const handleManualMoveBox = (id: string, x: number, y: number, z?: number) => {
-    const nextDraft = manualSetBoxPosition(manualDraft, id, x, y, z)
+    const box = manualDraft.boxes.find((b) => b.id === id)
+    const clampedX = box ? Math.max(0, Math.min(renderingContainer.length - box.length, x)) : x
+    const clampedY = box ? Math.max(0, Math.min(renderingContainer.width - box.width, y)) : y
+    const clampedZ = (z !== undefined && box) ? Math.max(0, Math.min(renderingContainer.height - box.height, z)) : z
+    const nextDraft = manualSetBoxPosition(manualDraft, id, clampedX, clampedY, clampedZ)
     const issues = manualValidateDraft(nextDraft, renderingContainer, placementSettings.supportPolicy).filter((issue) => issue.boxId === id)
     if (issues.some(isBlockingManualIssue)) {
       notifyManualRejected('move', id, undefined, issues)
