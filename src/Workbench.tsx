@@ -1149,7 +1149,7 @@ function Workbench() {
       canConfirm,
       missingFieldsHint: missing.length > 0 ? `${t.mappingRequiredHint}: ${missing.join(', ')}` : t.mappingConfirmReady,
     }
-  }, [templateDimensionMode, customMapping.length, customMapping.width, customMapping.height, customMapping.quantity, templateCombinedColumn, templateDimensionOrder, templateDefaults.quantity, t, locale])
+  }, [templateDimensionMode, customMapping.length, customMapping.width, customMapping.height, customMapping.quantity, templateCombinedColumn, templateDefaults.quantity, t])
   const workspaceRef = useRef<HTMLElement | null>(null)
   const reportRef = useRef<HTMLElement | null>(null)
   const cargoRef = useRef<HTMLFormElement | null>(null)
