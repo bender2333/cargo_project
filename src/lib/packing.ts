@@ -284,9 +284,11 @@ export function placementScore(
   const tiltPenalty = box.height === item.height ? 0 : container.length * container.width * container.height
 
   // Prefer LWH orientation (original length along container length) so cargo labels
-  // face the inspection door. ~1mm penalty for floor-rotated (WLH) is enough to
-  // break ties without blocking WLH when LWH would not fit.
-  const labelFacingPenalty = box.orientationKey !== 'LWH' && box.height === item.height ? 1 : 0
+  // face the inspection door. Cancels the -box.width * 0.01 tiebreaker advantage
+  // WLH naturally gets (since box.width = item.length ≥ item.width = LWH width).
+  const labelFacingPenalty = box.orientationKey !== 'LWH' && box.height === item.height
+    ? (item.length - item.width) * 0.01
+    : 0
 
   // Edge-snap bonuses: prefer placements that snap to container or neighbor boundaries.
   let snapBonus = 0
@@ -318,6 +320,34 @@ export function placementScore(
     : 0
 
   const capacity = stackCapacity(item)
+  // Same-label adjacency bonus: prefer placing cargo near existing boxes
+  // with the same label, so same-product groups stay together in the container.
+  let sameLabelBonus = 0
+  for (const candidate of placed) {
+    if (candidate.cargoId === item.id) {
+      // Check if placed adjacent (touching on floor plane) or stacked on top
+      const touchesX = Math.abs(point.x - candidate.x) <= EPSILON && Math.abs(point.y + box.width - candidate.y) <= EPSILON
+      const touchesY = Math.abs(candidate.y + candidate.width - point.y) <= EPSILON && Math.abs(point.x - candidate.x) <= EPSILON
+      const stackedOn = point.z > EPSILON && Math.abs(point.z - candidate.z - candidate.height) <= EPSILON &&
+        point.x <= candidate.x + candidate.length + EPSILON && point.x + box.length >= candidate.x - EPSILON &&
+        point.y <= candidate.y + candidate.width + EPSILON && point.y + box.width >= candidate.y - EPSILON
+      if (touchesX || touchesY || stackedOn) {
+        sameLabelBonus -= container.height
+      }
+    }
+  }
+
+  // Same-height stacking bonus: prefer stacking boxes of the same height
+  // on top of each other, reducing the visual gaps from mixed-height layers.
+  let sameHeightBonus = 0
+  for (const candidate of placed) {
+    if (Math.abs(candidate.height - box.height) <= EPSILON && point.z > EPSILON &&
+      Math.abs(point.z - candidate.z - candidate.height) <= EPSILON) {
+      // Supporting box has same height as the placed box
+      sameHeightBonus -= container.height / 1000
+    }
+  }
+
   if (Number.isFinite(capacity)) {
     const limitedCapacityFloorPenalty = placed.length > 0 && point.z <= EPSILON
       ? container.length * container.width * container.height
@@ -325,6 +355,8 @@ export function placementScore(
     return (
       tiltPenalty +
       labelFacingPenalty +
+      sameLabelBonus +
+      sameHeightBonus +
       topPassengerFloorPenalty +
       limitedCapacityFloorPenalty +
       (container.height - point.z) * container.length * container.width +
@@ -341,6 +373,8 @@ export function placementScore(
   return (
     tiltPenalty +
     labelFacingPenalty +
+    sameLabelBonus +
+    sameHeightBonus +
     topPassengerFloorPenalty +
     point.x * container.width * container.height +
     point.y * container.height +

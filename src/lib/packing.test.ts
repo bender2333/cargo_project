@@ -790,3 +790,63 @@ describe('calculatePacking', () => {
     })
   })
 })
+
+describe('orientation preference and clustering', () => {
+  it('prefers LWH over WLH when both orientations fit the same space', () => {
+    const container = containers[0]
+    const items = [cargo({ id: 'wide', label: 'W', length: 530, width: 305, height: 310, quantity: 10 })]
+    const result = calculatePacking(container, items)
+    expectValidPacking(container, result)
+    const lwhCount = result.placed.filter((box) => box.orientationKey === 'LWH').length
+    const wlhCount = result.placed.filter((box) => box.orientationKey === 'WLH').length
+    expect(lwhCount).toBeGreaterThanOrEqual(wlhCount)
+  })
+
+  it('still uses WLH when LWH would not fit optimally', () => {
+    const container = containers[0]
+    const items = [cargo({ id: 'mix', label: 'M', length: 530, width: 305, height: 310, quantity: 50 })]
+    const result = calculatePacking(container, items)
+    expectValidPacking(container, result)
+    expect(result.placed.filter((box) => box.orientationKey === 'LWH').length).toBeGreaterThan(0)
+  })
+
+  it('same-label cargo forms a contiguous cluster', () => {
+    const container = testContainer({ length: 3000, width: 2000, height: 2000 })
+    const items = [
+      cargo({ id: 'a', label: 'A', length: 300, width: 300, height: 300, quantity: 10 }),
+      cargo({ id: 'b', label: 'B', length: 300, width: 300, height: 300, quantity: 10 }),
+    ]
+    const result = calculatePacking(container, items)
+    expectValidPacking(container, result)
+    for (const label of ['A', 'B']) {
+      const boxes = result.placed.filter((box) => box.label === label)
+      if (boxes.length <= 1) continue
+      const minX = Math.min(...boxes.map((b) => b.x))
+      const maxX = Math.max(...boxes.map((b) => b.x + b.length))
+      const minY = Math.min(...boxes.map((b) => b.y))
+      const maxY = Math.max(...boxes.map((b) => b.y + b.width))
+      const area = (maxX - minX) * (maxY - minY)
+      expect(area).toBeLessThan(container.length * container.width * 0.9)
+    }
+  })
+
+  it('stacks same-height boxes on each other', () => {
+    const container = testContainer({ length: 2000, width: 2000, height: 2000 })
+    const items = [
+      cargo({ id: 'tall', label: 'T', length: 400, width: 400, height: 500, quantity: 4 }),
+      cargo({ id: 'short', label: 'S', length: 400, width: 400, height: 200, quantity: 4 }),
+    ]
+    const result = calculatePacking(container, items)
+    expectValidPacking(container, result)
+    let sameHeightStacks = 0
+    for (const box of result.placed) {
+      const below = box.verticalSupportedBy
+        .map((id) => result.placed.find((b) => b.id === id))
+        .filter(Boolean) as PlacedBox[]
+      for (const supporter of below) {
+        if (Math.abs(supporter.height - box.height) <= 0.001) sameHeightStacks++
+      }
+    }
+    expect(sameHeightStacks).toBeGreaterThan(0)
+  })
+})
