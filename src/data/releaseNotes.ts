@@ -14,6 +14,24 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-06-12-r42-packing-layout-fixes',
+    date: '2026-06-12',
+    title: { en: 'Packing layout: label-facing + cargo grouping', zh: '排布局优化：标签朝向与货物聚整' },
+    items: {
+      en: [
+        'Auto-packing prefers LWH orientation (labels facing door) over WLH (sideways), while keeping WLH when it improves density.',
+        'Same-label cargo clusters together rather than splitting across two zones — easier to verify and unload.',
+        'Same-height boxes stack on each other, reducing mixed-height visual gaps.',
+      ],
+      zh: [
+        '自动排布优先 LWH 朝向（标签面朝柜门），替代 WLH（标签侧翻）；不牺牲需 WLH 时的装载密度。',
+        '同标货物聚成一整块，不再拆到两区域——理货和查验更方便。',
+        '相同高度货箱上下对齐堆叠，减少高低混层的视觉缝隙。',
+      ],
+    },
+  },
+
+  {
     version: '2026-06-12-r41-import-template-redesign',
     date: '2026-06-12',
     title: { en: 'Import template redesign', zh: '导入模板重构' },
