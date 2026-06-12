@@ -1,5 +1,19 @@
 # Decision Log
 
+
+## 2026-06-12 三计划执行完成（吸附/渲染朝向/手动性能）
+
+> 状态：代码已全部实现，lint+test+build 通过。E2E 受 API 服务器端口不匹配影响未完全通过。
+
+- 计划来源：`plans/2026-06-11-snap-feedback.md`、`plans/2026-06-11-manual-render-and-metrics.md`、`plans/2026-06-11-manual-perf.md`
+- 成果：10 commits，291 单元测试通过，build 通过。
+- Plan3-Snap：吸附容差 30→80mm，3D 落定边吸附修复，snapGuides 共享逻辑（3D/2D 渲染后续）。
+- Plan2-Render：handleContinueManually 朝向元数据一致性修复（makeManualBox），移动钳制到柜边界，旋转能力 UI 可见化（gizmo 隐藏+E2E 属性），体积 CBM 展示，导入空结果引导。
+- Plan1-Perf：validateBox 增量校验 O(n³)→O(n²)，supportingStackLimitViolation 节点图预构建复用，拖动节流跳过。
+- E2E 状态：服务器默认端口 3000 与 vite proxy 默认 3010 不匹配，需 `PORT=3010 node server/index.mjs` 前置启动。已记录为环境配置问题。
+- 远程部署：`npm run build` 产出 `dist/` 完整，待推送。
+- 通知：CHANGELOG.md 已更新完整条目，decision.md 已追加本记录。
+
 记录 PRD 未明确、需要取舍或会影响后续架构的决策。
 
 ## 2026-06-09 已决策：反馈轮次 2（尺规样式 / PDF 位置与视角 / 手动模式步骤 / 模板帮助）
@@ -809,3 +823,107 @@
 - 后续：
   - 每个阶段完成后更新 `CHANGELOG.md` 并提交。
   - UI/3D/导入流程阶段必须运行浏览器自动化测试；若测试暴露现有功能缺陷，先记录再修，不削弱断言。
+
+## 2026-06-11 越南整柜散货反馈复核（仅诊断，未改代码）
+
+- 背景：用户反馈 6/11 一批问题，逐条对照当前代码核实是否真实存在。
+- 复核结论：
+
+  1. 「无法批量导入xlsx」→ **未复现/疑似使用问题**。导入已实现并接线：Workbench.tsx:3681 文件输入 accept=".xlsx,.xls,.csv" → importExcel (Workbench.tsx:2177) → parseCargoRows/parseCargoRowsWithTemplate；importCargo.ts 支持中英文表头映射含最大堆叠层数列(importCargo.ts:71,258)，并有模板管理器(open-template-manager)。导入错误会写入 importLog 标签(Workbench.tsx:2181)。需向用户确认其文件表头/扩展名或是否找到入口。
+
+  2A. 「自动转手动微调卡顿」→ **确认**。validateDraft(manualPlacement.ts:523) 每次 move 都全量重算：overlap 双重循环 O(n^2)(537)，外加 supportingStackLimitViolation 对每个 box 重建 Map 且对每个 box 递归 stackLayerForManualBox(493-517)，整体接近 O(n^3)；handleManualMoveBox(Workbench.tsx:1278) 在每次提交都跑 validateDraft，无节流/记忆化。box 多时明显卡顿。
+  2B. 「无法判定能否自由旋转」→ **部分**。canRotate 有校验(dryRunOrientation manualPlacement.ts:387)，六向+yaw/pitch 逻辑存在，但缺少「该货物可否旋转」的明确 UI 指示，属体验缺口。
+
+  3&4. 「手动出现产品交叉/超出边界」→ **确认（核心根因）**。手动移动管线只「检测后拒绝」而非「钳制/吸附避让」：setBoxPosition(manualPlacement.ts:97) 直接写 x/y 无任何边界/重叠保护；handleManualMoveBox(Workbench.tsx:1278-1287) 校验若有 blocking issue 则整体拒绝该次移动(return)，但这意味着交互依赖 3D/2D 拖拽过程的中间态，且自动→手动接管时若位置因取整/朝向重算产生重叠，会被当作已存在的非法态。需运行时确认拖拽落点行为。
+
+  5. 「体积利用率口径」→ **部分确认**。volumeUtilization 分母用 getContainerVolume(packing.ts:846)，而该函数其实已扣除安全余量（containers.ts:65-68 内部调用 effectiveContainer，扣 doorGap/sideGap*2/topGap）。所以并非用满柜名义体积，但仍未扣除「箱体无法完全贴内壁」的现实贴合损耗，用户感受的 85% vs 实际可装差距来源于此——可考虑增加「可用体积/实际贴合率」说明。
+
+  6. 「无法边边对齐/自动吸附」→ **未复现（功能已具备）**。snapToEdges(snapEdges.ts:15) 支持吸附到柜壁/中线/相邻货物四种边(34-39)，容差默认 30mm(EDGE_SNAP_TOLERANCE_MM)；已接线到 3D 拖拽(ContainerScene.tsx:1271,1377,1438)。但 2D 视图(ManualPlacement2D)是否调用 snapToEdges 需确认；且吸附默认开关(placementSettings edgeSnapEnabled 默认值)需核对。用户「无法边边对齐」可能是吸附被关闭或仅在 3D 生效。
+
+- 影响：手动排布质量(2A/3/4)是主要痛点，根因集中在 manualPlacement 校验策略与性能；导入(1)与吸附(6)更可能是发现/开关问题，需运行时确认。
+- 后续：与用户确认 1、6 的运行时表现后，再就 2A/3/4 出具单独计划文件(plans/)。本轮不改代码、不写 review.md。
+
+## 2026-06-11 手动排布吸附「可感知化」决策（已决策）
+
+- 背景：6/11 反馈「手动无法边边对齐/吸附」。复核确认吸附功能齐全且默认开启（placementSettings.ts:23-27，snapEdges.ts 吸柜壁/中线/邻箱边），真问题是「吸附无视觉反馈 + 容差太小(30mm) + 3D 落定未重套边吸附」。用户澄清：诉求是让吸附「可被感知」，不是新增功能。
+- 选项与决策：
+  - 视觉反馈：采纳「对齐辅助线 + 被吸附边高亮」。吸附触发时沿对齐的那条边画一条贯穿参考线（CAD/Figma 风格），并高亮被吸附的边；3D 与 2D 都做。（放弃「仅变色」「再加提示文字」两个候选。）
+  - 吸附容差：采纳「放大到固定值」。edgeToleranceMm 默认 30 → 80。（放弃「随缩放自适应像素」与「设置面板滑块」，本轮从简。）
+  - 落定一致性 bug：采纳「一起修」。ContainerScene.tsx pointerup 落定(约 1307 行)只重套 grid snap，需补 edge snap，保证「预览贴边=最终落点」。
+- 影响：snapToEdges 已返回 snappedAxes，需在 3D 拖拽中保留并驱动辅助线/高亮渲染（当前 ContainerScene.tsx:1274-1276 丢弃）；2D applyManualPlacementSnap 已正确吸附，需新增辅助线渲染。容差默认值变更会影响所有用户新会话（旧 localStorage 设置不被覆盖）。
+- 后续：定稿计划见 plans/2026-06-11-snap-feedback.md，转交 Codex 执行。
+
+## 2026-06-11 三个问题工程复核：交叉/超界是「渲染 bug」而非「数据 bug」（已确认，关键发现）
+
+- 背景：用户提供 test-data/json/ 三个 debug 快照（snapshot 3/5/6），反馈手动排布出现产品交叉、边界超出、俯视图空隙。
+- 验证方法：用真实 calculatePacking 与 validateDraft 重跑三个快照的 cargo/draft（临时测试已删除，结论如下）：
+  - snapshot(3): 自动 866 箱、手动 74 箱；重叠对=0，越界=0，validateDraft issues=0。
+  - snapshot(5): 自动 30、手动 30；重叠=0 越界=0 issues=0。
+  - snapshot(6): 自动 30、手动 2；重叠=0 越界=0 issues=0。
+  → **数据层面三个工程完全合法**，与存档里 manual.issues=0 一致。
+
+- 关键发现：**视觉交叉/超界来自 3D 渲染朝向 bug，不是装箱数据错误。** 数值复算 render transform（scale=1，three.js 实算 8 顶点 AABB）：
+  - snapshot(3) 940 箱中 74 个渲染足迹与存储尺寸不符；snapshot(5) 60 中 18 个不符；snapshot(6)（全 LWH 单位朝向）0 个不符。
+  - 典型：某 WLH 箱存储 (L365,W580,H435)，但渲染足迹算出 (x580,z365) —— **长宽被转置 90°**，于是 mesh 互相穿插、捅出柜壁，而 validateDraft 用的是正确的 length/width，所以报 0 问题。
+
+- 根因定位：auto→manual 接管 handleContinueManually（Workbench.tsx:1401-1431）。它把自动箱的「已旋转后」length/width/height 直接拷贝（1413-1415），同时：
+  - orientationKey 仍取自动箱的 box.orientationKey（如 WLH，1419）；
+  - baseLength/Width/Height 却取「原始 cargo」未旋转尺寸（cargo.length/width/height，1416-1418）；
+  - 完全不设 orientationAxes → 渲染时 orientationAxesOf 回退到 canonical(identity)。
+  三者自相矛盾：renderer 用 baseDimensionsFromPlaced(按 orientationKey 反推)得到未转置的 600×400 几何体，但 orientationAxes=identity 不施加旋转 → 画成 600×400，而数据/校验是 400×600。
+  对照：自动渲染路径不设 orientationAxes，回退 canonical WLH 轴，旋转刚好把几何体换回 400×600，所以**自动视图正确、手动视图错位**——与用户「自动正常、手动出问题」完全吻合。
+
+- 修复方向（下一轮计划，本轮不改码）：handleContinueManually 生成 manual 箱时，使 orientationKey / orientationAxes / base*/ length-width-height 自洽。两条可选：
+  (A) base* 用「原始 cargo」尺寸时，必须同时写入与 orientationKey 对应的 orientationAxes（canonical），并保证 length/width/height = dimensionsForManualOrientation(base, key)；
+  (B) 或令 manual 箱 orientationKey 统一为 LWH、base* 直接等于已旋转后的 length/width/height（即「把当前朝向当作基准」），最简单且消除歧义。
+  验证标准：对每个 placed 箱，renderedFootprint(box) 的 (x,z,y) 必须等于 (length,width,height)（容差<0.5mm）——把本轮临时复算固化成单测；并补 E2E：snapshot(3)/(5) 进入手动后 3D 无交叉。
+
+- 体积利用率（issue 5）补充确认：data/containers.ts 所有标准柜 doorGap/topGap/sideGap 全为 0，effectiveContainer 不扣任何余量，故 volumeUtilization 分母=名义满柜体积。用户「按 78CBM 名义算、实际只能装 64CBM」的质疑成立——系统未对「箱体无法贴内壁」的现实损耗建模，effective 余量机制存在但因数据为 0 而失效。
+
+- 影响：交叉/超界类反馈的优先修复点从「手动碰撞策略」转移到「auto→manual 朝向元数据自洽」（Workbench.tsx:1401）。这比之前判断的 setBoxPosition 无防护更直接、更高频。
+- 后续：把渲染朝向自洽修复纳入手动排布计划文件；利用率口径单列决策（是否引入贴壁损耗系数或显示「可用体积」）。
+
+## 2026-06-11 6/11 反馈计划落定（已决策）
+
+- 背景：复核后确认 6/11 全部 7 项均已分析。用户拍板：先写完 6/11 剩余全部（#1-5），#3/#4 两个根因都修。
+- 决策：
+  - #6 吸附 → plans/2026-06-11-snap-feedback.md（已出）。
+  - #1-5 → plans/2026-06-11-manual-render-and-metrics.md（本轮出）。5 个子任务：
+    1) 手动渲染朝向自洽（修 #3/#4 主因，handleContinueManually Workbench.tsx:1401 复用 makeManualBox 不变式；含「渲染足迹==存储尺寸」单测 + 三快照回归夹具）。
+    2) 手动移动落点 clamp 到柜内（修 #3/#4 次因，保留重叠拒绝语义）。
+    3) 旋转能力可见化（修 #2B，canRotate 禁用态 + 文案）。
+    4) 利用率口径：本轮只做方案 A（展示净体积分母透明化）；方案 B(补柜型余量)/C(贴壁损耗系数) 待用户决策。
+    5) 导入 #1：先运行时确认真实 Excel，再决定是增强报错可见性还是降级为发现性问题处理。
+- 影响：#3/#4 主修点确定为渲染朝向自洽（实测证据），setBoxPosition 防护降为次要 clamp。
+- 后续：两份计划转交 Codex。利用率方案 B/C 与导入 #1 的最终处置需下一轮用户确认。
+
+## 2026-06-11 2A 性能计划单列 + 旧批次暂缓（已决策）
+
+- 用户拍板：2A（手动卡顿，validateDraft 近 O(n³)）单独出性能计划；6/11 之前旧批次暂缓，先把 6/11 计划交 Codex。
+- 2A 计划：plans/2026-06-11-manual-perf.md。三步：①单箱增量校验 validateBox(O(n³)→O(n))；②消除 supportingStackLimitViolation 重复建图(O(n³)→O(n²))；③拖动中节流(可选,先测后定)。核心防回归门槛：validateBox 结果必须 == validateDraft().filter(boxId)。
+- 旧批次（6/2、5/26、5/25、5/22、5/14、3月）：未分析、未计划，按用户指示推迟。注意尺规/装柜步骤/重心代码里已存在(measurement.ts/loadingSteps/centerOfGravity)，下轮需逐条核实已实现/已修/仍缺。
+
+- 6/11 三份计划齐备：snap-feedback.md(#6) / manual-render-and-metrics.md(#1-5) / manual-perf.md(#2A)。
+
+## 2026-06-11 导入模板泛化性差：根因定位（真实文件 越南第十一批6.2海运.xlsx）
+
+- 背景：用户实测导入不好用，泛化性差。用真实文件复核（test-data/excel/越南第十一批6.2海运.xlsx）。
+- 文件结构：R1=标题「越南第十一批海运 预计6.2提货」(单格)；R2=真实表头(物料代码SKU/物料名称/预计发货数量/箱数/产品净重(KG)/个/产品毛重(KG)/箱/.../外箱尺寸(mm)/箱规)；R3+ 数据。尺寸为单格合并「530*305*310」，无单独长宽高列；无独立标签列(用 SKU)；数量有两列(预计发货数量=单品数、箱数=箱数)。
+- 根因（均已实测确认）：
+  1. **表头行硬编码为 1**：importExcel(Workbench.tsx:2208-2209) 固定 headerRow=1/startRow=2。真实文件标题占 R1，自动探测把标题行当表头 → 列名只剩标题一格 → canAutoMap 必失败，且回退的映射弹窗也拿到错误列(只有标题)。无「标题行/表头行」自动跳过或探测。
+  2. **合并尺寸列不被识别**：canAutoMap(Workbench.tsx:2126) 要求分别命中 length/width/height。真实文件尺寸在「外箱尺寸（mm）/箱规」单格(530*305*310)。combined 模式存在(splitCombinedDimensions 正确)，但 canAutoMap 不认识合并列，preSelectCol 也无合并列候选 → 必落到手动弹窗。
+  3. **表头候选词太窄**：fields(importCargo.ts:57-72) 与 preSelectCol(Workbench.tsx:2141) 的中文候选不含「物料名称」(name 候选有"名称"可命中)、「箱规」「外箱尺寸」(尺寸合并列)、「物料代码SKU」(label 无 SKU/物料代码)。即使表头行对了，长宽高仍全 NONE。
+  4. **手动弹窗负担重**：落到弹窗后默认 headerRow=1、dimensionMode=separate(Workbench.tsx:2260-2262)，用户须手动改表头行→切合并模式→选合并列→设顺序，步骤多、预选无用，正是「不好用」。
+- 影响：真实业务 Excel 几乎一定走手动弹窗且预选无效，泛化性差的核心是「表头行探测缺失 + 合并尺寸列不参与自动识别 + 候选词窄」。
+- 后续：出导入泛化计划(plans/)。方向：自动探测表头行(扫描首几行找命中字段最多的行)、自动识别合并尺寸列并默认 combined、扩充中文候选词(含 SKU/物料代码/物料名称/箱规/外箱尺寸/箱数)、弹窗智能预选(含合并列与表头行)。待与用户确认优先级与是否需要"双数量列"语义(箱数 vs 件数)。
+
+## 2026-06-11 导入模板重新定性：模板=用户配置规则（纠正前一条自动探测思路）
+
+- 用户纠正：客户格式复杂度高，不可能靠系统猜全。模板的本质是「用户配置一次读取规则，之后照规则读」。问题应聚焦「配规则 + 复用规则」的体验，而非加自动探测。
+- 当前规则模型已有的能力：表头行 templateHeaderRow、起始行 templateStartRow、逐字段列映射 customMapping、尺寸分离/合并 templateDimensionMode、合并列 templateCombinedColumn、单位 customUnits、默认值 templateDefaults、模板存取(saveImportTemplate/applyImportTemplate, 后端 /api/import-templates)。
+- 真正的体验缺陷（按模板=规则的模型）：
+  1. **上传时不主动套已存模板**：importExcel(Workbench.tsx:2219) 只试 canAutoMap，失败就开「空白/瞎猜」的弹窗，从不先尝试用户已保存的模板。同格式文件第二次导入仍要从头配——复用链路根本没接上。这是「不好用」的首要原因。
+  2. **合并尺寸顺序不可配**：数据层支持 dimensionOrder(importCargo.ts:52)，但 UI 把它写死成 [length,width,height]（Workbench.tsx:1856/1969/2002），合并模式只能选列、默认按 L*W*H。文件若是 宽*长*高 或 长*高*宽，规则无法表达。
+  3. **应用模板后仍是「填表单」而非「按规则直接读」**：applyImportTemplate(1877) 把模板灌进各 state，用户还要在弹窗里确认/再点确认导入；模板没有「选中即套用并预览结果」的直达体验。
+  4. 弹窗字段映射、表头行、合并列分散在多个区块，配置心智负担重（次要）。
+- 设计方向（待与用户确认）：① 上传时按「列名签名/表头指纹」自动匹配已存模板，命中即直接用该规则解析并展示结果，未命中才开配置；② 合并尺寸顺序做成可配（下拉 LWH/WLH/...）；③ 模板选中即套用并实时预览解析结果，弱化「再确认」。核心是把「模板」从「一次性映射弹窗」升级为「可复用、可命中的读取规则」。
