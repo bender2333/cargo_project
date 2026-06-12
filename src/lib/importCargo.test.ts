@@ -420,3 +420,41 @@ describe('parseCargoRowsWithMapping', () => {
     expect(result.items[0]!.name).toBe('散热器组件 Type-A 2026 款')
   })
 })
+
+  it('combined dimensions respect user-selected order (width,length,height)', () => {
+    const template: ImportTemplateConfig = {
+      mapping: { dimensions: '外箱尺寸（mm）' },
+      headerRow: 1,
+      startRow: 2,
+      dimensionMode: 'combined',
+      combinedColumn: '外箱尺寸（mm）',
+      dimensionOrder: ['width', 'length', 'height'],
+    }
+    const result = parseCargoRowsWithTemplate(
+      [{ '外箱尺寸（mm）': '530*305*310' }],
+      template,
+      { createId: () => 'order-test' },
+    )
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0]!.width).toBe(530)
+    expect(result.items[0]!.length).toBe(305)
+    expect(result.items[0]!.height).toBe(310)
+  })
+
+  it('default dimension order is LWH when not set', () => {
+    const template: ImportTemplateConfig = {
+      mapping: { dimensions: '尺寸' },
+      headerRow: 1,
+      startRow: 2,
+      dimensionMode: 'combined',
+      combinedColumn: '尺寸',
+    }
+    const result = parseCargoRowsWithTemplate(
+      [{ '尺寸': '580*365*435' }],
+      template,
+      { createId: () => 'lwh-default' },
+    )
+    expect(result.items[0]!.length).toBe(580)
+    expect(result.items[0]!.width).toBe(365)
+    expect(result.items[0]!.height).toBe(435)
+  })
