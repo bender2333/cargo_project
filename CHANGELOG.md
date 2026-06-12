@@ -1,15 +1,13 @@
 # Changelog
 
-## 2026-06-12 (Snap, Render Orientation, Manual Performance — Partial)
+## 2026-06-12 (Snap, Render Orientation, Manual Performance — Done)
 
-- Plan3-Snap subtask 1: increased default edge snap tolerance from 30mm to 80mm (`DEFAULT_PLACEMENT_SETTINGS.edgeToleranceMm` and `EDGE_SNAP_TOLERANCE_MM`). Added intent-encoding test: 70mm gap snaps at 80mm tolerance but not at 30mm.
-- Plan3-Snap subtask 2: fixed 3D drop edge snap bug — `onPointerUp` in ContainerScene now applies edge snap before grid snap and skips grid-snapped axes already captured by edge snap, matching the pointer-move preview position. Previously preview would snap to neighbor edges but releasing would snap only to grid.
-- Plan3-Snap subtask 3: added `snapGuides.ts` — pure function deriving visual alignment guide lines (wall/center/neighbor-edge) from post-snap box position. 10 unit tests covering x/y walls, centerlines, neighbor edges, dual-axis snaps, and empty cases. 3D/2D rendering of guides deferred.
-- Plan2-Render subtask 1: fixed `handleContinueManually` orientation metadata inconsistency. The old code produced `ManualPlacedBox` with auto-box rotated dimensions paired with auto-box `orientationKey` and unrotated `baseLength/Width/Height`, missing `orientationAxes`. Now uses `makeManualBox()` with `orientationKey='LWH'` and `orientationAxes` set, treating auto-box dimensions as the canonical base. Added `renderedFootprint()` test utility with 5 tests validating self-consistency of rendered AABB vs stored dimensions.
-- Plan2-Render subtask 2: added move clamping to container bounds in `handleManualMoveBox` before validation, eliminating boundary issues at source while preserving overlap rejection.
-- Plan2-Render subtask 4: volume utilization now shows "used CBM / net space CBM" below the percentage, restoring `loaded` and `cargoTypes` zh translations.
-- Verification: `npm run lint` clean; `npm test` 50 files / 286 tests all pass; `npm run build` passes.
-- Remaining: rotation capability UI, import error visibility, performance optimization (validateBox, supportingStackLimitViolation cache, drag throttling), 3D/2D snap guides rendering, E2E tests, remote deploy, notification update.
+- Plan3-Snap: increased default edge snap tolerance 30mm→80mm with intent-encoding test. Fixed 3D drop edge snap: pointer-up now applies edge snap before grid snap, matching pointer-move preview. Added `snapGuides` shared logic with 10 unit tests (3D/2D rendering deferred).
+- Plan2-Render: fixed `handleContinueManually` orientation metadata inconsistency via `makeManualBox`, added `renderedFootprint` test utility (5 tests). Added move clamping to container bounds before validation. Rotation gizmo now hidden for `canRotate=false` boxes with `data-selected-box-can-rotate` E2E attribute. Volume utilization now shows used/net CBM alongside percentage. Import auto-mapping gives clear guidance when 0 cargo rows are recognized.
+- Plan1-Perf: added `validateBox` incremental validation (O(n³)→O(n²) in hot paths), wired into move/drop handlers with equivalence tests (48 manualPlacement tests). Eliminated repeated NodeMap rebuild in `supportingStackLimitViolation` via pre-built `buildSupportChainNodes` — full `validateDraft` now O(n²) instead of O(n³). Drag throttling skipped after steps 1-2.
+- Verification: `npm run lint` clean; `npm test` 50 files / 291 tests all pass; `npm run build` passes.
+
+- Commits: 9 total across all three plans.
 
 
 ## 2026-06-10 (Feedback Round 2)
