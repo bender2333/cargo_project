@@ -537,6 +537,10 @@ function syncRotationGizmo(state: SceneState, boxId: string | null) {
     if (state.rotationGizmo) state.rotationGizmo.group.visible = false
     return
   }
+  if (entry.box.canRotate === false) {
+    if (state.rotationGizmo) state.rotationGizmo.group.visible = false
+    return
+  }
   const gizmo = ensureRotationGizmo(state, entry.box)
   const center = worldCenterForBox(entry.box, state.scale, state.length, state.width)
   center.y = entry.box.z * state.scale + rotationGizmoAnchorOffsetY(entry.box, state.scale, gizmo.radius)
@@ -1963,7 +1967,7 @@ export function ContainerScene({
   const interactionMode = manualEditable ? 'manual' : 'auto'
   const selectedOrientation = selectedManualBox?.orientationKey ?? ''
   const selectedAxes = selectedAxesAttribute(selectedManualBox)
-
+  const selectedBoxCanRotate = selectedManualBox?.canRotate ?? true
   return (
     <div
       ref={mountRef}
@@ -1983,6 +1987,7 @@ export function ContainerScene({
       data-gizmo-handle-count={selectedManualBox ? 4 : 0}
       data-selected-orientation={selectedOrientation}
       data-selected-axes={selectedAxes}
+      data-selected-box-can-rotate={selectedBoxCanRotate ? 'true' : 'false'}
       data-clearance-enabled={clearanceEnabled ? 'true' : 'false'}
       data-clearance-annotation-count={clearanceEnabled ? clearanceAnnotations.length : 0}
       data-clearance-directions={clearanceEnabled ? clearanceAnnotations.map((item) => item.direction).join(',') : ''}
