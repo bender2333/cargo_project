@@ -14,6 +14,32 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-06-12-r40-snap-render-perf',
+    date: '2026-06-12',
+    title: { en: 'Snap feedback, render fixes, and manual performance', zh: '吸附反馈 / 渲染修正 / 手动性能优化' },
+    items: {
+      en: [
+        'Snap-to-edge tolerance increased from 30mm to 80mm for easier alignment discovery; 3D pointer-up now applies edge snap matching the preview position.',
+        'Fixed orientation metadata inconsistency when continuing manually from auto-packed results — rendered footprint now matches stored dimensions.',
+        'Movement now clamps to container bounds before validation, preventing out-of-bounds placements at the source.',
+        'Rotation gizmo is now hidden for boxes with locked rotation, with a bilingual notice explaining why.',
+        'Volume utilization now shows used CBM / net CBM alongside the percentage for clearer capacity understanding.',
+        'Import now gives clear guidance when no cargo rows are auto-recognized, suggesting manual column mapping.',
+        'Manual placement validation performance improved from O(n³) to O(n²) on move/drop hot paths — smoother interaction with many boxes.',
+      ],
+      zh: [
+        '边吸附容差从 30mm 扩大到 80mm，更容易发现对齐位置；3D 松手落定现在应用边吸附，与预览位置一致。',
+        '修复从自动结果进入手动模式时的朝向元数据不一致——渲染足迹现在与存储尺寸完全匹配。',
+        '移动自动钳制在货柜边界内，从源头杜绝越界放置。',
+        '不可旋转的货物现在隐藏旋转手柄并显示双语提示。',
+        '体积利用率现在同时显示已装 CBM / 净空间 CBM，容量理解更直观。',
+        '导入无自动识别行时给出明确引导，建议使用模板管理器手动映射。',
+        '手动排布校验性能从 O(n³) 优化到 O(n²)，大量箱体时拖拽交互更流畅。',
+      ],
+    },
+  },
+
+  {
     version: '2026-06-10-r39-feedback-round2',
     date: '2026-06-10',
     title: { en: 'Template help, manual steps, and 3D loading sheets', zh: '模板帮助 / 手动步骤 / 3D 作业分解图' },
