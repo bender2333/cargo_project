@@ -2231,6 +2231,10 @@ function Workbench() {
         setCargoItems(imported.items)
         setSelectedBoxId(null)
         markPlacementDirty()
+      } else if (imported.errors.length === 0) {
+        setImportMessages((prev) => [...prev, locale === 'zh'
+          ? '未识别到可导入的货物行，建议使用模板管理器手动映射列'
+          : 'No cargo rows were recognized. Try mapping columns manually with the template manager.'])
       }
       setActiveResultTab('importLog')
       setActiveNav('report')
