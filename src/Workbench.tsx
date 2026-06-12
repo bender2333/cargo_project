@@ -283,6 +283,7 @@ const copy = {
     loaded: 'Loaded',
     cargoTypes: 'Cargo types',
     volumeUse: 'Volume utilization',
+    volumeCbmDetail: 'CBM used / net space',
     weightUse: 'Weight utilization',
     containerVolume: 'Container volume',
     volume: 'Volume',
@@ -554,9 +555,10 @@ const copy = {
     frontView: '正视',
     sideView: '侧视',
     results: '结果',
-    loaded: '已装入',
-    cargoTypes: '参与箱型',
+    loaded: '已装载',
+    cargoTypes: '货物品类',
     volumeUse: '体积利用率',
+    volumeCbmDetail: '已装 CBM / 净空间',
     weightUse: '重量利用率',
     containerVolume: '货柜体积',
     volume: '体积',
@@ -3300,9 +3302,8 @@ function Workbench() {
           <div className={`grid grid-cols-5 gap-3 max-xl:grid-cols-2 ${workspaceMaximized ? 'hidden' : ''}`} data-testid="archive-stat-grid">
             <div className="archive-stat"><div className="archive-stat-value">{result.placedCount}</div><div className="archive-stat-key">{t.loaded}</div></div>
             <div className="archive-stat"><div className="archive-stat-value">{Math.round(result.usedWeight)}</div><div className="archive-stat-key">{t.weight}</div></div>
-            <div className="archive-stat"><div className="archive-stat-value">{result.volumeUtilization.toFixed(1)}%</div><div className="archive-stat-key">{t.volumeUse}</div></div>
             <div className="archive-stat"><div className="archive-stat-value">{result.weightUtilization.toFixed(1)}%</div><div className="archive-stat-key">{t.weightUse}</div></div>
-            <div className="archive-stat"><div className="archive-stat-value">{result.labelStats.length}</div><div className="archive-stat-key">{t.cargoTypes}</div></div>
+            <div className="archive-stat"><div className="archive-stat-value">{result.volumeUtilization.toFixed(1)}%</div><div className="archive-stat-key">{t.volumeUse}</div><div className="text-xs text-[#64748b]">{formatCubicMeters(result.usedVolume)}{' / '}{formatCubicMeters(result.containerVolume)}</div></div>
           </div>
 
           <section
