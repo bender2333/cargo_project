@@ -928,6 +928,41 @@ test('creates an import template from the visible manager and reuses it for Exce
   await expect(page.getByText(/800 x 600 x 400 mm/)).toBeVisible()
 })
 
+test('remembers a manually mapped import config and prefills it on the next import', async ({ page }) => {
+  await openEnglish(page)
+  const filePath = await createTemplateWorkbookFile()
+
+  // First import: map columns by hand, never saving a named template.
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await page.getByTestId('template-start-row').fill('2')
+  await page.getByTestId('map-select-name').selectOption('Goods')
+  await page.getByTestId('map-select-length').selectOption('L')
+  await page.getByTestId('map-select-width').selectOption('W')
+  await page.getByTestId('map-select-height').selectOption('H')
+  await page.getByTestId('map-unit-length').selectOption('cm')
+  await page.getByTestId('map-unit-width').selectOption('cm')
+  await page.getByTestId('map-unit-height').selectOption('cm')
+  await page.getByTestId('confirm-mapping').click()
+  await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
+  await expect(page.getByText(/800 x 600 x 400 mm/)).toBeVisible()
+
+  // Reopen: the dialog prefills the last raw config even though no named template exists.
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await expect(page.getByTestId('map-select-name')).toHaveValue('Goods')
+  await expect(page.getByTestId('map-select-length')).toHaveValue('L')
+  await expect(page.getByTestId('map-select-width')).toHaveValue('W')
+  await expect(page.getByTestId('map-select-height')).toHaveValue('H')
+  await expect(page.getByTestId('map-unit-length')).toHaveValue('cm')
+  await expect(page.getByTestId('template-start-row')).toHaveValue('2')
+
+  // Confirm directly without re-filling: the remembered config imports successfully.
+  await page.getByTestId('confirm-mapping').click()
+  await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
+  await expect(page.getByText(/800 x 600 x 400 mm/)).toBeVisible()
+})
+
 test('explains template mapping fields with inline help tooltips', async ({ page }) => {
   await openEnglish(page)
   const filePath = await createTemplateWorkbookFile()

@@ -58,6 +58,7 @@ import { parseCargoRows, parseCargoRowsWithTemplate } from './lib/importCargo'
 import type { ImportCargoRow } from './lib/importCargo'
 import { deleteImportTemplate, readImportTemplates, saveImportTemplate, updateImportTemplate } from './lib/importTemplates'
 import type { ImportTemplatePayload } from './lib/importTemplates'
+import { loadLastImportConfig, saveLastImportConfig, type LastImportConfig } from './lib/lastImportConfig'
 import { deleteCustomCargo, readCustomCargo, saveCustomCargo, updateCustomCargo } from './lib/customCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
@@ -1945,6 +1946,18 @@ function Workbench() {
     }
     setShowMappingModal(false)
     setActiveResultTab('importLog')
+    // Persist the raw mapping the user just used so the next import (same format)
+    // can prefill it, regardless of whether a named template was saved.
+    saveLastImportConfig(currentUser?.id ?? null, {
+      mapping: customMapping,
+      units: customUnits,
+      headerRow: templateHeaderRow,
+      startRow: templateStartRow,
+      dimensionMode: templateDimensionMode,
+      combinedColumn: templateCombinedColumn,
+      dimensionOrder: templateDimensionOrder,
+      defaults: templateDefaults,
+    })
     // Remember last used template
     if (selectedImportTemplateId) {
       try {
@@ -1972,6 +1985,17 @@ function Workbench() {
     setTemplateDefaults(template.defaultValues ?? { quantity: 1, canRotate: true, stackable: true })
     setTemplateName(template.name)
     setTemplateDimensionOrder(template.dimensionOrder ?? ['length', 'width', 'height'])
+  }
+
+  const applyLastImportConfig = (config: LastImportConfig) => {
+    setCustomMapping((current) => ({ ...current, ...config.mapping }))
+    setCustomUnits(config.units)
+    setTemplateHeaderRow(config.headerRow)
+    setTemplateStartRow(config.startRow)
+    setTemplateDimensionMode(config.dimensionMode)
+    setTemplateCombinedColumn(config.combinedColumn)
+    setTemplateDimensionOrder(config.dimensionOrder)
+    setTemplateDefaults(config.defaults)
   }
 
   const libraryFormCargo = (): CargoItem => ({
@@ -2349,10 +2373,17 @@ function Workbench() {
       setTemplateDimensionMode('separate')
       setTemplateCombinedColumn('')
       setTemplateDefaults({ quantity: 1, canRotate: true, stackable: true })
-      // Auto-select last used template if it still exists
+      // Prefill priority: a still-existing named template wins; otherwise fall
+      // back to the last raw config the user confirmed (point 2), so a manually
+      // mapped import is remembered even without saving a named template.
       const lastUsedExists = lastUsedTemplateId && importTemplates.some((item) => item.id === lastUsedTemplateId)
       if (lastUsedExists) {
         applyImportTemplate(lastUsedTemplateId)
+      } else {
+        const savedConfig = loadLastImportConfig(currentUser?.id ?? null)
+        if (savedConfig) {
+          applyLastImportConfig(savedConfig)
+        }
       }
       setShowMappingModal(true)
     }
