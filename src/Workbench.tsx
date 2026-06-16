@@ -4318,6 +4318,11 @@ function Workbench() {
                     const excelColumns = importColumnsForHeaderRow(importRows, templateHeaderRow)
                     const isDimension = fieldKey === 'length' || fieldKey === 'width' || fieldKey === 'height'
                     const dimensionKey = fieldKey as 'length' | 'width' | 'height'
+                    // Combined mode supplies L/W/H from the combined column + split
+                    // order, so the standalone dimension selectors are redundant.
+                    if (templateDimensionMode === 'combined' && isDimension) {
+                      return null
+                    }
                     return (
                       <div key={fieldKey} className="rounded-md border border-slate-200 bg-white p-3">
                         <label className="block text-sm font-semibold text-slate-700">

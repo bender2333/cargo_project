@@ -1052,6 +1052,19 @@ test('imports Vietnam irregular workbook through a reusable combined-dimension t
   await page.getByTestId('import-template-name').fill(templateName)
   await page.getByTestId('template-header-row').fill('2')
   await page.getByTestId('template-start-row').fill('3')
+  // Separate mode (default on open) renders the standalone L/W/H selectors.
+  await expect(page.getByTestId('map-select-length')).toBeVisible()
+  await expect(page.getByTestId('map-select-width')).toBeVisible()
+  await expect(page.getByTestId('map-select-height')).toBeVisible()
+  await page.getByTestId('template-dimension-mode').selectOption('combined')
+  // Combined mode auto-fills L/W/H from the combined column, so the standalone
+  // dimension selectors must disappear (no "still pick L/W/H below").
+  await expect(page.getByTestId('map-select-length')).toHaveCount(0)
+  await expect(page.getByTestId('map-select-width')).toHaveCount(0)
+  await expect(page.getByTestId('map-select-height')).toHaveCount(0)
+  // Toggling back to separate restores them.
+  await page.getByTestId('template-dimension-mode').selectOption('separate')
+  await expect(page.getByTestId('map-select-length')).toBeVisible()
   await page.getByTestId('template-dimension-mode').selectOption('combined')
   await page.getByTestId('template-combined-column').selectOption('外箱尺寸（mm）')
   await page.getByTestId('map-select-label').selectOption('物料代码SKU')
