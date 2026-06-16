@@ -950,6 +950,18 @@ test('explains template mapping fields with inline help tooltips', async ({ page
   const popover = page.getByTestId('help-tooltip-popover')
   await expect(popover).toBeVisible()
   await expect(popover).toContainText(/column title|Excel/)
+
+  // Regression: the header-row help sits in the leftmost column where the
+  // old absolute-centered w-64 bubble overflowed the modal's clipped left edge.
+  // The portal+clamp bubble must stay fully inside the viewport.
+  const box = await popover.boundingBox()
+  expect(box).not.toBeNull()
+  const viewport = page.viewportSize()
+  expect(viewport).not.toBeNull()
+  expect(box!.x).toBeGreaterThanOrEqual(0)
+  expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.width)
+  expect(box!.y).toBeGreaterThanOrEqual(0)
+  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height)
 })
 
 test('creates an import template from top-level template manager and reuses it for Excel import', async ({ page }) => {
