@@ -1006,12 +1006,14 @@ test('creates an import template from top-level template manager and reuses it f
 
   await page.getByTestId('nav-template-manager').click()
   await expect(page.getByTestId('template-manager-list')).toBeVisible()
+  await page.getByTestId('template-manager-sample-input').setInputFiles(filePath)
+  await expect(page.getByTestId('template-manager-sample-status')).toBeVisible()
   await page.getByTestId('template-manager-new').click()
   await page.getByTestId('template-manager-new-name').fill(templateName)
-  await page.getByTestId('template-manager-new-map-name').fill('Goods')
-  await page.getByTestId('template-manager-new-map-length').fill('L')
-  await page.getByTestId('template-manager-new-map-width').fill('W')
-  await page.getByTestId('template-manager-new-map-height').fill('H')
+  await page.getByTestId('tm-new-map-select-name').selectOption('Goods')
+  await page.getByTestId('tm-new-map-select-length').selectOption('L')
+  await page.getByTestId('tm-new-map-select-width').selectOption('W')
+  await page.getByTestId('tm-new-map-select-height').selectOption('H')
   await page.getByTestId('template-manager-new-save').click()
 
   const savedRow = page.locator('[data-testid^="template-manager-row-"]:has-text("' + templateName + '")')
@@ -1054,7 +1056,7 @@ test('renames and deletes import templates from top-level template manager', asy
 
   await page.getByTestId(`template-manager-edit-${templateId}`).click()
   await page.getByTestId(`template-manager-name-${templateId}`).fill(renamedTemplateName)
-  await page.getByTestId(`template-manager-map-length-${templateId}`).fill('W')
+  await page.getByTestId(`tm-edit-${templateId}-map-select-length`).selectOption('W')
   await page.getByTestId(`template-manager-save-${templateId}`).click()
   await expect(page.getByTestId(`template-manager-row-${templateId}`)).toContainText(renamedTemplateName)
   await expect(page.getByTestId(`template-manager-row-${templateId}`)).toContainText('length:W')

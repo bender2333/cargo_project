@@ -204,6 +204,8 @@ const copy = {
     templateUpdate: 'Update template',
     templateNew: 'New template',
     templateCreate: 'Create template',
+    templateLoadSample: 'Load sample headers',
+    templateSampleLoaded: 'Sample columns',
     templateHeaderRow: 'Header row',
     templateStartRow: 'Start row',
     templateDefaultLabel: 'Default label',
@@ -494,6 +496,8 @@ const copy = {
     templateUpdate: '更新模板',
     templateNew: '新建模板',
     templateCreate: '创建模板',
+    templateLoadSample: '加载样本表头',
+    templateSampleLoaded: '样本列',
     templateHeaderRow: '表头行',
     templateStartRow: '数据起始行',
     templateDimensionOrder: '拆分顺序',
@@ -1118,6 +1122,9 @@ function Workbench() {
   const [editingImportTemplateId, setEditingImportTemplateId] = useState('')
   const [editingImportTemplateDraft, setEditingImportTemplateDraft] = useState<ImportTemplatePayload | null>(null)
   const [newImportTemplateDraft, setNewImportTemplateDraft] = useState<ImportTemplatePayload | null>(null)
+  // Header candidates for the standalone template manager mapping dropdowns,
+  // loaded from a sample workbook (the manager page has no live import file).
+  const [templateSampleRows, setTemplateSampleRows] = useState<ImportCargoRow[]>([])
   const { canConfirm: canConfirmMapping, missingFieldsHint } = useMemo(() => {
     const isCombined = templateDimensionMode === 'combined'
     const missing: string[] = []
@@ -2179,33 +2186,42 @@ function Workbench() {
     setEditingImportTemplateDraft(null)
   }
 
-  const updateEditingTemplateMapping = (field: string, value: string) => {
-    setEditingImportTemplateDraft((current) => current ? {
-      ...current,
-      mapping: { ...current.mapping, [field]: value },
-    } : current)
+  const loadTemplateSampleHeaders = async (file: File | null) => {
+    if (!file) return
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      setTemplateSampleRows(sheet ? XLSX.utils.sheet_to_json<WorksheetCell[]>(sheet, { header: 1, raw: true }) : [])
+    } catch (error) {
+      console.error('[template-sample]', error)
+      setTemplateSampleRows([])
+    }
   }
 
-  const updateEditingTemplateNumber = (field: 'headerRow' | 'startRow', value: string) => {
-    const fallback = field === 'headerRow' ? 1 : 2
-    const minimum = fallback
-    const parsed = Math.max(minimum, Number(value) || fallback)
-    setEditingImportTemplateDraft((current) => current ? { ...current, [field]: parsed } : current)
-  }
+  // Adapt the persisted ImportTemplatePayload draft to/from the shared mapping
+  // form value shape (defaultValues <-> defaults, undefined row fallbacks).
+  const draftToMappingValue = (draft: ImportTemplatePayload): ImportMappingValue => ({
+    mapping: draft.mapping,
+    units: draft.units,
+    headerRow: draft.headerRow ?? 1,
+    startRow: draft.startRow ?? 2,
+    dimensionMode: draft.dimensionMode ?? 'separate',
+    combinedColumn: draft.combinedColumn ?? '',
+    dimensionOrder: draft.dimensionOrder ?? ['length', 'width', 'height'],
+    defaults: draft.defaultValues ?? {},
+  })
 
-  const updateNewTemplateMapping = (field: string, value: string) => {
-    setNewImportTemplateDraft((current) => current ? {
-      ...current,
-      mapping: { ...current.mapping, [field]: value },
-    } : current)
-  }
-
-  const updateNewTemplateNumber = (field: 'headerRow' | 'startRow', value: string) => {
-    const fallback = field === 'headerRow' ? 1 : 2
-    const minimum = fallback
-    const parsed = Math.max(minimum, Number(value) || fallback)
-    setNewImportTemplateDraft((current) => current ? { ...current, [field]: parsed } : current)
-  }
+  const applyMappingValueToDraft = (draft: ImportTemplatePayload, next: ImportMappingValue): ImportTemplatePayload => ({
+    ...draft,
+    mapping: next.mapping,
+    units: next.units,
+    headerRow: next.headerRow,
+    startRow: next.startRow,
+    dimensionMode: next.dimensionMode,
+    combinedColumn: next.combinedColumn,
+    dimensionOrder: next.dimensionOrder,
+    defaultValues: next.defaults,
+  })
 
   const saveNewImportTemplate = async () => {
     const draft = newImportTemplateDraft
@@ -2719,6 +2735,16 @@ function Workbench() {
         <h3 className="text-lg font-bold">{t.templateManager}</h3>
         <div className="flex flex-wrap items-center gap-2">
           {templateSaveNotice && <span className="text-xs font-semibold text-[#047857]">{templateSaveNotice}</span>}
+          <label className="archive-button secondary cursor-pointer px-3 py-1.5 text-xs">
+            {t.templateLoadSample}
+            <input
+              className="hidden"
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              data-testid="template-manager-sample-input"
+              onChange={(event) => { void loadTemplateSampleHeaders(event.target.files?.[0] ?? null); event.target.value = '' }}
+            />
+          </label>
           <button
             className="archive-button success px-3 py-1.5 text-xs"
             data-testid="template-manager-new"
@@ -2729,6 +2755,11 @@ function Workbench() {
           </button>
         </div>
       </div>
+      {templateSampleRows.length > 0 && (
+        <p className="mb-3 text-xs font-semibold text-[#047857]" data-testid="template-manager-sample-status">
+          {t.templateSampleLoaded}: {importColumnsForHeaderRow(templateSampleRows, 1).length}
+        </p>
+      )}
       {newImportTemplateDraft && (
         <div className="mb-4 grid gap-2 rounded border border-[#93c5fd] bg-[#eff6ff] p-3 text-sm" data-testid="template-manager-new-form">
           <label className="text-xs font-semibold text-[#475569]">
@@ -2740,52 +2771,13 @@ function Workbench() {
               onChange={(event) => setNewImportTemplateDraft((current) => current ? { ...current, name: event.target.value } : current)}
             />
           </label>
-          <div className="grid grid-cols-2 gap-2">
-            <label className="text-xs font-semibold text-[#475569]">
-              {t.templateHeaderRow}
-              <input className="field-input mt-1" min={1} type="number" value={newImportTemplateDraft.headerRow ?? 1} onChange={(event) => updateNewTemplateNumber('headerRow', event.target.value)} />
-            </label>
-            <label className="text-xs font-semibold text-[#475569]">
-              {t.templateStartRow}
-              <input className="field-input mt-1" min={2} type="number" value={newImportTemplateDraft.startRow ?? 2} onChange={(event) => updateNewTemplateNumber('startRow', event.target.value)} />
-            </label>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <label className="text-xs font-semibold text-[#475569]">
-              {t.templateDimensionMode}
-              <select
-                className="field-input mt-1"
-                value={newImportTemplateDraft.dimensionMode ?? 'separate'}
-                data-testid="template-manager-new-dimension-mode"
-                onChange={(event) => setNewImportTemplateDraft((current) => current ? { ...current, dimensionMode: event.target.value as 'separate' | 'combined' } : current)}
-              >
-                <option value="separate">{t.templateDimensionSeparate}</option>
-                <option value="combined">{t.templateDimensionCombined}</option>
-              </select>
-            </label>
-            <label className="text-xs font-semibold text-[#475569]">
-              {t.templateCombinedColumn}
-              <input
-                className="field-input mt-1"
-                data-testid="template-manager-new-combined-column"
-                value={newImportTemplateDraft.combinedColumn ?? ''}
-                onChange={(event) => setNewImportTemplateDraft((current) => current ? { ...current, combinedColumn: event.target.value, mapping: { ...current.mapping, dimensions: event.target.value } } : current)}
-              />
-            </label>
-          </div>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            {(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'dimensions'] as const).map((field) => (
-              <label className="text-xs font-semibold text-[#475569]" key={field}>
-                {field}
-                <input
-                  className="field-input mt-1"
-                  data-testid={`template-manager-new-map-${field}`}
-                  value={newImportTemplateDraft.mapping[field] ?? ''}
-                  onChange={(event) => updateNewTemplateMapping(field, event.target.value)}
-                />
-              </label>
-            ))}
-          </div>
+          <ImportMappingForm
+            value={draftToMappingValue(newImportTemplateDraft)}
+            onChange={(next) => setNewImportTemplateDraft((current) => current ? applyMappingValueToDraft(current, next) : current)}
+            availableColumns={importColumnsForHeaderRow(templateSampleRows, newImportTemplateDraft.headerRow ?? 1)}
+            labels={t}
+            testIdPrefix="tm-new-"
+          />
           <div className="flex flex-wrap gap-2">
             <button className="archive-button success px-2 py-1 text-xs" data-testid="template-manager-new-save" type="button" onClick={() => void saveNewImportTemplate()} disabled={!newImportTemplateDraft.name.trim()}>{t.templateCreate}</button>
             <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => setNewImportTemplateDraft(null)}>{t.cancel}</button>
@@ -2798,63 +2790,24 @@ function Workbench() {
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {importTemplates.map((template) => (
             <article className="rounded border border-[#d1d5db] bg-[#f8fafc] p-3 text-sm" data-testid={`template-manager-row-${template.id}`} key={template.id}>
-              {editingImportTemplateId === template.id ? (
+              {editingImportTemplateId === template.id && editingImportTemplateDraft ? (
                 <div className="grid gap-2">
                   <label className="text-xs font-semibold text-[#475569]">
                     {t.templateName}
                     <input
                       className="field-input mt-1"
                       data-testid={`template-manager-name-${template.id}`}
-                      value={editingImportTemplateDraft?.name ?? ''}
+                      value={editingImportTemplateDraft.name}
                       onChange={(event) => setEditingImportTemplateDraft((current) => current ? { ...current, name: event.target.value } : current)}
                     />
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="text-xs font-semibold text-[#475569]">
-                      {t.templateHeaderRow}
-                      <input className="field-input mt-1" min={1} type="number" value={editingImportTemplateDraft?.headerRow ?? 1} onChange={(event) => updateEditingTemplateNumber('headerRow', event.target.value)} />
-                    </label>
-                    <label className="text-xs font-semibold text-[#475569]">
-                      {t.templateStartRow}
-                      <input className="field-input mt-1" min={2} type="number" value={editingImportTemplateDraft?.startRow ?? 2} onChange={(event) => updateEditingTemplateNumber('startRow', event.target.value)} />
-                    </label>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="text-xs font-semibold text-[#475569]">
-                      {t.templateDimensionMode}
-                      <select
-                        className="field-input mt-1"
-                        value={editingImportTemplateDraft?.dimensionMode ?? 'separate'}
-                        data-testid={`template-manager-dimension-mode-${template.id}`}
-                        onChange={(event) => setEditingImportTemplateDraft((current) => current ? { ...current, dimensionMode: event.target.value as 'separate' | 'combined' } : current)}
-                      >
-                        <option value="separate">{t.templateDimensionSeparate}</option>
-                        <option value="combined">{t.templateDimensionCombined}</option>
-                      </select>
-                    </label>
-                    <label className="text-xs font-semibold text-[#475569]">
-                      {t.templateCombinedColumn}
-                      <input
-                        className="field-input mt-1"
-                        data-testid={`template-manager-combined-column-${template.id}`}
-                        value={editingImportTemplateDraft?.combinedColumn ?? ''}
-                        onChange={(event) => setEditingImportTemplateDraft((current) => current ? { ...current, combinedColumn: event.target.value, mapping: { ...current.mapping, dimensions: event.target.value } } : current)}
-                      />
-                    </label>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'dimensions'] as const).map((field) => (
-                      <label className="text-xs font-semibold text-[#475569]" key={field}>
-                        {field}
-                        <input
-                          className="field-input mt-1"
-                          data-testid={`template-manager-map-${field}-${template.id}`}
-                          value={editingImportTemplateDraft?.mapping[field] ?? ''}
-                          onChange={(event) => updateEditingTemplateMapping(field, event.target.value)}
-                        />
-                      </label>
-                    ))}
-                  </div>
+                  <ImportMappingForm
+                    value={draftToMappingValue(editingImportTemplateDraft)}
+                    onChange={(next) => setEditingImportTemplateDraft((current) => current ? applyMappingValueToDraft(current, next) : current)}
+                    availableColumns={importColumnsForHeaderRow(templateSampleRows, editingImportTemplateDraft.headerRow ?? 1)}
+                    labels={t}
+                    testIdPrefix={`tm-edit-${template.id}-`}
+                  />
                   <div className="flex flex-wrap gap-2">
                     <button className="archive-button success px-2 py-1 text-xs" data-testid={`template-manager-save-${template.id}`} type="button" onClick={() => void saveEditedImportTemplate()}>{t.templateUpdate}</button>
                     <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => { setEditingImportTemplateId(''); setEditingImportTemplateDraft(null) }}>{t.cancel}</button>
