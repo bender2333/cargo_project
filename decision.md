@@ -14,6 +14,7 @@
 - 点 4：`HelpTooltip` 改 React portal + `position:fixed` + 视口夹紧，规避 `overflow-y-auto` 容器横向裁切。E2E 断言气泡 `getBoundingClientRect()` 完整落在视口内。
 - 既有 E2E（模板管理页用自由文本 `template-manager-new-map-*`.fill）随重构改为下拉 `.selectOption`；非削弱断言，是随计划演进行为。
 - 执行顺序：4 → 3 → 2 → 1(B→A)。每点单独 commit。
+- ✅ 完成（2026-06-16）：4 点全部实现，各自单独 commit（portal tooltip / combined 隐藏 L/W/H / 裸配置预填 / 抽 ImportMappingForm / 统一模板管理页 / 导出模板端到端）。本地 lint clean、`npm test` 52 文件 320 测试通过、build 通过、全量 E2E（container-calc 43 + 其余 47 通过 / 1 skip）。导出模板模型最终落地＝「有序列集合 {field, header, unit?}」，cm 单位仅作用于 6 个尺寸字段（original/actual L/W/H），单位换算 mm/10；默认（未选模板）保持原 17 列 detailRows 不变。后端 export_templates 走 scp server/*.mjs + service restart 部署，migration v7 远端重启时执行。
 
 ## 2026-06-12 三计划执行完成（吸附/渲染朝向/手动性能）
 

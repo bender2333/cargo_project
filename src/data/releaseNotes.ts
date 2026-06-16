@@ -14,6 +14,28 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-06-16-r43-template-unify-export',
+    date: '2026-06-16',
+    title: { en: 'Unified templates, export templates, and mapping fixes', zh: '模板统一 / 导出模板 / 映射修正' },
+    items: {
+      en: [
+        'Export templates: pick which columns to export, reorder them, rename headers, and set mm/cm units — then choose a template beside Export XLSX. No template selected keeps the full default columns.',
+        'Template manager page now uses the same dropdown mapping form as the import dialog (load a sample workbook to populate column choices) — one consistent mapping experience everywhere.',
+        'Manually mapped imports are remembered: reopen the import dialog and your last mapping, units, and rows are prefilled even without saving a named template.',
+        'Combined dimension mode auto-fills length/width/height from the combined column — the redundant standalone selectors are now hidden.',
+        'Field help bubbles (header row, dimension mode, …) are no longer clipped by the dialog edge; they render above everything and stay inside the viewport.',
+      ],
+      zh: [
+        '导出模板：自选导出列、调整顺序、自定义表头名、设置 mm/cm 单位，导出 XLSX 旁选择模板即可；不选模板时仍输出完整默认列。',
+        '模板管理页改用与导入弹窗一致的下拉映射表单（加载样本表头填充列候选）——三处映射体验统一。',
+        '手填映射会被记住：重开导入弹窗时，上次的映射、单位与表格行已自动预填，无需显式命名保存模板。',
+        '合并尺寸模式下长/宽/高由合并列自动填充，冗余的独立选择器已隐藏。',
+        '字段帮助气泡（表头行、尺寸模式等）不再被弹窗边缘裁切，悬浮在最上层并夹紧在视口内。',
+      ],
+    },
+  },
+
+  {
     version: '2026-06-12-r42-packing-layout-fixes',
     date: '2026-06-12',
     title: { en: 'Packing layout: label-facing + cargo grouping', zh: '排布局优化：标签朝向与货物聚整' },
