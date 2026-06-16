@@ -2,6 +2,124 @@
 
 日期：2026-05-29
 
+## 第三十三轮 Review 与「模板管理统一 / 导出模板 / 合并尺寸自动填充 / 帮助气泡显示」计划
+
+日期：2026-06-16
+
+来源：用户复核模板模块，提出 4 点。已逐条定位到 `src/Workbench.tsx` / `src/components/HelpTooltip.tsx` / `src/lib/exportPlan.ts` 的具体行，根因如下。点 1/3 与 `plans/2026-06-12-template-and-packing-gap.md` 子任务 2/3（未执行）重叠，本轮一并收口。
+
+下文行号取自当前 `src/Workbench.tsx`（214KB，无未提交改动）。
+
+### 1. 模板管理与导出模板管理功能不一致（导出侧根本无模板）
+
+**现象**：
+
+- 导入侧有「模板管理」，导出侧（导出 XLSX）无任何模板 / 列配置，二者能力不对称。
+- 即便只看导入侧，模板配置也分裂成两套不一致 UI。
+
+**代码定位**：
+
+- 导入模板存在**两套**实现：
+  - 顶层「模板管理」页 `templateManagerPanel`（`src/Workbench.tsx:2663`）：列映射用**自由文本 `<input>`**（新建 `template-manager-new-map-*` :2724-2734；编辑 `template-manager-map-*` :2793-2803），合并列也是自由文本（:2716 / :2784）。无下拉、无表头候选、无预览、无必填校验、无拆分顺序选择。
+  - 导入弹窗（`src/Workbench.tsx:4109`+）：列映射用**下拉 `<select>`**（来源=表头行，`map-select-*` :4332）、实时预览表（:4362）、必填校验 `canConfirmMapping`（:1120）、拆分顺序下拉（:4282）、按维度单位选择（:4343）。
+- 导出：`exportExcel`（`src/Workbench.tsx:2361`）直接把 `buildExportPlanRows`（`src/lib/exportPlan.ts`，17 个**写死**列）写盘，无列选择 / 排序 / 重命名 / 模板管理。
+
+**根因**：
+
+- 导入模板能力分裂成「自由文本页」与「下拉弹窗」两套实现；导出侧没有模板概念。"功能上一致"无从谈起。
+
+**决策点（执行前需确认范围，记 `decision.md`）**：
+
+- 解读 A（主，按字面）：新增「导出模板管理」，与导入模板管理 UI / 能力一致——列表 / 新建 / 编辑 / 删除 / 保存 / 复用，外加「选择导出哪些列、顺序、表头名、单位」。
+- 解读 B（支撑）：先把导入侧两套 UI 收敛到同一映射组件（即 2026-06-12 计划子任务 2），保证导入内部"功能上一致"。
+- 建议 A+B 同做，B 作为 A 的前置：抽出共享「列配置 / 管理外壳」组件，导入弹窗、顶层模板页、导出模板三处复用。范围最大的是 A。
+
+**推荐方案**：
+
+- 抽 `src/components/` 下单一「列映射组件」：封装 表头 / 起始行、尺寸模式（分列 / 合并+顺序）、必填高亮、选填区、列下拉（来源=样本表头）、必填校验。导入弹窗与顶层模板页复用，删自由文本分支（:2724 / :2793 两组 `<input>`）。
+- 导出模板：新增 `exportTemplates` 数据层（仿 `src/lib/importTemplates.ts` + 后端 schema / 幂等迁移），模型=「导出列集合 + 顺序 + 表头名 + 单位」；`exportExcel` 改为按所选导出模板产列；新增「导出模板管理」入口，复用同一管理外壳（列表 / 新建 / 编辑 / 删除）。
+- **验证**：组件 / E2E 断言导入页与弹窗映射区一致（同组件、下拉、必填）；导出按模板产出列与顺序正确；后端模板增删改查往返一致（dimensionMode / combinedColumn / dimensionOrder / mapping / 导出列集合）。
+
+### 2. 导入时把当前填写参数直接作为模板，下次直接应用
+
+**现象**：
+
+- 用户在导入弹窗手填参数后，下次导入未被记住 / 套用，要重新填，或必须显式命名保存模板。
+
+**代码定位**：
+
+- 保存模板 `handleSaveImportTemplate`（:2039）要求先填名称（:2041 `if (!name) return`）。
+- 上次使用记忆 `lastUsedTemplateId`：**仅在选过命名模板**（`selectedImportTemplateId` 非空）时持久化（:1949）；打开弹窗若该模板仍在则自动套用（:2353-2356）。
+- 打开弹窗（非自动映射分支）会把表头 / 起始 / 模式 / 默认值重置为初值（:2343-2351）。
+
+**根因**：
+
+- 记忆只覆盖"用过命名模板"的链路；**手填的临时映射不会被持久化**——确认导入时 `selectedImportTemplateId` 为空，什么都不存，下次回到默认值。故"当前填写的参数下次直接应用"在常见手填场景失效。
+
+**推荐方案**：
+
+- 持久化「上次使用的原始配置」(mapping + units + headerRow + startRow + dimensionMode + combinedColumn + dimensionOrder + defaults) 到 localStorage（按用户隔离 key，仿 `placementSettingsKey`），**不依赖是否命名保存**。
+- 打开导入弹窗时：若存在上次原始配置则预填（命名模板优先于裸配置，或并存让用户选）。
+- 可选降摩擦：弹窗「存为模板」做成更显眼一键入口，名称默认取文件名 / 日期。
+- **验证**：单测 last-used 原始配置读写（含用户隔离 key、字段往返）；E2E 手填映射→确认导入→重开弹窗字段已预填→直接确认导入成功。
+
+### 3. 合并尺寸列选定后，长 / 宽 / 高应自动填充（隐藏独立选择器）
+
+**现象**：
+
+- 选「合并尺寸列」模式并选定合并列后，下方字段区仍要求继续选 length / width / height 三个列。
+
+**代码定位**：
+
+- 合并模式已渲染合并列 + 拆分顺序（`src/Workbench.tsx:4256-4300`）。
+- 但字段映射循环（:4304 `Object.keys(customMapping).map`）**无视模式**仍渲染独立的 length / width / height `<select>`（`isDimension` :4319，`map-select-length/width/height` :4332）。
+- 合并模式下 `parseCargoRowsWithTemplate` 走合并列 + 顺序解析，独立 L/W/H 列不参与；UI 冗余且令人困惑。`canConfirmMapping`（:1124）合并分支已只校验合并列，逻辑层无需改。
+- 即 `plans/2026-06-12-template-and-packing-gap.md` 子任务 3 未执行。
+
+**根因**：
+
+- 字段循环缺少「合并模式隐藏 L/W/H 独立选择器」的渲染条件。
+
+**推荐方案**：
+
+- 合并模式（`templateDimensionMode==='combined'`）下，字段循环跳过 / 隐藏 length / width / height 三个独立选择器及其单位选择器；分列模式保持显示。本子任务并入点 1 的共享组件实现（组件内按 mode 条件渲染），但单独验收。
+- **验证**：组件 / E2E：combined 模式不渲染 `map-select-length/width/height`，分列模式渲染。真实文件 `test-data/excel/越南第十一批6.2海运.xlsx` 选合并列 + LWH→各行长宽高正确（如 580*365*435→L580 W365 H435）。
+
+### 4. 表头行 / 尺寸模式帮助点击后显示不全（气泡被裁切）
+
+**现象**：
+
+- 点击「表头行」「尺寸模式」旁的 `?`，弹出的帮助气泡显示不全（左半被裁）。
+
+**代码定位**：
+
+- `HelpTooltip`（`src/components/HelpTooltip.tsx:33`）气泡 class `absolute left-1/2 top-6 w-64 -translate-x-1/2`：宽 256px、以 `?` 按钮为中心居中。
+- 弹窗容器（`src/Workbench.tsx:4099`）`max-h-[92vh] overflow-y-auto`。按 CSS Overflow 规范，`overflow-y:auto` 会把 `overflow-x` 由 `visible` 计算成 `auto` → 容器**横向也裁切**溢出内容。
+- 「表头行」为 `grid-cols-4` 首列（最左，:4149）；「尺寸模式」在默认 stackable=true 时落在 row3 首列（最左，:4241）。其 `?` 按钮距弹窗左内边距约 70px，居中的 256px 气泡向左外延约 128px → 溢出弹窗左缘约 50-60px → 被裁。**两处恰好都在最左列**，与"显示不全"现象吻合。帮助文案本身够短（en :218-220 / zh :523-525），非文字截断。
+
+**根因**：
+
+- 气泡固定居中且 `w-64`，在靠左列锚点处必然向左溢出；叠加 `overflow-y-auto` 强制 `overflow-x:auto` 裁切，左半被切。
+
+**推荐方案**：
+
+- 让 `HelpTooltip` 具备视口 / 边界感知：用 React portal 渲染到 `document.body`，按 `?` 按钮 `getBoundingClientRect()` 计算 `position:fixed` 坐标并夹紧到视口（彻底规避任何 `overflow` 祖先裁切）。退化方案：按锚点位置动态选左 / 右对齐类，使气泡不越界。推荐 portal 方案（可复用、对所有锚点稳健）。
+- **验证**：E2E 点击 `help-tooltip-header-row` / `help-tooltip-dimension-mode`，断言气泡 `getBoundingClientRect()` 完整落在视口内（left ≥ 0、right ≤ 视口宽）。
+
+### 必跑验证
+
+- 每子任务：`npm run lint && npm test && npm run build`。
+- 涉及导入 / 导出 / 弹窗 UI：额外 `npm run test:e2e`；真实文件 `越南第十一批6.2海运.xlsx` 作夹具跑通。测试失败先记 `decision.md`，不削弱断言。
+
+### 风险与回归门槛
+
+- 点 1 抽共享组件 + 新增导出模板范围最大：导入弹窗既有 E2E（lastUsedTemplateId 预填、确认导入、明细 A/B/C+原文 name）必须全绿；顶层模板页删自由文本后，已存模板需在新下拉式编辑器正确往返（dimensionMode / combinedColumn / dimensionOrder / mapping）。
+- 点 2 持久化裸配置不得污染命名模板链路；用户隔离 key 防串户。
+- 点 3 纯渲染条件，勿改 parse 与必填校验。
+- 点 4 portal 注意与弹窗 backdrop（z-50）的层级、卸载时清理监听。
+
+建议执行顺序：4（独立、低风险、最快见效）→ 3 → 2 →（抽共享组件）→ 1。点 1 范围最大，执行前先在 `decision.md` 确认解读 A/B 范围。
+
 ## 第三十二轮 Review 与「顶层错位穿模、标签朝向一致、全局堆叠层数」计划
 
 日期：2026-06-04
