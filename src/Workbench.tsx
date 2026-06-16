@@ -9,6 +9,7 @@ import { ManualPlacement2D } from './components/ManualPlacement2D'
 import { PlaybackPanel } from './components/PlaybackPanel'
 import { LoadingStepsPanel } from './components/LoadingStepsPanel'
 import { ImportMappingForm, type ImportMappingValue } from './components/ImportMappingForm'
+import { ExportColumnsEditor } from './components/ExportColumnsEditor'
 import { CenterOfGravityPanel } from './components/CenterOfGravityPanel'
 import { ContainerComparisonPanel } from './components/ContainerComparisonPanel'
 import { buildPlaybackSequence, visibleBoxesAt } from './lib/playback'
@@ -51,7 +52,7 @@ import {
 } from './lib/manualPlacement'
 import type { ManualDraft, ManualHistory, ManualRotationDirection, OrientationKey, ValidationIssue } from './lib/manualPlacement'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from './data/containers'
-import { buildExportPlanRows } from './lib/exportPlan'
+import { buildExportPlanRows, buildExportRowsFromTemplate, EXPORT_FIELD_KEYS } from './lib/exportPlan'
 import type { HistoryPlan } from './lib/historyPlans'
 import { createClientId } from './lib/clientId'
 import { parseCargoRows, parseCargoRowsWithTemplate } from './lib/importCargo'
@@ -59,6 +60,8 @@ import type { ImportCargoRow } from './lib/importCargo'
 import { deleteImportTemplate, readImportTemplates, saveImportTemplate, updateImportTemplate } from './lib/importTemplates'
 import type { ImportTemplatePayload } from './lib/importTemplates'
 import { loadLastImportConfig, saveLastImportConfig, type LastImportConfig } from './lib/lastImportConfig'
+import { deleteExportTemplate, readExportTemplates, saveExportTemplate, updateExportTemplate } from './lib/exportTemplates'
+import type { ExportTemplatePayload } from './lib/exportTemplates'
 import { deleteCustomCargo, readCustomCargo, saveCustomCargo, updateCustomCargo } from './lib/customCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
@@ -78,7 +81,7 @@ import {
   savePlacementSettings,
   type PlacementSettings,
 } from './lib/placementSettings'
-import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, CustomDbContainer, DbHistoryPlan, ImportTemplate, ImportTemplateUnits, ImportTemplateDefaults } from './types'
+import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, CustomDbContainer, DbHistoryPlan, ImportTemplate, ImportTemplateUnits, ImportTemplateDefaults, ExportTemplate } from './types'
 import { isLoggedIn, getCurrentUser, fetchWithAuth, removeToken } from './lib/auth'
 import type { User } from './lib/auth'
 import { LoginPage } from './components/LoginPage'
@@ -206,6 +209,13 @@ const copy = {
     templateCreate: 'Create template',
     templateLoadSample: 'Load sample headers',
     templateSampleLoaded: 'Sample columns',
+    exportTemplateManager: 'Export templates',
+    exportTemplateDefault: 'Default columns',
+    exportTemplateEmpty: 'No export templates yet',
+    exportColumnHeader: 'Column header',
+    exportColumnUnit: 'Unit',
+    exportAddColumn: 'Add column…',
+    exportNoColumns: 'No columns selected',
     templateHeaderRow: 'Header row',
     templateStartRow: 'Start row',
     templateDefaultLabel: 'Default label',
@@ -498,6 +508,13 @@ const copy = {
     templateCreate: '创建模板',
     templateLoadSample: '加载样本表头',
     templateSampleLoaded: '样本列',
+    exportTemplateManager: '导出模板',
+    exportTemplateDefault: '默认列',
+    exportTemplateEmpty: '暂无导出模板',
+    exportColumnHeader: '列表头',
+    exportColumnUnit: '单位',
+    exportAddColumn: '添加列…',
+    exportNoColumns: '未选择任何列',
     templateHeaderRow: '表头行',
     templateStartRow: '数据起始行',
     templateDimensionOrder: '拆分顺序',
@@ -1122,6 +1139,11 @@ function Workbench() {
   const [editingImportTemplateId, setEditingImportTemplateId] = useState('')
   const [editingImportTemplateDraft, setEditingImportTemplateDraft] = useState<ImportTemplatePayload | null>(null)
   const [newImportTemplateDraft, setNewImportTemplateDraft] = useState<ImportTemplatePayload | null>(null)
+  const [exportTemplates, setExportTemplates] = useState<ExportTemplate[]>([])
+  const [selectedExportTemplateId, setSelectedExportTemplateId] = useState('')
+  const [editingExportTemplateId, setEditingExportTemplateId] = useState('')
+  const [editingExportTemplateDraft, setEditingExportTemplateDraft] = useState<ExportTemplatePayload | null>(null)
+  const [newExportTemplateDraft, setNewExportTemplateDraft] = useState<ExportTemplatePayload | null>(null)
   // Header candidates for the standalone template manager mapping dropdowns,
   // loaded from a sample workbook (the manager page has no live import file).
   const [templateSampleRows, setTemplateSampleRows] = useState<ImportCargoRow[]>([])
@@ -1233,6 +1255,15 @@ function Workbench() {
     }
   }
 
+  const fetchExportTemplates = async () => {
+    if (!isLoggedIn()) return
+    try {
+      setExportTemplates(await readExportTemplates())
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const fetchCustomCargo = async () => {
     if (!isLoggedIn()) return
     try {
@@ -1263,6 +1294,7 @@ function Workbench() {
       fetchHistory()
       fetchCustomContainers()
       fetchImportTemplates()
+      fetchExportTemplates()
       fetchCustomCargo()
     }
   }, [loggedIn])
@@ -2268,6 +2300,61 @@ function Workbench() {
     setTemplateSaveNotice(t.templateDeleted)
   }
 
+  const createBlankExportTemplate = (): ExportTemplatePayload => ({
+    name: '',
+    columns: EXPORT_FIELD_KEYS.map((field) => ({ field, header: field })),
+  })
+
+  const saveNewExportTemplate = async () => {
+    const draft = newExportTemplateDraft
+    const name = draft?.name.trim()
+    if (!draft || !name) return
+    const saved = await saveExportTemplate({ name, columns: draft.columns })
+    if (!saved) {
+      alert(locale === 'zh' ? '创建导出模板失败' : 'Failed to create export template')
+      return
+    }
+    setExportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
+    setSelectedExportTemplateId(saved.id)
+    setNewExportTemplateDraft(null)
+    setTemplateSaveNotice(`${t.templateSaved}: ${saved.name}`)
+  }
+
+  const editExportTemplate = (template: ExportTemplate) => {
+    setEditingExportTemplateId(template.id)
+    setEditingExportTemplateDraft({ name: template.name, columns: template.columns.map((col) => ({ ...col })) })
+  }
+
+  const saveEditedExportTemplate = async () => {
+    const draft = editingExportTemplateDraft
+    const name = draft?.name.trim()
+    if (!draft || !name || !editingExportTemplateId) return
+    const updated = await updateExportTemplate(editingExportTemplateId, { name, columns: draft.columns })
+    if (!updated) {
+      alert(locale === 'zh' ? '更新导出模板失败' : 'Failed to update export template')
+      return
+    }
+    setExportTemplates((current) => current.map((item) => item.id === updated.id ? updated : item))
+    setEditingExportTemplateId('')
+    setEditingExportTemplateDraft(null)
+    setTemplateSaveNotice(`${t.templateUpdated}: ${updated.name}`)
+  }
+
+  const removeExportTemplate = async (id: string) => {
+    const ok = await deleteExportTemplate(id)
+    if (!ok) {
+      alert(locale === 'zh' ? '删除导出模板失败' : 'Failed to delete export template')
+      return
+    }
+    setExportTemplates((current) => current.filter((item) => item.id !== id))
+    if (selectedExportTemplateId === id) setSelectedExportTemplateId('')
+    if (editingExportTemplateId === id) {
+      setEditingExportTemplateId('')
+      setEditingExportTemplateDraft(null)
+    }
+    setTemplateSaveNotice(t.templateDeleted)
+  }
+
   const canAutoMap = (row: ImportCargoRow): boolean => {
     if (Array.isArray(row)) return false
     const keys = Object.keys(row).map(k => k.toLowerCase())
@@ -2428,7 +2515,11 @@ function Workbench() {
   }
 
   const exportExcel = () => {
-    const sheet = XLSX.utils.json_to_sheet(detailRows)
+    const exportTemplate = exportTemplates.find((item) => item.id === selectedExportTemplateId)
+    const planRows = exportTemplate && exportTemplate.columns.length > 0
+      ? buildExportRowsFromTemplate(detailRows, exportTemplate.columns)
+      : detailRows
+    const sheet = XLSX.utils.json_to_sheet(planRows)
     const shipmentSheet = XLSX.utils.json_to_sheet([
       {
         shipmentName: shipmentName.trim() || 'Untitled shipment',
@@ -2835,6 +2926,89 @@ function Workbench() {
     </div>
   )
 
+  const exportTemplateManagerPanel = (
+    <div className="mt-4 rounded-lg border border-[#c6c6c6] bg-white p-4" data-testid="export-template-list">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-lg font-bold">{t.exportTemplateManager}</h3>
+        <button
+          className="archive-button success px-3 py-1.5 text-xs"
+          data-testid="export-template-new"
+          type="button"
+          onClick={() => setNewExportTemplateDraft(createBlankExportTemplate())}
+        >
+          {t.templateNew}
+        </button>
+      </div>
+      {newExportTemplateDraft && (
+        <div className="mb-4 grid gap-2 rounded border border-[#93c5fd] bg-[#eff6ff] p-3 text-sm" data-testid="export-template-new-form">
+          <label className="text-xs font-semibold text-[#475569]">
+            {t.templateName}
+            <input
+              className="field-input mt-1"
+              data-testid="export-template-new-name"
+              value={newExportTemplateDraft.name}
+              onChange={(event) => setNewExportTemplateDraft((current) => current ? { ...current, name: event.target.value } : current)}
+            />
+          </label>
+          <ExportColumnsEditor
+            columns={newExportTemplateDraft.columns}
+            onChange={(columns) => setNewExportTemplateDraft((current) => current ? { ...current, columns } : current)}
+            labels={t}
+            testIdPrefix="ex-new-"
+          />
+          <div className="flex flex-wrap gap-2">
+            <button className="archive-button success px-2 py-1 text-xs" data-testid="export-template-new-save" type="button" onClick={() => void saveNewExportTemplate()} disabled={!newExportTemplateDraft.name.trim()}>{t.templateCreate}</button>
+            <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => setNewExportTemplateDraft(null)}>{t.cancel}</button>
+          </div>
+        </div>
+      )}
+      {exportTemplates.length === 0 ? (
+        <p className="text-sm text-[#64748b]">{t.exportTemplateEmpty}</p>
+      ) : (
+        <div className="grid gap-2 md:grid-cols-2">
+          {exportTemplates.map((template) => (
+            <article className="rounded border border-[#d1d5db] bg-[#f8fafc] p-3 text-sm" data-testid={`export-template-row-${template.id}`} key={template.id}>
+              {editingExportTemplateId === template.id && editingExportTemplateDraft ? (
+                <div className="grid gap-2">
+                  <label className="text-xs font-semibold text-[#475569]">
+                    {t.templateName}
+                    <input
+                      className="field-input mt-1"
+                      data-testid={`export-template-name-${template.id}`}
+                      value={editingExportTemplateDraft.name}
+                      onChange={(event) => setEditingExportTemplateDraft((current) => current ? { ...current, name: event.target.value } : current)}
+                    />
+                  </label>
+                  <ExportColumnsEditor
+                    columns={editingExportTemplateDraft.columns}
+                    onChange={(columns) => setEditingExportTemplateDraft((current) => current ? { ...current, columns } : current)}
+                    labels={t}
+                    testIdPrefix={`ex-edit-${template.id}-`}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button className="archive-button success px-2 py-1 text-xs" data-testid={`export-template-save-${template.id}`} type="button" onClick={() => void saveEditedExportTemplate()}>{t.templateUpdate}</button>
+                    <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => { setEditingExportTemplateId(''); setEditingExportTemplateDraft(null) }}>{t.cancel}</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <strong>{template.name}</strong>
+                  <p className="mt-1 truncate text-xs text-[#64748b]">
+                    {template.columns.map((col) => col.header || col.field).join(', ') || '-'}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button className="archive-button secondary px-2 py-1 text-xs" data-testid={`export-template-edit-${template.id}`} type="button" onClick={() => editExportTemplate(template)}>{t.templateEdit}</button>
+                    <button className="archive-button px-2 py-1 text-xs text-red-700" data-testid={`export-template-delete-${template.id}`} type="button" onClick={() => void removeExportTemplate(template.id)}>{t.templateDelete}</button>
+                  </div>
+                </>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
   if (!loggedIn) {
     if (showRegister) {
       return (
@@ -2978,6 +3152,7 @@ function Workbench() {
               <button className="archive-button secondary" type="button" onClick={() => activateNav('overview')}>{t.backToWorkbench}</button>
             </div>
             {templateManagerPanel}
+            {exportTemplateManagerPanel}
           </section>
         ) : (
         <section className={sidebarCollapsed ? "flex gap-5 max-lg:flex-col" : "flex gap-5 max-lg:flex-col"} data-testid="workbench-layout">
@@ -3794,6 +3969,17 @@ function Workbench() {
                   >
                   {t.templateManager}
                 </button>
+                <select
+                  className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold"
+                  value={selectedExportTemplateId}
+                  data-testid="export-template-select"
+                  onChange={(event) => setSelectedExportTemplateId(event.target.value)}
+                >
+                  <option value="">{t.exportTemplateDefault}</option>
+                  {exportTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>{template.name}</option>
+                  ))}
+                </select>
                 <button className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold" type="button" onClick={exportExcel}>{t.exportExcel}</button>
                 <button className="border border-[#9b9b9b] bg-white px-3 py-2 font-semibold" type="button" onClick={saveCurrentPlan}>{t.savePlan}</button>
               </div>

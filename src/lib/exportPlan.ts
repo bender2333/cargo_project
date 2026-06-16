@@ -1,4 +1,4 @@
-import type { CargoItem, PackingResult } from '../types'
+import type { CargoItem, ExportTemplateColumn, PackingResult } from '../types'
 
 export type ExportPlanRow = {
   label: string
@@ -50,4 +50,57 @@ export function buildExportPlanRows(cargoItems: CargoItem[], result: PackingResu
       failureReasonCode: unplaced?.reasonCode ?? '',
     }
   })
+}
+
+// Ordered list of every column an export template can include. Drives the
+// "add column" picker and the default export template.
+export const EXPORT_FIELD_KEYS: (keyof ExportPlanRow)[] = [
+  'label',
+  'name',
+  'originalLength',
+  'originalWidth',
+  'originalHeight',
+  'actualLength',
+  'actualWidth',
+  'actualHeight',
+  'weight',
+  'maxStackLayers',
+  'plannedQuantity',
+  'placedQuantity',
+  'unplacedQuantity',
+  'layer',
+  'workStep',
+  'failureReason',
+  'failureReasonCode',
+]
+
+const DIMENSION_FIELDS: Record<string, true> = {
+  originalLength: true,
+  originalWidth: true,
+  originalHeight: true,
+  actualLength: true,
+  actualWidth: true,
+  actualHeight: true,
+}
+
+// Dimension columns are stored in mm; only these accept a cm unit override.
+export function isExportDimensionField(field: string): boolean {
+  return DIMENSION_FIELDS[field] === true
+}
+
+export function projectExportRow(row: ExportPlanRow, columns: ExportTemplateColumn[]): Record<string, string | number> {
+  const out: Record<string, string | number> = {}
+  for (const col of columns) {
+    const raw = (row as Record<string, unknown>)[col.field]
+    let value: string | number = typeof raw === 'number' || typeof raw === 'string' ? raw : ''
+    if (col.unit === 'cm' && typeof value === 'number' && isExportDimensionField(col.field)) {
+      value = value / 10
+    }
+    out[col.header.trim() || col.field] = value
+  }
+  return out
+}
+
+export function buildExportRowsFromTemplate(rows: ExportPlanRow[], columns: ExportTemplateColumn[]): Record<string, string | number>[] {
+  return rows.map((row) => projectExportRow(row, columns))
 }

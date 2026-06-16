@@ -303,6 +303,25 @@ function parseTemplatePayload(body) {
   }
 }
 
+function parseExportTemplatePayload(body) {
+  if (typeof body?.name !== 'string' || !body.name.trim() || !Array.isArray(body?.columns)) return null
+  const columns = body.columns
+    .map((col) => {
+      const field = String(col?.field ?? '').trim()
+      if (!field) return null
+      const templateColumn = {
+        field,
+        header: String(col?.header ?? ''),
+      }
+      if (col?.unit === 'cm' || col?.unit === 'mm') {
+        templateColumn.unit = col.unit
+      }
+      return templateColumn
+    })
+    .filter(Boolean)
+  return { name: body.name.trim(), columns }
+}
+
 function parseJsonOrDefault(value, fallback) {
   try {
     if (value == null || value === '') return fallback
@@ -325,6 +344,16 @@ function serializeTemplate(row) {
     combinedColumn: row.combined_column ?? '',
     dimensionOrder: parseJsonOrDefault(row.dimension_order, ['length', 'width', 'height']),
     defaultValues: parseJsonOrDefault(row.defaults, {}),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function serializeExportTemplate(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    columns: parseJsonOrDefault(row.columns, []),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -394,6 +423,75 @@ app.delete('/api/import-templates/:id', authenticate, (req, res) => {
     }
     db.prepare('DELETE FROM import_templates WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id)
     res.json({ message: 'Import template deleted' })
+  } catch (err) {
+    sendServerError(res, req.path, err)
+  }
+})
+
+app.get('/api/export-templates', authenticate, (req, res) => {
+  try {
+    const rows = db.prepare('SELECT * FROM export_templates WHERE user_id = ? ORDER BY datetime(updated_at) DESC').all(req.user.id)
+    res.json(rows.map(serializeExportTemplate))
+  } catch (err) {
+    sendServerError(res, req.path, err)
+  }
+})
+
+app.post('/api/export-templates', authenticate, (req, res) => {
+  const payload = parseExportTemplatePayload(req.body)
+  if (!payload) {
+    return res.status(400).json({ error: 'Missing template name or columns' })
+  }
+  const id = randomUUID()
+  const now = new Date().toISOString()
+  try {
+    db.prepare(`
+      INSERT INTO export_templates (id, user_id, name, columns, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, req.user.id, payload.name, JSON.stringify(payload.columns), now, now)
+    const created = db.prepare('SELECT * FROM export_templates WHERE id = ? AND user_id = ?').get(id, req.user.id)
+    res.status(201).json(serializeExportTemplate(created))
+  } catch (err) {
+    if (String(err?.message ?? '').includes('UNIQUE')) {
+      return res.status(409).json({ error: 'Template name already exists' })
+    }
+    sendServerError(res, req.path, err)
+  }
+})
+
+app.put('/api/export-templates/:id', authenticate, (req, res) => {
+  const payload = parseExportTemplatePayload(req.body)
+  if (!payload) {
+    return res.status(400).json({ error: 'Missing template name or columns' })
+  }
+  try {
+    const existing = db.prepare('SELECT * FROM export_templates WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id)
+    if (!existing) {
+      return res.status(404).json({ error: 'Template not found or unauthorized' })
+    }
+    db.prepare(`
+      UPDATE export_templates
+      SET name = ?, columns = ?, updated_at = ?
+      WHERE id = ? AND user_id = ?
+    `).run(payload.name, JSON.stringify(payload.columns), new Date().toISOString(), req.params.id, req.user.id)
+    const updated = db.prepare('SELECT * FROM export_templates WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id)
+    res.json(serializeExportTemplate(updated))
+  } catch (err) {
+    if (String(err?.message ?? '').includes('UNIQUE')) {
+      return res.status(409).json({ error: 'Template name already exists' })
+    }
+    sendServerError(res, req.path, err)
+  }
+})
+
+app.delete('/api/export-templates/:id', authenticate, (req, res) => {
+  try {
+    const existing = db.prepare('SELECT * FROM export_templates WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id)
+    if (!existing) {
+      return res.status(404).json({ error: 'Template not found or unauthorized' })
+    }
+    db.prepare('DELETE FROM export_templates WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id)
+    res.json({ message: 'Export template deleted' })
   } catch (err) {
     sendServerError(res, req.path, err)
   }

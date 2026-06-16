@@ -202,3 +202,19 @@ export interface ImportTemplate {
   createdAt: string
   updatedAt: string
 }
+
+export type ExportColumnUnit = 'mm' | 'cm'
+
+export type ExportTemplateColumn = {
+  field: string
+  header: string
+  unit?: ExportColumnUnit
+}
+
+export interface ExportTemplate {
+  id: string
+  name: string
+  columns: ExportTemplateColumn[]
+  createdAt?: string
+  updatedAt?: string
+}

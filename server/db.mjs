@@ -65,6 +65,17 @@ db.exec(`
     UNIQUE(user_id, name)
   );
 
+  CREATE TABLE IF NOT EXISTS export_templates (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    columns TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(user_id, name)
+  );
+
   CREATE TABLE IF NOT EXISTS custom_cargo (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -187,6 +198,24 @@ const migrations = [
       if (!hasColumn('import_templates', 'dimension_order')) {
         db.exec('ALTER TABLE import_templates ADD COLUMN dimension_order TEXT DEFAULT \'[\"length\",\"width\",\"height\"]\'')
       }
+    },
+  },
+  {
+    version: 7,
+    description: 'Add user-scoped export templates',
+    up: () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS export_templates (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          columns TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+          UNIQUE(user_id, name)
+        )
+      `)
     },
   },
 ]

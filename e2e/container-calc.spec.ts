@@ -1079,6 +1079,55 @@ test('renames and deletes import templates from top-level template manager', asy
   await expect(page.getByTestId('import-template-select').locator('option', { hasText: renamedTemplateName })).toHaveCount(0)
 })
 
+test('builds an export template that selects, renames, and unit-converts columns', async ({ page }) => {
+  await openEnglish(page)
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('Name', { exact: true }).fill('ExportProbe')
+  await cargoForm.getByLabel('Label', { exact: true }).fill('XP')
+  await cargoForm.getByLabel('Length mm').fill('800')
+  await cargoForm.getByLabel('Width mm').fill('600')
+  await cargoForm.getByLabel('Height mm').fill('400')
+  await cargoForm.getByLabel('Weight kg').fill('20')
+  await cargoForm.getByLabel('Quantity').fill('1')
+  await page.getByRole('button', { name: '+ Add cargo item' }).click()
+
+  const templateName = `Export ${Date.now()}`
+  await page.getByTestId('nav-template-manager').click()
+  await expect(page.getByTestId('export-template-list')).toBeVisible()
+  await page.getByTestId('export-template-new').click()
+  await page.getByTestId('export-template-new-name').fill(templateName)
+  await page.getByTestId('ex-new-export-col-header-name').fill('Goods')
+  await page.getByTestId('ex-new-export-col-header-label').fill('Tag')
+  await page.getByTestId('ex-new-export-col-unit-originalLength').selectOption('cm')
+  await page.getByTestId('ex-new-export-col-remove-weight').click()
+  await page.getByTestId('export-template-new-save').click()
+  await expect(page.locator('[data-testid^="export-template-row-"]:has-text("' + templateName + '")')).toBeVisible()
+
+  await page.locator('header').getByRole('button', { name: 'Workbench' }).click()
+  await page.getByTestId('export-template-select').selectOption({ label: templateName })
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export XLSX' }).click()
+  const download = await downloadPromise
+  const exportPath = path.join(os.tmpdir(), `cargo-export-tpl-${Date.now()}.xlsx`)
+  await download.saveAs(exportPath)
+  const exported = XLSX.read(await fs.readFile(exportPath), { type: 'buffer' })
+  const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(exported.Sheets['Packing Plan'])
+  const headers = Object.keys(rows[0])
+  // Renamed columns appear under their custom headers; the originals do not.
+  expect(headers).toContain('Tag')
+  expect(headers).toContain('Goods')
+  expect(headers).not.toContain('label')
+  expect(headers).not.toContain('name')
+  // Removed column is gone entirely.
+  expect(headers).not.toContain('weight')
+  const probe = rows.find((row) => row.Goods === 'ExportProbe')
+  expect(probe).toBeTruthy()
+  expect(probe!.Tag).toBe('XP')
+  // 800 mm exported as 80 cm.
+  expect(probe!.originalLength).toBe(80)
+})
+
 test('imports Vietnam irregular workbook through a reusable combined-dimension template', async ({ page }) => {
   test.slow()
   await openEnglish(page)
