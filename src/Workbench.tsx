@@ -8,7 +8,7 @@ import type { PlanViewMode } from './components/ContainerPlan2D'
 import { ManualPlacement2D } from './components/ManualPlacement2D'
 import { PlaybackPanel } from './components/PlaybackPanel'
 import { LoadingStepsPanel } from './components/LoadingStepsPanel'
-import { HelpTooltip } from './components/HelpTooltip'
+import { ImportMappingForm, type ImportMappingValue } from './components/ImportMappingForm'
 import { CenterOfGravityPanel } from './components/CenterOfGravityPanel'
 import { ContainerComparisonPanel } from './components/ContainerComparisonPanel'
 import { buildPlaybackSequence, visibleBoxesAt } from './lib/playback'
@@ -1996,6 +1996,28 @@ function Workbench() {
     setTemplateCombinedColumn(config.combinedColumn)
     setTemplateDimensionOrder(config.dimensionOrder)
     setTemplateDefaults(config.defaults)
+  }
+
+  const importMappingValue: ImportMappingValue = {
+    mapping: customMapping,
+    units: customUnits,
+    headerRow: templateHeaderRow,
+    startRow: templateStartRow,
+    dimensionMode: templateDimensionMode,
+    combinedColumn: templateCombinedColumn,
+    dimensionOrder: templateDimensionOrder,
+    defaults: templateDefaults,
+  }
+
+  const handleImportMappingChange = (next: ImportMappingValue) => {
+    setCustomMapping(next.mapping)
+    setCustomUnits(next.units)
+    setTemplateHeaderRow(next.headerRow)
+    setTemplateStartRow(next.startRow)
+    setTemplateDimensionMode(next.dimensionMode)
+    setTemplateCombinedColumn(next.combinedColumn)
+    setTemplateDimensionOrder(next.dimensionOrder)
+    setTemplateDefaults(next.defaults)
   }
 
   const libraryFormCargo = (): CargoItem => ({
@@ -4176,251 +4198,39 @@ function Workbench() {
                   </div>
                 )}
               </div>
-              <div className="mb-4 grid gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm md:grid-cols-4" data-testid="import-template-manager">
-                <label className="font-semibold text-slate-700">
-                  <span className="inline-flex items-center gap-1.5">
-                    {t.templateHeaderRow}
-                    <HelpTooltip text={t.templateHelpHeaderRow} testId="help-tooltip-header-row" />
-                  </span>
-                  <input
-                    className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                    type="number"
-                    min={1}
-                    value={templateHeaderRow}
-                    data-testid="template-header-row"
-                    onChange={(event) => setTemplateHeaderRow(Math.max(1, Number(event.target.value) || 1))}
-                  />
-                </label>
-                <label className="font-semibold text-slate-700">
-                  <span className="inline-flex items-center gap-1.5">
-                    {t.templateStartRow}
-                    <HelpTooltip text={t.templateHelpStartRow} testId="help-tooltip-start-row" />
-                  </span>
-                  <input
-                    className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                    type="number"
-                    min={2}
-                    value={templateStartRow}
-                    data-testid="template-start-row"
-                    onChange={(event) => setTemplateStartRow(Math.max(2, Number(event.target.value) || 2))}
-                  />
-                </label>
-                <label className="font-semibold text-slate-700">
-                  {t.templateDefaultLabel}
-                  <input
-                    className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                    value={templateDefaults.label ?? ''}
-                    data-testid="template-default-label"
-                    onChange={(event) => setTemplateDefaults((current) => ({ ...current, label: event.target.value }))}
-                  />
-                </label>
-                <label className="font-semibold text-slate-700">
-                  {t.templateDefaultQuantity}
-                  <input
-                    className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                    type="number"
-                    min={1}
-                    value={templateDefaults.quantity ?? 1}
-                    data-testid="template-default-quantity"
-                    onChange={(event) => setTemplateDefaults((current) => ({ ...current, quantity: Math.max(1, Number(event.target.value) || 1) }))}
-                  />
-                </label>
-                <label className="font-semibold text-slate-700">
-                  {t.templateDefaultColor}
-                  <input
-                    className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white"
-                    type="color"
-                    value={templateDefaults.color ?? '#f59e0b'}
-                    data-testid="template-default-color"
-                    onChange={(event) => setTemplateDefaults((current) => ({ ...current, color: event.target.value }))}
-                  />
-                </label>
-                <label className="flex items-center gap-2 font-semibold text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={templateDefaults.canRotate ?? true}
-                    data-testid="template-default-rotate"
-                    onChange={(event) => setTemplateDefaults((current) => ({ ...current, canRotate: event.target.checked }))}
-                  />
-                  {t.templateDefaultRotate}
-                </label>
-                <label className="flex items-center gap-2 font-semibold text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={templateDefaults.stackable ?? true}
-                    data-testid="template-default-stackable"
-                    onChange={(event) => setTemplateDefaults((current) => ({ ...current, stackable: event.target.checked, maxStackLayers: event.target.checked ? current.maxStackLayers : undefined }))}
-                  />
-                  {t.templateDefaultStackable}
-                </label>
-                {(templateDefaults.stackable ?? true) && (
-                  <label className="font-semibold text-slate-700">
-                    {t.templateDefaultMaxStackLayers}
-                    <input
-                      className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                      type="number"
-                      min={1}
-                      value={templateDefaults.maxStackLayers ?? ''}
-                      data-testid="template-default-max-stack-layers"
-                      onChange={(event) => {
-                        const parsed = Math.floor(Number(event.target.value) || 0)
-                        setTemplateDefaults((current) => ({ ...current, maxStackLayers: parsed > 0 ? parsed : undefined }))
-                      }}
-                    />
-                  </label>
-                )}
-                <label className="font-semibold text-slate-700">
-                  <span className="inline-flex items-center gap-1.5">
-                    {t.templateDimensionMode}
-                    <HelpTooltip text={t.templateHelpDimensionMode} testId="help-tooltip-dimension-mode" />
-                  </span>
-                  <select
-                    className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                    value={templateDimensionMode}
-                    data-testid="template-dimension-mode"
-                    onChange={(event) => setTemplateDimensionMode(event.target.value as 'separate' | 'combined')}
-                  >
-                    <option value="separate">{t.templateDimensionSeparate}</option>
-                    <option value="combined">{t.templateDimensionCombined}</option>
-                  </select>
-                </label>
-                {templateDimensionMode === 'combined' && (
-                  <div>
-                    <label className="font-semibold text-slate-700">
-                      <span className="inline-flex items-center gap-1.5">
-                        {t.templateCombinedColumn}
-                        <HelpTooltip text={t.templateHelpCombinedColumn} testId="help-tooltip-combined-column" />
-                      </span>
-                      <select
-                        className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                        value={templateCombinedColumn}
-                        data-testid="template-combined-column"
-                        onChange={(event) => {
-                          setTemplateCombinedColumn(event.target.value)
-                          setCustomMapping((current) => ({ ...current, dimensions: event.target.value }))
-                        }}
-                      >
-                        <option value="">{t.mappingSelectColumn}</option>
-                        {importColumnsForHeaderRow(importRows, templateHeaderRow).map((col) => (
-                          <option key={col} value={col}>{col}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="font-semibold text-slate-700">
-                      <span className="inline-flex items-center gap-1.5">
-                        {t.templateDimensionOrder}
-                      </span>
-                      <select
-                        className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                        value={templateDimensionOrder.join(',')}
-                        data-testid="template-dimension-order"
-                        onChange={(event) => {
-                          const val = event.target.value.split(',').filter(Boolean) as Array<'length' | 'width' | 'height'>
-                          setTemplateDimensionOrder(val)
-                        }}
-                      >
-                        <option value="length,width,height">{t.templateDimensionOrderLWH}</option>
-                        <option value="length,height,width">{t.templateDimensionOrderLHW}</option>
-                        <option value="width,length,height">{t.templateDimensionOrderWLH}</option>
-                        <option value="width,height,length">{t.templateDimensionOrderWHL}</option>
-                        <option value="height,length,width">{t.templateDimensionOrderHLW}</option>
-                        <option value="height,width,length">{t.templateDimensionOrderHWL}</option>
-                      </select>
-                    </label>
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="space-y-3" data-testid="mapping-fields">
-                  {Object.keys(customMapping).map((fieldKey) => {
-                    const labelMap: Record<string, string> = {
-                      label: t.mappingFieldLabel,
-                      name: t.mappingFieldName,
-                      length: t.mappingFieldLength,
-                      width: t.mappingFieldWidth,
-                      height: t.mappingFieldHeight,
-                      weight: t.mappingFieldWeight,
-                      quantity: t.mappingFieldQuantity,
-                      color: t.color,
-                      canRotate: t.rotate,
-                      stackable: t.stackable,
-                      maxStackLayers: t.maxStackLayers,
-                    }
-                    const excelColumns = importColumnsForHeaderRow(importRows, templateHeaderRow)
-                    const isDimension = fieldKey === 'length' || fieldKey === 'width' || fieldKey === 'height'
-                    const dimensionKey = fieldKey as 'length' | 'width' | 'height'
-                    // Combined mode supplies L/W/H from the combined column + split
-                    // order, so the standalone dimension selectors are redundant.
-                    if (templateDimensionMode === 'combined' && isDimension) {
-                      return null
-                    }
-                    return (
-                      <div key={fieldKey} className="rounded-md border border-slate-200 bg-white p-3">
-                        <label className="block text-sm font-semibold text-slate-700">
-                          <span className="inline-flex items-center gap-1.5">
-                            {labelMap[fieldKey] || fieldKey}
-                            {fieldKey === 'label' && <HelpTooltip text={t.templateHelpLabelColumn} testId="help-tooltip-label-column" />}
-                          </span>
-                          <select
-                            className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                            value={customMapping[fieldKey]}
-                            onChange={(e) => setCustomMapping(prev => ({ ...prev, [fieldKey]: e.target.value }))}
-                            data-testid={`map-select-${fieldKey}`}
-                          >
-                            <option value="">{t.mappingSelectColumn}</option>
-                            {excelColumns.map(col => (
-                              <option key={col} value={col}>{col}</option>
-                            ))}
-                          </select>
-                        </label>
-                        {isDimension && (
-                          <label className="mt-2 block text-xs font-semibold text-slate-600">
-                            {t.mappingUnit}
-                            <select
-                              className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                              value={customUnits[dimensionKey]}
-                              onChange={(e) => setCustomUnits(prev => ({ ...prev, [dimensionKey]: e.target.value as DimensionUnit }))}
-                              data-testid={`map-unit-${fieldKey}`}
-                            >
-                              <option value="auto">{t.mappingAutoUnit}</option>
-                              <option value="mm">mm</option>
-                              <option value="cm">cm</option>
-                            </select>
-                            {customUnits[dimensionKey] === 'cm' && (
-                              <span className="mt-1 inline-block text-[11px] font-medium text-amber-600">{t.mappingConvertHint}</span>
-                            )}
-                          </label>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-                <div className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid="mapping-preview">
-                  <div className="mb-2 text-sm font-semibold text-slate-700">{t.mappingPreview}</div>
-                  <div className="max-h-[420px] overflow-auto">
-                    <table className="min-w-full border-collapse text-xs">
-                      <thead className="sticky top-0 bg-slate-100">
-                        <tr>
-                          {importColumnsForHeaderRow(importRows, templateHeaderRow).map((col) => (
-                            <th key={col} className="border border-slate-200 px-2 py-1 text-left font-semibold text-slate-700 whitespace-nowrap">{col}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {importPreviewRows(importRows, templateHeaderRow, templateStartRow).slice(0, 5).map((row, rowIndex) => (
-                          <tr key={rowIndex} className="odd:bg-white even:bg-slate-50">
+              <ImportMappingForm
+                value={importMappingValue}
+                onChange={handleImportMappingChange}
+                availableColumns={importColumnsForHeaderRow(importRows, templateHeaderRow)}
+                labels={t}
+                previewSlot={(
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid="mapping-preview">
+                    <div className="mb-2 text-sm font-semibold text-slate-700">{t.mappingPreview}</div>
+                    <div className="max-h-[420px] overflow-auto">
+                      <table className="min-w-full border-collapse text-xs">
+                        <thead className="sticky top-0 bg-slate-100">
+                          <tr>
                             {importColumnsForHeaderRow(importRows, templateHeaderRow).map((col) => (
-                              <td key={col} className="border border-slate-200 px-2 py-1 text-slate-700 whitespace-nowrap">
-                                {row[col] === undefined || row[col] === null ? '' : String(row[col])}
-                              </td>
+                              <th key={col} className="border border-slate-200 px-2 py-1 text-left font-semibold text-slate-700 whitespace-nowrap">{col}</th>
                             ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {importPreviewRows(importRows, templateHeaderRow, templateStartRow).slice(0, 5).map((row, rowIndex) => (
+                            <tr key={rowIndex} className="odd:bg-white even:bg-slate-50">
+                              {importColumnsForHeaderRow(importRows, templateHeaderRow).map((col) => (
+                                <td key={col} className="border border-slate-200 px-2 py-1 text-slate-700 whitespace-nowrap">
+                                  {row[col] === undefined || row[col] === null ? '' : String(row[col])}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              </div>
+                )}
+              />
               <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
                 {(customUnits.length === 'cm' || customUnits.width === 'cm' || customUnits.height === 'cm') && (
                   <span className="mr-auto text-xs font-semibold text-amber-600" data-testid="mapping-convert-hint">
