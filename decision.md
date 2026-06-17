@@ -973,3 +973,37 @@
 
 - 影响：packing 评分/排序需引入「同 label 朝向一致」约束（须保证现有 packing.test.ts 全绿，新增缝隙回归断言）；模板 UI 三处合一，删除 templateManagerPanel 自由文本输入分支。
 - 后续：计划见 plans/2026-06-12-template-and-packing-gap.md。
+
+## 2026-06-17 第34轮 Review：模板入口再收敛（去掉弹窗外的「新建无数据源」问题）
+
+- 背景：第33轮 4 点已实现（模板管理页改用共享下拉映射组件），但用户复核仍指出模板设计有问题：①导航页「模板管理」点「新建模板」要选数据列，但新建时**没有数据源**，所有列下拉是空的，根本选不了；②工具栏还有一个「导入模板管理」按钮，与导航页重复，应去掉并合并到导航页模板管理。
+
+- 根因（已读码定位）：
+  - **新建无数据源**：导航页「新建模板」按钮（Workbench.tsx:2843）调 `createBlankImportTemplateDraft()` 开空白 `ImportMappingForm`；该表单列下拉只来自 `availableColumns`（ImportMappingForm.tsx:97 = `availableColumns ∪ 已选值`），而导航页传入的是 `importColumnsForHeaderRow(templateSampleRows, …)`，`templateSampleRows` 仅在用户先点「加载样本表头」上传文件后才有值。未上传 → 列下拉全空 → 「要选数据却没数据源」。
+  - **入口重复**：工具栏「导入模板管理」按钮（:3961，`open-template-manager`）`setImportRows([{}])` 后开映射弹窗，喂空数据 `[{}]`，同样列下拉为空；与导航页 `template-manager` 功能重叠。
+  - **真正可用路径**：导入真实 Excel → 弹窗带真实列 → 配映射 → 弹窗顶部 import-template-controls（:4301）命名+保存。这是唯一有数据源的创建路径。
+
+- 选项与决策（已与用户确认）：
+  1. 合并目标：**决策＝合并进导航页「模板管理」**，去掉工具栏「导入模板管理」按钮（`open-template-manager`，:3958-3971）。
+  2. 导航页去留：**决策＝保留，作为唯一管理入口**，且允许在此新建/自定义模板。
+  3. 新建时列下拉数据源：**决策＝允许手填列名**。新建/编辑模板时，列映射不强制依赖样本文件——`ImportMappingForm` 的列选择器在无 `availableColumns` 时支持用户手动输入列名（自由文本），有样本则可下拉选。沿用「加载样本表头」作为可选辅助。
+  4. 导入弹窗保存控件：**决策＝保留**。真实导入 Excel 时，弹窗顶部仍可命名并「保存模板」（看着真列配出来是最自然的创建路径），存后也出现在导航页同一列表。
+  - 导出模板（exportTemplateManagerPanel）本轮不动。
+
+- 影响：①删工具栏 `open-template-manager` 按钮 → E2E `container-calc.spec.ts:917-920` 段需更新（改走导航页或直接删该复用断言）。②`ImportMappingForm` 列选择器需支持「无样本时手填列名」——新增可输入模式（如 datalist 或 input+下拉混合），不破坏现有 `map-select-*` selectOption E2E。③导航页「新建模板」不再要求先加载样本。
+- 后续：计划见 plans/2026-06-17-template-entry-consolidation.md。
+
+### 补充（同轮）：合并模式下仍出现一个多余的「dimensions」列下拉
+
+- 现象：用户反馈「选了合并列后，后续仍然需要选择长宽高」。
+- 根因（已读码定位）：`FIELD_KEYS`（ImportMappingForm.tsx:65-78）含一项 `'dimensions'`。字段循环隐藏条件是 `dimensionMode==='combined' && dimensionKey`（:122），而 `dimensionKey` 仅 length/width/height 有值（`DIMENSION_FIELDS` 只收这三）。合并模式下真正的 L/W/H 三选择器**已被正确隐藏**；但 `dimensions` 项 `dimensionKey` 为 undefined → **不被隐藏**，渲染出一个裸的 "dimensions" 列下拉（`fieldLabel` 无此键，显示原始 key）。同时合并模式底部已有专门的「合并尺寸列」选择器 `template-combined-column`（:285），二者 onChange 都写同一个 `mapping.dimensions`（:289）——重复且困惑。
+- 决策：`dimensions` **不作为普通字段渲染**，字段循环跳过它（任何模式）；合并列统一由底部维度区的 `template-combined-column` 负责。`mapping.dimensions` 数据语义不变（仍由 combinedColumn 写入），parse 不动。
+- 影响：合并模式下字段区只剩 label/name/weight/quantity/color/可旋转/可堆叠/最大层数 等非尺寸项 + 底部「合并列 + 拆分顺序」；分列模式不受影响。无新增 E2E 风险（`map-select-dimensions` 无人引用）。
+- 已并入计划子任务 1。
+
+### 完成记录（2026-06-17）
+
+- 实现：`ImportMappingForm` 的列映射控件已由纯下拉改为可输入 `input + datalist`，保留原 `map-select-*`/`template-combined-column` test id 与 mapping 语义；无样本时可手填列名，有样本时给建议。
+- 实现：工具栏 `open-template-manager` 重复入口已删除，模板管理只走导航页「模板管理」；真实导入 Excel 弹窗顶部命名/保存模板控件保留。
+- 实现：`dimensions` 不再作为普通字段渲染；合并尺寸只由专门的 `template-combined-column` 写 `mapping.dimensions`。兼容旧模板：若后端序列化出的 `combinedColumn` 是空字符串但 `mapping.dimensions` 仍有列名，parser 与 Workbench 编辑/草稿/保存边界都使用 `combinedColumn || mapping.dimensions` 兜底，避免编辑旧合并模板时把合并列清空。
+- 验证：先改 E2E 并观察到 RED（旧 `<select>` 无法 `.fill()`）；实现后 targeted GREEN 6 项通过；TS review 发现旧合并模板空 `combinedColumn` 兼容缺口后新增单测并修复；本地 `npm run lint`、`npm test`（52 文件 / 321 测试）、`npm run build`、全量 `npm run test:e2e`（91 passed / 1 skipped）通过。部署结果见 CHANGELOG 同日条目追加。

@@ -74,7 +74,6 @@ const FIELD_KEYS = [
   'canRotate',
   'stackable',
   'maxStackLayers',
-  'dimensions',
 ] as const
 
 const DIMENSION_FIELDS: Record<string, MappingDimensionKey> = { length: 'length', width: 'width', height: 'height' }
@@ -93,7 +92,7 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
 
   // Keep already-selected columns selectable even when the live header list does
   // not contain them (e.g. editing a saved template before loading a sample file).
-  const usedValues = [value.combinedColumn, ...FIELD_KEYS.map((field) => value.mapping[field] ?? '')].filter(Boolean)
+  const usedValues = [value.combinedColumn, value.mapping.dimensions, ...FIELD_KEYS.map((field) => value.mapping[field] ?? '')].filter(Boolean)
   const columns = Array.from(new Set([...availableColumns, ...usedValues]))
 
   const fieldLabel: Record<string, string> = {
@@ -129,17 +128,19 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
                 {fieldLabel[fieldKey] || fieldKey}
                 {fieldKey === 'label' && <HelpTooltip text={labels.templateHelpLabelColumn} testId={tid('help-tooltip-label-column')} />}
               </span>
-              <select
+              <input
                 className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 value={value.mapping[fieldKey] ?? ''}
+                list={tid(`map-options-${fieldKey}`)}
+                placeholder={labels.mappingSelectColumn}
                 onChange={(event) => onChange({ ...value, mapping: { ...value.mapping, [fieldKey]: event.target.value } })}
                 data-testid={tid(`map-select-${fieldKey}`)}
-              >
-                <option value="">{labels.mappingSelectColumn}</option>
+              />
+              <datalist id={tid(`map-options-${fieldKey}`)}>
                 {columns.map((col) => (
-                  <option key={col} value={col}>{col}</option>
+                  <option key={col} value={col} />
                 ))}
-              </select>
+              </datalist>
             </label>
             {dimensionKey && (
               <label className="mt-2 block text-xs font-semibold text-slate-600">
@@ -282,17 +283,19 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
                 {labels.templateCombinedColumn}
                 <HelpTooltip text={labels.templateHelpCombinedColumn} testId={tid('help-tooltip-combined-column')} />
               </span>
-              <select
+              <input
                 className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
                 value={value.combinedColumn}
+                list={tid('combined-column-options')}
+                placeholder={labels.mappingSelectColumn}
                 data-testid={tid('template-combined-column')}
                 onChange={(event) => onChange({ ...value, combinedColumn: event.target.value, mapping: { ...value.mapping, dimensions: event.target.value } })}
-              >
-                <option value="">{labels.mappingSelectColumn}</option>
+              />
+              <datalist id={tid('combined-column-options')}>
                 {columns.map((col) => (
-                  <option key={col} value={col}>{col}</option>
+                  <option key={col} value={col} />
                 ))}
-              </select>
+              </datalist>
             </label>
             <label className="font-semibold text-slate-700">
               <span className="inline-flex items-center gap-1.5">

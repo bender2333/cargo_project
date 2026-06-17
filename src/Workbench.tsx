@@ -2180,7 +2180,7 @@ function Workbench() {
       startRow: template.startRow,
       mergeRows: template.mergeRows,
       dimensionMode: template.dimensionMode ?? 'separate',
-      combinedColumn: template.combinedColumn ?? '',
+      combinedColumn: template.combinedColumn || template.mapping.dimensions || '',
       dimensionOrder: template.dimensionOrder ?? ['length', 'width', 'height'],
       defaultValues: template.defaultValues,
     })
@@ -2201,7 +2201,7 @@ function Workbench() {
       startRow: draft.startRow,
       mergeRows: draft.mergeRows,
       dimensionMode: draft.dimensionMode,
-      combinedColumn: draft.combinedColumn,
+      combinedColumn: draft.combinedColumn || draft.mapping.dimensions || '',
       dimensionOrder: draft.dimensionOrder,
       defaultValues: draft.defaultValues,
     })
@@ -2238,7 +2238,7 @@ function Workbench() {
     headerRow: draft.headerRow ?? 1,
     startRow: draft.startRow ?? 2,
     dimensionMode: draft.dimensionMode ?? 'separate',
-    combinedColumn: draft.combinedColumn ?? '',
+    combinedColumn: draft.combinedColumn || draft.mapping.dimensions || '',
     dimensionOrder: draft.dimensionOrder ?? ['length', 'width', 'height'],
     defaults: draft.defaultValues ?? {},
   })
@@ -2267,7 +2267,7 @@ function Workbench() {
       startRow: draft.startRow,
       mergeRows: draft.mergeRows,
       dimensionMode: draft.dimensionMode,
-      combinedColumn: draft.combinedColumn,
+      combinedColumn: draft.combinedColumn || draft.mapping.dimensions || '',
       dimensionOrder: draft.dimensionOrder,
       defaultValues: draft.defaultValues,
     })
@@ -3955,20 +3955,6 @@ function Workbench() {
                   event.currentTarget.value = ''
                   void importExcel(file)
                 }} /></label>
-                <button
-                  className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold"
-                  type="button"
-                  data-testid="open-template-manager"
-                    onClick={() => {
-                      setImportRows([{}])
-                      setSelectedImportTemplateId('')
-                      setTemplateName('')
-                      setTemplateSaveNotice('')
-                      setShowMappingModal(true)
-                    }}
-                  >
-                  {t.templateManager}
-                </button>
                 <select
                   className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold"
                   value={selectedExportTemplateId}

@@ -458,3 +458,22 @@ describe('parseCargoRowsWithMapping', () => {
     expect(result.items[0]!.width).toBe(365)
     expect(result.items[0]!.height).toBe(435)
   })
+
+  it('falls back to mapping.dimensions when saved combinedColumn is an empty string', () => {
+    const template: ImportTemplateConfig = {
+      mapping: { dimensions: '尺寸' },
+      headerRow: 1,
+      startRow: 2,
+      dimensionMode: 'combined',
+      // Legacy API rows serialize an absent combined_column as ''. The parser
+      // must still honor the mapping.dimensions compatibility field.
+      combinedColumn: '',
+    }
+    const result = parseCargoRowsWithTemplate(
+      [{ '尺寸': '580*365*435' }],
+      template,
+      { createId: () => 'legacy-combined' },
+    )
+    expect(result.errors).toEqual([])
+    expect(result.items[0]!).toMatchObject({ length: 580, width: 365, height: 435 })
+  })

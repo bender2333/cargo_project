@@ -382,7 +382,7 @@ export function parseCargoRowsWithTemplate(
   if (defaults.maxStackLayers !== undefined && !effectiveMapping.maxStackLayers) effectiveMapping.maxStackLayers = '__default_maxStackLayers'
 
   if (template.dimensionMode === 'combined') {
-    const combinedColumn = template.combinedColumn ?? template.mapping.dimensions
+    const combinedColumn = template.combinedColumn || template.mapping.dimensions
     const order = template.dimensionOrder ?? dimensionFields
     if (combinedColumn) {
       const multiplier = dimensionUnitMultiplier(template, combinedColumn)

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-06-17 (Template Entry Consolidation — Round 34)
+
+Implements REVIEW.md「第三十四轮」and `plans/2026-06-17-template-entry-consolidation.md`: collapse template management to the navigation page, remove the empty-data toolbar path, and make new/edit template mapping usable without a sample workbook.
+
+- TDD evidence: updated the affected E2E expectations first and ran the targeted template subset before production edits. Expected RED was observed: `.fill()` failed because `map-select-*` and `template-combined-column` were still `<select>` elements, proving the old pure-select behavior was under test.
+- Mapping inputs: `ImportMappingForm` column controls changed from pure `<select>` to controlled `<input list="...">` + `<datalist>` suggestions while preserving the existing `data-testid` contract (`map-select-*`, `template-combined-column`). Empty string still means unmapped. Existing selected values and `availableColumns` both populate suggestions, so editing saved templates keeps their typed headers visible.
+- Pure hand-entry template creation: navigation 「模板管理」 → 「新建模板」 no longer requires `template-manager-sample-input`. Users can type column names directly (e.g. Goods/L/W/H or customer-specific headers). E2E now creates a reusable import template from the navigation page without loading a sample first and then imports the Excel fixture through it.
+- Optional sample headers: 「加载样本表头」 remains an assistant, not a prerequisite. New E2E uploads a sample workbook and asserts the datalist contains `Goods` and `L` suggestions, then still uses the same fillable controls to save the template.
+- Entry consolidation: removed the toolbar `open-template-manager` button that previously opened the import mapping modal with `[{}]` empty data. E2E asserts `open-template-manager` has count 0. The real 「Import XLSX」 flow and import-dialog save-template controls remain intact.
+- Combined dimensions cleanup: removed `dimensions` from ordinary field rendering. `mapping.dimensions` remains part of the data model, but it is written only by the dedicated `template-combined-column` input; E2E asserts `map-select-dimensions` has count 0 in combined mode while L/W/H still hide and restore correctly.
+- Compatibility fix from TypeScript review: legacy combined-dimension templates whose serialized `combinedColumn` is `''` but whose `mapping.dimensions` still stores the size column now keep working. Parser fallback now uses `combinedColumn || mapping.dimensions`, and Workbench edit/draft/save boundaries preserve that fallback so editing an old combined template cannot blank the combined-size column.
+- Local verification: targeted RED observed as above; targeted GREEN passed 6 template/import tests; legacy combined-column fallback regression passed; mandatory reviewers ran (React/general no issues; TS found the legacy fallback bug and it was fixed); `npm run lint` clean; `npm test` 52 files / 321 tests passed; `npm run build` passed with the existing Vite chunk-size warning; full `npm run test:e2e` passed 91 / skipped 1 / failed 0.
+
 ## 2026-06-16 (Template unification / Export templates / Combined auto-fill / Help bubble — Round 33)
 
 Implements REVIEW.md「第三十三轮」points 1-4 (scope A+B per decision.md 2026-06-16). Order 4 → 3 → 2 → 1(B→A); each point its own commit.

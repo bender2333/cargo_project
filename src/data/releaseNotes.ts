@@ -14,6 +14,30 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-06-17-r44-template-entry-consolidation',
+    date: '2026-06-17',
+    title: { en: 'Template entry consolidation', zh: '模板入口收敛' },
+    items: {
+      en: [
+        'Template management now has one management entry: the toolbar duplicate "Import template manager" button is gone; use the navigation "Template manager" page for creating, editing, deleting, import templates, and export templates.',
+        'New import templates no longer need a sample workbook first. In the template manager page, every mapped column field is now a fillable input with optional datalist suggestions, so you can type headers such as Goods, L, W, H directly.',
+        'Loading sample headers remains available as an optional helper: after uploading a sample workbook, the same inputs offer suggestions from the file while still allowing custom typed column names.',
+        'The real Excel import dialog keeps its save-template controls. When a workbook is open, the same fillable mapping inputs show the real file columns as suggestions and saved templates still appear in the one template list.',
+        'Combined-dimension mode is cleaner: the ordinary "dimensions" mapping field is no longer rendered; only the dedicated combined-size column plus split-order controls own that mapping.',
+        'E2E coverage now checks pure hand-typed template creation, optional sample-header suggestions, the removed toolbar entry, reused templates, remembered raw mappings, and the Vietnam combined-dimension fixture.',
+      ],
+      zh: [
+        '模板管理现在只保留一个管理入口：工具栏重复的「导入模板管理」按钮已删除；统一从导航「模板管理」页创建、编辑、删除导入模板与导出模板。',
+        '新建导入模板不再必须先加载样本文件。模板管理页的每个列映射字段都改为可输入框 + 可选建议，Goods、L、W、H 等表头可直接手填。',
+        '「加载样本表头」仍保留为可选辅助：上传样本后，同一输入框会给出文件列建议，同时仍允许输入自定义列名。',
+        '真实 Excel 导入弹窗保留顶部「命名 + 保存模板」控件。打开工作簿时，同一套可输入映射框会用真实文件列做建议，保存后的模板仍进入统一列表。',
+        '合并尺寸模式更干净：普通字段区不再渲染裸的 "dimensions" 映射项；合并尺寸列只由专门的合并列 + 拆分顺序控件负责。',
+        'E2E 已覆盖纯手填新建模板、样本表头建议、删除的工具栏入口、模板复用、裸映射记忆，以及越南合并尺寸夹具。',
+      ],
+    },
+  },
+
+  {
     version: '2026-06-16-r43-template-unify-export',
     date: '2026-06-16',
     title: { en: 'Unified templates, export templates, and mapping fixes', zh: '模板统一 / 导出模板 / 映射修正' },
