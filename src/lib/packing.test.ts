@@ -762,9 +762,9 @@ describe('calculatePacking', () => {
   })
 
   describe('tilting and side-placement algorithm optimization', () => {
-    it('places 80 items of 400x500x600 in 40HQ container, ensuring higher stack layers via tilting', () => {
-      // 40HQ has height 2694. With 600mm height, we can stack 4 layers (2400mm). 
-      // With tilting, we can use 400mm or 500mm height, e.g., 5 layers of 500mm (2500mm) or 6 layers of 400mm (2400mm).
+    it('places 80 items of 400x500x600 in a 40HQ container as even upright layers', () => {
+      // 40HQ has height 2694. A 600mm-tall box stacks 4 upright layers (2400mm); the remaining
+      // 294mm cannot fit another box, so four even layers is the correct full-utilization result.
       const containerhq = containers[2] // "Container 40' HC" (12117 x 2388 x 2694)
       const cargoItem = cargo({
         id: 'box-tilt',
@@ -780,13 +780,45 @@ describe('calculatePacking', () => {
 
       const result = calculatePacking(containerhq, [cargoItem])
       
-      // Let's verify we placed many of them
+      // Rotation lets a 600mm box fill the 2694mm-tall container in four upright layers.
+      // All 80 fit, and same-cargo orientation commitment keeps them in one orientation so they
+      // pack as even columns instead of an uneven mixed-orientation staircase (which leaves gaps).
       expectValidPacking(containerhq, result)
-      expect(result.placedCount).toBeGreaterThanOrEqual(50)
-      
-      // Let's check the maximum physical layers. With tilting, it should reach at least 5 layers
+      expect(result.placedCount).toBe(80)
       const maxLayer = Math.max(...result.placed.map((box) => box.physicalLayer), 0)
-      expect(maxLayer).toBeGreaterThanOrEqual(5)
+      expect(maxLayer).toBeGreaterThanOrEqual(4)
+    })
+  })
+
+  describe('same-cargo orientation commitment', () => {
+    it('commits a cargo to one orientation so identical boxes share a row pitch', () => {
+      // 530x305x310 boxes fit LWH or WLH; mixing them alternates the 530/305 floor pitch and
+      // leaves side gaps. The first placement fixes the orientation and every later box of the
+      // same cargo reuses it, so all placed boxes share one orientationKey. Regression for the
+      // alternating-orientation side gaps reported on cargo-debug-snapshot (14).
+      const container = testContainer({ length: 12117, width: 2388, height: 2694 })
+      const cargoItem = cargo({ length: 530, width: 305, height: 310, quantity: 60, canRotate: true })
+
+      const result = calculatePacking(container, [cargoItem])
+
+      expect(result.placedCount).toBe(60)
+      const orientationKeys = new Set(result.placed.map((box) => box.orientationKey))
+      expect(orientationKeys.size).toBe(1)
+    })
+
+    it('lets a box fall back to another orientation when the committed one cannot fit', () => {
+      // Commitment is a strong preference, not a hard filter. In a 1000x1000x400 box only two
+      // committed-orientation boxes fit; a third fits the leftover strip only when rotated. It
+      // must still place (three total, two distinct orientations) rather than be dropped as
+      // unplaced — a hard filter would strand it and leave only two placed.
+      const container = testContainer({ length: 1000, width: 1000, height: 400 })
+      const cargoItem = cargo({ length: 600, width: 400, height: 400, quantity: 6, canRotate: true })
+
+      const result = calculatePacking(container, [cargoItem])
+
+      expect(result.placedCount).toBe(3)
+      const orientationKeys = new Set(result.placed.map((box) => box.orientationKey))
+      expect(orientationKeys.size).toBe(2)
     })
   })
 })

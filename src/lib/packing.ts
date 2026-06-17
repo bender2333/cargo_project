@@ -278,10 +278,22 @@ export function placementScore(
   point: PackingPoint,
   placed: PlacedBox[],
   container: ContainerSpec,
+  committedOrientation?: OrientationKey,
 ) {
   // Discourage tilting (orientations where original height is no longer along z),
   // so realistic upright placement wins when both orientations fit comparably.
   const tiltPenalty = box.height === item.height ? 0 : container.length * container.width * container.height
+
+  // Same-cargo orientation commitment: once a cargo's first upright box fixes an orientation,
+  // keep the rest of that cargo in it so floor rows share a pitch instead of alternating
+  // LWH/WLH and leaving side gaps. Strong penalty, not a hard filter — it dominates local
+  // position tiebreakers but yields when the committed orientation cannot fit anywhere, so a
+  // box switches orientation rather than going unplaced. Only constrains upright candidates;
+  // tilts stay governed by tiltPenalty.
+  const orientationCommitmentPenalty =
+    committedOrientation !== undefined && box.orientationKey !== committedOrientation && box.height === item.height
+      ? container.length * container.width * container.height * 0.5
+      : 0
 
   // Prefer LWH orientation (original length along container length) so cargo labels
   // face the inspection door. Cancels the -box.width * 0.01 tiebreaker advantage
@@ -354,6 +366,7 @@ export function placementScore(
       : 0
     return (
       tiltPenalty +
+      orientationCommitmentPenalty +
       labelFacingPenalty +
       sameLabelBonus +
       sameHeightBonus +
@@ -372,6 +385,7 @@ export function placementScore(
   // so that pinwheel arrangements emerge naturally for tightly packed pallet loads.
   return (
     tiltPenalty +
+    orientationCommitmentPenalty +
     labelFacingPenalty +
     sameLabelBonus +
     sameHeightBonus +
@@ -394,6 +408,7 @@ function bestPlacement(
   preferCapacityOneTopPassenger = false,
   reserveTopPassengerStackSlot = false,
   deferCapacityOneFloorFallback = false,
+  committedOrientation?: OrientationKey,
 ) {
   const placedById = new Map<string, StackChainNode>(placed.map((placedBox) => [placedBox.id, placedBox]))
   const bestFromPoints = (candidatePoints: PackingPoint[]) => orientations(item)
@@ -418,7 +433,7 @@ function bestPlacement(
         .map((point) => ({
           box,
           point,
-          score: placementScore(item, box, point, placed, container),
+          score: placementScore(item, box, point, placed, container, committedOrientation),
         })),
     )
     .sort((a, b) => a.score - b.score || b.box.width - a.box.width || b.box.length * b.box.width - a.box.length * a.box.width)[0]
@@ -650,6 +665,9 @@ function normalizeDefaultMaxStackLayers(value: number | undefined) {
 export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[], options: CalculatePackingOptions = {}): PackingResult {
   const effective = effectiveContainer(container)
   const placed: PlacedBox[] = []
+  // Each cargo commits to the orientation of its first upright placement; later boxes of the
+  // same cargo reuse it so rows share a pitch and stop leaving alternating side gaps.
+  const committedOrientations = new Map<string, OrientationKey>()
   let extremePoints: PackingPoint[] = [{ x: 0, y: 0, z: 0 }]
   const unplacedMap = new Map<string, UnplacedCargo>()
   let usedWeight = 0
@@ -711,6 +729,9 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     placement: { box: BoxOrientation; point: PackingPoint },
   ) => {
     const { box, point } = placement
+    if (box.height === entry.item.height && !committedOrientations.has(entry.item.id)) {
+      committedOrientations.set(entry.item.id, box.orientationKey)
+    }
     const support = supportDetails(point, box, placed)
     placed.push({
       id: `${entry.item.id}-${entry.index}`,
@@ -792,7 +813,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
           for (const candidatePoints of candidatePointSets) {
             for (const point of candidatePoints) {
               if (!canPlace(point, box, effective, placed, placedById, item)) continue
-              const score = placementScore(item, box, point, placed, effective)
+              const score = placementScore(item, box, point, placed, effective, committedOrientations.get(item.id))
               if (
                 best === null ||
                 score < best.score ||
@@ -854,6 +875,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         loadingMode === 'quantity',
         reserveTopPassengerStackSlot,
         loadingMode === 'quantity',
+        committedOrientations.get(item.id),
       )
       if (!placement) {
         markUnplaced(item, entry.label, UNPLACED_REASON_CODES.NO_SPACE)
@@ -870,6 +892,11 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         effective,
         placed,
         normalizePoints([...extremePoints, ...topSurfacePoints(placed, entry.item)], effective),
+        0,
+        false,
+        false,
+        false,
+        committedOrientations.get(entry.item.id),
       )
       if (!placement) continue
       placeEntry(entry, placement)
