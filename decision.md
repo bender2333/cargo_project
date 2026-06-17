@@ -1,6 +1,28 @@
 # Decision Log
 
 
+## 2026-06-17 第三十五轮 Review：箱子倒放（朝向渲染）+ 同货物缝隙（装箱朝向一致）
+
+> 状态：已实现并本地验证（lint clean、`npm test` 52 文件 324 测试、build 通过、隔离 WebGL 渲染 + 435 箱整柜渲染目检）。来源：用户复核 `cargo-debug-snapshot (14).json` + 倒放.png/缝隙.png。已用真实快照精确复现（PLACED 454、LWH197/WLH253/HWL4）后再动手。
+
+### 点 1 · 箱子倒放 = 3D 渲染 bug（非装箱数据错误）
+
+- 背景：倒放.png 中紫色 `TP`(`WLH`) 箱标签上下颠倒（显示成 "dl"），缝隙.png 中部红/蓝箱顶面无标签（露出无标签的 `-Y` 底面）。快照中 `WLH` 共 253 箱，远多于真正倒置的 4 个 `HWL`，说明不是 4 个倒箱，而是整类 `WLH` 渲染翻转。
+- 根因：自动装箱输出 canonical 全正 `orientationAxes`（`WLH`={W+,L+,H+}）。`WLH/LHW/HWL` 这三个是左手（improper）排列，`orientationRenderingBasisVectors`（`src/lib/orientationTransform.ts`）为恢复正交旋转一律翻转 **height**；而 `WLH` 的 height 本就朝上，翻 height 把整箱倒过来 → 顶面变底面、标签颠倒。
+- 选项：A 在渲染基向量函数里按「height 已朝上时改翻水平轴(width)」分流；B 让装箱输出 proper 的有符号 axes（改 `canonicalAxesForOrientation` 给一个水平负号）；C 3D 标签改逐面纠正旋转。
+- 决策：**A**。最小、最稳。仅当基底 improper 且 `basis.height.z>0`（height 朝上，唯一命中 canonical `WLH`）时翻 `width`，否则保持原 height 翻转（不破坏 `normalizes left-handed snapshot axes` 那条锁定 height 翻转的快照用例 —— 其 height 为水平 `hz=0`，不进新分支）。tilt 方向(`LHW/HWL`，height 水平)维持原行为。
+- 影响：`renderedFootprint` 对单轴变号不敏感（AABB 取 ±半轴 max-min），手动重叠/越界判定不变；2D 用 `orientationAxesOf`（未改）不受影响。新增单测断言 canonical `WLH` 渲染基底 height 保持 (0,0,1) 且 det=1。隔离渲染 LWH/WLH/HWL 三箱与整柜 435 箱目检：标签全部正立。
+
+### 点 2 · 同货物缝隙 = 装箱朝向不一致（执行 2026-06-12 已决策但未落地的子任务 1）
+
+- 背景：2026-06-12 已拍板「缝隙＝同货物同朝向」（decision.md 同日条目 + `plans/2026-06-12-template-and-packing-gap.md` 子任务 1），但当时只落地了模板 UI（子任务 2/3/4），装箱朝向约束一直没做。本轮补上。
+- 根因：`placementScore` 只用极弱的 `labelFacingPenalty=(L-W)*0.01` 偏好 LWH，压不过位置项，同一货物被拆成 LWH/WLH 混排（快照 7 个品类混排），地面行距 530/305 交替留缝。
+- 决策：每个 cargo 由其**首个直立放置**确定承诺朝向（`committedOrientations: Map<cargoId,OrientationKey>`，`placeEntry` 写入）；后续同 cargo 直立候选若朝向不同则加 `orientationCommitmentPenalty = 0.5×柜体积`。**强惩罚非硬过滤**：承诺朝向放不下时仍换朝向放置（快照混排 7→1，那 1 个正是兜底换朝向，箱体仍被放置而非 unplaced），覆盖 `bestPlacement` 与 `volume` 两条路径。penalty 取 0.5×体积：盖过本地位置项（单行位移约 0.09×体积，dominance≈5×），又低于 `tiltPenalty`(1×体积) 以保证「直立兜底优于躺倒」。
+- 量级取舍（sweep 实测）：penalty∈[0.15,0.5] 均得混排=1、无 tilt；=1.0 会让直立兜底与 tilt 同分而重新混入 `WHL/HLW`，故取 0.5。
+- 影响 / 与旧决策冲突：与 2026-05-23「6 朝向 tilt 提利用率」存在张力——但本轮用户正是抱怨 tilt/倒放，方向以**当前用户反馈**为准（AGENTS 规则 7/11：取更新更贴合用户的取向）。快照结果：LWH282/WLH153、**HWL 消失**、混排 7→1、地面侧悬 11→7。利用率权衡：本超载夹具(864 货 ~50% 可装)placed 454→435（−19，−4.2%）；sweep 证明任何 ≥0.05 的 penalty 都会触发该降幅且到 0.5 持平，是「同货物同朝向」决策接受的一致性 vs 密度固有代价，非量级失误。正常装载（全部可装）一致性零成本。
+- 测试取舍（非削弱凑绿）：`places 80×400×500×600` 旧断言 `maxLayer≥5` 实际奖励的是混排 LWH/WLH 的**不平整阶梯堆叠**（17/20/20/20/3），即用户抱怨的缝隙来源；修复后为干净 4 层均匀堆叠（20×4）且 **80 箱全装（利用率不降）**。故把断言改为 `placedCount===80 + maxLayer≥4`，并改标题/注释（原「via tilting」实际无 tilt）。证据：OCP=0 与 0.5 均放 80 箱，仅堆叠结构由阶梯变均匀。
+- 后续：按 CLAUDE.md 生产部署 + 远程 E2E 回归，结果记入 CHANGELOG。`test:e2e` 若覆盖 3D 标签/装箱布局相关用例需重点观察。
+
 ## 2026-06-16 第三十三轮 Review 范围拍板（模板统一 / 导出模板 / 合并填充 / 帮助气泡）
 
 > 状态：已拍板，按 REVIEW.md「第三十三轮」推荐方案执行。基线（lint+test 305+build+模板相关 E2E 6 项）已全绿。
