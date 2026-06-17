@@ -87,6 +87,21 @@ export function orientationRenderingBasisVectors(axes: OrientationAxes): Orienta
   const basis = orientationBasisVectors(axes)
   const expectedHeight = vectorCross(basis.length, basis.width)
   if (vectorDot(expectedHeight, basis.height) < 0) {
+    // Left-handed (improper) basis: negating one axis restores a proper rotation.
+    // When the body height already points up (canonical upright orientations like WLH),
+    // negating height would render the box upside-down — negate a horizontal axis (width)
+    // instead so the box stays upright. Otherwise (height tilted/down, e.g. legacy snapshot
+    // axes) negate height to bring it back up.
+    if (basis.height.z > 0) {
+      return {
+        ...basis,
+        width: {
+          x: axisComponent(-basis.width.x),
+          y: axisComponent(-basis.width.y),
+          z: axisComponent(-basis.width.z),
+        },
+      }
+    }
     return {
       ...basis,
       height: {

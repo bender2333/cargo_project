@@ -175,4 +175,22 @@ describe('orientationTransform', () => {
       height: { x: 0, y: 1, z: 0 },
     })
   })
+
+  it('keeps the box upright for a canonical WLH yaw instead of flipping it upside-down', () => {
+    // Auto-packing emits canonical all-positive axes. WLH is an improper (left-handed)
+    // permutation, but its height already points up — the rendering basis must stay upright
+    // (height z = 1), otherwise the box and its labels render upside-down. Regression for the
+    // purple WLH "倒放" boxes in cargo-debug-snapshot (14).
+    const axes = { x: 'W+', y: 'L+', z: 'H+' } as const
+
+    expect(determinant(orientationBasisVectors(axes))).toBe(-1)
+    const rendering = orientationRenderingBasisVectors(axes)
+    expect(determinant(rendering)).toBe(1)
+    expect(rendering.height).toEqual({ x: 0, y: 0, z: 1 })
+    expect(rendering).toEqual({
+      length: { x: 0, y: 1, z: 0 },
+      width: { x: -1, y: 0, z: 0 },
+      height: { x: 0, y: 0, z: 1 },
+    })
+  })
 })
