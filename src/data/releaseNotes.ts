@@ -14,6 +14,23 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-06-17-r45-upright-boxes-and-gaps',
+    date: '2026-06-17',
+    title: { en: 'Upright boxes & tighter packing', zh: '箱体正立与无缝排布' },
+    items: {
+      en: [
+        'Fixed boxes that rendered upside-down in 3D: cargo turned 90° (width-along-length) now shows upright, readable labels instead of inverted text and blank top faces.',
+        'Identical cargo now packs in a single consistent orientation, so rows share one pitch and the alternating side gaps between same-product boxes are gone.',
+        'Boxes are no longer tipped onto their side or end to squeeze in; a box still switches orientation only when that is the sole way it fits.',
+      ],
+      zh: [
+        '修复 3D 中箱体倒置显示的问题：货物旋转 90°（宽沿柜长）后现在正立显示、标签可读，不再出现颠倒文字和无标签的顶面。',
+        '相同货物现在按统一朝向排布，行距一致，同一产品箱体之间交替出现的侧向缝隙已消除。',
+        '不再为塞进货物而把箱体侧倒或竖立；仅当唯一能放下的方式就是换朝向时，箱体才会换朝向。',
+      ],
+    },
+  },
+  {
     version: '2026-06-17-r44-template-entry-consolidation',
     date: '2026-06-17',
     title: { en: 'Template entry consolidation', zh: '模板入口收敛' },
