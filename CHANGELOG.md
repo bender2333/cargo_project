@@ -9,6 +9,8 @@ Review feedback: after mapping columns in the Excel import dialog, clicking 「�
 - Live reproduction + verification (headless Chromium against local API 3010): fresh user, configure combined-mode Vietnam mapping, save, cancel, re-upload → before the fix the dialog reopened blank (dropdown 「No template」, fields empty); after the fix the same flow auto-applied the template (dropdown selected, headerRow/startRow/combined column/label/name/quantity all restored, confirm enabled).
 - Test: added E2E `auto-applies a saved import template on the next import without re-selecting` (save → cancel → re-upload → assert dropdown shows the template and `map-select-*` prefilled → confirm imports 1 row). Verified RED without the fix (dropdown resolved to 「No template」) then GREEN with it, so the test fails when this business logic regresses.
 - Verification (local): `npm run lint` clean; `npm test` 52 files / 324 tests pass; `npm run build` passes (existing Vite chunk-size warning); full `npm run test:e2e` 92 passed / 1 skipped / 0 failed.
+- Deploy (production): `npm run deploy` passed all 7 steps — local build, remote backup `/root/cargo_project-backup-20260618-020342`, `dist/` synced into the live site, `server/*.mjs` + `package*.json` synced, `cargo-server.service` restarted, Step 7 HTTP+API health check passed.
+- Remote E2E regression (`PLAYWRIGHT_BASE_URL=http://101.33.232.150/`): targeted template-reuse paths passed 5/5 — the new save→remember→auto-apply test plus visible-manager reuse, manual-config memory, top-level manager reuse, and Vietnam combined-dimension template — confirming the fix is live on production.
 
 ## 2026-06-17 (Upside-down boxes + same-cargo gaps — Round 35)
 
