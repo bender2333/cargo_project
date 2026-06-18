@@ -10,6 +10,8 @@ Implements `plans/2026-06-18-template-apply-only-prefill.md`: corrects the Round
 - Tests updated: template E2E expectations now encode prefill-only semantics, including “select template but cancel means no cargo imported”, default no-template state, missing-column red frame, and Vietnam combined-template prefill before confirmation. Per direct user instruction for this task, E2E was updated but not executed.
 - Release note: added `2026-06-18-r48-template-prefill-confirm` and revised r47/r46 notes so the in-app release notes no longer advertise the superseded immediate-import or auto-apply behavior.
 - Verification (local): `npm run lint` clean; `npm test` 53 files / 329 tests pass; `npm run build` passes with the existing Vite chunk-size warning. Reviews: TypeScript/React/general reviews reported no blocking issues. E2E intentionally skipped by direct user request for this task.
+- Deploy (production): `npm run deploy` passed all 7 steps — local build, remote backup `/root/cargo_project-backup-20260618-070111`, `dist/` and backend modules synced, `cargo-server.service` restarted, and remote HTTP/API health check passed.
+- Remote verification: live `http://101.33.232.150/` serves bundle `/assets/index-zguq9R2-.js`; browser-side bundle fetch confirmed it contains `2026-06-18-r48-template-prefill-confirm`, `Templates prefill mappings for review`, and `模板先预填，确认后导入`, and no longer contains the superseded title `Template selection imports immediately`.
 
 ## 2026-06-18 (Template selection triggers import — Round 37)
 
