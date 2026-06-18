@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-06-18 (Save import template = remember it for next import — Round 36)
+
+Review feedback: after mapping columns in the Excel import dialog, clicking 「保存模板」 should be enough — the next time the template is used the mappings should already be applied, with no manual re-selection. It wasn't: saving a template did not make it the one auto-applied next time.
+
+- Root cause (`src/Workbench.tsx` `handleSaveImportTemplate`): saving a named template set `selectedImportTemplateId` but never persisted `lastUsedTemplateId`. Only `confirmMappingImport` wrote `cargo_last_used_template_id`. So save-then-cancel (or saving in one session and importing in a later one) left `lastUsedTemplateId` unset; the next upload's `importExcel` auto-apply check (`lastUsedExists`) was false and the dialog reopened blank, forcing the user to re-pick the template from the dropdown. (Picking it from the dropdown always restored every mapping correctly — the gap was purely that save did not mark the template as last-used.)
+- Fix: `handleSaveImportTemplate` now persists the saved template id as last-used (`localStorage.setItem(LAST_USED_TEMPLATE_KEY, saved.id)` + `setLastUsedTemplateId(saved.id)`), mirroring the confirm path. Saving a template is an explicit "I'll reuse this" signal, so the next import auto-applies it. Surgical: the only behavioral change is that save now remembers; the confirm path, the standalone manager page, and parse rules are untouched.
+- Live reproduction + verification (headless Chromium against local API 3010): fresh user, configure combined-mode Vietnam mapping, save, cancel, re-upload → before the fix the dialog reopened blank (dropdown 「No template」, fields empty); after the fix the same flow auto-applied the template (dropdown selected, headerRow/startRow/combined column/label/name/quantity all restored, confirm enabled).
+- Test: added E2E `auto-applies a saved import template on the next import without re-selecting` (save → cancel → re-upload → assert dropdown shows the template and `map-select-*` prefilled → confirm imports 1 row). Verified RED without the fix (dropdown resolved to 「No template」) then GREEN with it, so the test fails when this business logic regresses.
+- Verification (local): `npm run lint` clean; `npm test` 52 files / 324 tests pass; `npm run build` passes (existing Vite chunk-size warning); full `npm run test:e2e` 92 passed / 1 skipped / 0 failed.
+
 ## 2026-06-17 (Upside-down boxes + same-cargo gaps — Round 35)
 
 Review feedback on `cargo-debug-snapshot (14).json`: ① boxes rendered upside-down (倒放, the purple `TP`/`WLH` boxes showed inverted "dl" labels); ② same cargo laid out with side gaps between boxes (缝隙). Reproduced the snapshot result exactly (`calculatePacking` → PLACED 454, orient LWH 197 / WLH 253 / HWL 4) before changing anything.

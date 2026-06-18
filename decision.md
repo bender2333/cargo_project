@@ -1,5 +1,16 @@
 # Decision Log
 
+## 2026-06-18 第三十六轮 Review：保存模板＝记住它（下次导入自动套用）
+
+> 状态：已实现并验证（lint clean、`npm test` 52 文件 324 测试、build 通过、headless Chromium 真机复现前后对比、新增 E2E 先 RED 后 GREEN、全量 `npm run test:e2e` 92 passed / 1 skipped）。来源：用户复核——「在导入 Excel 中选择各个映射后点击保存模板应可直接保存，下次再次使用模板就不用手动再选择映射」。
+
+- 背景：用户在导入弹窗里配好列映射、点「保存模板」，期望下次导入该模板已自动套用、不必再手动选映射。实测：保存后若不在同一弹窗里确认导入（取消，或本次保存、下次会话才导入），下次上传弹窗仍空白，必须手动从下拉里重选模板。
+- 根因（读码 + 真机复现定位）：`src/Workbench.tsx` `handleSaveImportTemplate` 保存命名模板时只 `setSelectedImportTemplateId(saved.id)`，**从不写 `lastUsedTemplateId`**（`cargo_last_used_template_id`）。只有 `confirmMappingImport`（:2001-2006）在确认导入时才持久化 last-used。于是「保存但未确认」这条链路 last-used 仍为空 → 下次 `importExcel` 的 `lastUsedExists` 为 false → 不调用 `applyImportTemplate` → 弹窗空白。注意：从下拉手选模板时 `applyImportTemplate` 一直能正确还原全部映射（已真机验证），缺口纯粹是「保存」没把模板标记为 last-used。
+- 选项：A 保存成功后即把该模板写为 last-used（镜像 confirm 路径）；B 改 `importExcel` 自动套用逻辑，无 last-used 时退而取「最近保存的模板」；C 上传时按表头指纹自动匹配模板。
+- 决策：**A**。最小、最贴合用户心智——「点了保存＝我要复用它」，所以保存即记住，下次自动套用。`handleSaveImportTemplate` 在 `if (!saved) return` 后加 `localStorage.setItem(LAST_USED_TEMPLATE_KEY, saved.id)` + `setLastUsedTemplateId(saved.id)`。不动 confirm 路径、不动导航页模板管理、不动 parse 规则。B 行为不可预期（最近保存 ≠ 用户想用的）、C 是此前已否决的自动匹配方向（decision 2026-06-11「模板=用户配置规则，不自动探测」）。
+- 影响：唯一行为变化＝保存后该模板成为 last-used；下次上传弹窗自动套用（下拉选中 + 全部映射回填 + 确认可用）。若该模板后被删除，`importExcel`(:2504) 的 `importTemplates.some(id===lastUsedTemplateId)` 兜底回退到裸配置/空白，不会卡死。多次保存以最后一次为准；同弹窗内若改选别的模板再确认导入，confirm 仍以实际导入的模板覆盖 last-used，二者一致。
+- 测试（编码意图，非凑绿）：新增 E2E `auto-applies a saved import template on the next import without re-selecting`——保存→取消→重传→断言下拉选中该模板且 `map-select-*` 已回填→直接确认导入 1 行。临时摘除修复跑出 RED（下拉解析为「No template」），还原后 GREEN，确保业务逻辑回退时测试会红。
+- 后续：按 CLAUDE.md 生产部署 + 远程 E2E 回归，结果记入 CHANGELOG 同日条目。
 
 ## 2026-06-17 第三十五轮 Review：箱子倒放（朝向渲染）+ 同货物缝隙（装箱朝向一致）
 

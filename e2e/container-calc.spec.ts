@@ -960,6 +960,41 @@ test('remembers a manually mapped import config and prefills it on the next impo
   await expect(page.getByText(/800 x 600 x 400 mm/)).toBeVisible()
 })
 
+test('auto-applies a saved import template on the next import without re-selecting', async ({ page }) => {
+  await openEnglish(page)
+  const filePath = await createTemplateWorkbookFile()
+  const templateName = `Saved Reuse ${Date.now()}`
+
+  // Configure mappings and SAVE the template, then cancel WITHOUT confirming an import.
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await page.getByTestId('import-template-name').fill(templateName)
+  await page.getByTestId('template-start-row').fill('2')
+  await page.getByTestId('map-select-name').fill('Goods')
+  await page.getByTestId('map-select-length').fill('L')
+  await page.getByTestId('map-select-width').fill('W')
+  await page.getByTestId('map-select-height').fill('H')
+  await page.getByTestId('save-import-template').click()
+  await expect(page.getByTestId('template-save-status')).toContainText(templateName)
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByTestId('mapping-modal')).toHaveCount(0)
+
+  // Reopen: saving alone (no confirmed import) must mark the template as last-used, so
+  // the dialog auto-applies it — every mapping is prefilled without touching the dropdown.
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await expect(page.getByTestId('import-template-select').locator('option:checked')).toHaveText(templateName)
+  await expect(page.getByTestId('map-select-name')).toHaveValue('Goods')
+  await expect(page.getByTestId('map-select-length')).toHaveValue('L')
+  await expect(page.getByTestId('map-select-width')).toHaveValue('W')
+  await expect(page.getByTestId('map-select-height')).toHaveValue('H')
+
+  // Confirm directly without re-selecting anything: the remembered template imports successfully.
+  await page.getByTestId('confirm-mapping').click()
+  await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Template only crate/ }).first()).toBeVisible()
+})
+
 test('explains template mapping fields with inline help tooltips', async ({ page }) => {
   await openEnglish(page)
   const filePath = await createTemplateWorkbookFile()

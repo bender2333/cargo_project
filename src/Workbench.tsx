@@ -2139,6 +2139,13 @@ function Workbench() {
     if (!saved) return
     setImportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
     setSelectedImportTemplateId(saved.id)
+    // Saving a named template is an explicit "I'll reuse this" signal: remember it
+    // as the last-used template so the next import auto-applies it (point 2 of the
+    // 2026-06-17 review), without the user re-selecting every mapping by hand.
+    try {
+      localStorage.setItem(LAST_USED_TEMPLATE_KEY, saved.id)
+    } catch { /* ignore */ }
+    setLastUsedTemplateId(saved.id)
     setEditingImportTemplateId('')
     setEditingImportTemplateDraft(null)
     setTemplateSaveNotice(`${t.templateSaved}: ${saved.name}`)
