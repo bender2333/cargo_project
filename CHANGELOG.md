@@ -11,6 +11,7 @@ Review feedback: after mapping columns in the Excel import dialog, clicking 「�
 - Verification (local): `npm run lint` clean; `npm test` 52 files / 324 tests pass; `npm run build` passes (existing Vite chunk-size warning); full `npm run test:e2e` 92 passed / 1 skipped / 0 failed.
 - Deploy (production): `npm run deploy` passed all 7 steps — local build, remote backup `/root/cargo_project-backup-20260618-020342`, `dist/` synced into the live site, `server/*.mjs` + `package*.json` synced, `cargo-server.service` restarted, Step 7 HTTP+API health check passed.
 - Remote E2E regression (`PLAYWRIGHT_BASE_URL=http://101.33.232.150/`): targeted template-reuse paths passed 5/5 — the new save→remember→auto-apply test plus visible-manager reuse, manual-config memory, top-level manager reuse, and Vietnam combined-dimension template — confirming the fix is live on production.
+- Release note: added `2026-06-18-r46-save-template-remember` to `src/data/releaseNotes.ts` (EN/ZH user-facing summary). Missed in the first deploy and shipped in a follow-up `npm run deploy` (remote backup `/root/cargo_project-backup-20260618-023854`, health check passed); live bundle `assets/index-Cj0VqqIl.js` verified to contain the note string.
 
 ## 2026-06-17 (Upside-down boxes + same-cargo gaps — Round 35)
 
