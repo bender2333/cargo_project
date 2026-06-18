@@ -11,6 +11,9 @@ Implements `plans/2026-06-18-template-select-triggers-import.md`: import templat
 - Test coverage: added `src/components/ImportMappingForm.test.tsx`; extended `src/lib/importCargo.test.ts` with config-builder and real Vietnam fixture coverage; updated template E2E flows to assert default no-template state, select-template-immediate import, missing-column red frame, and manual mapping fallback.
 - Release note: added `2026-06-18-r47-template-select-import` and revised the previous r46 note so the in-app release notes no longer advertise the superseded auto-apply behavior.
 - Verification (local): `npm run lint` clean; `npm test` 53 files / 329 tests pass; `npm run build` passes with the existing Vite chunk-size warning; full `npm run test:e2e` 93 passed / 1 skipped / 0 failed. Reviews: React/general approved; TypeScript review found the legacy empty-`combinedColumn` missing-column bug and an exact-text test gap, both fixed and re-verified with targeted unit + template E2E 10/10.
+- Deploy (production): `npm run deploy` passed all 7 steps — local build, remote backup `/root/cargo_project-backup-20260618-052306`, `dist/` and backend modules synced, `cargo-server.service` restarted, and remote HTTP/API health check passed.
+- Remote verification: live `http://101.33.232.150/` serves bundle `/assets/index-C-CEX-rj.js`; browser-side bundle fetch confirmed it contains `2026-06-18-r47-template-select-import`, `Template selection imports immediately`, and `选择模板即刻导入`.
+- Remote E2E regression (`PLAYWRIGHT_BASE_URL=http://101.33.232.150/`): full `npm run test:e2e` passed 93 / skipped 1 / failed 0 against production.
 
 ## 2026-06-18 (Save import template = remember it for next import — Round 36)
 
