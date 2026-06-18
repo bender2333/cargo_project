@@ -14,6 +14,19 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-06-18-r46-save-template-remember',
+    date: '2026-06-18',
+    title: { en: 'Saved templates remembered for next import', zh: '保存的模板下次导入自动套用' },
+    items: {
+      en: [
+        'Saving an import template in the Excel import dialog now remembers it: the next time you import, that template and all of its column mappings are applied automatically — no need to re-pick the template or re-select the mappings by hand.',
+      ],
+      zh: [
+        '在 Excel 导入弹窗里保存模板后，系统会记住它：下次导入时该模板及其全部列映射会自动套用，无需再次选择模板或重新手动选择映射。',
+      ],
+    },
+  },
+  {
     version: '2026-06-17-r45-upright-boxes-and-gaps',
     date: '2026-06-17',
     title: { en: 'Upright boxes & tighter packing', zh: '箱体正立与无缝排布' },
