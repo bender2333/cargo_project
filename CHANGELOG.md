@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-18 (Template selection only pre-fills mappings — Round 38)
+
+Implements `plans/2026-06-18-template-apply-only-prefill.md`: corrects the Round 37 misread. Selecting an import template is parameter prefill, not import confirmation.
+
+- Behavior correction: the import template dropdown now calls `applyImportTemplate(templateId)` only. It applies the saved mapping, header/start rows, units, combined-dimension mode, split order, and defaults into the mapping dialog; it does not parse the workbook, set cargo items, close the modal, or switch navigation.
+- Confirmation boundary: importing still happens only via `confirmMappingImport`. Users can select a template, inspect the preview/table mapping, adjust any column, then click Confirm Import.
+- Preserved Round 37 useful work: missing mapped columns still compute during template prefill and flow into `ImportMappingForm.missingColumns`, so absent workbook headers remain red-framed immediately after template selection.
+- Tests updated: template E2E expectations now encode prefill-only semantics, including “select template but cancel means no cargo imported”, default no-template state, missing-column red frame, and Vietnam combined-template prefill before confirmation. Per direct user instruction for this task, E2E was updated but not executed.
+- Release note: added `2026-06-18-r48-template-prefill-confirm` and revised r47/r46 notes so the in-app release notes no longer advertise the superseded immediate-import or auto-apply behavior.
+- Verification (local): `npm run lint` clean; `npm test` 53 files / 329 tests pass; `npm run build` passes with the existing Vite chunk-size warning. Reviews: TypeScript/React/general reviews reported no blocking issues. E2E intentionally skipped by direct user request for this task.
+
 ## 2026-06-18 (Template selection triggers import — Round 37)
 
 Implements `plans/2026-06-18-template-select-triggers-import.md`: import templates are explicit parsing rules, not persistent auto-prefill.

@@ -938,6 +938,15 @@ test('creates an import template from the visible manager and reuses it for Exce
   await expect(page.getByTestId('mapping-modal')).toBeVisible()
   await expect(page.getByTestId('import-template-select')).toHaveValue('')
   await page.getByTestId('import-template-select').selectOption({ label: templateName })
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await expect(page.getByTestId('map-select-name')).toHaveValue('Goods')
+  await expect(page.getByTestId('map-select-length')).toHaveValue('L')
+  await expect(page.getByTestId('map-select-width')).toHaveValue('W')
+  await expect(page.getByTestId('map-select-height')).toHaveValue('H')
+  await expect(page.getByTestId('template-default-label')).toHaveValue('TP')
+  await expect(page.getByTestId('template-default-quantity')).toHaveValue('3')
+  await expect(page.getByTestId('confirm-mapping')).toBeVisible()
+  await page.getByTestId('confirm-mapping').click()
   await expect(page.getByTestId('mapping-modal')).toHaveCount(0)
   await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
   await expect(page.getByRole('button', { name: /Template only crate/ }).first()).toBeVisible()
@@ -981,7 +990,7 @@ test('keeps manually mapped import as an explicit confirmation path', async ({ p
   await expect(page.getByText(/800 x 600 x 400 mm/)).toBeVisible()
 })
 
-test('does not auto-load a saved import template on the next import', async ({ page }) => {
+test('does not auto-load or import a saved template until the user confirms it', async ({ page }) => {
   await openEnglish(page)
   const filePath = await createTemplateWorkbookFile()
   const templateName = `Saved Reuse ${Date.now()}`
@@ -1000,15 +1009,18 @@ test('does not auto-load a saved import template on the next import', async ({ p
   await page.getByRole('button', { name: 'Cancel' }).click()
   await expect(page.getByTestId('mapping-modal')).toHaveCount(0)
 
-  // Reopen: no template is selected by default. Choosing one imports immediately.
+  // Reopen: no template is selected by default. Choosing one pre-fills only.
   await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
   await expect(page.getByTestId('mapping-modal')).toBeVisible()
   await expect(page.getByTestId('import-template-select')).toHaveValue('')
   await expect(page.getByTestId('map-select-name')).toHaveValue('')
   await page.getByTestId('import-template-select').selectOption({ label: templateName })
-  await expect(page.getByTestId('mapping-modal')).toHaveCount(0)
-  await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
-  await expect(page.getByRole('button', { name: /Template only crate/ }).first()).toBeVisible()
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await expect(page.getByTestId('map-select-name')).toHaveValue('Goods')
+  await expect(page.getByTestId('map-select-length')).toHaveValue('L')
+  await expect(page.getByRole('button', { name: /Template only crate/ })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByRole('button', { name: /Template only crate/ })).toHaveCount(0)
 })
 
 test('highlights missing template columns and keeps the import dialog open', async ({ page }) => {
@@ -1038,7 +1050,7 @@ test('highlights missing template columns and keeps the import dialog open', asy
   await expect(page.getByTestId('map-select-length')).toHaveAttribute('data-invalid', 'true')
   await expect(page.getByTestId('map-select-width')).not.toHaveAttribute('data-invalid')
   await expect(page.getByText(/Column not found in file/)).toBeVisible()
-  await expect(page.getByTestId('import-log-panel')).toContainText(/Import issue row 2/)
+  await expect(page.getByRole('button', { name: /Missing length crate/ })).toHaveCount(0)
 })
 
 test('explains template mapping fields with inline help tooltips', async ({ page }) => {
@@ -1100,6 +1112,10 @@ test('creates an import template from top-level template manager and reuses it f
   await expect(page.getByTestId('mapping-modal')).toBeVisible()
   await expect(page.getByTestId('import-template-select')).toHaveValue('')
   await page.getByTestId('import-template-select').selectOption({ label: templateName })
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await expect(page.getByTestId('map-select-name')).toHaveValue('Goods')
+  await expect(page.getByTestId('map-select-length')).toHaveValue('L')
+  await page.getByTestId('confirm-mapping').click()
   await expect(page.getByTestId('mapping-modal')).toHaveCount(0)
   await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
   await expect(page.getByRole('button', { name: /Template only crate/ }).first()).toBeVisible()
@@ -1163,6 +1179,9 @@ test('renames and deletes import templates from top-level template manager', asy
   await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
   await expect(page.getByTestId('mapping-modal')).toBeVisible()
   await page.getByTestId('import-template-select').selectOption({ label: renamedTemplateName })
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await expect(page.getByTestId(`map-select-length`)).toHaveValue('W')
+  await page.getByTestId('confirm-mapping').click()
   await expect(page.getByTestId('mapping-modal')).toHaveCount(0)
   await expect(page.getByRole('button', { name: /Template only crate/ }).first()).toBeVisible()
   await expect(page.getByText(/60 x 60 x 40 mm/)).toBeVisible()
@@ -1271,6 +1290,10 @@ test('imports Vietnam irregular workbook through a reusable combined-dimension t
   await expect(page.getByTestId('mapping-modal')).toBeVisible()
   await expect(page.getByTestId('import-template-select')).toHaveValue('')
   await page.getByTestId('import-template-select').selectOption({ label: templateName })
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await expect(page.getByTestId('template-combined-column')).toHaveValue('外箱尺寸（mm）')
+  await expect(page.getByTestId('map-select-label')).toHaveValue('物料代码SKU')
+  await page.getByTestId('confirm-mapping').click()
   await expect(page.getByTestId('mapping-modal')).toHaveCount(0)
   await expect(page.getByTestId('import-log-panel').getByText('Import success: 24')).toBeVisible()
   await expect(page.getByText(/TB-C10-EV_v1\.1/).first()).toBeVisible()

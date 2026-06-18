@@ -55,7 +55,7 @@ import { containers, effectiveContainer, formatCubicMeters, getContainerVolume }
 import { buildExportPlanRows, buildExportRowsFromTemplate, EXPORT_FIELD_KEYS } from './lib/exportPlan'
 import type { HistoryPlan } from './lib/historyPlans'
 import { createClientId } from './lib/clientId'
-import { buildTemplateImportConfig, parseCargoRows, parseCargoRowsWithTemplate } from './lib/importCargo'
+import { parseCargoRows, parseCargoRowsWithTemplate } from './lib/importCargo'
 import type { ImportCargoRow } from './lib/importCargo'
 import { deleteImportTemplate, readImportTemplates, saveImportTemplate, updateImportTemplate } from './lib/importTemplates'
 import type { ImportTemplatePayload } from './lib/importTemplates'
@@ -2042,7 +2042,7 @@ function Workbench() {
       dimensionOrder: templateDimensionOrder,
       defaults: templateDefaults,
     })
-    rememberSelectedImportTemplate(selectedImportTemplateId)
+    if (imported.items.length > 0) rememberSelectedImportTemplate(selectedImportTemplateId)
     setActiveNav('report')
   }
 
@@ -2085,21 +2085,9 @@ function Workbench() {
     setTemplateDefaults(next.defaults)
     setTemplateName(template.name)
     setTemplateDimensionOrder(next.dimensionOrder)
+    setMissingImportColumns(missingMappedColumns(next, importColumnsForHeaderRow(importRows, next.headerRow)))
   }
 
-  const importWithTemplate = (template: ImportTemplate) => {
-    const templateMappingValue = importMappingValueFromTemplate(template)
-    applyImportTemplate(template.id)
-    const missing = missingMappedColumns(templateMappingValue, importColumnsForHeaderRow(importRows, templateMappingValue.headerRow))
-    setMissingImportColumns(missing)
-    const imported = parseCargoRowsWithTemplate(importRows, buildTemplateImportConfig(template), { colors })
-    applyImportedCargo(imported)
-    rememberSelectedImportTemplate(template.id)
-    setActiveNav('report')
-    if (missing.length === 0) {
-      setShowMappingModal(false)
-    }
-  }
 
   const importMappingValue: ImportMappingValue = {
     mapping: customMapping,
@@ -4353,14 +4341,7 @@ function Workbench() {
                     className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
                     value={selectedImportTemplateId}
                     data-testid="import-template-select"
-                    onChange={(event) => {
-                      const template = importTemplates.find((item) => item.id === event.target.value)
-                      if (template) {
-                        importWithTemplate(template)
-                        return
-                      }
-                      applyImportTemplate('')
-                    }}
+                    onChange={(event) => applyImportTemplate(event.target.value)}
                   >
                     <option value="">{t.templateNone}</option>
                     {importTemplates.map((template) => (

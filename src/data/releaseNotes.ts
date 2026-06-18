@@ -14,17 +14,30 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '2026-06-18-r47-template-select-import',
+    version: '2026-06-18-r48-template-prefill-confirm',
     date: '2026-06-18',
-    title: { en: 'Template selection imports immediately', zh: '选择模板即刻导入' },
+    title: { en: 'Templates prefill mappings for review', zh: '模板先预填，确认后导入' },
     items: {
       en: [
-        'Excel import now starts with “No template” selected. Choose a saved template from the import dialog and it parses/imports immediately — no extra Confirm Import click.',
-        'If a saved template points to a column that is not in the workbook, the dialog stays open, the missing mapped field is highlighted in red, and the import log still shows the row-level parse errors so you can fix the mapping in place.',
+        'Selecting a saved Excel import template now only applies its mapping parameters in the dialog. The dialog stays open so you can review the preview and click Confirm Import when ready.',
+        'Missing template columns still show red inline feedback immediately after selection, so you can fix the mapping before importing.',
       ],
       zh: [
-        'Excel 导入弹窗现在默认停在「无模板」。在下拉框选中已保存模板后，会立即按该模板解析并导入，不再需要再点一次「确认导入」。',
-        '如果模板映射的列在当前工作簿中不存在，弹窗会保持打开，对应映射输入框红框提示，同时导入日志继续展示逐行解析错误，便于现场修正映射。',
+        '选择已保存的 Excel 导入模板后，现在只会把模板参数预填到弹窗里。弹窗保持打开，用户可先查看预览，再点击「确认导入」。',
+        '模板列缺失时仍会在选择后立即红框提示，方便导入前现场修正映射。',
+      ],
+    },
+  },
+  {
+    version: '2026-06-18-r47-template-select-import',
+    date: '2026-06-18',
+    title: { en: 'Template immediate-import behavior superseded', zh: '选择模板即导入行为已调整' },
+    items: {
+      en: [
+        'This interim immediate-import behavior has been superseded: selecting a template now pre-fills the mapping dialog only, and importing requires the Confirm Import button.',
+      ],
+      zh: [
+        '这一版“选模板即导入”的过渡行为已被取代：现在选择模板只预填映射弹窗，真正导入仍需点击「确认导入」。',
       ],
     },
   },
@@ -34,10 +47,10 @@ export const releaseNotes: ReleaseNote[] = [
     title: { en: 'Saved template behavior superseded', zh: '保存模板行为已调整' },
     items: {
       en: [
-        'This interim saved-template auto-apply behavior has been superseded by the current explicit-selection flow above: new imports start with “No template”, and selecting a template imports immediately.',
+        'This interim saved-template auto-apply behavior has been superseded by the current explicit prefill-and-confirm flow: new imports start with “No template”, selecting a template fills the mapping dialog, and importing requires Confirm Import.',
       ],
       zh: [
-        '这一版“保存后下次自动套用”的过渡行为已由上方最新流程取代：新的导入默认「无模板」，选中模板后立即导入。',
+        '这一版“保存后下次自动套用”的过渡行为已由当前“显式选择、预填、再确认”流程取代：新的导入默认「无模板」，选中模板只填充映射弹窗，真正导入仍需点击「确认导入」。',
       ],
     },
   },

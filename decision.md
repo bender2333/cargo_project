@@ -1051,3 +1051,22 @@
 - 实现：工具栏 `open-template-manager` 重复入口已删除，模板管理只走导航页「模板管理」；真实导入 Excel 弹窗顶部命名/保存模板控件保留。
 - 实现：`dimensions` 不再作为普通字段渲染；合并尺寸只由专门的 `template-combined-column` 写 `mapping.dimensions`。兼容旧模板：若后端序列化出的 `combinedColumn` 是空字符串但 `mapping.dimensions` 仍有列名，parser 与 Workbench 编辑/草稿/保存边界都使用 `combinedColumn || mapping.dimensions` 兜底，避免编辑旧合并模板时把合并列清空。
 - 验证：先改 E2E 并观察到 RED（旧 `<select>` 无法 `.fill()`）；实现后 targeted GREEN 6 项通过；TS review 发现旧合并模板空 `combinedColumn` 兼容缺口后新增单测并修复；本地 `npm run lint`、`npm test`（52 文件 / 321 测试）、`npm run build`、全量 `npm run test:e2e`（91 passed / 1 skipped）通过。部署结果见 CHANGELOG 同日条目追加。
+
+## 2026-06-18 第38轮 Review：撤销"选模板即导入"，更正为"选模板=仅应用参数预填"
+
+> 状态：已实现本地门禁验证；E2E 按用户本轮明确要求未执行。部署结果见 CHANGELOG 同日条目。
+
+- 背景：第37轮架构师（Claude）误读用户诉求，把"选模板"设计成**直接解析+关窗导入**（计划 plans/2026-06-18-template-select-triggers-import.md，已由 commit e2eaa6b 实现）。用户第38轮实测反馈：「选择了模板以后，直接弹窗就消失了」「选择模板不是就直接将 excel 导入了，而是只应用模板参数」。
+
+- 根因（架构师理解偏差 + 已读码定位）：
+  - 设计误读：用户说"再次导入不用再选映射"指的是**选模板后映射自动填好、省掉逐列手选**；架构师误解为**省掉查看/确认那一步**。
+  - 代码现状：commit e2eaa6b 把导入弹窗模板下拉 `onChange`（Workbench.tsx:4356 区域）从 `applyImportTemplate(value)`（仅预填）改为 `importWithTemplate(template)`（解析 parseCargoRowsWithTemplate + applyImportedCargo 写货物 + setShowMappingModal(false) 关窗 + setActiveNav('report')）→ "选模板=确认导入"。
+
+- 选项与决策（已与用户确认）：
+  1. 选模板语义：**决策＝仅应用/预填模板参数（列映射 + 表头行/起始行/单位/合并模式/拆分顺序/默认值）到映射弹窗**，弹窗保持打开，预览与各列映射可见，用户查看确认后**再点"确认导入"**才真正导入。回到 e2eaa6b 之前 applyImportTemplate 的"仅预填"语义。
+  2. 红框能力：**决策＝保留** e2eaa6b 引入的缺列检测/红框（missingColumns / missingMappedColumns），仅去掉"自动解析+关窗"。选模板预填后若模板映射的列在文件中不存在，对应输入框标红，弹窗仍开。
+  3. 默认不加载模板：**决策＝维持**（不恢复 on-open 自动套用 lastUsedTemplate）；打开弹窗下拉默认「无」。
+  4. 记忆上次模板：**决策＝改到"确认导入成功后"才记**，避免"只是选来看看没导入"也被记成上次用。
+
+- 影响：删除 `importWithTemplate` 函数；弹窗模板下拉 `onChange` 改回 `applyImportTemplate`（含红框计算）；`rememberSelectedImportTemplate` 仅在确认导入且产生有效 cargo 后记录，避免“只是选来看看”或失败确认污染 last-used；e2eaa6b 写的「选模板即导入」E2E 已改写为「选模板预填、确认才导入」+「选模板后不确认则不导入」防回归断言，不为通过弱化断言。
+- 验证：本轮按用户要求不跑 E2E；本地 `npm run lint && npm test && npm run build` 通过（53 文件 / 329 单测，build 仅既有 chunk-size warning）。
