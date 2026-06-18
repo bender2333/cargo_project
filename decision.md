@@ -1070,3 +1070,19 @@
 
 - 影响：删除 `importWithTemplate` 函数；弹窗模板下拉 `onChange` 改回 `applyImportTemplate`（含红框计算）；`rememberSelectedImportTemplate` 仅在确认导入且产生有效 cargo 后记录，避免“只是选来看看”或失败确认污染 last-used；e2eaa6b 写的「选模板即导入」E2E 已改写为「选模板预填、确认才导入」+「选模板后不确认则不导入」防回归断言，不为通过弱化断言。
 - 验证：本轮按用户要求不跑 E2E；本地 `npm run lint && npm test && npm run build` 通过（53 文件 / 329 单测，build 仅既有 chunk-size warning）。
+
+## 2026-06-18 第39轮 Review：导入弹窗"保存模板"= 选中即更新 + 失败不再静默
+
+- 背景：用户对导入弹窗顶部「保存模板」按钮（save-import-template）提出两点：①选中某模板、在弹窗改了参数（如分列改合并、补合并尺寸列）后点保存，期望**更新当前这条**，现状却永远新建一条；②保存失败时无任何提示（静默）。
+
+- 根因（已读码定位）：
+  - handleSaveImportTemplate（Workbench.tsx:2179）只调 saveImportTemplate（POST），从不调 updateImportTemplate（PUT）。后端 POST /api/import-templates（server/index.mjs:371）永远 INSERT 新 UUID，且 name 有 UNIQUE 约束 → 同名 POST 撞 409（:386-388）。
+  - 静默：saveImportTemplate 失败返回 null（importTemplates.ts:28），handleSaveImportTemplate `if (!saved) return`（:2194）直接返回不提示。对比 saveNewImportTemplate(:2282)、saveEditedImportTemplate(:2216) 失败都有 alert，唯独弹窗这个缺。
+
+- 选项与决策（已与用户确认）：
+  1. 保存语义：**决策＝选中了就更新，改名才新建**。判定：selectedImportTemplateId 非空 且 选中模板存在 且 name 未改 → updateImportTemplate（PUT）；否则 saveImportTemplate（POST，新建/另存为）。仍是同一个「保存模板」按钮，逻辑自动判定（用户预期只有一个按钮）。
+  2. 失败反馈：**决策＝alert**，与旁边 saveNewImportTemplate/saveEditedImportTemplate 一致（Convention Over Novelty）。
+  3. 同名覆盖：**决策＝本轮不做**。新建走 POST 若键入已存在的别的模板名 → 后端 409 → alert 告知即可；"同名是否覆盖"确认超范围，如需另开一轮。
+
+- 影响：仅改 handleSaveImportTemplate 一个函数；复用现有 PUT/POST lib 通道与 t.templateUpdated/t.templateSaved 文案（均已存在）；不动后端、不动导航页新建/编辑、不动下拉选模板 onChange。
+- 后续：计划见 plans/2026-06-18-save-template-update-in-place.md。与 plans/2026-06-18-template-apply-only-prefill.md 相互独立（同文件不同函数，合并注意不互相覆盖）。

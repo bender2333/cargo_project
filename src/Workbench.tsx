@@ -2179,20 +2179,37 @@ function Workbench() {
   const handleSaveImportTemplate = async () => {
     const name = templateName.trim()
     if (!name) return
-    const saved = await saveImportTemplate({
+
+    const selected = importTemplates.find((t) => t.id === selectedImportTemplateId)
+    const isUpdate = !!(selectedImportTemplateId && selected && name === selected.name)
+
+    const payload = {
       name,
       mapping: customMapping,
       units: customUnits as ImportTemplateUnits,
       headerRow: templateHeaderRow,
       startRow: templateStartRow,
-      mergeRows: 'none',
+      mergeRows: 'none' as const,
       dimensionMode: templateDimensionMode,
       combinedColumn: templateCombinedColumn || customMapping.dimensions || '',
       dimensionOrder: templateDimensionOrder,
       defaultValues: templateDefaults,
-    })
-    if (!saved) return
-    setImportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
+    }
+
+    const saved = isUpdate
+      ? await updateImportTemplate(selected.id, payload)
+      : await saveImportTemplate(payload)
+
+    if (!saved) {
+      alert(locale === 'zh' ? '保存模板失败' : 'Failed to save template')
+      return
+    }
+
+    if (isUpdate) {
+      setImportTemplates((current) => current.map((item) => item.id === saved.id ? saved : item))
+    } else {
+      setImportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
+    }
     setSelectedImportTemplateId(saved.id)
     // Saving records the chosen template for telemetry/local continuity, but
     // the next import starts from "None" and waits for explicit template selection.
@@ -2201,8 +2218,9 @@ function Workbench() {
     } catch { /* ignore */ }
     setEditingImportTemplateId('')
     setEditingImportTemplateDraft(null)
-    setTemplateSaveNotice(`${t.templateSaved}: ${saved.name}`)
-    setImportMessages((messages) => [`${t.templateSaved}: ${saved.name}`, ...messages])
+    const noticeText = isUpdate ? t.templateUpdated : t.templateSaved
+    setTemplateSaveNotice(`${noticeText}: ${saved.name}`)
+    setImportMessages((messages) => [`${noticeText}: ${saved.name}`, ...messages])
   }
 
   const createBlankImportTemplateDraft = (): ImportTemplatePayload => ({

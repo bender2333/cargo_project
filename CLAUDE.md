@@ -355,4 +355,3 @@ Silent failures — functions that run but return wrong data, migrations that sk
 - 小步快走，小 bug 修复完毕迅速进行 `commit`。
 - 需要进行浏览器自动化测试进行完整的验证。
 
-讨论不要写入review.md，先讨论清楚，可以写道日记和decision。等讨论完了再完成写入review.md ，记住
