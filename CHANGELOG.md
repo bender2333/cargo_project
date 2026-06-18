@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-06-18 (Template selection triggers import — Round 37)
+
+Implements `plans/2026-06-18-template-select-triggers-import.md`: import templates are explicit parsing rules, not persistent auto-prefill.
+
+- Behavior: Excel import mapping dialog now opens with `import-template-select` set to 「No template」/「无」. It no longer auto-applies `cargo_last_used_template_id` or the saved raw mapping config on modal open; the hand-mapping path remains available via the normal Confirm Import button.
+- Template selection: choosing a saved template in the import dialog now calls `importWithTemplate(template)` and parses `importRows` immediately. Successful template imports close the modal, switch to the report/import-log view, and populate cargo details without requiring an extra Confirm Import click.
+- Parser config: added `buildTemplateImportConfig(template)` in `src/lib/importCargo.ts` so template-triggered parsing uses the selected template object directly instead of reading React state immediately after `setState`.
+- Missing columns: `ImportMappingForm` now accepts `missingColumns`; mapped inputs whose saved column header is absent from the current workbook get `data-invalid="true"`, red border/ring, and the inline message `Column not found in file / 列在文件中未找到`. The parser still runs and importLog still records row-level errors; the modal stays open when missing mapped columns exist.
+- Test coverage: added `src/components/ImportMappingForm.test.tsx`; extended `src/lib/importCargo.test.ts` with config-builder and real Vietnam fixture coverage; updated template E2E flows to assert default no-template state, select-template-immediate import, missing-column red frame, and manual mapping fallback.
+- Release note: added `2026-06-18-r47-template-select-import` and revised the previous r46 note so the in-app release notes no longer advertise the superseded auto-apply behavior.
+- Verification (local): `npm run lint` clean; `npm test` 53 files / 329 tests pass; `npm run build` passes with the existing Vite chunk-size warning; full `npm run test:e2e` 93 passed / 1 skipped / 0 failed. Reviews: React/general approved; TypeScript review found the legacy empty-`combinedColumn` missing-column bug and an exact-text test gap, both fixed and re-verified with targeted unit + template E2E 10/10.
+
 ## 2026-06-18 (Save import template = remember it for next import — Round 36)
 
 Review feedback: after mapping columns in the Excel import dialog, clicking 「保存模板」 should be enough — the next time the template is used the mappings should already be applied, with no manual re-selection. It wasn't: saving a template did not make it the one auto-applied next time.

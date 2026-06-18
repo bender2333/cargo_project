@@ -14,15 +14,30 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
-    version: '2026-06-18-r46-save-template-remember',
+    version: '2026-06-18-r47-template-select-import',
     date: '2026-06-18',
-    title: { en: 'Saved templates remembered for next import', zh: '保存的模板下次导入自动套用' },
+    title: { en: 'Template selection imports immediately', zh: '选择模板即刻导入' },
     items: {
       en: [
-        'Saving an import template in the Excel import dialog now remembers it: the next time you import, that template and all of its column mappings are applied automatically — no need to re-pick the template or re-select the mappings by hand.',
+        'Excel import now starts with “No template” selected. Choose a saved template from the import dialog and it parses/imports immediately — no extra Confirm Import click.',
+        'If a saved template points to a column that is not in the workbook, the dialog stays open, the missing mapped field is highlighted in red, and the import log still shows the row-level parse errors so you can fix the mapping in place.',
       ],
       zh: [
-        '在 Excel 导入弹窗里保存模板后，系统会记住它：下次导入时该模板及其全部列映射会自动套用，无需再次选择模板或重新手动选择映射。',
+        'Excel 导入弹窗现在默认停在「无模板」。在下拉框选中已保存模板后，会立即按该模板解析并导入，不再需要再点一次「确认导入」。',
+        '如果模板映射的列在当前工作簿中不存在，弹窗会保持打开，对应映射输入框红框提示，同时导入日志继续展示逐行解析错误，便于现场修正映射。',
+      ],
+    },
+  },
+  {
+    version: '2026-06-18-r46-save-template-remember',
+    date: '2026-06-18',
+    title: { en: 'Saved template behavior superseded', zh: '保存模板行为已调整' },
+    items: {
+      en: [
+        'This interim saved-template auto-apply behavior has been superseded by the current explicit-selection flow above: new imports start with “No template”, and selecting a template imports immediately.',
+      ],
+      zh: [
+        '这一版“保存后下次自动套用”的过渡行为已由上方最新流程取代：新的导入默认「无模板」，选中模板后立即导入。',
       ],
     },
   },

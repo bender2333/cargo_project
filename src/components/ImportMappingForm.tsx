@@ -85,15 +85,23 @@ type Props = {
   labels: ImportMappingFormLabels
   testIdPrefix?: string
   previewSlot?: ReactNode
+  missingColumns?: string[]
 }
 
-export function ImportMappingForm({ value, onChange, availableColumns, labels, testIdPrefix = '', previewSlot }: Props) {
+export function ImportMappingForm({ value, onChange, availableColumns, labels, testIdPrefix = '', previewSlot, missingColumns = [] }: Props) {
   const tid = (id: string) => `${testIdPrefix}${id}`
 
   // Keep already-selected columns selectable even when the live header list does
   // not contain them (e.g. editing a saved template before loading a sample file).
   const usedValues = [value.combinedColumn, value.mapping.dimensions, ...FIELD_KEYS.map((field) => value.mapping[field] ?? '')].filter(Boolean)
   const columns = Array.from(new Set([...availableColumns, ...usedValues]))
+  const missingColumnSet = new Set(missingColumns.map((column) => column.trim()).filter(Boolean))
+  const missingColumnMessage = 'Column not found in file / 列在文件中未找到'
+  const inputClass = (invalid: boolean) => `mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 ${invalid ? 'border-red-500 ring-1 ring-red-400 focus:border-red-500 focus:ring-red-400' : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-500'}`
+  const columnMissing = (column: string | undefined) => {
+    const trimmed = column?.trim() ?? ''
+    return trimmed !== '' && missingColumnSet.has(trimmed)
+  }
 
   const fieldLabel: Record<string, string> = {
     label: labels.mappingFieldLabel,
@@ -121,6 +129,7 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
         if (value.dimensionMode === 'combined' && dimensionKey) {
           return null
         }
+        const fieldMissing = columnMissing(value.mapping[fieldKey])
         return (
           <div key={fieldKey} className="rounded-md border border-slate-200 bg-white p-3">
             <label className="block text-sm font-semibold text-slate-700">
@@ -129,12 +138,13 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
                 {fieldKey === 'label' && <HelpTooltip text={labels.templateHelpLabelColumn} testId={tid('help-tooltip-label-column')} />}
               </span>
               <input
-                className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className={inputClass(fieldMissing)}
                 value={value.mapping[fieldKey] ?? ''}
                 list={tid(`map-options-${fieldKey}`)}
                 placeholder={labels.mappingSelectColumn}
                 onChange={(event) => onChange({ ...value, mapping: { ...value.mapping, [fieldKey]: event.target.value } })}
                 data-testid={tid(`map-select-${fieldKey}`)}
+                data-invalid={fieldMissing ? 'true' : undefined}
               />
               <datalist id={tid(`map-options-${fieldKey}`)}>
                 {columns.map((col) => (
@@ -142,6 +152,9 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
                 ))}
               </datalist>
             </label>
+            {fieldMissing && (
+              <p className="mt-1 text-xs font-semibold text-red-600">{missingColumnMessage}</p>
+            )}
             {dimensionKey && (
               <label className="mt-2 block text-xs font-semibold text-slate-600">
                 {labels.mappingUnit}
@@ -276,47 +289,54 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
             <option value="combined">{labels.templateDimensionCombined}</option>
           </select>
         </label>
-        {value.dimensionMode === 'combined' && (
-          <div>
-            <label className="font-semibold text-slate-700">
-              <span className="inline-flex items-center gap-1.5">
-                {labels.templateCombinedColumn}
-                <HelpTooltip text={labels.templateHelpCombinedColumn} testId={tid('help-tooltip-combined-column')} />
-              </span>
-              <input
-                className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                value={value.combinedColumn}
-                list={tid('combined-column-options')}
-                placeholder={labels.mappingSelectColumn}
-                data-testid={tid('template-combined-column')}
-                onChange={(event) => onChange({ ...value, combinedColumn: event.target.value, mapping: { ...value.mapping, dimensions: event.target.value } })}
-              />
-              <datalist id={tid('combined-column-options')}>
-                {columns.map((col) => (
-                  <option key={col} value={col} />
-                ))}
-              </datalist>
-            </label>
-            <label className="font-semibold text-slate-700">
-              <span className="inline-flex items-center gap-1.5">
-                {labels.templateDimensionOrder}
-              </span>
-              <select
-                className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                value={value.dimensionOrder.join(',')}
-                data-testid={tid('template-dimension-order')}
-                onChange={(event) => onChange({ ...value, dimensionOrder: event.target.value.split(',').filter(Boolean) as MappingDimensionKey[] })}
-              >
-                <option value="length,width,height">{labels.templateDimensionOrderLWH}</option>
-                <option value="length,height,width">{labels.templateDimensionOrderLHW}</option>
-                <option value="width,length,height">{labels.templateDimensionOrderWLH}</option>
-                <option value="width,height,length">{labels.templateDimensionOrderWHL}</option>
-                <option value="height,length,width">{labels.templateDimensionOrderHLW}</option>
-                <option value="height,width,length">{labels.templateDimensionOrderHWL}</option>
-              </select>
-            </label>
-          </div>
-        )}
+        {value.dimensionMode === 'combined' && (() => {
+          const combinedMissing = columnMissing(value.combinedColumn)
+          return (
+            <div>
+              <label className="font-semibold text-slate-700">
+                <span className="inline-flex items-center gap-1.5">
+                  {labels.templateCombinedColumn}
+                  <HelpTooltip text={labels.templateHelpCombinedColumn} testId={tid('help-tooltip-combined-column')} />
+                </span>
+                <input
+                  className={inputClass(combinedMissing)}
+                  value={value.combinedColumn}
+                  list={tid('combined-column-options')}
+                  placeholder={labels.mappingSelectColumn}
+                  data-testid={tid('template-combined-column')}
+                  data-invalid={combinedMissing ? 'true' : undefined}
+                  onChange={(event) => onChange({ ...value, combinedColumn: event.target.value, mapping: { ...value.mapping, dimensions: event.target.value } })}
+                />
+                <datalist id={tid('combined-column-options')}>
+                  {columns.map((col) => (
+                    <option key={col} value={col} />
+                  ))}
+                </datalist>
+              </label>
+              {combinedMissing && (
+                <p className="mt-1 text-xs font-semibold text-red-600">{missingColumnMessage}</p>
+              )}
+              <label className="font-semibold text-slate-700">
+                <span className="inline-flex items-center gap-1.5">
+                  {labels.templateDimensionOrder}
+                </span>
+                <select
+                  className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                  value={value.dimensionOrder.join(',')}
+                  data-testid={tid('template-dimension-order')}
+                  onChange={(event) => onChange({ ...value, dimensionOrder: event.target.value.split(',').filter(Boolean) as MappingDimensionKey[] })}
+                >
+                  <option value="length,width,height">{labels.templateDimensionOrderLWH}</option>
+                  <option value="length,height,width">{labels.templateDimensionOrderLHW}</option>
+                  <option value="width,length,height">{labels.templateDimensionOrderWLH}</option>
+                  <option value="width,height,length">{labels.templateDimensionOrderWHL}</option>
+                  <option value="height,length,width">{labels.templateDimensionOrderHLW}</option>
+                  <option value="height,width,length">{labels.templateDimensionOrderHWL}</option>
+                </select>
+              </label>
+            </div>
+          )
+        })()}
       </div>
       {previewSlot ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

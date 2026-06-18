@@ -53,6 +53,33 @@ export type ImportTemplateConfig = {
   dimensionOrder?: Array<'length' | 'width' | 'height'>
 }
 
+export type TemplateImportSource = {
+  name?: string
+  mapping: Record<string, string>
+  units?: Partial<Record<'length' | 'width' | 'height', 'auto' | 'mm' | 'cm'>>
+  headerRow?: number
+  startRow?: number
+  mergeRows?: 'none' | 'by-label'
+  defaultValues?: ImportTemplateDefaults
+  dimensionMode?: 'separate' | 'combined'
+  combinedColumn?: string
+  dimensionOrder?: ReadonlyArray<'length' | 'width' | 'height'>
+}
+
+export function buildTemplateImportConfig(template: TemplateImportSource): ImportTemplateConfig {
+  return {
+    mapping: template.mapping,
+    units: template.units,
+    headerRow: template.headerRow,
+    startRow: template.startRow,
+    mergeRows: 'none',
+    defaultValues: template.defaultValues,
+    dimensionMode: template.dimensionMode,
+    combinedColumn: template.combinedColumn || template.mapping.dimensions || '',
+    dimensionOrder: template.dimensionOrder ? [...template.dimensionOrder] : undefined,
+  }
+}
+
 const defaultColors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
 
 const fields = {

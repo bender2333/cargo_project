@@ -1,5 +1,16 @@
 # Decision Log
 
+
+## 2026-06-18 第三十七轮 Review：导入弹窗选中模板即直接导入
+
+> 状态：已实现并通过本地全量验证（lint clean、`npm test` 53 文件 / 329 测试、build 通过、全量 `npm run test:e2e` 93 passed / 1 skipped；模板相关 E2E 10/10）。部署与远程 E2E 结果见 CHANGELOG 同日条目。
+
+- 背景：用户澄清模板本质不是“帮我预填后再确认”，而是完整解析规则（列映射 + 表头行/起始行/单位/合并尺寸/拆分顺序/默认值）。因此导入弹窗选择某个模板时，应直接按该模板解析导入；默认不应再自动套用上次模板或裸配置。
+- 决策：本轮以“显式选择”为准，**取代**上一条“保存模板＝下次自动套用”的过渡决策。`importExcel` 打开手动映射弹窗时仅做当前文件列名启发式预选，模板下拉保持「无」；用户选中保存模板后立即解析并导入，成功时关闭弹窗并进入报告/导入日志。
+- state 时序：新增 `buildTemplateImportConfig(template)` 纯函数，直接从模板对象生成 `parseCargoRowsWithTemplate` 配置；`importWithTemplate(template)` 解析时使用该对象配置，不依赖 `applyImportTemplate` 的异步 React state 更新。
+- 列缺失展示：若模板映射的列名不在当前文件表头中，仍照常解析并把逐行错误写入 importLog；同时传 `missingColumns` 给 `ImportMappingForm`，让对应输入框 `data-invalid="true"` + 红框 + “Column not found in file / 列在文件中未找到”。有缺列时弹窗保持打开，用户可现场修正。
+- 既有能力边界：模板管理页的新增/编辑已通过同一个 `ImportMappingForm` 保存这些参数，满足“模板 = 映射 + 列表信息”的设计意图；本轮不改后端 schema、不改解析规则、不改导出模板。
+- 影响：`loadLastImportConfig` 仍保留数据层和测试，但导入弹窗不再自动读取它；`saveLastImportConfig` 仍记录用户确认过的裸映射，后续若需要可显式恢复。旧 E2E 中“自动套用保存模板 / 自动预填裸配置”的断言改为“默认无模板 + 手动路径仍可确认 + 选择模板立即导入”。
 ## 2026-06-18 第三十六轮 Review：保存模板＝记住它（下次导入自动套用）
 
 > 状态：已实现并验证（lint clean、`npm test` 52 文件 324 测试、build 通过、headless Chromium 真机复现前后对比、新增 E2E 先 RED 后 GREEN、全量 `npm run test:e2e` 92 passed / 1 skipped）。来源：用户复核——「在导入 Excel 中选择各个映射后点击保存模板应可直接保存，下次再次使用模板就不用手动再选择映射」。

@@ -1,6 +1,8 @@
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { IMPORT_CODES, parseCargoRows, parseCargoRowsWithMapping, parseCargoRowsWithTemplate } from './importCargo'
-import type { ImportTemplateConfig } from './importCargo'
+import * as XLSX from 'xlsx'
+import { buildTemplateImportConfig, IMPORT_CODES, parseCargoRows, parseCargoRowsWithMapping, parseCargoRowsWithTemplate } from './importCargo'
+import type { ImportCargoRow, ImportTemplateConfig } from './importCargo'
 
 describe('parseCargoRows', () => {
   it('maps Chinese headers and converts centimeter dimensions to millimeters', () => {
@@ -242,6 +244,76 @@ describe('parseCargoRowsWithMapping', () => {
         maxStackLayers: 4,
       }),
     ])
+  })
+
+  it('builds parser config directly from a saved template payload', () => {
+    const template = {
+      name: 'Combined Vietnam template',
+      mapping: {
+        label: '物料代码SKU',
+        name: '物料名称',
+        dimensions: '外箱尺寸（mm）',
+        quantity: '箱数',
+        weight: '产品毛重(KG)/箱',
+      },
+      units: { length: 'mm', width: 'mm', height: 'mm' } as const,
+      headerRow: 2,
+      startRow: 3,
+      mergeRows: 'by-label' as const,
+      dimensionMode: 'combined' as const,
+      combinedColumn: '',
+      dimensionOrder: ['length', 'width', 'height'] as const,
+      defaultValues: { quantity: 1, canRotate: true, stackable: false },
+    }
+
+    expect(buildTemplateImportConfig(template)).toEqual({
+      mapping: template.mapping,
+      units: template.units,
+      headerRow: 2,
+      startRow: 3,
+      mergeRows: 'none',
+      dimensionMode: 'combined',
+      combinedColumn: '外箱尺寸（mm）',
+      dimensionOrder: ['length', 'width', 'height'],
+      defaultValues: { quantity: 1, canRotate: true, stackable: false },
+    })
+  })
+
+  it('parses the Vietnam fixture from template config without React state', () => {
+    const workbookPath = path.join(process.cwd(), 'test-data', 'excel', '越南第十一批6.2海运.xlsx')
+    const workbook = XLSX.readFile(workbookPath)
+    const sheet = workbook.Sheets[workbook.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true }) as ImportCargoRow[]
+
+    const result = parseCargoRowsWithTemplate(rows, buildTemplateImportConfig({
+      name: 'Vietnam combined dimensions',
+      mapping: {
+        label: '物料代码SKU',
+        name: '物料名称',
+        quantity: '箱数',
+        dimensions: '外箱尺寸（mm）',
+        weight: '产品毛重(KG)/箱',
+      },
+      units: { length: 'mm', width: 'mm', height: 'mm' },
+      headerRow: 2,
+      startRow: 3,
+      mergeRows: 'none',
+      dimensionMode: 'combined',
+      combinedColumn: '外箱尺寸（mm）',
+      dimensionOrder: ['length', 'width', 'height'],
+      defaultValues: { quantity: 1, canRotate: true, stackable: true },
+    }))
+
+    expect(result.errors).toEqual([])
+    expect(result.summary.importedRows).toBe(24)
+    expect(result.summary.skippedRows).toBe(1)
+    expect(result.items[0]).toMatchObject({
+      label: 'TB-C10-EV_v1.1',
+      length: 530,
+      width: 305,
+      height: 310,
+      quantity: 126,
+    })
   })
 
   it('applies default quantity when no quantity column is mapped', () => {

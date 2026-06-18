@@ -55,11 +55,11 @@ import { containers, effectiveContainer, formatCubicMeters, getContainerVolume }
 import { buildExportPlanRows, buildExportRowsFromTemplate, EXPORT_FIELD_KEYS } from './lib/exportPlan'
 import type { HistoryPlan } from './lib/historyPlans'
 import { createClientId } from './lib/clientId'
-import { parseCargoRows, parseCargoRowsWithTemplate } from './lib/importCargo'
+import { buildTemplateImportConfig, parseCargoRows, parseCargoRowsWithTemplate } from './lib/importCargo'
 import type { ImportCargoRow } from './lib/importCargo'
 import { deleteImportTemplate, readImportTemplates, saveImportTemplate, updateImportTemplate } from './lib/importTemplates'
 import type { ImportTemplatePayload } from './lib/importTemplates'
-import { loadLastImportConfig, saveLastImportConfig, type LastImportConfig } from './lib/lastImportConfig'
+import { saveLastImportConfig } from './lib/lastImportConfig'
 import { deleteExportTemplate, readExportTemplates, saveExportTemplate, updateExportTemplate } from './lib/exportTemplates'
 import type { ExportTemplatePayload } from './lib/exportTemplates'
 import { deleteCustomCargo, readCustomCargo, saveCustomCargo, updateCustomCargo } from './lib/customCargo'
@@ -94,6 +94,43 @@ import { buildCargoDebugSnapshot } from './lib/debugSnapshot'
 
 const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
 type WorksheetCell = string | number | boolean | null | undefined
+
+const TEMPLATE_MAPPING_FIELDS = ['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable', 'maxStackLayers'] as const
+const TEMPLATE_DIMENSION_FIELDS = new Set(['length', 'width', 'height'])
+
+function importMappingValueFromTemplate(template: ImportTemplate): ImportMappingValue {
+  return {
+    mapping: { ...template.mapping, dimensions: template.combinedColumn || template.mapping.dimensions || '' },
+    units: {
+      length: template.units.length,
+      width: template.units.width,
+      height: template.units.height,
+    },
+    headerRow: template.headerRow ?? 1,
+    startRow: template.startRow ?? 2,
+    dimensionMode: template.dimensionMode ?? 'separate',
+    combinedColumn: template.combinedColumn || template.mapping.dimensions || '',
+    dimensionOrder: template.dimensionOrder ?? ['length', 'width', 'height'],
+    defaults: template.defaultValues ?? { quantity: 1, canRotate: true, stackable: true },
+  }
+}
+
+function mappedColumnsForTemplateValue(value: ImportMappingValue): string[] {
+  const columns: string[] = []
+  if (value.dimensionMode === 'combined') {
+    columns.push(value.combinedColumn || value.mapping.dimensions || '')
+  }
+  TEMPLATE_MAPPING_FIELDS.forEach((field) => {
+    if (value.dimensionMode === 'combined' && TEMPLATE_DIMENSION_FIELDS.has(field)) return
+    columns.push(value.mapping[field] ?? '')
+  })
+  return Array.from(new Set(columns.map((column) => column.trim()).filter(Boolean)))
+}
+
+function missingMappedColumns(value: ImportMappingValue, availableColumns: string[]): string[] {
+  const present = new Set(availableColumns)
+  return mappedColumnsForTemplateValue(value).filter((column) => !present.has(column))
+}
 
 const copy = {
   en: {
@@ -1122,13 +1159,6 @@ function Workbench() {
   const [templateCombinedColumn, setTemplateCombinedColumn] = useState('')
   const [templateDimensionOrder, setTemplateDimensionOrder] = useState<Array<'length' | 'width' | 'height'>>(['length', 'width', 'height'])
   const LAST_USED_TEMPLATE_KEY = 'cargo_last_used_template_id'
-  const [lastUsedTemplateId, setLastUsedTemplateId] = useState(() => {
-    try {
-      return localStorage.getItem(LAST_USED_TEMPLATE_KEY) ?? ''
-    } catch {
-      return ''
-    }
-  })
   const [importTemplates, setImportTemplates] = useState<ImportTemplate[]>([])
   const [selectedImportTemplateId, setSelectedImportTemplateId] = useState('')
   const [templateName, setTemplateName] = useState('')
@@ -1136,6 +1166,7 @@ function Workbench() {
   const [templateStartRow, setTemplateStartRow] = useState(2)
   const [templateDefaults, setTemplateDefaults] = useState<ImportTemplateDefaults>({ quantity: 1, canRotate: true, stackable: true })
   const [templateSaveNotice, setTemplateSaveNotice] = useState('')
+  const [missingImportColumns, setMissingImportColumns] = useState<string[]>([])
   const [editingImportTemplateId, setEditingImportTemplateId] = useState('')
   const [editingImportTemplateDraft, setEditingImportTemplateDraft] = useState<ImportTemplatePayload | null>(null)
   const [newImportTemplateDraft, setNewImportTemplateDraft] = useState<ImportTemplatePayload | null>(null)
@@ -1958,6 +1989,32 @@ function Workbench() {
     markPlacementDirty()
   }
 
+  const importMessagesFor = (imported: ReturnType<typeof parseCargoRowsWithTemplate>) => [
+    `${t.importSuccess}: ${imported.summary.importedRows}`,
+    `${t.importMappedFields}: ${imported.summary.mappedFields.join(', ') || '-'}`,
+    `${t.importConvertedRows}: ${imported.summary.convertedCentimeterRows}`,
+    `${t.importSkippedRows}: ${imported.summary.skippedRows}`,
+    ...imported.errors.map((issue) => `${t.importIssue} row ${issue.row}: ${translateImportIssue(issue, locale)}`),
+    ...imported.warnings.map((issue) => `${t.importWarning} row ${issue.row}: ${translateImportIssue(issue, locale)}`),
+  ]
+
+  const applyImportedCargo = (imported: ReturnType<typeof parseCargoRowsWithTemplate>) => {
+    setImportMessages(importMessagesFor(imported))
+    if (imported.items.length > 0) {
+      setCargoItems(imported.items)
+      setSelectedBoxId(null)
+      markPlacementDirty()
+    }
+    setActiveResultTab('importLog')
+  }
+
+  const rememberSelectedImportTemplate = (templateId: string) => {
+    if (!templateId) return
+    try {
+      localStorage.setItem(LAST_USED_TEMPLATE_KEY, templateId)
+    } catch { /* ignore */ }
+  }
+
   const confirmMappingImport = () => {
     const imported = parseCargoRowsWithTemplate(importRows, {
       mapping: customMapping,
@@ -1970,23 +2027,11 @@ function Workbench() {
       dimensionOrder: templateDimensionOrder,
       defaultValues: templateDefaults,
     }, { colors })
-    setImportMessages([
-      `${t.importSuccess}: ${imported.summary.importedRows}`,
-      `${t.importMappedFields}: ${imported.summary.mappedFields.join(', ') || '-'}`,
-      `${t.importConvertedRows}: ${imported.summary.convertedCentimeterRows}`,
-      `${t.importSkippedRows}: ${imported.summary.skippedRows}`,
-      ...imported.errors.map((issue) => `${t.importIssue} row ${issue.row}: ${translateImportIssue(issue, locale)}`),
-      ...imported.warnings.map((issue) => `${t.importWarning} row ${issue.row}: ${translateImportIssue(issue, locale)}`),
-    ])
-    if (imported.items.length > 0) {
-      setCargoItems(imported.items)
-      setSelectedBoxId(null)
-      markPlacementDirty()
-    }
+    applyImportedCargo(imported)
+    setMissingImportColumns([])
     setShowMappingModal(false)
-    setActiveResultTab('importLog')
-    // Persist the raw mapping the user just used so the next import (same format)
-    // can prefill it, regardless of whether a named template was saved.
+    // Persist the raw mapping the user confirmed. The import dialog no longer
+    // auto-loads it on open; named template selection is now explicit.
     saveLastImportConfig(currentUser?.id ?? null, {
       mapping: customMapping,
       units: customUnits,
@@ -1997,44 +2042,63 @@ function Workbench() {
       dimensionOrder: templateDimensionOrder,
       defaults: templateDefaults,
     })
-    // Remember last used template
-    if (selectedImportTemplateId) {
-      try {
-        localStorage.setItem(LAST_USED_TEMPLATE_KEY, selectedImportTemplateId)
-      } catch { /* ignore */ }
-      setLastUsedTemplateId(selectedImportTemplateId)
-    }
+    rememberSelectedImportTemplate(selectedImportTemplateId)
     setActiveNav('report')
   }
 
   const applyImportTemplate = (templateId: string) => {
     setSelectedImportTemplateId(templateId)
+    setMissingImportColumns([])
     const template = importTemplates.find((item) => item.id === templateId)
-    if (!template) return
-    setCustomMapping((current) => ({ ...current, ...template.mapping, dimensions: template.combinedColumn ?? template.mapping.dimensions ?? '' }))
-    setCustomUnits({
-      length: template.units.length,
-      width: template.units.width,
-      height: template.units.height,
-    })
-    setTemplateHeaderRow(template.headerRow ?? 1)
-    setTemplateStartRow(template.startRow ?? 2)
-    setTemplateDimensionMode(template.dimensionMode ?? 'separate')
-    setTemplateCombinedColumn(template.combinedColumn ?? template.mapping.dimensions ?? '')
-    setTemplateDefaults(template.defaultValues ?? { quantity: 1, canRotate: true, stackable: true })
+    if (!template) {
+      setCustomMapping({
+        label: '',
+        name: '',
+        length: '',
+        width: '',
+        height: '',
+        weight: '',
+        quantity: '',
+        color: '',
+        canRotate: '',
+        stackable: '',
+        maxStackLayers: '',
+        dimensions: '',
+      })
+      setCustomUnits({ length: 'auto', width: 'auto', height: 'auto' })
+      setTemplateHeaderRow(1)
+      setTemplateStartRow(2)
+      setTemplateDimensionMode('separate')
+      setTemplateCombinedColumn('')
+      setTemplateDefaults({ quantity: 1, canRotate: true, stackable: true })
+      setTemplateName('')
+      setTemplateDimensionOrder(['length', 'width', 'height'])
+      return
+    }
+    const next = importMappingValueFromTemplate(template)
+    setCustomMapping(next.mapping)
+    setCustomUnits(next.units)
+    setTemplateHeaderRow(next.headerRow)
+    setTemplateStartRow(next.startRow)
+    setTemplateDimensionMode(next.dimensionMode)
+    setTemplateCombinedColumn(next.combinedColumn)
+    setTemplateDefaults(next.defaults)
     setTemplateName(template.name)
-    setTemplateDimensionOrder(template.dimensionOrder ?? ['length', 'width', 'height'])
+    setTemplateDimensionOrder(next.dimensionOrder)
   }
 
-  const applyLastImportConfig = (config: LastImportConfig) => {
-    setCustomMapping((current) => ({ ...current, ...config.mapping }))
-    setCustomUnits(config.units)
-    setTemplateHeaderRow(config.headerRow)
-    setTemplateStartRow(config.startRow)
-    setTemplateDimensionMode(config.dimensionMode)
-    setTemplateCombinedColumn(config.combinedColumn)
-    setTemplateDimensionOrder(config.dimensionOrder)
-    setTemplateDefaults(config.defaults)
+  const importWithTemplate = (template: ImportTemplate) => {
+    const templateMappingValue = importMappingValueFromTemplate(template)
+    applyImportTemplate(template.id)
+    const missing = missingMappedColumns(templateMappingValue, importColumnsForHeaderRow(importRows, templateMappingValue.headerRow))
+    setMissingImportColumns(missing)
+    const imported = parseCargoRowsWithTemplate(importRows, buildTemplateImportConfig(template), { colors })
+    applyImportedCargo(imported)
+    rememberSelectedImportTemplate(template.id)
+    setActiveNav('report')
+    if (missing.length === 0) {
+      setShowMappingModal(false)
+    }
   }
 
   const importMappingValue: ImportMappingValue = {
@@ -2057,6 +2121,9 @@ function Workbench() {
     setTemplateCombinedColumn(next.combinedColumn)
     setTemplateDimensionOrder(next.dimensionOrder)
     setTemplateDefaults(next.defaults)
+    setMissingImportColumns(selectedImportTemplateId
+      ? missingMappedColumns(next, importColumnsForHeaderRow(importRows, next.headerRow))
+      : [])
   }
 
   const libraryFormCargo = (): CargoItem => ({
@@ -2139,13 +2206,11 @@ function Workbench() {
     if (!saved) return
     setImportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
     setSelectedImportTemplateId(saved.id)
-    // Saving a named template is an explicit "I'll reuse this" signal: remember it
-    // as the last-used template so the next import auto-applies it (point 2 of the
-    // 2026-06-17 review), without the user re-selecting every mapping by hand.
+    // Saving records the chosen template for telemetry/local continuity, but
+    // the next import starts from "None" and waits for explicit template selection.
     try {
       localStorage.setItem(LAST_USED_TEMPLATE_KEY, saved.id)
     } catch { /* ignore */ }
-    setLastUsedTemplateId(saved.id)
     setEditingImportTemplateId('')
     setEditingImportTemplateDraft(null)
     setTemplateSaveNotice(`${t.templateSaved}: ${saved.name}`)
@@ -2505,18 +2570,8 @@ function Workbench() {
       setTemplateDimensionMode('separate')
       setTemplateCombinedColumn('')
       setTemplateDefaults({ quantity: 1, canRotate: true, stackable: true })
-      // Prefill priority: a still-existing named template wins; otherwise fall
-      // back to the last raw config the user confirmed (point 2), so a manually
-      // mapped import is remembered even without saving a named template.
-      const lastUsedExists = lastUsedTemplateId && importTemplates.some((item) => item.id === lastUsedTemplateId)
-      if (lastUsedExists) {
-        applyImportTemplate(lastUsedTemplateId)
-      } else {
-        const savedConfig = loadLastImportConfig(currentUser?.id ?? null)
-        if (savedConfig) {
-          applyLastImportConfig(savedConfig)
-        }
-      }
+      setTemplateDimensionOrder(['length', 'width', 'height'])
+      setMissingImportColumns([])
       setShowMappingModal(true)
     }
   }
@@ -4298,7 +4353,14 @@ function Workbench() {
                     className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
                     value={selectedImportTemplateId}
                     data-testid="import-template-select"
-                    onChange={(event) => applyImportTemplate(event.target.value)}
+                    onChange={(event) => {
+                      const template = importTemplates.find((item) => item.id === event.target.value)
+                      if (template) {
+                        importWithTemplate(template)
+                        return
+                      }
+                      applyImportTemplate('')
+                    }}
                   >
                     <option value="">{t.templateNone}</option>
                     {importTemplates.map((template) => (
@@ -4335,6 +4397,7 @@ function Workbench() {
                 onChange={handleImportMappingChange}
                 availableColumns={importColumnsForHeaderRow(importRows, templateHeaderRow)}
                 labels={t}
+                missingColumns={missingImportColumns}
                 previewSlot={(
                   <div className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid="mapping-preview">
                     <div className="mb-2 text-sm font-semibold text-slate-700">{t.mappingPreview}</div>
