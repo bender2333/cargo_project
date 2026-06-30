@@ -11,6 +11,7 @@
 - Import/performance fix: importing large workbooks now marks packing as dirty and defers automatic packing until the explicit Load button. The container-comparison tab also computes only when opened, preventing the Vietnam template import flow from blocking on unrelated multi-container packing. Pallet-top candidates are deduplicated and ordinary top-fill expansion is limited to first-priority loads or capacity-one top cargo.
 - Subtask 3/4 tests: extended import parser, import mapping form, last import config, custom cargo client/server, and Playwright import/form coverage for `loadingPriority='first'` and `groundOnly=true`.
 - Verification: `npm run lint` passed; `npm test` passed 53 files / 334 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 93 / skipped 1 / failed 0.
+- Release note: added `2026-06-30-r49-loading-priority-ground-only` with bilingual user-facing notes for first-priority/ground-only cargo, Excel/template support, and explicit Load behavior for large imports.
 
 ## 2026-06-18 (Template selection only pre-fills mappings — Round 38)
 

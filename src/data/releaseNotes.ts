@@ -14,6 +14,23 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-06-30-r49-loading-priority-ground-only',
+    date: '2026-06-30',
+    title: { en: 'Loading priority and ground-only cargo', zh: '先装优先级与必须落地' },
+    items: {
+      en: [
+        'Cargo can now be marked First or Normal and can be constrained to Ground only from the cargo form, edit dialog, cargo library, and Excel import templates.',
+        'Automatic packing honors first-priority pallets before normal cargo, then fills pallet tops and gaps under the updated support threshold.',
+        'Large workbook imports no longer block on unrelated background packing; packing runs when you click Load.',
+      ],
+      zh: [
+        '货物现在可在录入、编辑、货物库和 Excel 导入模板中设置「先装/普通」以及「必须落地」。',
+        '自动装箱会优先装入先装整托，再按更新后的支撑阈值填充托顶和缝隙。',
+        '大型工作簿导入不再被无关后台装箱阻塞；点击「装箱」时才执行排布计算。',
+      ],
+    },
+  },
+  {
     version: '2026-06-18-r48-template-prefill-confirm',
     date: '2026-06-18',
     title: { en: 'Templates prefill mappings for review', zh: '模板先预填，确认后导入' },
