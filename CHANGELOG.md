@@ -12,6 +12,9 @@
 - Subtask 3/4 tests: extended import parser, import mapping form, last import config, custom cargo client/server, and Playwright import/form coverage for `loadingPriority='first'` and `groundOnly=true`.
 - Verification: `npm run lint` passed; `npm test` passed 53 files / 334 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 93 / skipped 1 / failed 0.
 - Release note: added `2026-06-30-r49-loading-priority-ground-only` with bilingual user-facing notes for first-priority/ground-only cargo, Excel/template support, and explicit Load behavior for large imports.
+- Deploy: `npm run deploy` passed all 7 steps with remote backup `/root/cargo_project-backup-20260630-075820`; remote HTTP/API health check passed.
+- Remote verification: live `http://101.33.232.150/` serves bundle `assets/index-Dq5SPFWq.js`, and the deployed bundle contains `2026-06-30-r49-loading-priority-ground-only`.
+- Remote E2E regression (`PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npm run test:e2e`): passed 93 / skipped 1 / failed 0 against production.
 
 ## 2026-06-18 (Template selection only pre-fills mappings — Round 38)
 
