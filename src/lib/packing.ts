@@ -36,6 +36,12 @@ export type CalculatePackingOptions = {
 
 type OrientationKey = PlacedBox['orientationKey']
 type LabelRotationDeg = PlacedBox['labelRotationDeg']
+type PlacementChoice = {
+  score: number
+  box: BoxOrientation
+  point: PackingPoint
+  idx: number
+}
 
 export type BoxOrientation = BoxSize & {
   orientationKey: OrientationKey
@@ -243,7 +249,7 @@ function canPlace(
 
   const support = supportDetails(point, box, placed)
   if (reserveTopPassengerStackSlot && !preservesReservedTopPassengerStackSlot(support, placedById)) return false
-  return support.supportRatio >= 0.8 && respectsMaxStackLayers(support, placedById, item)
+  return support.supportRatio >= 0.5 && respectsMaxStackLayers(support, placedById, item)
 }
 
 function pointKey(point: PackingPoint) {
@@ -449,6 +455,8 @@ function bestPlacement(
 
 function topSurfacePoints(placed: PlacedBox[], item?: CargoItem, minZ = 0) {
   const levels = new Map<number, { x: Set<number>; y: Set<number> }>()
+  const gridPoints: PackingPoint[] = []
+  const itemOrientations = item ? orientations(item) : []
   for (const box of placed) {
     const z = box.z + box.height
     if (z < minZ - EPSILON) continue
@@ -458,6 +466,13 @@ function topSurfacePoints(placed: PlacedBox[], item?: CargoItem, minZ = 0) {
     level.y.add(box.y)
     level.y.add(box.y + box.width)
     levels.set(z, level)
+    for (const orientation of itemOrientations) {
+      for (let x = box.x; x + orientation.length <= box.x + box.length + EPSILON; x += orientation.length) {
+        for (let y = box.y; y + orientation.width <= box.y + box.width + EPSILON; y += orientation.width) {
+          gridPoints.push({ x, y, z })
+        }
+      }
+    }
   }
 
   const xOffsets = new Set([0])
@@ -469,15 +484,36 @@ function topSurfacePoints(placed: PlacedBox[], item?: CargoItem, minZ = 0) {
     }
   }
 
-  return [...levels.entries()].flatMap(([z, level]) =>
-    [...level.x].flatMap((edgeX) =>
-      [...level.y].flatMap((edgeY) =>
-        [...xOffsets].flatMap((xOffset) =>
-          [...yOffsets].map((yOffset) => ({ x: edgeX + xOffset, y: edgeY + yOffset, z })),
+  return [
+    ...gridPoints,
+    ...[...levels.entries()].flatMap(([z, level]) => {
+      if (!itemOrientations.length) return []
+      const xs = [...level.x]
+      const ys = [...level.y]
+      const minX = Math.min(...xs)
+      const maxX = Math.max(...xs)
+      const minY = Math.min(...ys)
+      const maxY = Math.max(...ys)
+      return itemOrientations.flatMap((box) => {
+        const points: PackingPoint[] = []
+        for (let x = minX; x + box.length <= maxX + EPSILON; x += box.length) {
+          for (let y = minY; y + box.width <= maxY + EPSILON; y += box.width) {
+            points.push({ x, y, z })
+          }
+        }
+        return points
+      })
+    }),
+    ...[...levels.entries()].flatMap(([z, level]) =>
+      [...level.x].flatMap((edgeX) =>
+        [...level.y].flatMap((edgeY) =>
+          [...xOffsets].flatMap((xOffset) =>
+            [...yOffsets].map((yOffset) => ({ x: edgeX + xOffset, y: edgeY + yOffset, z })),
+          ),
         ),
       ),
     ),
-  )
+  ]
 }
 
 function minimumFittingHeight(item: CargoItem, container: ContainerSpec) {
@@ -662,6 +698,18 @@ function normalizeDefaultMaxStackLayers(value: number | undefined) {
   return Math.floor(Number(value))
 }
 
+function cargoVolume(item: CargoItem) {
+  return item.length * item.width * item.height
+}
+
+function loadingPriorityRank(item: Pick<CargoItem, 'loadingPriority'>) {
+  return item.loadingPriority === 'first' ? 0 : 1
+}
+
+function canUseTopSurfacePoints(item: CargoItem) {
+  return !item.groundOnly && (stackCapacity(item) === 1 || item.loadingPriority !== 'first')
+}
+
 export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[], options: CalculatePackingOptions = {}): PackingResult {
   const effective = effectiveContainer(container)
   const placed: PlacedBox[] = []
@@ -675,6 +723,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
 
   const loadingMode = options.loadingMode ?? 'quantity'
   const defaultMaxStackLayers = normalizeDefaultMaxStackLayers(options.defaultMaxStackLayers)
+  const hasFirstPriorityCargo = cargoItems.some((item) => item.loadingPriority === 'first')
   const expanded = cargoItems
     .flatMap((item, itemIndex) => {
       totalCargoCount += item.quantity
@@ -686,19 +735,24 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       return Array.from({ length: item.quantity }, (_, index) => ({ item: effectiveItem, itemIndex, label, index: index + 1 }))
     })
     .sort((a, b) => {
+      const priority = loadingPriorityRank(a.item) - loadingPriorityRank(b.item)
+      if (priority !== 0) return priority
       if (loadingMode === 'input') {
         return a.itemIndex - b.itemIndex || a.index - b.index
       }
       if (loadingMode === 'weight') {
-        return b.item.weight - a.item.weight || b.item.length * b.item.width * b.item.height - a.item.length * a.item.width * a.item.height
+        return b.item.weight - a.item.weight || cargoVolume(b.item) - cargoVolume(a.item)
       }
       if (loadingMode === 'quantity') {
+        if (hasFirstPriorityCargo && loadingPriorityRank(a.item) === 1 && loadingPriorityRank(b.item) === 1) {
+          return cargoVolume(a.item) - cargoVolume(b.item) || b.item.quantity - a.item.quantity
+        }
         return stackCapacity(b.item) - stackCapacity(a.item)
           || b.item.quantity - a.item.quantity
-          || b.item.length * b.item.width * b.item.height - a.item.length * a.item.width * a.item.height
+          || cargoVolume(b.item) - cargoVolume(a.item)
       }
       return stackCapacity(b.item) - stackCapacity(a.item)
-        || b.item.length * b.item.width * b.item.height - a.item.length * a.item.width * a.item.height
+        || cargoVolume(b.item) - cargoVolume(a.item)
     })
   const minPendingTopPassengerHeights = new Array<number>(expanded.length).fill(Number.POSITIVE_INFINITY)
   let minPendingTopPassengerHeight = Number.POSITIVE_INFINITY
@@ -753,6 +807,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       stackable: entry.item.stackable,
       maxStackLayers: entry.item.maxStackLayers,
       groundOnly: entry.item.groundOnly,
+      loadingPriority: entry.item.loadingPriority,
       physicalLayer: support.physicalLayer,
       verticalLayer: support.physicalLayer,
       workStep: placed.length + 1,
@@ -780,56 +835,55 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     const remaining = [...expanded]
     while (remaining.length > 0) {
       const placedById = new Map<string, StackChainNode>(placed.map((placedBox) => [placedBox.id, placedBox]))
-      let best:
-        | {
-            score: number
-            box: BoxOrientation
-            point: PackingPoint
-            idx: number
-          }
-        | null = null
+      let best: PlacementChoice | undefined
 
-      for (let idx = 0; idx < remaining.length; idx += 1) {
-        const entry = remaining[idx]
-        const item = entry.item
-        if (orientations(item).every((box) => !fitsInsideContainer({ x: 0, y: 0, z: 0 }, box, effective))) {
-          continue
-        }
-        if (usedWeight + item.weight > effective.maxWeight + EPSILON) {
-          continue
-        }
-        for (const box of orientations(item)) {
-          if (
-            box.length > effective.length ||
-            box.width > effective.width ||
-            box.height > effective.height
-          ) {
+      for (const priorityRank of [0, 1]) {
+        if (!remaining.some((entry) => loadingPriorityRank(entry.item) === priorityRank)) continue
+        for (let idx = 0; idx < remaining.length; idx += 1) {
+          const entry = remaining[idx]
+          const item = entry.item
+          if (loadingPriorityRank(item) !== priorityRank) continue
+          if (orientations(item).every((box) => !fitsInsideContainer({ x: 0, y: 0, z: 0 }, box, effective))) {
             continue
           }
-          const topPassengerPoints = stackCapacity(item) === 1 && !item.groundOnly && placed.length > 0
-            ? normalizePoints(topSurfacePoints(placed, item, effective.height - item.height), effective)
-            : []
-          const candidatePointSets = topPassengerPoints.length > 0 ? [topPassengerPoints, extremePoints] : [extremePoints]
-          for (const candidatePoints of candidatePointSets) {
-            for (const point of candidatePoints) {
-              if (!canPlace(point, box, effective, placed, placedById, item)) continue
-              const score = placementScore(item, box, point, placed, effective, committedOrientations.get(item.id))
-              if (
-                best === null ||
-                score < best.score ||
-                (score === best.score && box.width > best.box.width)
-              ) {
-                best = { score, box, point, idx }
+          if (usedWeight + item.weight > effective.maxWeight + EPSILON) {
+            continue
+          }
+          for (const box of orientations(item)) {
+            if (
+              box.length > effective.length ||
+              box.width > effective.width ||
+              box.height > effective.height
+            ) {
+              continue
+            }
+            const topPassengerPoints = canUseTopSurfacePoints(item) && placed.length > 0
+              ? normalizePoints(topSurfacePoints(placed, item), effective)
+              : []
+            const candidatePointSets = topPassengerPoints.length > 0 ? [topPassengerPoints, extremePoints] : [extremePoints]
+            for (const candidatePoints of candidatePointSets) {
+              for (const point of candidatePoints) {
+                if (!canPlace(point, box, effective, placed, placedById, item)) continue
+                const score = placementScore(item, box, point, placed, effective, committedOrientations.get(item.id))
+                if (
+                  best === undefined ||
+                  score < best.score ||
+                  (score === best.score && box.width > best.box.width)
+                ) {
+                  best = { score, box, point, idx }
+                }
               }
             }
           }
         }
+        if (best) break
       }
 
       if (!best) break
-      const entry = remaining[best.idx]
-      remaining.splice(best.idx, 1)
-      placeEntry(entry, { box: best.box, point: best.point })
+      const choice = best
+      const entry = remaining[choice.idx]
+      remaining.splice(choice.idx, 1)
+      placeEntry(entry, { box: choice.box, point: choice.point })
     }
 
     // Anything still in `remaining` is unplaced; categorize each by reason.
@@ -870,7 +924,12 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         item,
         effective,
         placed,
-        extremePoints,
+        normalizePoints(
+          canUseTopSurfacePoints(item)
+            ? [...extremePoints, ...topSurfacePoints(placed, item)]
+            : extremePoints,
+          effective,
+        ),
         reservedTopPassengerHeight,
         loadingMode === 'quantity',
         reserveTopPassengerStackSlot,
@@ -885,7 +944,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       placeEntry(entry, placement)
     }
 
-    const retryEntries = noSpaceEntries.filter((entry) => stackCapacity(entry.item) === 1)
+    const retryEntries = noSpaceEntries.filter((entry) => canUseTopSurfacePoints(entry.item))
     for (const entry of retryEntries) {
       const placement = bestPlacement(
         entry.item,

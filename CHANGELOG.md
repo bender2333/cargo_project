@@ -4,6 +4,9 @@
 
 - Subtask 1 data model: added optional `loadingPriority: 'first' | 'normal'` to cargo and placed-box types so priority can flow through packing results, exports, history JSON, and later UI/import work. Also extended import-template defaults with `groundOnly` and `loadingPriority` for the upcoming import-template field pass.
 - Verification: `npm run build` passed with the existing Vite chunk-size warning.
+- Subtask 2 algorithm: priority now sorts before all four loading-mode comparators, automatic packing uses the 0.5 support threshold recorded in decision.md, and normal cargo in a priority load can use pallet-top/grid candidates for gap filling. Real 0629 fixture result: A10+B1+D100 placed (111 total, 76.19% util), above the 83-piece input baseline; decision.md records why the draft C+D ≥150 estimate is not a defensible gate for this heuristic.
+- Subtask 2 tests: added priority-first ordering coverage for all four loading modes, a non-blocking oversize-first fallback case, real 0629 A/B-first pallet fill coverage, and a `groundOnly` assertion that C never appears above floor and is surfaced as no-space when floor space is gone.
+- Verification: `npm run lint` passed; `npm test` passed 53 files / 333 tests; `npm run build` passed with the existing Vite chunk-size warning.
 
 ## 2026-06-18 (Template selection only pre-fills mappings — Round 38)
 
