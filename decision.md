@@ -1,6 +1,33 @@
 # Decision Log
 
 
+## 2026-06-29 第39轮补充：支撑阈值 0.8→0.5 决策 + 测试2 剩余项待办
+
+### 决策：自动装箱支撑阈值 0.8 → 0.5
+
+- 背景：用户要求把自动装箱的底面支撑阈值从 0.8 改 0.5，以增强托顶/缝隙填充。
+- 根因/现状（已读码定位）：
+  - 自动装箱阈值**硬编码**在 `packing.ts:246` `return support.supportRatio >= 0.8 && ...`，且 `packing.ts` **完全不读 `supportPolicy`/`placementSettings`**（grep 无 `supportPolicy` 引用）。
+  - 手动侧用 `placementSettings.ts:33` `minSupportRatio: 0.5` 与 `manualPlacement.ts:75` `MIN_SUPPORT_OVERLAP_RATIO = 0.5`。
+  - **即存在两套不一致阈值**：自动 0.8、手动 0.5。会出现"自动摆得下手动判违规"或反之的割裂（CLAUDE.md「暴露冲突，别平均」）。
+- 决策：自动装箱 `canPlace` 阈值 **0.8 → 0.5**，与手动侧对齐。
+- 取舍：
+  - 收益：散货可骑整托边缘/两箱接缝，托顶与缝隙填充增强（直接服务本轮"尽量填满"目标）；自动/手动判定一致。
+  - 风险：50% 支撑允许箱体悬挑一半，物理稳定性下降、3D 视觉出现明显悬空。属真实权衡，但与手动侧现状一致，不新增割裂。
+- 量化基线（0.8，0629 真实数据实测）：整托优先 input 模式 = placed 83 / util 77.1%（A10+B1+C61+D11）；仅整托 util 58%。**0.5 的实测提升幅度未测**——因 Codex 正并发改 `packing.ts`，架构师不临时改算法测量，留作子任务由执行者在其分支实测并回填本条。
+- 影响面：改动影响**所有**自动装箱结果（不止 0629）。`packing.test.ts`/`stackfill`/`31pallet` 须全绿；新增"0.5 阈值下整托优先填充量 > 0.8 基线"的可断言用例。
+- 并入：`plans/2026-06-29-loading-priority-and-packing-fill.md` 子任务2（原计划"0.8 本轮不动"的边界**作废**，改为本轮一并调 0.5）。
+
+### 待办：测试2 剩余项（第一轮算法落地后另起轮次）
+
+本轮（优先级+填充+阈值）聚焦自动装箱正确性。测试2 的手动交互问题留待后续：
+
+1. **手动旋转入口缺失**：3D 仅能双击调 gizmo 再点箭头（`ContainerScene.tsx:1154/1120`），无旋转快捷键；2D 视图（`ManualPlacement2D.tsx`）完全无旋转入口。→ 补 2D 旋转按钮 + 3D 旋转快捷键（逻辑层 `rotateBox` 全套已就绪）。
+2. **跨箱规批量对齐**：吸附 `snapEdges.ts`/`manualPlacementSnap.ts` 只对被拖单箱生效（`ContainerScene.tsx:1278`），无整体对齐。→ 新增跨箱规对齐能力。
+3. **超限可见性兜底（fail loudly）**：`handleContinueManually`（`Workbench.tsx:1551`）转手动不重验证；`validateDraft` 只标红不剔除超限箱（`manualToPlacedBoxes` 全渲染）。切更小柜型后超限箱静默保留。→ 转手动/切柜型后明确提示并阻止导出，或提供自动归位。当前 0629 数据未触发，优先级最低。
+
+---
+
 ## 2026-06-29 第39轮 Review：装柜排版"缝隙"与"超限"问题定位（基于真实 snapshot）
 
 > 状态：仅根因定位，未实现。数据来自 `test-data/json/0629/`（4 个 cargo-debug-snapshot，对应"装柜软件问题汇总 6.29"马来20GP测试）。

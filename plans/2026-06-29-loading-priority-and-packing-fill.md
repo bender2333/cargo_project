@@ -49,8 +49,8 @@
      - **倾向方案A**：影响面小、可控，先验证利用率提升幅度，不够再考虑 B。
   3. **缝隙种子补强（R3，可选降级项）**：`placeEntry` 放置大箱（footprint 显著大于候选货物）时，为其顶面补种网格落点。若方案A已让 0629 数据达标，此项可降级到下一轮，避免一次改太多。
 - **边界**：
-  - **不改** `canPlace`（:230）几何/重叠/支撑判定、不改 `supportDetails`、不改 `orientations()`、不改 `respectsMaxStackLayers`、不改分层 `layers.ts`。
-  - `support.supportRatio >= 0.8`（`canPlace:246`）**本轮不动**——降低它会引入悬空风险，属独立决策。若 0629 缝隙因 0.8 阈值填不满，记 `decision.md` 留待下一轮。
+  - **不改** `canPlace`（:230）的重叠/越界/几何判定本身、不改 `supportDetails`、不改 `orientations()`、不改 `respectsMaxStackLayers`、不改分层 `layers.ts`。
+  - `support.supportRatio` 阈值（`canPlace:246`）**本轮 0.8 → 0.5**（与手动侧 `minSupportRatio` 0.5 对齐，详见 decision.md「2026-06-29 第39轮补充」）。须新增「0.5 下整托优先填充量 > 0.8 基线 83 件」可断言用例，并回填 0.5 实测数据到 decision.md。悬挑稳定性下降是已知权衡，与手动侧现状一致。
   - 优先级是**排序键**，不是硬过滤：`first` 货物放不下仍照常 markUnplaced（no-space），不因优先级跳过其它货物。
 - **模块**：`src/lib/packing.ts`（排序 + bestPlacement/retry 调用条件）。
 - **验证标准（硬门槛，新增到 `packing.test.ts` 或新建 `packing.priority.test.ts`）**：
@@ -106,5 +106,5 @@
 - 子任务 2 改装箱核心，影响所有装箱路径 —— `packing.test.ts` / `stackfill` / `31pallet` 全绿是硬门槛；四种 loadingMode 都要覆盖优先级排序。
 - 托顶填充放宽可能让普通货物过度上堆、或退化现有 stackfill 行为 —— 用例3「不退化利用率」+ 现有 stackfill 测试守门。优先用方案A（小改 retry 条件），不够再评估方案B。
 - 优先级误设成硬过滤会让 normal 货物饿死 —— 用例4 专守。
-- 0.8 支撑阈值本轮不动；若缝隙因此填不满，记 decision.md 留待下一轮，不在本轮偷偷降阈值。
+- 支撑阈值 0.8→0.5 影响**所有**自动装箱结果（不止 0629）：放宽后箱体可悬挑一半，须靠 `packing.test.ts`/`stackfill`/`31pallet` 全绿守稳定性回归；新增「0.5 填充量 > 0.8 基线」用例量化收益。这是与手动侧对齐的决策，不是临时降阈值。
 - 自定义货物库后端是否需 ground_only 列待子任务4确认，避免静默丢字段（fail loudly）。
