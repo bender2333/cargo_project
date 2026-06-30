@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-30 (Loading priority and pallet-top fill — Round 49)
+
+- Subtask 1 data model: added optional `loadingPriority: 'first' | 'normal'` to cargo and placed-box types so priority can flow through packing results, exports, history JSON, and later UI/import work. Also extended import-template defaults with `groundOnly` and `loadingPriority` for the upcoming import-template field pass.
+- Verification: `npm run build` passed with the existing Vite chunk-size warning.
+
 ## 2026-06-18 (Template selection only pre-fills mappings — Round 38)
 
 Implements `plans/2026-06-18-template-apply-only-prefill.md`: corrects the Round 37 misread. Selecting an import template is parameter prefill, not import confirmation.

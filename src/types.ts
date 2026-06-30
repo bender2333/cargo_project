@@ -25,6 +25,7 @@ export type CargoItem = {
   stackable: boolean
   maxStackLayers?: number
   groundOnly?: boolean
+  loadingPriority?: 'first' | 'normal'
 }
 
 export type PlacedBox = {
@@ -55,6 +56,7 @@ export type PlacedBox = {
   stackable: boolean
   maxStackLayers?: number
   groundOnly?: boolean
+  loadingPriority?: 'first' | 'normal'
   physicalLayer: number
   verticalLayer?: number
   workStep: number
@@ -185,6 +187,8 @@ export type ImportTemplateDefaults = {
   canRotate?: boolean
   stackable?: boolean
   maxStackLayers?: number
+  groundOnly?: boolean
+  loadingPriority?: 'first' | 'normal'
 }
 
 export interface ImportTemplate {
