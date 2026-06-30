@@ -455,8 +455,11 @@ function bestPlacement(
 
 function topSurfacePoints(placed: PlacedBox[], item?: CargoItem, minZ = 0) {
   const levels = new Map<number, { x: Set<number>; y: Set<number> }>()
-  const gridPoints: PackingPoint[] = []
   const itemOrientations = item ? orientations(item) : []
+  const points = new Map<string, PackingPoint>()
+  const addPoint = (point: PackingPoint) => {
+    points.set(pointKey(point), point)
+  }
   for (const box of placed) {
     const z = box.z + box.height
     if (z < minZ - EPSILON) continue
@@ -469,7 +472,7 @@ function topSurfacePoints(placed: PlacedBox[], item?: CargoItem, minZ = 0) {
     for (const orientation of itemOrientations) {
       for (let x = box.x; x + orientation.length <= box.x + box.length + EPSILON; x += orientation.length) {
         for (let y = box.y; y + orientation.width <= box.y + box.width + EPSILON; y += orientation.width) {
-          gridPoints.push({ x, y, z })
+          addPoint({ x, y, z })
         }
       }
     }
@@ -478,42 +481,38 @@ function topSurfacePoints(placed: PlacedBox[], item?: CargoItem, minZ = 0) {
   const xOffsets = new Set([0])
   const yOffsets = new Set([0])
   if (item) {
-    for (const box of orientations(item)) {
+    for (const box of itemOrientations) {
       xOffsets.add(-box.length)
       yOffsets.add(-box.width)
     }
   }
 
-  return [
-    ...gridPoints,
-    ...[...levels.entries()].flatMap(([z, level]) => {
-      if (!itemOrientations.length) return []
-      const xs = [...level.x]
-      const ys = [...level.y]
-      const minX = Math.min(...xs)
-      const maxX = Math.max(...xs)
-      const minY = Math.min(...ys)
-      const maxY = Math.max(...ys)
-      return itemOrientations.flatMap((box) => {
-        const points: PackingPoint[] = []
-        for (let x = minX; x + box.length <= maxX + EPSILON; x += box.length) {
-          for (let y = minY; y + box.width <= maxY + EPSILON; y += box.width) {
-            points.push({ x, y, z })
+  for (const [z, level] of levels.entries()) {
+    const xs = [...level.x]
+    const ys = [...level.y]
+    const minX = Math.min(...xs)
+    const maxX = Math.max(...xs)
+    const minY = Math.min(...ys)
+    const maxY = Math.max(...ys)
+    for (const box of itemOrientations) {
+      for (let x = minX; x + box.length <= maxX + EPSILON; x += box.length) {
+        for (let y = minY; y + box.width <= maxY + EPSILON; y += box.width) {
+          addPoint({ x, y, z })
+        }
+      }
+    }
+    for (const edgeX of level.x) {
+      for (const edgeY of level.y) {
+        for (const xOffset of xOffsets) {
+          for (const yOffset of yOffsets) {
+            addPoint({ x: edgeX + xOffset, y: edgeY + yOffset, z })
           }
         }
-        return points
-      })
-    }),
-    ...[...levels.entries()].flatMap(([z, level]) =>
-      [...level.x].flatMap((edgeX) =>
-        [...level.y].flatMap((edgeY) =>
-          [...xOffsets].flatMap((xOffset) =>
-            [...yOffsets].map((yOffset) => ({ x: edgeX + xOffset, y: edgeY + yOffset, z })),
-          ),
-        ),
-      ),
-    ),
-  ]
+      }
+    }
+  }
+
+  return [...points.values()]
 }
 
 function minimumFittingHeight(item: CargoItem, container: ContainerSpec) {
@@ -706,8 +705,8 @@ function loadingPriorityRank(item: Pick<CargoItem, 'loadingPriority'>) {
   return item.loadingPriority === 'first' ? 0 : 1
 }
 
-function canUseTopSurfacePoints(item: CargoItem) {
-  return !item.groundOnly && (stackCapacity(item) === 1 || item.loadingPriority !== 'first')
+function canUseTopSurfacePoints(item: CargoItem, hasFirstPriorityCargo = false) {
+  return !item.groundOnly && (stackCapacity(item) === 1 || (hasFirstPriorityCargo && item.loadingPriority !== 'first'))
 }
 
 export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[], options: CalculatePackingOptions = {}): PackingResult {
@@ -857,7 +856,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
             ) {
               continue
             }
-            const topPassengerPoints = canUseTopSurfacePoints(item) && placed.length > 0
+            const topPassengerPoints = canUseTopSurfacePoints(item, hasFirstPriorityCargo) && placed.length > 0
               ? normalizePoints(topSurfacePoints(placed, item), effective)
               : []
             const candidatePointSets = topPassengerPoints.length > 0 ? [topPassengerPoints, extremePoints] : [extremePoints]
@@ -925,7 +924,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         effective,
         placed,
         normalizePoints(
-          canUseTopSurfacePoints(item)
+          canUseTopSurfacePoints(item, hasFirstPriorityCargo)
             ? [...extremePoints, ...topSurfacePoints(placed, item)]
             : extremePoints,
           effective,
@@ -944,7 +943,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       placeEntry(entry, placement)
     }
 
-    const retryEntries = noSpaceEntries.filter((entry) => canUseTopSurfacePoints(entry.item))
+    const retryEntries = noSpaceEntries.filter((entry) => canUseTopSurfacePoints(entry.item, hasFirstPriorityCargo))
     for (const entry of retryEntries) {
       const placement = bestPlacement(
         entry.item,

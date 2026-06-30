@@ -7,6 +7,10 @@
 - Subtask 2 algorithm: priority now sorts before all four loading-mode comparators, automatic packing uses the 0.5 support threshold recorded in decision.md, and normal cargo in a priority load can use pallet-top/grid candidates for gap filling. Real 0629 fixture result: A10+B1+D100 placed (111 total, 76.19% util), above the 83-piece input baseline; decision.md records why the draft C+D ≥150 estimate is not a defensible gate for this heuristic.
 - Subtask 2 tests: added priority-first ordering coverage for all four loading modes, a non-blocking oversize-first fallback case, real 0629 A/B-first pallet fill coverage, and a `groundOnly` assertion that C never appears above floor and is surfaced as no-space when floor space is gone.
 - Verification: `npm run lint` passed; `npm test` passed 53 files / 333 tests; `npm run build` passed with the existing Vite chunk-size warning.
+- Subtasks 3/4 UI + import: added `Loading priority` and `Ground only` controls to the main cargo form, edit dialog, and cargo library; cargo lists now surface both fields. Excel import, mapping templates, last-used raw mapping defaults, custom cargo API payloads, and the custom cargo SQLite table now preserve both fields.
+- Import/performance fix: importing large workbooks now marks packing as dirty and defers automatic packing until the explicit Load button. The container-comparison tab also computes only when opened, preventing the Vietnam template import flow from blocking on unrelated multi-container packing. Pallet-top candidates are deduplicated and ordinary top-fill expansion is limited to first-priority loads or capacity-one top cargo.
+- Subtask 3/4 tests: extended import parser, import mapping form, last import config, custom cargo client/server, and Playwright import/form coverage for `loadingPriority='first'` and `groundOnly=true`.
+- Verification: `npm run lint` passed; `npm test` passed 53 files / 334 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e` passed 93 / skipped 1 / failed 0.
 
 ## 2026-06-18 (Template selection only pre-fills mappings — Round 38)
 

@@ -97,6 +97,8 @@ const fields = {
   canRotate: ['canRotate', 'Rotate', 'rotation_allowed', '可旋转', '可旋轉', '允许旋转', '允許旋轉'],
   stackable: ['stackable', 'Stackable', '可堆叠', '可堆疊', '允许堆叠', '允許堆疊'],
   maxStackLayers: ['maxStackLayers', 'max stack layers', 'Max stack layers', '最大堆叠层数', '最大堆疊層數', '堆叠层数', '堆疊層數'],
+  groundOnly: ['groundOnly', 'ground only', 'Ground only', '必须落地', '落地', '不可上托', '不可堆叠在上'],
+  loadingPriority: ['loadingPriority', 'loading priority', 'Loading priority', '装载优先级', '优先级', '先装'],
 }
 
 const summaryRowPattern = /^(汇总|合计|小计|total|合計)$/i
@@ -146,6 +148,11 @@ function boolValue(value: RowValue, fallback: boolean) {
     return true
   }
   return fallback
+}
+
+function loadingPriorityValue(value: RowValue): CargoItem['loadingPriority'] {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  return ['first', 'priority', 'high', '先装', '优先', '優先', '高'].includes(normalized) ? 'first' : 'normal'
 }
 
 function fallbackLabel(index: number) {
@@ -256,6 +263,8 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
       { field: 'canRotate', candidates: fields.canRotate },
       { field: 'stackable', candidates: fields.stackable },
       { field: 'maxStackLayers', candidates: fields.maxStackLayers },
+      { field: 'groundOnly', candidates: fields.groundOnly },
+      { field: 'loadingPriority', candidates: fields.loadingPriority },
     ]
 
     fieldMappings.forEach(({ field, candidates }) => {
@@ -283,6 +292,8 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
       canRotate: boolValue(valueFor(row, fields.canRotate), true),
       stackable: boolValue(valueFor(row, fields.stackable), true),
       maxStackLayers: numberValue(valueFor(row, fields.maxStackLayers)) > 0 ? Math.floor(numberValue(valueFor(row, fields.maxStackLayers))) : undefined,
+      groundOnly: boolValue(valueFor(row, fields.groundOnly), false),
+      loadingPriority: loadingPriorityValue(valueFor(row, fields.loadingPriority)),
     })
   })
 
@@ -398,6 +409,8 @@ export function parseCargoRowsWithTemplate(
     if (defaults.canRotate !== undefined) applyDefault('canRotate', '__default_canRotate', defaults.canRotate)
     if (defaults.stackable !== undefined) applyDefault('stackable', '__default_stackable', defaults.stackable)
     if (defaults.maxStackLayers !== undefined) applyDefault('maxStackLayers', '__default_maxStackLayers', defaults.maxStackLayers)
+    if (defaults.groundOnly !== undefined) applyDefault('groundOnly', '__default_groundOnly', defaults.groundOnly)
+    if (defaults.loadingPriority !== undefined) applyDefault('loadingPriority', '__default_loadingPriority', defaults.loadingPriority)
     return next
   })
   if (defaults.label && !effectiveMapping.label) effectiveMapping.label = '__default_label'
@@ -407,6 +420,8 @@ export function parseCargoRowsWithTemplate(
   if (defaults.canRotate !== undefined && !effectiveMapping.canRotate) effectiveMapping.canRotate = '__default_canRotate'
   if (defaults.stackable !== undefined && !effectiveMapping.stackable) effectiveMapping.stackable = '__default_stackable'
   if (defaults.maxStackLayers !== undefined && !effectiveMapping.maxStackLayers) effectiveMapping.maxStackLayers = '__default_maxStackLayers'
+  if (defaults.groundOnly !== undefined && !effectiveMapping.groundOnly) effectiveMapping.groundOnly = '__default_groundOnly'
+  if (defaults.loadingPriority !== undefined && !effectiveMapping.loadingPriority) effectiveMapping.loadingPriority = '__default_loadingPriority'
 
   if (template.dimensionMode === 'combined') {
     const combinedColumn = template.combinedColumn || template.mapping.dimensions

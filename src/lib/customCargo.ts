@@ -15,6 +15,8 @@ function payloadFromCargo(item: CargoItem): CustomCargoPayload {
     canRotate: item.canRotate,
     stackable: item.stackable,
     maxStackLayers: item.maxStackLayers,
+    groundOnly: item.groundOnly,
+    loadingPriority: item.loadingPriority,
   }
 }
 

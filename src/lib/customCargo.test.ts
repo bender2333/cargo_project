@@ -27,6 +27,8 @@ const cargo: CargoItem = {
   canRotate: false,
   stackable: true,
   maxStackLayers: 3,
+  groundOnly: true,
+  loadingPriority: 'first',
 }
 
 describe('customCargo api client', () => {
@@ -58,6 +60,8 @@ describe('customCargo api client', () => {
         canRotate: false,
         stackable: true,
         maxStackLayers: 3,
+        groundOnly: true,
+        loadingPriority: 'first',
       }),
     })
   })

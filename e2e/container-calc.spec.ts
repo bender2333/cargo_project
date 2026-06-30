@@ -21,6 +21,8 @@ async function createWorkbookFile() {
       canRotate: true,
       stackable: false,
       maxStackLayers: 4,
+      groundOnly: true,
+      loadingPriority: 'first',
     },
   ])
   const workbook = XLSX.utils.book_new()
@@ -304,7 +306,11 @@ test('adds cargo and recalculates utilization', async ({ page }) => {
   await cargoForm.getByLabel('Height mm').fill('600')
   await cargoForm.getByLabel('Weight kg').fill('42')
   await cargoForm.getByLabel('Quantity').fill('3')
+  await cargoForm.getByLabel('Loading priority').selectOption('first')
+  await cargoForm.getByLabel('Ground only').check()
   await page.getByRole('button', { name: '+ Add cargo item' }).click()
+  await expect(page.getByTestId('cargo-list-item').filter({ hasText: 'Tall crate' })).toContainText('Loading priority: First')
+  await expect(page.getByTestId('cargo-list-item').filter({ hasText: 'Tall crate' })).toContainText('Ground only')
   await page.getByRole('button', { name: 'Load', exact: true }).click()
 
   await expect(page.getByRole('button', { name: /Tall crate/ }).first()).toBeVisible()
@@ -874,6 +880,9 @@ test('supports Excel import/export affordance and Chinese mode', async ({ page }
   await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
   await expect(page.getByTestId('import-log-panel').getByText(/Mapped fields: .*label/)).toBeVisible()
   await expect(page.getByRole('button', { name: /Imported crate/ }).first()).toBeVisible()
+  await expect(page.getByTestId('cargo-list-item').filter({ hasText: 'Imported crate' })).toContainText('Loading priority: First')
+  await expect(page.getByTestId('cargo-list-item').filter({ hasText: 'Imported crate' })).toContainText('Ground only')
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
 
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Export XLSX' }).click()
@@ -1297,7 +1306,6 @@ test('imports Vietnam irregular workbook through a reusable combined-dimension t
   await expect(page.getByTestId('mapping-modal')).toHaveCount(0)
   await expect(page.getByTestId('import-log-panel').getByText('Import success: 24')).toBeVisible()
   await expect(page.getByText(/TB-C10-EV_v1\.1/).first()).toBeVisible()
-  await page.getByRole('button', { name: 'Load', exact: true }).click()
   await page.getByRole('button', { name: 'Details' }).click()
   await expect(page.getByRole('cell', { name: 'TB-C10-EV_v1.1', exact: true })).toBeVisible()
 })
@@ -1326,6 +1334,7 @@ test('imports Chinese centimeter Excel fields with visible conversion warning', 
   await expect(page.getByTestId('import-log-panel').getByText(/Import warning row 2/)).toBeVisible()
   await expect(page.getByRole('button', { name: /整托货物/ }).first()).toBeVisible()
   await expect(page.getByText(/900 x 700 x 500 mm/)).toBeVisible()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
 
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Export XLSX' }).click()

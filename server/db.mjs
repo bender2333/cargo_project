@@ -89,6 +89,8 @@ db.exec(`
     can_rotate INTEGER DEFAULT 1,
     stackable INTEGER DEFAULT 1,
     max_stack_layers INTEGER,
+    ground_only INTEGER DEFAULT 0,
+    loading_priority TEXT DEFAULT 'normal',
     created_at TEXT NOT NULL,
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
   );
@@ -179,6 +181,8 @@ const migrations = [
           can_rotate INTEGER DEFAULT 1,
           stackable INTEGER DEFAULT 1,
           max_stack_layers INTEGER,
+          ground_only INTEGER DEFAULT 0,
+          loading_priority TEXT DEFAULT 'normal',
           created_at TEXT NOT NULL,
           FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )
@@ -216,6 +220,18 @@ const migrations = [
           UNIQUE(user_id, name)
         )
       `)
+    },
+  },
+  {
+    version: 8,
+    description: 'Add loading priority and ground-only custom cargo fields',
+    up: () => {
+      if (!hasColumn('custom_cargo', 'ground_only')) {
+        db.exec('ALTER TABLE custom_cargo ADD COLUMN ground_only INTEGER DEFAULT 0')
+      }
+      if (!hasColumn('custom_cargo', 'loading_priority')) {
+        db.exec("ALTER TABLE custom_cargo ADD COLUMN loading_priority TEXT DEFAULT 'normal'")
+      }
     },
   },
 ]

@@ -81,7 +81,7 @@ import {
   savePlacementSettings,
   type PlacementSettings,
 } from './lib/placementSettings'
-import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, CustomDbContainer, DbHistoryPlan, ImportTemplate, ImportTemplateUnits, ImportTemplateDefaults, ExportTemplate } from './types'
+import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, PackingResult, CustomDbContainer, DbHistoryPlan, ImportTemplate, ImportTemplateUnits, ImportTemplateDefaults, ExportTemplate } from './types'
 import { isLoggedIn, getCurrentUser, fetchWithAuth, removeToken } from './lib/auth'
 import type { User } from './lib/auth'
 import { LoginPage } from './components/LoginPage'
@@ -95,7 +95,7 @@ import { buildCargoDebugSnapshot } from './lib/debugSnapshot'
 const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
 type WorksheetCell = string | number | boolean | null | undefined
 
-const TEMPLATE_MAPPING_FIELDS = ['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable', 'maxStackLayers'] as const
+const TEMPLATE_MAPPING_FIELDS = ['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable', 'maxStackLayers', 'groundOnly', 'loadingPriority'] as const
 const TEMPLATE_DIMENSION_FIELDS = new Set(['length', 'width', 'height'])
 
 function importMappingValueFromTemplate(template: ImportTemplate): ImportMappingValue {
@@ -156,6 +156,10 @@ const copy = {
     rotate: 'Allow rotation',
     stackable: 'Stackable',
     maxStackLayers: 'Max stack layers',
+    groundOnly: 'Ground only',
+    loadingPriority: 'Loading priority',
+    loadingFirst: 'First',
+    loadingNormal: 'Normal',
     globalMaxStackLayers: 'Global default max stack layers',
     maxStackLayersOwn: 'own',
     maxStackLayersGlobal: 'global default',
@@ -261,6 +265,8 @@ const copy = {
     templateDefaultRotate: 'Default rotatable',
     templateDefaultStackable: 'Default stackable',
     templateDefaultMaxStackLayers: 'Default max stack layers',
+    templateDefaultGroundOnly: 'Default ground only',
+    templateDefaultLoadingPriority: 'Default loading priority',
     templateDimensionMode: 'Dimension mode',
     templateDimensionSeparate: 'Separate L/W/H columns',
     templateDimensionCombined: 'Combined size column',
@@ -292,6 +298,8 @@ const copy = {
     mappingFieldHeight: 'Height',
     mappingFieldWeight: 'Unit weight',
     mappingFieldQuantity: 'Quantity',
+    mappingFieldGroundOnly: 'Ground only',
+    mappingFieldLoadingPriority: 'Loading priority',
     load: 'Load',
     view2d: '2D',
     view3d: '3D',
@@ -455,6 +463,10 @@ const copy = {
     rotate: '允许旋转',
     stackable: '允许堆叠',
     maxStackLayers: '最大堆叠层数',
+    groundOnly: '必须落地',
+    loadingPriority: '装载优先级',
+    loadingFirst: '先装',
+    loadingNormal: '普通',
     globalMaxStackLayers: '全局默认最大堆叠层数',
     maxStackLayersOwn: '货物自带',
     maxStackLayersGlobal: '全局兜底',
@@ -575,6 +587,8 @@ const copy = {
     templateDefaultRotate: '默认可旋转',
     templateDefaultStackable: '默认可堆叠',
     templateDefaultMaxStackLayers: '默认最大堆叠层数',
+    templateDefaultGroundOnly: '默认必须落地',
+    templateDefaultLoadingPriority: '默认装载优先级',
     templateDimensionMode: '尺寸模式',
     templateDimensionSeparate: '长宽高分列',
     templateDimensionCombined: '合并尺寸列',
@@ -591,6 +605,8 @@ const copy = {
     mappingFieldHeight: '高度',
     mappingFieldWeight: '单件重量',
     mappingFieldQuantity: '数量',
+    mappingFieldGroundOnly: '必须落地',
+    mappingFieldLoadingPriority: '装载优先级',
     load: '装箱',
     view2d: '2D',
     view3d: '3D',
@@ -845,6 +861,8 @@ const emptyForm: CargoForm = {
   canRotate: true,
   stackable: true,
   maxStackLayers: undefined,
+  groundOnly: false,
+  loadingPriority: 'normal',
 }
 function nextLabel(index: number) {
   return excelStyleLabel(index)
@@ -1019,6 +1037,24 @@ function containerPlacementKey(container: ContainerSpec) {
   ].join(':')
 }
 
+function emptyPackingResult(container: ContainerSpec, cargoItems: CargoItem[]): PackingResult {
+  return {
+    placed: [],
+    unplaced: [],
+    layers: [],
+    workSteps: [],
+    labelStats: [],
+    diagnostics: [],
+    totalCargoCount: cargoItems.reduce((sum, item) => sum + item.quantity, 0),
+    placedCount: 0,
+    usedVolume: 0,
+    containerVolume: getContainerVolume(container),
+    volumeUtilization: 0,
+    usedWeight: 0,
+    weightUtilization: 0,
+  }
+}
+
 function localizeManualIssue(issue: ValidationIssue, localeCopy: typeof copy.en) {
   if (issue.type === 'boundary') return localeCopy.manualIssueBoundary
   if (issue.type === 'overlap') return localeCopy.manualIssueOverlap
@@ -1147,6 +1183,8 @@ function Workbench() {
     canRotate: '',
     stackable: '',
     maxStackLayers: '',
+    groundOnly: '',
+    loadingPriority: '',
     dimensions: '',
   })
   type DimensionUnit = 'auto' | 'mm' | 'cm'
@@ -1333,10 +1371,11 @@ function Workbench() {
   const renderingContainer = effectiveContainer(selectedContainer)
   const displayCargoItems = useMemo(() => normalizeCargoLabelColors(cargoItems), [cargoItems])
   const defaultMaxStackLayers = placementSettings.defaultMaxStackLayers
-  const result = useMemo(
-    () => calculatePacking(selectedContainer, displayCargoItems, { loadingMode, defaultMaxStackLayers }),
-    [defaultMaxStackLayers, displayCargoItems, loadingMode, selectedContainer],
+  const calculateCurrentPacking = () => calculatePacking(selectedContainer, displayCargoItems, { loadingMode, defaultMaxStackLayers })
+  const [calculatedResult, setCalculatedResult] = useState<PackingResult>(() =>
+    calculatePacking(containers[0], normalizeCargoLabelColors(initialCargo), { loadingMode: 'quantity' }),
   )
+  const result = hasCalculated ? calculatedResult : emptyPackingResult(selectedContainer, displayCargoItems)
   const detailRows = useMemo(
     () => buildExportPlanRows(displayCargoItems, result, { defaultMaxStackLayers }),
     [defaultMaxStackLayers, displayCargoItems, result],
@@ -1345,6 +1384,18 @@ function Workbench() {
 
   const markPlacementDirty = () => {
     setHasCalculated(false)
+    setContainerChangeNotice('')
+  }
+
+  const calculateAndShowPlacement = () => {
+    setCalculatedResult(calculateCurrentPacking())
+    setHasCalculated(true)
+    setContainerChangeNotice('')
+  }
+
+  const showCalculatedPlacement = (nextResult: PackingResult) => {
+    setCalculatedResult(nextResult)
+    setHasCalculated(true)
     setContainerChangeNotice('')
   }
 
@@ -1728,10 +1779,11 @@ function Workbench() {
     return [...containers, ...allCustom]
   }, [customContainers])
   const compareRows = useMemo(() => {
+    if (activeResultTab !== 'compare' || !hasCalculated) return []
     if (compareSelection.length === 0) return []
     const chosen = compareCandidates.filter((c) => compareSelection.includes(c.id))
     return compareContainers(chosen, displayCargoItems, loadingMode, defaultMaxStackLayers)
-  }, [compareSelection, compareCandidates, defaultMaxStackLayers, displayCargoItems, loadingMode])
+  }, [activeResultTab, compareSelection, compareCandidates, defaultMaxStackLayers, displayCargoItems, hasCalculated, loadingMode])
   const fillSuggestions = useMemo(
     () => suggestFillItems(hasCalculated ? result : null, selectedContainer),
     [hasCalculated, result, selectedContainer],
@@ -1858,7 +1910,7 @@ function Workbench() {
     const clamped = Math.min(quantity, STANDARD_BOX_MAX_PER_CLICK)
     const item = buildStandardCargoItem(preset, clamped, () => createClientId())
     setCargoItems((current) => [...current, item])
-    setHasCalculated(true)
+    markPlacementDirty()
   }
   const handleAddAllFillCargo = (rows: { preset: { id: string }; maxCount: number }[]) => {
     let added = 0
@@ -1873,7 +1925,7 @@ function Workbench() {
     }
     if (added === 0) return
     setCargoItems((current) => [...current, ...additions])
-    setHasCalculated(true)
+    markPlacementDirty()
   }
   const labelOptions = [...new Set(result.labelStats.map((item) => item.label))]
   const activeLayerIndex = result.layers.findIndex((layer) => layer.id === activeLayerId)
@@ -1942,6 +1994,8 @@ function Workbench() {
       label: (form.label || nextLabel(cargoItems.length)).toUpperCase().slice(0, 2),
       quantity: Math.max(1, Math.floor(form.quantity)),
       maxStackLayers: form.stackable ? form.maxStackLayers : undefined,
+      groundOnly: form.groundOnly ?? false,
+      loadingPriority: form.loadingPriority ?? 'normal',
     }
     setCargoItems((items) => [...items, next])
     setForm((current) => ({
@@ -1967,6 +2021,8 @@ function Workbench() {
       canRotate: cargo.canRotate,
       stackable: cargo.stackable,
       maxStackLayers: cargo.maxStackLayers,
+      groundOnly: cargo.groundOnly ?? false,
+      loadingPriority: cargo.loadingPriority ?? 'normal',
     })
   }
 
@@ -1981,6 +2037,8 @@ function Workbench() {
       label: (editForm.label || editingCargo.label || nextLabel(cargoItems.length)).toUpperCase().slice(0, 2),
       quantity: Math.max(1, Math.floor(editForm.quantity)),
       maxStackLayers: editForm.stackable ? editForm.maxStackLayers : undefined,
+      groundOnly: editForm.groundOnly ?? false,
+      loadingPriority: editForm.loadingPriority ?? 'normal',
     }
 
     setCargoItems((items) => items.map((item) => item.id === editingCargo.id ? nextCargo : item))
@@ -2063,6 +2121,8 @@ function Workbench() {
         canRotate: '',
         stackable: '',
         maxStackLayers: '',
+        groundOnly: '',
+        loadingPriority: '',
         dimensions: '',
       })
       setCustomUnits({ length: 'auto', width: 'auto', height: 'auto' })
@@ -2121,6 +2181,8 @@ function Workbench() {
     label: (cargoLibraryForm.label || nextLabel(customCargoItems.length)).toUpperCase().slice(0, 2),
     quantity: 1,
     maxStackLayers: cargoLibraryForm.stackable ? cargoLibraryForm.maxStackLayers : undefined,
+    groundOnly: cargoLibraryForm.groundOnly ?? false,
+    loadingPriority: cargoLibraryForm.loadingPriority ?? 'normal',
   })
 
   const saveLibraryCargo = async (event: FormEvent) => {
@@ -2153,6 +2215,8 @@ function Workbench() {
       canRotate: item.canRotate,
       stackable: item.stackable,
       maxStackLayers: item.maxStackLayers,
+      groundOnly: item.groundOnly ?? false,
+      loadingPriority: item.loadingPriority ?? 'normal',
     })
   }
 
@@ -2172,7 +2236,7 @@ function Workbench() {
 
   const addLibraryCargoToWorkbench = (item: CargoItem) => {
     setCargoItems((current) => [...current, { ...item, id: createClientId(), quantity: Math.max(1, item.quantity || 1) }])
-    setHasCalculated(true)
+    markPlacementDirty()
     setActiveNav('overview')
   }
 
@@ -2458,6 +2522,8 @@ function Workbench() {
       name: ['name', '名称', '品名', '名称', '货物名称', 'description'],
       label: ['label', '标签', '代码', '代号', '托盘'],
       maxStackLayers: ['maxstacklayers', 'max stack layers', '最大堆叠层数', '最大堆疊層數', '堆叠层数', '堆疊層數'],
+      groundOnly: ['groundonly', 'ground only', '必须落地', '落地', '不可上托', '不可堆叠在上'],
+      loadingPriority: ['loadingpriority', 'loading priority', '装载优先级', '优先级', '先装'],
     }[fieldKey] || []
     return columns.find(col => candidates.some(cand => col.toLowerCase().includes(cand.toLowerCase()))) || ''
   }
@@ -2561,9 +2627,11 @@ function Workbench() {
         canRotate: '',
         stackable: '',
         maxStackLayers: '',
+        groundOnly: '',
+        loadingPriority: '',
         dimensions: '',
       }
-      const requiredFields = ['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable', 'maxStackLayers', 'dimensions']
+      const requiredFields = ['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable', 'maxStackLayers', 'groundOnly', 'loadingPriority', 'dimensions']
       requiredFields.forEach((fieldKey) => {
         initialMap[fieldKey] = preSelectCol(fieldKey, rowKeys)
       })
@@ -2748,11 +2816,13 @@ function Workbench() {
     setCargoItems(plan.cargoItems)
     setLoadingMode(plan.loadingMode || 'quantity')
     setPlacementSettings((current) => ({ ...current, defaultMaxStackLayers: plan.defaultMaxStackLayers }))
+    showCalculatedPlacement(calculatePacking(plan.container, normalizeCargoLabelColors(plan.cargoItems), {
+      loadingMode: plan.loadingMode || 'quantity',
+      defaultMaxStackLayers: plan.defaultMaxStackLayers,
+    }))
     setActiveLayerId('all')
     setActiveLabelId('all')
     setSelectedBoxId(null)
-    setHasCalculated(true)
-    setContainerChangeNotice('')
     setActiveResultTab('layers')
     setActiveNav('overview')
   }
@@ -2848,6 +2918,8 @@ function Workbench() {
         <label>{t.color}<input className="mt-1 h-10 w-full border border-[#aaa] bg-white" type="color" value={cargoLibraryForm.color} onChange={(event) => setCargoLibraryForm((current) => ({ ...current, color: event.target.value }))} /></label>
         <label className="flex items-center gap-2 pt-7"><input checked={cargoLibraryForm.canRotate} type="checkbox" onChange={(event) => setCargoLibraryForm((current) => ({ ...current, canRotate: event.target.checked }))} />{t.rotate}</label>
         <label className="flex items-center gap-2 pt-7"><input checked={cargoLibraryForm.stackable} type="checkbox" onChange={(event) => setCargoLibraryForm((current) => ({ ...current, stackable: event.target.checked, maxStackLayers: event.target.checked ? current.maxStackLayers : undefined }))} />{t.stackable}</label>
+        <label>{t.loadingPriority}<select className="field-input mt-1" value={cargoLibraryForm.loadingPriority ?? 'normal'} onChange={(event) => setCargoLibraryForm((current) => ({ ...current, loadingPriority: event.target.value as CargoItem['loadingPriority'] }))}><option value="normal">{t.loadingNormal}</option><option value="first">{t.loadingFirst}</option></select></label>
+        <label className="flex items-center gap-2 pt-7"><input checked={cargoLibraryForm.groundOnly ?? false} type="checkbox" onChange={(event) => setCargoLibraryForm((current) => ({ ...current, groundOnly: event.target.checked }))} />{t.groundOnly}</label>
         {cargoLibraryForm.stackable && (
           <label>{t.maxStackLayers}<input className="field-input mt-1" min={1} type="number" value={cargoLibraryForm.maxStackLayers ?? ''} onChange={(event) => updateLibraryMaxStackLayers(event.target.value)} /></label>
         )}
@@ -2873,7 +2945,7 @@ function Workbench() {
                 <div>
                   <strong>{item.name}</strong>
                   <p className="text-xs text-[#64748b]">{item.length} x {item.width} x {item.height} mm · {item.weight} kg</p>
-                  <p className="text-xs text-[#64748b]">{item.canRotate ? t.rotate : `${t.rotate}: off`} · {item.stackable ? t.stackable : `${t.stackable}: off`}{item.maxStackLayers ? ` · ${t.maxStackLayers}: ${item.maxStackLayers}` : ''}</p>
+                  <p className="text-xs text-[#64748b]">{item.canRotate ? t.rotate : `${t.rotate}: off`} · {item.stackable ? t.stackable : `${t.stackable}: off`}{item.maxStackLayers ? ` · ${t.maxStackLayers}: ${item.maxStackLayers}` : ''} · {item.loadingPriority === 'first' ? t.loadingFirst : t.loadingNormal}{item.groundOnly ? ` · ${t.groundOnly}` : ''}</p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -3525,6 +3597,8 @@ function Workbench() {
             <div className="grid grid-cols-2 gap-2 text-sm">
               <label className="flex items-center gap-2"><input checked={form.canRotate} type="checkbox" onChange={(event) => setForm((current) => ({ ...current, canRotate: event.target.checked }))} />{t.rotate}</label>
               <label className="flex items-center gap-2"><input checked={form.stackable} type="checkbox" onChange={(event) => setForm((current) => ({ ...current, stackable: event.target.checked, maxStackLayers: event.target.checked ? current.maxStackLayers : undefined }))} />{t.stackable}</label>
+              <label className="field-label">{t.loadingPriority}<select className="field-input mt-1" value={form.loadingPriority ?? 'normal'} onChange={(event) => setForm((current) => ({ ...current, loadingPriority: event.target.value as CargoItem['loadingPriority'] }))}><option value="normal">{t.loadingNormal}</option><option value="first">{t.loadingFirst}</option></select></label>
+              <label className="flex items-center gap-2"><input checked={form.groundOnly ?? false} type="checkbox" onChange={(event) => setForm((current) => ({ ...current, groundOnly: event.target.checked }))} />{t.groundOnly}</label>
             </div>
             {form.stackable && (
               <label className="field-label" data-testid="max-stack-layers-field">
@@ -3623,6 +3697,9 @@ function Workbench() {
                     </button>
                   </div>
                   <p className="mt-1 text-xs text-[#666]">{item.length} x {item.width} x {item.height} mm, {item.weight} kg, {t.qty} {item.quantity}</p>
+                  <p className="mt-1 text-xs text-[#64748b]">
+                    {t.loadingPriority}: {item.loadingPriority === 'first' ? t.loadingFirst : t.loadingNormal}{item.groundOnly ? ` · ${t.groundOnly}` : ''}
+                  </p>
                   <p className="mt-1 text-xs text-[#64748b]">
                     {t.maxStackLayers}: {item.maxStackLayers
                       ? `${item.maxStackLayers} (${t.maxStackLayersOwn})`
@@ -3991,10 +4068,7 @@ function Workbench() {
               <button
                 className="archive-button success absolute bottom-6 right-6"
                 type="button"
-                onClick={() => {
-                  setHasCalculated(true)
-                  setContainerChangeNotice('')
-                }}
+                onClick={calculateAndShowPlacement}
               >
                 {t.load}
               </button>
@@ -4254,8 +4328,7 @@ function Workbench() {
                   selectedIds={compareSelection}
                   onApplyRecommended={(id) => {
                     setSelectedContainerId(id)
-                    setHasCalculated(true)
-                    setContainerChangeNotice('')
+                    markPlacementDirty()
                   }}
                   onToggleCandidate={(id) => {
                     setCompareSelection((current) =>
@@ -4485,6 +4558,8 @@ function Workbench() {
               <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                 <label className="flex items-center gap-2"><input checked={editForm.canRotate} type="checkbox" onChange={(event) => setEditForm((current) => ({ ...current, canRotate: event.target.checked }))} />{t.rotate}</label>
                 <label className="flex items-center gap-2"><input checked={editForm.stackable} type="checkbox" onChange={(event) => setEditForm((current) => ({ ...current, stackable: event.target.checked, maxStackLayers: event.target.checked ? current.maxStackLayers : undefined }))} />{t.stackable}</label>
+                <label className="field-label">{t.loadingPriority}<select className="field-input mt-1" value={editForm.loadingPriority ?? 'normal'} onChange={(event) => setEditForm((current) => ({ ...current, loadingPriority: event.target.value as CargoItem['loadingPriority'] }))}><option value="normal">{t.loadingNormal}</option><option value="first">{t.loadingFirst}</option></select></label>
+                <label className="flex items-center gap-2"><input checked={editForm.groundOnly ?? false} type="checkbox" onChange={(event) => setEditForm((current) => ({ ...current, groundOnly: event.target.checked }))} />{t.groundOnly}</label>
               </div>
               {editForm.stackable && (
                 <label className="field-label mt-3 block" data-testid="edit-max-stack-layers-field">

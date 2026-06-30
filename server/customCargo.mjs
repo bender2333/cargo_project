@@ -30,6 +30,8 @@ export function parseCustomCargoPayload(body) {
     canRotate: body?.canRotate == null ? true : Boolean(body.canRotate),
     stackable: body?.stackable == null ? true : Boolean(body.stackable),
     maxStackLayers: optionalPositiveInteger(body?.maxStackLayers) ?? undefined,
+    groundOnly: body?.groundOnly == null ? false : Boolean(body.groundOnly),
+    loadingPriority: body?.loadingPriority === 'first' ? 'first' : 'normal',
   }
 }
 
@@ -47,6 +49,8 @@ export function serializeCustomCargo(row) {
     canRotate: row.can_rotate === 1,
     stackable: row.stackable === 1,
     maxStackLayers: row.max_stack_layers ?? undefined,
+    groundOnly: row.ground_only === 1,
+    loadingPriority: row.loading_priority === 'first' ? 'first' : 'normal',
     createdAt: row.created_at,
   }
 }

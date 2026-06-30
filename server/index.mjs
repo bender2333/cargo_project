@@ -204,9 +204,9 @@ app.post('/api/custom-cargo', authenticate, (req, res) => {
   const id = randomUUID()
   try {
     db.prepare(`
-      INSERT INTO custom_cargo (id, user_id, name, label, length, width, height, weight, color, can_rotate, stackable, max_stack_layers, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, req.user.id, payload.name, payload.label, payload.length, payload.width, payload.height, payload.weight, payload.color, payload.canRotate ? 1 : 0, payload.stackable ? 1 : 0, payload.maxStackLayers ?? null, new Date().toISOString())
+      INSERT INTO custom_cargo (id, user_id, name, label, length, width, height, weight, color, can_rotate, stackable, max_stack_layers, ground_only, loading_priority, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, req.user.id, payload.name, payload.label, payload.length, payload.width, payload.height, payload.weight, payload.color, payload.canRotate ? 1 : 0, payload.stackable ? 1 : 0, payload.maxStackLayers ?? null, payload.groundOnly ? 1 : 0, payload.loadingPriority, new Date().toISOString())
     const created = db.prepare('SELECT * FROM custom_cargo WHERE id = ? AND user_id = ?').get(id, req.user.id)
     res.status(201).json(serializeCustomCargo(created))
   } catch (err) {
@@ -226,9 +226,9 @@ app.put('/api/custom-cargo/:id', authenticate, (req, res) => {
     }
     db.prepare(`
       UPDATE custom_cargo
-      SET name = ?, label = ?, length = ?, width = ?, height = ?, weight = ?, color = ?, can_rotate = ?, stackable = ?, max_stack_layers = ?
+      SET name = ?, label = ?, length = ?, width = ?, height = ?, weight = ?, color = ?, can_rotate = ?, stackable = ?, max_stack_layers = ?, ground_only = ?, loading_priority = ?
       WHERE id = ? AND user_id = ?
-    `).run(payload.name, payload.label, payload.length, payload.width, payload.height, payload.weight, payload.color, payload.canRotate ? 1 : 0, payload.stackable ? 1 : 0, payload.maxStackLayers ?? null, req.params.id, req.user.id)
+    `).run(payload.name, payload.label, payload.length, payload.width, payload.height, payload.weight, payload.color, payload.canRotate ? 1 : 0, payload.stackable ? 1 : 0, payload.maxStackLayers ?? null, payload.groundOnly ? 1 : 0, payload.loadingPriority, req.params.id, req.user.id)
     const updated = db.prepare('SELECT * FROM custom_cargo WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id)
     res.json(serializeCustomCargo(updated))
   } catch (err) {
@@ -250,7 +250,7 @@ app.delete('/api/custom-cargo/:id', authenticate, (req, res) => {
 })
 
 // 5. Excel import templates (user-scoped deterministic mappings)
-const TEMPLATE_FIELDS = new Set(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable', 'maxStackLayers', 'dimensions'])
+const TEMPLATE_FIELDS = new Set(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable', 'maxStackLayers', 'groundOnly', 'loadingPriority', 'dimensions'])
 const TEMPLATE_UNITS = new Set(['auto', 'mm', 'cm'])
 const TEMPLATE_MERGE_ROWS = new Set(['none', 'by-label'])
 const TEMPLATE_DIMENSION_MODES = new Set(['separate', 'combined'])
@@ -289,6 +289,8 @@ function parseTemplatePayload(body) {
   if (defaults.canRotate != null) cleanDefaults.canRotate = Boolean(defaults.canRotate)
   if (defaults.stackable != null) cleanDefaults.stackable = Boolean(defaults.stackable)
   if (defaults.maxStackLayers != null && Number.isFinite(Number(defaults.maxStackLayers))) cleanDefaults.maxStackLayers = Math.max(1, Math.floor(Number(defaults.maxStackLayers)))
+  if (defaults.groundOnly != null) cleanDefaults.groundOnly = Boolean(defaults.groundOnly)
+  if (defaults.loadingPriority != null) cleanDefaults.loadingPriority = defaults.loadingPriority === 'first' ? 'first' : 'normal'
   return {
     name,
     mapping: cleanMapping,

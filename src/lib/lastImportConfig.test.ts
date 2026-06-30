@@ -26,7 +26,7 @@ const fullConfig: LastImportConfig = {
   dimensionMode: 'combined',
   combinedColumn: '外箱尺寸（mm）',
   dimensionOrder: ['width', 'length', 'height'],
-  defaults: { quantity: 5, canRotate: false, stackable: true, maxStackLayers: 3, label: 'TP' },
+  defaults: { quantity: 5, canRotate: false, stackable: true, maxStackLayers: 3, label: 'TP', groundOnly: true, loadingPriority: 'first' },
 }
 
 describe('lastImportConfigKey', () => {

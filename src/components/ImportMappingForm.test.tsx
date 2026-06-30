@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react'
+import { fireEvent, render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { ImportMappingForm, type ImportMappingFormLabels, type ImportMappingValue } from './ImportMappingForm'
 
@@ -13,6 +13,8 @@ const labels: ImportMappingFormLabels = {
   templateDefaultRotate: 'Default rotate',
   templateDefaultStackable: 'Default stackable',
   templateDefaultMaxStackLayers: 'Default max stack layers',
+  templateDefaultGroundOnly: 'Default ground only',
+  templateDefaultLoadingPriority: 'Default loading priority',
   templateDimensionMode: 'Dimension mode',
   templateHelpDimensionMode: 'Dimension mode help',
   templateDimensionSeparate: 'Separate',
@@ -35,9 +37,14 @@ const labels: ImportMappingFormLabels = {
   mappingFieldHeight: 'Height',
   mappingFieldWeight: 'Weight',
   mappingFieldQuantity: 'Quantity',
+  mappingFieldGroundOnly: 'Ground only',
+  mappingFieldLoadingPriority: 'Loading priority',
   color: 'Color',
   rotate: 'Rotate',
   stackable: 'Stackable',
+  groundOnly: 'Ground only',
+  loadingFirst: 'First',
+  loadingNormal: 'Normal',
   maxStackLayers: 'Max stack layers',
   mappingUnit: 'Unit',
   mappingAutoUnit: 'Auto',
@@ -111,5 +118,27 @@ describe('ImportMappingForm missing column feedback', () => {
     )
 
     expect(getByTestId('template-combined-column').getAttribute('data-invalid')).toBe('true')
+  })
+
+  it('updates ground-only and loading-priority defaults', () => {
+    const onChange = vi.fn()
+    const { getByTestId } = render(
+      <ImportMappingForm
+        value={baseValue}
+        onChange={onChange}
+        availableColumns={['Code', 'Goods', 'W', 'H', 'Qty']}
+        labels={labels}
+      />,
+    )
+
+    fireEvent.click(getByTestId('template-default-ground-only'))
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      defaults: expect.objectContaining({ groundOnly: true }),
+    }))
+
+    fireEvent.change(getByTestId('template-default-loading-priority'), { target: { value: 'first' } })
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      defaults: expect.objectContaining({ loadingPriority: 'first' }),
+    }))
   })
 })

@@ -25,6 +25,8 @@ describe('custom cargo helpers', () => {
       canRotate: false,
       stackable: true,
       maxStackLayers: 3,
+      groundOnly: false,
+      loadingPriority: 'normal',
     })
   })
 
@@ -47,6 +49,8 @@ describe('custom cargo helpers', () => {
       can_rotate: 0,
       stackable: 1,
       max_stack_layers: 3,
+      ground_only: 1,
+      loading_priority: 'first',
       created_at: '2026-06-06T00:00:00.000Z',
     })).toEqual({
       id: 'row-1',
@@ -61,6 +65,8 @@ describe('custom cargo helpers', () => {
       canRotate: false,
       stackable: true,
       maxStackLayers: 3,
+      groundOnly: true,
+      loadingPriority: 'first',
       createdAt: '2026-06-06T00:00:00.000Z',
     })
   })
