@@ -1,0 +1,89 @@
+import { readFileSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+import { containers, effectiveContainer } from '../data/containers'
+import type { ContainerSpec, CargoItem, PlacedBox } from '../types'
+import { calculatePacking } from './packing'
+
+const VOXEL_MM = 50
+
+function vietnamFixture(): { container: ContainerSpec; items: CargoItem[] } {
+  return JSON.parse(readFileSync('test-data/json/vietnam-11/input.json', 'utf8'))
+}
+
+function packingMetrics(placed: PlacedBox[], container: ContainerSpec) {
+  const effective = effectiveContainer(container)
+  const usedVolume = placed.reduce((sum, box) => sum + box.length * box.width * box.height, 0)
+  const envX = Math.max(...placed.map((box) => box.x + box.length))
+  const envY = Math.max(...placed.map((box) => box.y + box.width))
+  const envZ = Math.max(...placed.map((box) => box.z + box.height))
+
+  const nx = Math.ceil(effective.length / VOXEL_MM)
+  const ny = Math.ceil(effective.width / VOXEL_MM)
+  const nz = Math.ceil(effective.height / VOXEL_MM)
+  const occupied = new Uint8Array(nx * ny * nz)
+  const index = (x: number, y: number, z: number) => (x * ny + y) * nz + z
+
+  for (const box of placed) {
+    const x0 = Math.floor(box.x / VOXEL_MM)
+    const x1 = Math.ceil((box.x + box.length) / VOXEL_MM)
+    const y0 = Math.floor(box.y / VOXEL_MM)
+    const y1 = Math.ceil((box.y + box.width) / VOXEL_MM)
+    const z0 = Math.floor(box.z / VOXEL_MM)
+    const z1 = Math.ceil((box.z + box.height) / VOXEL_MM)
+    for (let x = x0; x < x1 && x < nx; x += 1) {
+      for (let y = y0; y < y1 && y < ny; y += 1) {
+        for (let z = z0; z < z1 && z < nz; z += 1) occupied[index(x, y, z)] = 1
+      }
+    }
+  }
+
+  let floorFilled = 0
+  for (let x = 0; x < nx; x += 1) {
+    for (let y = 0; y < ny; y += 1) {
+      if (occupied[index(x, y, 0)]) floorFilled += 1
+    }
+  }
+
+  return {
+    envelopeFillPct: (usedVolume / (envX * envY * envZ)) * 100,
+    floorEmptyPct: ((nx * ny - floorFilled) / (nx * ny)) * 100,
+    utilPct: (usedVolume / (effective.length * effective.width * effective.height)) * 100,
+  }
+}
+
+describe('block-building packing engine', () => {
+  it('removes the Vietnam 20GP vertical-gap regression in both optimization modes', () => {
+    const fixture = vietnamFixture()
+
+    for (const mode of ['quantity', 'volume'] as const) {
+      const startedAt = Date.now()
+      const result = calculatePacking(fixture.container, fixture.items, { loadingMode: mode })
+      const elapsedMs = Date.now() - startedAt
+      const metrics = packingMetrics(result.placed, fixture.container)
+
+      expect(result.placedCount).toBeGreaterThanOrEqual(443)
+      expect(metrics.utilPct).toBeGreaterThanOrEqual(79.6)
+      expect(metrics.envelopeFillPct).toBeGreaterThan(88)
+      expect(metrics.floorEmptyPct).toBeLessThan(8)
+      expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
+      expect(elapsedMs).toBeLessThan(5000)
+    }
+  })
+
+  it('keeps Vietnam 40HQ utilization above the frozen baseline', () => {
+    const fixture = vietnamFixture()
+    const container = containers.find((item) => item.id === '40hq')
+    if (!container) throw new Error('Missing 40HQ container fixture')
+
+    for (const mode of ['quantity', 'volume'] as const) {
+      const startedAt = Date.now()
+      const result = calculatePacking(container, fixture.items, { loadingMode: mode })
+      const elapsedMs = Date.now() - startedAt
+      const metrics = packingMetrics(result.placed, container)
+
+      expect(metrics.utilPct).toBeGreaterThan(76.5)
+      expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
+      expect(elapsedMs).toBeLessThan(20_000)
+    }
+  }, 25_000)
+})

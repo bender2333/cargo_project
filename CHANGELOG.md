@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-07 (Block-building engine — Subtask 4 guarded main loop)
+
+- Reworked `calculatePacking` so repeated multi-SKU carton workloads in `quantity` / `volume` mode use block candidates + EMS placement. Each carton inside a committed block is still staged and committed through `canPlace`, preserving boundary, overlap, support-ratio, `groundOnly`, and stack-chain gates.
+- Added bounded greedy selection (`MAX_BLOCK_CATALOG_SIZE`, `MAX_BLOCK_REJECTIONS_PER_STEP`) with single-box fallback fill after block placement. Priority/small/single-piece fixtures stay on the existing path for now; this is recorded in `decision.md`.
+- Added `src/lib/packing.blockEngine.test.ts` for the Vietnam regression metrics: 20GP must beat baseline utilization, envelope fill, floor empty, and geometry-error gates; 40HQ must stay above the frozen 76.5% utilization baseline.
+- Vietnam 20GP measured by script: quantity 462/864, util 91.27%, envelope fill 92.75%, floor empty 4.15%, 191ms; volume 462/864, util 91.27%, envelope fill 92.75%, floor empty 4.15%, 135ms; no error diagnostics.
+- Vietnam 40HQ measured by script: quantity 823/864, util 76.62%, envelope fill 77.37%, floor empty 10.68%, 3323ms; volume 823/864, util 76.62%, envelope fill 77.37%, floor empty 10.68%, 3967ms; no error diagnostics. This is above but not significantly above the 76.5% baseline.
+- Verification: `npx vitest run src/lib/packing.blockEngine.test.ts` passed 1 file / 2 tests; `npx vitest run src/lib/packing.test.ts src/lib/packing.stackfill.test.ts src/lib/packing.31pallet.test.ts` passed 3 files / 53 tests; `npm run lint` passed; `npm test` passed 56 files / 346 tests.
+- Build gate: `npm run build` still fails on the pre-existing dirty `src/types.ts` removal of `loadingPriority`; this subtask did not touch that field per task instruction.
+- E2E: first `npm run test:e2e` failed because no backend was listening on 127.0.0.1:3010. After starting `npm run start:server` with `PORT=3010`, full E2E passed 93 / skipped 1 / failed 0. Temporary backend was stopped after the run.
+
 ## 2026-07-07 (Block-building engine — Subtask 3 block generation)
 
 - Added `src/lib/blocks.ts` as a pure same-SKU block candidate generator. It enumerates integer `nx × ny × nz` blocks per orientation, preserves cargo label/name/color metadata, and exposes block dimensions, count, volume, footprint area, and weight for the later search/placement step.

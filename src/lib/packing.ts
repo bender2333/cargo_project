@@ -2,6 +2,8 @@ import type { CargoItem, ContainerSpec, LoadingMode, PackingDiagnostic, PackingR
 import { effectiveContainer, getContainerVolume } from '../data/containers'
 import { assignDepthLayers, buildPackingLayers } from './layers'
 import { stackCapacity, violatesStackChain, type StackChainNode } from './stackCapacity'
+import { generateBlockCandidates, type BlockCandidate } from './blocks'
+import { initEMS, splitEMS, type EmptyMaximalSpace } from './emsSpace'
 
 export const UNPLACED_REASON_CODES = {
   EXCEEDS_DIMENSIONS: 'exceeds-dimensions',
@@ -36,11 +38,21 @@ export type CalculatePackingOptions = {
 
 type OrientationKey = PlacedBox['orientationKey']
 type LabelRotationDeg = PlacedBox['labelRotationDeg']
-type PlacementChoice = {
-  score: number
-  box: BoxOrientation
+type CargoPackingState = {
+  item: CargoItem
+  itemIndex: number
+  label: string
+  remaining: number
+  nextIndex: number
+  catalog: BlockCandidate[]
+}
+
+type BlockPlacementChoice = {
+  state: CargoPackingState
+  block: BlockCandidate
+  ems: EmptyMaximalSpace
   point: PackingPoint
-  idx: number
+  waste: number
 }
 
 export type BoxOrientation = BoxSize & {
@@ -55,6 +67,8 @@ export type PackingPoint = {
 }
 
 const EPSILON = 0.001
+const MAX_BLOCK_CATALOG_SIZE = 120
+const MAX_BLOCK_REJECTIONS_PER_STEP = 40
 
 function labelForIndex(index: number) {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -701,6 +715,85 @@ function cargoVolume(item: CargoItem) {
   return item.length * item.width * item.height
 }
 
+function compareBlockCatalog(a: BlockCandidate, b: BlockCandidate, loadingMode: LoadingMode) {
+  if (loadingMode === 'quantity') {
+    return b.volume - a.volume
+      || b.count - a.count
+      || b.footprintArea - a.footprintArea
+  }
+  if (loadingMode === 'weight') {
+    return b.weight - a.weight
+      || b.volume - a.volume
+      || b.count - a.count
+  }
+  return b.volume - a.volume
+    || b.count - a.count
+    || b.footprintArea - a.footprintArea
+}
+
+function compareBlockChoices(a: BlockPlacementChoice, b: BlockPlacementChoice, loadingMode: LoadingMode) {
+  if (loadingMode === 'quantity') {
+    return b.block.volume - a.block.volume
+      || b.block.count - a.block.count
+      || a.waste - b.waste
+      || a.point.z - b.point.z
+      || a.point.x - b.point.x
+      || a.point.y - b.point.y
+  }
+  return b.block.volume - a.block.volume
+    || b.block.count - a.block.count
+    || a.waste - b.waste
+    || a.point.z - b.point.z
+    || a.point.x - b.point.x
+    || a.point.y - b.point.y
+}
+
+function blockPlacementKey(choice: Pick<BlockPlacementChoice, 'state' | 'block' | 'point'>) {
+  const { state, block, point } = choice
+  return [
+    state.item.id,
+    block.orientationKey,
+    block.nx,
+    block.ny,
+    block.nz,
+    point.x,
+    point.y,
+    point.z,
+  ].join(':')
+}
+
+function blockCandidateKey(block: BlockCandidate) {
+  return [
+    block.orientationKey,
+    block.nx,
+    block.ny,
+    block.nz,
+  ].join(':')
+}
+
+function trimBlockCatalog(blocks: BlockCandidate[]) {
+  const selected = new Map<string, BlockCandidate>()
+  for (const block of blocks.slice(0, MAX_BLOCK_CATALOG_SIZE)) {
+    selected.set(blockCandidateKey(block), block)
+  }
+  for (const block of blocks) {
+    if (block.count === 1) selected.set(blockCandidateKey(block), block)
+  }
+  return [...selected.values()]
+}
+
+function emsFitsForBlock(emsList: EmptyMaximalSpace[], block: BlockCandidate) {
+  const blockVolume = block.length * block.width * block.height
+  return emsList
+    .filter((ems) => block.length <= ems.length + EPSILON && block.width <= ems.width + EPSILON && block.height <= ems.height + EPSILON)
+    .map((ems) => ({
+      ems,
+      point: { x: ems.x, y: ems.y, z: ems.z },
+      waste: ems.length * ems.width * ems.height - blockVolume,
+    }))
+    .sort((a, b) => a.waste - b.waste || a.point.z - b.point.z || a.point.x - b.point.x || a.point.y - b.point.y)
+}
+
 function loadingPriorityRank(item: Pick<CargoItem, 'loadingPriority'>) {
   return item.loadingPriority === 'first' ? 0 : 1
 }
@@ -765,28 +858,45 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     }
   }
 
-  const markUnplaced = (item: CargoItem, label: string, reasonCode: UnplacedReasonCode) => {
+  const cargoStates: CargoPackingState[] = cargoItems.map((item, itemIndex) => {
+    const effectiveItem = {
+      ...item,
+      maxStackLayers: effectiveMaxStackLayers(item, defaultMaxStackLayers),
+    }
+    const catalog = generateBlockCandidates(effectiveItem, effective)
+      .sort((a, b) => compareBlockCatalog(a, b, loadingMode))
+    const trimmedCatalog = trimBlockCatalog(catalog)
+    return {
+      item: effectiveItem,
+      itemIndex,
+      label: labelForCargoItem(item, itemIndex),
+      remaining: item.quantity,
+      nextIndex: 1,
+      catalog: trimmedCatalog,
+    }
+  })
+
+  const markUnplaced = (item: CargoItem, label: string, reasonCode: UnplacedReasonCode, quantity = 1) => {
     const current = unplacedMap.get(item.id)
     unplacedMap.set(item.id, {
       cargoId: item.id,
       name: item.name,
       label,
-      quantity: (current?.quantity ?? 0) + 1,
+      quantity: (current?.quantity ?? 0) + quantity,
       reasonCode,
       reason: UNPLACED_REASON_MESSAGES[reasonCode],
     })
   }
 
-  const placeEntry = (
+  const buildPlacedBox = (
     entry: { item: CargoItem; itemIndex: number; label: string; index: number },
     placement: { box: BoxOrientation; point: PackingPoint },
-  ) => {
+    supportPlaced: PlacedBox[],
+    workStep: number,
+  ): PlacedBox => {
     const { box, point } = placement
-    if (box.height === entry.item.height && !committedOrientations.has(entry.item.id)) {
-      committedOrientations.set(entry.item.id, box.orientationKey)
-    }
-    const support = supportDetails(point, box, placed)
-    placed.push({
+    const support = supportDetails(point, box, supportPlaced)
+    return {
       id: `${entry.item.id}-${entry.index}`,
       cargoId: entry.item.id,
       name: entry.item.name,
@@ -809,11 +919,22 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       loadingPriority: entry.item.loadingPriority,
       physicalLayer: support.physicalLayer,
       verticalLayer: support.physicalLayer,
-      workStep: placed.length + 1,
+      workStep,
       supportType: support.supportType,
       supportedBy: support.supportedBy.map((candidate) => candidate.id),
       verticalSupportedBy: support.supportedBy.map((candidate) => candidate.id),
-    })
+    }
+  }
+
+  const placeEntry = (
+    entry: { item: CargoItem; itemIndex: number; label: string; index: number },
+    placement: { box: BoxOrientation; point: PackingPoint },
+  ) => {
+    const { box, point } = placement
+    if (box.height === entry.item.height && !committedOrientations.has(entry.item.id)) {
+      committedOrientations.set(entry.item.id, box.orientationKey)
+    }
+    placed.push(buildPlacedBox(entry, placement, placed, placed.length + 1))
 
     extremePoints = normalizePoints(
       [
@@ -827,14 +948,166 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     usedWeight += entry.item.weight
   }
 
-  if (loadingMode === 'volume') {
-    // Best-fit decreasing: at each step pick the best (entry, orientation, point) combo
-    // across all remaining entries, so the algorithm naturally interleaves complementary
-    // shapes (e.g., pinwheel packing for mixed pallet widths).
+  const blockUnitBox = (block: BlockCandidate): BoxOrientation => ({
+    length: block.box.length,
+    width: block.box.width,
+    height: block.box.height,
+    orientationKey: block.orientationKey,
+    labelRotationDeg: labelRotationForOrientation(block.orientationKey),
+  })
+
+  const blockUnitPlacements = (choice: BlockPlacementChoice) => {
+    const box = blockUnitBox(choice.block)
+    const units: Array<{ entry: { item: CargoItem; itemIndex: number; label: string; index: number }; placement: { box: BoxOrientation; point: PackingPoint } }> = []
+    let offset = 0
+    for (let zIndex = 0; zIndex < choice.block.nz; zIndex += 1) {
+      for (let xIndex = 0; xIndex < choice.block.nx; xIndex += 1) {
+        for (let yIndex = 0; yIndex < choice.block.ny; yIndex += 1) {
+          units.push({
+            entry: {
+              item: choice.state.item,
+              itemIndex: choice.state.itemIndex,
+              label: choice.state.label,
+              index: choice.state.nextIndex + offset,
+            },
+            placement: {
+              box,
+              point: {
+                x: choice.point.x + xIndex * box.length,
+                y: choice.point.y + yIndex * box.width,
+                z: choice.point.z + zIndex * box.height,
+              },
+            },
+          })
+          offset += 1
+        }
+      }
+    }
+    return units
+  }
+
+  const canStageBlock = (choice: BlockPlacementChoice) => {
+    if (usedWeight + choice.block.weight > effective.maxWeight + EPSILON) return false
+    const staged = [...placed]
+    for (const unit of blockUnitPlacements(choice)) {
+      const stagedById = new Map<string, StackChainNode>(staged.map((placedBox) => [placedBox.id, placedBox]))
+      if (!canPlace(unit.placement.point, unit.placement.box, effective, staged, stagedById, unit.entry.item)) {
+        return false
+      }
+      staged.push(buildPlacedBox(unit.entry, unit.placement, staged, staged.length + 1))
+    }
+    return true
+  }
+
+  let emsList = initEMS(effective)
+
+  const commitBlock = (choice: BlockPlacementChoice) => {
+    for (const unit of blockUnitPlacements(choice)) {
+      placeEntry(unit.entry, unit.placement)
+      choice.state.remaining -= 1
+      choice.state.nextIndex += 1
+    }
+    emsList = splitEMS(emsList, {
+      x: choice.point.x,
+      y: choice.point.y,
+      z: choice.point.z,
+      length: choice.block.length,
+      width: choice.block.width,
+      height: choice.block.height,
+    })
+  }
+
+  const selectBlockPlacement = (rejected: Set<string>): BlockPlacementChoice | undefined => {
+    for (const priorityRank of [0, 1]) {
+      let best: BlockPlacementChoice | undefined
+      for (const state of cargoStates) {
+        if (state.remaining <= 0 || loadingPriorityRank(state.item) !== priorityRank) continue
+        for (const block of state.catalog) {
+          if (block.count > state.remaining) continue
+          if (usedWeight + block.weight > effective.maxWeight + EPSILON) continue
+          for (const fit of emsFitsForBlock(emsList, block)) {
+            const choice = { state, block, ems: fit.ems, point: fit.point, waste: fit.waste }
+            if (rejected.has(blockPlacementKey(choice))) continue
+            if (!best || compareBlockChoices(choice, best, loadingMode) < 0) best = choice
+            break
+          }
+        }
+      }
+      if (best) return best
+    }
+    return undefined
+  }
+
+  const hasRepeatedMultiSkuCartons = cargoItems.length >= 5 && cargoItems.some((item) => item.quantity >= 20)
+  const useBlockEngine = (loadingMode === 'quantity' || loadingMode === 'volume')
+    && hasRepeatedMultiSkuCartons
+    && !hasFirstPriorityCargo
+
+  if (useBlockEngine) {
+    const rejected = new Set<string>()
+    let rejectionsSinceCommit = 0
+    while (cargoStates.some((state) => state.remaining > 0)) {
+      const choice = selectBlockPlacement(rejected)
+      if (!choice) break
+      if (!canStageBlock(choice)) {
+        rejected.add(blockPlacementKey(choice))
+        rejectionsSinceCommit += 1
+        if (rejectionsSinceCommit >= MAX_BLOCK_REJECTIONS_PER_STEP) break
+        continue
+      }
+      commitBlock(choice)
+      rejected.clear()
+      rejectionsSinceCommit = 0
+    }
+
+    for (const state of cargoStates) {
+      while (state.remaining > 0) {
+        if (usedWeight + state.item.weight > effective.maxWeight + EPSILON) break
+        const placement = bestPlacement(
+          state.item,
+          effective,
+          placed,
+          normalizePoints(
+            canUseTopSurfacePoints(state.item, hasFirstPriorityCargo)
+              ? [...extremePoints, ...topSurfacePoints(placed, state.item)]
+              : extremePoints,
+            effective,
+          ),
+          0,
+          loadingMode === 'quantity',
+          false,
+          false,
+          committedOrientations.get(state.item.id),
+        )
+        if (!placement) break
+        placeEntry({
+          item: state.item,
+          itemIndex: state.itemIndex,
+          label: state.label,
+          index: state.nextIndex,
+        }, placement)
+        state.remaining -= 1
+        state.nextIndex += 1
+      }
+    }
+
+    for (const state of cargoStates) {
+      if (state.remaining <= 0) continue
+      if (orientations(state.item).every((box) => !fitsInsideContainer({ x: 0, y: 0, z: 0 }, box, effective))) {
+        markUnplaced(state.item, state.label, UNPLACED_REASON_CODES.EXCEEDS_DIMENSIONS, state.remaining)
+        continue
+      }
+      if (usedWeight + state.item.weight > effective.maxWeight + EPSILON) {
+        markUnplaced(state.item, state.label, UNPLACED_REASON_CODES.EXCEEDS_PAYLOAD, state.remaining)
+        continue
+      }
+      markUnplaced(state.item, state.label, UNPLACED_REASON_CODES.NO_SPACE, state.remaining)
+    }
+  } else if (loadingMode === 'volume') {
     const remaining = [...expanded]
     while (remaining.length > 0) {
       const placedById = new Map<string, StackChainNode>(placed.map((placedBox) => [placedBox.id, placedBox]))
-      let best: PlacementChoice | undefined
+      let best: { score: number; box: BoxOrientation; point: PackingPoint; idx: number } | undefined
 
       for (const priorityRank of [0, 1]) {
         if (!remaining.some((entry) => loadingPriorityRank(entry.item) === priorityRank)) continue
@@ -849,11 +1122,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
             continue
           }
           for (const box of orientations(item)) {
-            if (
-              box.length > effective.length ||
-              box.width > effective.width ||
-              box.height > effective.height
-            ) {
+            if (box.length > effective.length || box.width > effective.width || box.height > effective.height) {
               continue
             }
             const topPassengerPoints = canUseTopSurfacePoints(item, hasFirstPriorityCargo) && placed.length > 0
@@ -885,7 +1154,6 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       placeEntry(entry, { box: choice.box, point: choice.point })
     }
 
-    // Anything still in `remaining` is unplaced; categorize each by reason.
     for (const entry of remaining) {
       const item = entry.item
       if (orientations(item).every((box) => !fitsInsideContainer({ x: 0, y: 0, z: 0 }, box, effective))) {
