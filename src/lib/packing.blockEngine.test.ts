@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { containers, effectiveContainer } from '../data/containers'
 import type { ContainerSpec, CargoItem, PlacedBox } from '../types'
 import { calculatePacking } from './packing'
+import { isGapFillBox } from './placementSource'
 
 const VOXEL_MM = 50
 
@@ -65,6 +66,7 @@ describe('block-building packing engine', () => {
       expect(metrics.utilPct).toBeGreaterThanOrEqual(79.6)
       expect(metrics.envelopeFillPct).toBeGreaterThan(88)
       expect(metrics.floorEmptyPct).toBeLessThan(8)
+      expect(result.placed.some(isGapFillBox)).toBe(true)
       expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
       expect(elapsedMs).toBeLessThan(5000)
     }

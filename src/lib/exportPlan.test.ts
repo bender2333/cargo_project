@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { CargoItem, ContainerSpec } from '../types'
 import { buildExportPlanRows } from './exportPlan'
 import { calculatePacking } from './packing'
+import { GAP_FILL_SOURCE } from './placementSource'
 
 const container: ContainerSpec = {
   id: 'export-test',
@@ -60,6 +61,7 @@ describe('buildExportPlanRows', () => {
         unplacedQuantity: 1,
         layer: '1',
         workStep: '1',
+        placementNote: '',
         failureReason: 'Exceeds maximum payload',
         failureReasonCode: 'exceeds-payload',
       },
@@ -79,6 +81,7 @@ describe('buildExportPlanRows', () => {
         unplacedQuantity: 0,
         layer: '1',
         workStep: '2',
+        placementNote: '',
         failureReason: '',
         failureReasonCode: '',
       },
@@ -102,6 +105,16 @@ describe('buildExportPlanRows', () => {
       unplacedQuantity: 1,
     })
   })
+
+  it('exports a mixed gap-fill note when any placed box for the cargo came from filler placement', () => {
+    const items = [cargo({ id: 'a', name: 'Alpha', label: 'A', quantity: 1, weight: 10 })]
+    const result = calculatePacking(container, items)
+    ;(result.placed[0] as typeof result.placed[0] & { placementSource?: string }).placementSource = GAP_FILL_SOURCE
+
+    expect(buildExportPlanRows(items, result)[0]).toMatchObject({
+      placementNote: 'Mixed gap-fill',
+    })
+  })
 })
 
 const sampleRow: ExportPlanRow = {
@@ -120,6 +133,7 @@ const sampleRow: ExportPlanRow = {
   unplacedQuantity: 1,
   layer: '1, 2',
   workStep: '1',
+  placementNote: '',
   failureReason: '',
   failureReasonCode: '',
 }

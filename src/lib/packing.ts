@@ -4,6 +4,7 @@ import { assignDepthLayers, buildPackingLayers } from './layers'
 import { stackCapacity, violatesStackChain, type StackChainNode } from './stackCapacity'
 import { generateBlockCandidates, type BlockCandidate } from './blocks'
 import { initEMS, splitEMS, type EmptyMaximalSpace } from './emsSpace'
+import { GAP_FILL_SOURCE } from './placementSource'
 
 export const UNPLACED_REASON_CODES = {
   EXCEEDS_DIMENSIONS: 'exceeds-dimensions',
@@ -893,10 +894,11 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     placement: { box: BoxOrientation; point: PackingPoint },
     supportPlaced: PlacedBox[],
     workStep: number,
+    placementSource?: string,
   ): PlacedBox => {
     const { box, point } = placement
     const support = supportDetails(point, box, supportPlaced)
-    return {
+    const placedBox = {
       id: `${entry.item.id}-${entry.index}`,
       cargoId: entry.item.id,
       name: entry.item.name,
@@ -924,17 +926,22 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       supportedBy: support.supportedBy.map((candidate) => candidate.id),
       verticalSupportedBy: support.supportedBy.map((candidate) => candidate.id),
     }
+    if (placementSource) {
+      ;(placedBox as PlacedBox & { placementSource?: string }).placementSource = placementSource
+    }
+    return placedBox
   }
 
   const placeEntry = (
     entry: { item: CargoItem; itemIndex: number; label: string; index: number },
     placement: { box: BoxOrientation; point: PackingPoint },
+    placementSource?: string,
   ) => {
     const { box, point } = placement
     if (box.height === entry.item.height && !committedOrientations.has(entry.item.id)) {
       committedOrientations.set(entry.item.id, box.orientationKey)
     }
-    placed.push(buildPlacedBox(entry, placement, placed, placed.length + 1))
+    placed.push(buildPlacedBox(entry, placement, placed, placed.length + 1, placementSource))
 
     extremePoints = normalizePoints(
       [
@@ -1002,8 +1009,9 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   let emsList = initEMS(effective)
 
   const commitBlock = (choice: BlockPlacementChoice) => {
+    const placementSource = choice.block.count === 1 ? GAP_FILL_SOURCE : undefined
     for (const unit of blockUnitPlacements(choice)) {
-      placeEntry(unit.entry, unit.placement)
+      placeEntry(unit.entry, unit.placement, placementSource)
       choice.state.remaining -= 1
       choice.state.nextIndex += 1
     }
@@ -1085,7 +1093,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
           itemIndex: state.itemIndex,
           label: state.label,
           index: state.nextIndex,
-        }, placement)
+        }, placement, GAP_FILL_SOURCE)
         state.remaining -= 1
         state.nextIndex += 1
       }

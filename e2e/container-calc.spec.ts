@@ -1306,8 +1306,10 @@ test('imports Vietnam irregular workbook through a reusable combined-dimension t
   await expect(page.getByTestId('mapping-modal')).toHaveCount(0)
   await expect(page.getByTestId('import-log-panel').getByText('Import success: 24')).toBeVisible()
   await expect(page.getByText(/TB-C10-EV_v1\.1/).first()).toBeVisible()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
   await page.getByRole('button', { name: 'Details' }).click()
   await expect(page.getByRole('cell', { name: 'TB-C10-EV_v1.1', exact: true })).toBeVisible()
+  await expect(page.getByText('Mixed gap-fill').first()).toBeVisible()
 })
 
 test('shows localized failure reasons in Chinese mode', async ({ page }) => {

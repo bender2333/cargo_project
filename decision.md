@@ -1,5 +1,13 @@
 # Decision Log
 
+## 2026-07-07 子任务 5 混堆填缝标记边界：运行时来源标记 + 单箱块按填缝呈现
+
+- 背景：子任务 5 要求填缝箱在分层、明细、导出中 fail-loudly 呈现。子任务 4 的后块阶段单箱 fallback 已能作为填缝来源，但越南 20GP 实测主要通过块循环里的 `count=1` 单箱块落位，若只标 fallback，会出现 UI 无提示。
+- 选项：A. 只标 post-block fallback；B. 块引擎中 `count=1` 的单箱块也标为 `gap-fill`；C. 重排主循环，先禁用单箱块，另起完整填缝阶段。
+- 决策：选择 B。`count=1` 块不是主体规整块，按卸货视角更接近块间/边料填缝；该标记只影响呈现和导出，不改变几何、评分、装载顺序或合规判定。
+- 影响：越南 20GP block-engine 结果现在可断言存在可识别填缝箱；分层、装柜步骤、明细表、导出行会显示 Mixed gap-fill / 混合填缝。为避免混入既有 `src/types.ts` dirty 状态，`placementSource` 本轮保持运行时扩展属性，未改 `PlacedBox` 类型。
+- 后续：清理或恢复 `loadingPriority` 类型契约后，可把 `placementSource?: 'gap-fill'` 正式纳入 `PlacedBox`，并在真正 beam/tree search 填缝阶段落地后细分 “single-box filler” 与 “small-block filler”。
+
 ## 2026-07-07 EMS 子任务构建门禁：暂不修复既有 `loadingPriority` 类型缺口
 
 - 背景：子任务 2（EMS 空间模型）完成后运行 `npm run build`，TypeScript 在 `src/components/ImportMappingForm.tsx`、`src/lib/importCargo.ts`、`src/lib/packing.ts`、`src/Workbench.tsx` 等处报错：`loadingPriority` 不存在于 `CargoItem` / `PlacedBox` / `ImportTemplateDefaults`。

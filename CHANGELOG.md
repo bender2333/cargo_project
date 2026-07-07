@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-07 (Block-building engine — Subtask 5 mixed gap-fill presentation)
+
+- Added a runtime placement-source marker for block-engine filler boxes. Post-block single-box fallback placements and one-box block commits are marked as `gap-fill` so mixed fill does not remain silent in downstream views.
+- Surfaced mixed gap-fill notes in the layer selector, active layer stats, loading-step rows, detail table, and export plan rows with English/Chinese copy.
+- Added `placementNote` to export plan rows and default export field keys; rows with any gap-fill placement report `Mixed gap-fill`.
+- Added focused coverage proving Vietnam 20GP block-engine results contain recognizable gap-fill boxes and export rows carry the mixed-fill note. Extended the Vietnam workbook E2E import flow to run placement and confirm `Mixed gap-fill` appears in the Details view.
+- Verification: `npx vitest run src/lib/exportPlan.test.ts src/lib/packing.blockEngine.test.ts` passed 2 files / 11 tests; `npm run lint` passed; `npm test` passed 56 files / 347 tests.
+- Build gate: `npm run build` still fails on the pre-existing dirty `src/types.ts` removal of `loadingPriority`; this subtask did not repair that unrelated type contract.
+- E2E: targeted Vietnam import test passed with a temporary backend on port 3010; full `npm run test:e2e` passed 93 / skipped 1 / failed 0 with the temporary backend stopped after the run.
+
 ## 2026-07-07 (Block-building engine — Subtask 4 guarded main loop)
 
 - Reworked `calculatePacking` so repeated multi-SKU carton workloads in `quantity` / `volume` mode use block candidates + EMS placement. Each carton inside a committed block is still staged and committed through `canPlace`, preserving boundary, overlap, support-ratio, `groundOnly`, and stack-chain gates.

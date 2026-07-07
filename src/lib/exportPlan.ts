@@ -1,4 +1,5 @@
 import type { CargoItem, ExportTemplateColumn, PackingResult } from '../types'
+import { isGapFillBox } from './placementSource'
 
 export type ExportPlanRow = {
   label: string
@@ -16,6 +17,7 @@ export type ExportPlanRow = {
   unplacedQuantity: number
   layer: string
   workStep: string
+  placementNote: string
   failureReason: string
   failureReasonCode: string
 }
@@ -46,6 +48,7 @@ export function buildExportPlanRows(cargoItems: CargoItem[], result: PackingResu
       unplacedQuantity: stats?.unplaced ?? unplaced?.quantity ?? 0,
       layer: formatNumberList(stats?.layers ?? [...new Set(placedBoxes.map((box) => box.physicalLayer))].sort((a, b) => a - b)),
       workStep: formatNumberList(placedBoxes.map((box) => box.workStep).sort((a, b) => a - b)),
+      placementNote: placedBoxes.some(isGapFillBox) ? 'Mixed gap-fill' : '',
       failureReason: unplaced?.reason ?? '',
       failureReasonCode: unplaced?.reasonCode ?? '',
     }
@@ -70,6 +73,7 @@ export const EXPORT_FIELD_KEYS: (keyof ExportPlanRow)[] = [
   'unplacedQuantity',
   'layer',
   'workStep',
+  'placementNote',
   'failureReason',
   'failureReasonCode',
 ]

@@ -65,6 +65,7 @@ import type { ExportTemplatePayload } from './lib/exportTemplates'
 import { deleteCustomCargo, readCustomCargo, saveCustomCargo, updateCustomCargo } from './lib/customCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
+import { isGapFillBox } from './lib/placementSource'
 import { clearPlacementOnContainerChange } from './lib/containerChange'
 import {
   deriveClearanceAnnotations,
@@ -369,6 +370,8 @@ const copy = {
     originalSize: 'Original size',
     actualSize: 'Actual size',
     workStep: 'Step',
+    placementNote: 'Placement note',
+    mixedPlacementGapFill: 'Mixed gap-fill',
     diagnostics: 'Diagnostics',
     history: 'History',
     savePlan: 'Save plan',
@@ -676,6 +679,8 @@ const copy = {
     originalSize: '原始尺寸',
     actualSize: '实际朝向',
     workStep: '步骤',
+    placementNote: '放置说明',
+    mixedPlacementGapFill: '混合填缝',
     diagnostics: '合规与诊断',
     history: '历史方案',
     savePlan: '保存方案',
@@ -1710,6 +1715,7 @@ function Workbench() {
   }, [manualNotice])
 
   const activeLayer = result.layers.find((layer) => layer.id === activeLayerId)
+  const layerHasGapFill = (physicalLayer: number) => result.placed.some((box) => box.physicalLayer === physicalLayer && isGapFillBox(box))
   const activeStepsResult = placementMode === 'manual'
     ? (manualResult.placed.length > 0 ? manualResult : null)
     : (hasCalculated ? result : null)
@@ -4156,6 +4162,7 @@ function Workbench() {
                     <button className={`border px-2 py-1 text-left text-xs ${activeLayerId === layer.id ? 'border-[#f3b21a] bg-white' : 'border-[#bbb] bg-[#eee]'}`} key={layer.id} type="button" onClick={() => setActiveLayerId(layer.id)}>
                       {layerName(layer, locale)}<br />{Math.round(layer.minZ)}-{Math.round(layer.maxZ)} mm<br />
                       {layer.labels.map((entry) => `${entry.label} x${entry.count}`).join(', ')}
+                      {layerHasGapFill(layer.physicalLayer) && <><br />{t.mixedPlacementGapFill}</>}
                     </button>
                   ))}
                 </div>
@@ -4164,6 +4171,7 @@ function Workbench() {
                     <strong>{t.layerStats}</strong>
                     <p>{activeLayer.count} {t.qty}, {activeLayer.weight.toLocaleString()} kg, {formatCubicMeters(activeLayer.volume)}</p>
                     <p>{activeLayer.labels.map((entry) => `${entry.label} x${entry.count}`).join(', ')}</p>
+                    {layerHasGapFill(activeLayer.physicalLayer) && <p>{t.placementNote}: {t.mixedPlacementGapFill}</p>}
                     {activeLayer.supportedBy.length > 0 && <p>{t.supportedBy}: {activeLayer.supportedBy.join(', ')}</p>}
                   </div>
                 )}
@@ -4181,7 +4189,7 @@ function Workbench() {
                           onClick={() => selectStepBox(step.boxId, String(step.physicalLayer))}
                         >
                           <strong>{step.step}</strong> {step.label} · {step.supportType}
-                          {box && <div>{box.name} · {layerName(result.layers.find((layer) => layer.physicalLayer === box.physicalLayer) ?? result.layers[0], locale)}</div>}
+                          {box && <div>{box.name} · {layerName(result.layers.find((layer) => layer.physicalLayer === box.physicalLayer) ?? result.layers[0], locale)}{isGapFillBox(box) ? ` · ${t.mixedPlacementGapFill}` : ''}</div>}
                         </button>
                       )
                     })}
@@ -4205,6 +4213,7 @@ function Workbench() {
                       <th className="p-2">{t.unplacedCount}</th>
                       <th className="p-2">{t.layers}</th>
                       <th className="p-2">{t.workStep}</th>
+                      <th className="p-2">{t.placementNote}</th>
                       <th className="p-2">{t.failureReason}</th>
                     </tr>
                   </thead>
@@ -4221,6 +4230,7 @@ function Workbench() {
                         <td className="p-2">{item.unplacedQuantity}</td>
                         <td className="p-2">{item.layer || '-'}</td>
                         <td className="p-2">{item.workStep || '-'}</td>
+                        <td className="p-2">{item.placementNote ? t.mixedPlacementGapFill : '-'}</td>
                         <td className="p-2">{item.failureReason ? failureReason(item.failureReason, locale, item.failureReasonCode) : t.noFailure}</td>
                       </tr>
                     ))}
