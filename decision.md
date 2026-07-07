@@ -5,7 +5,7 @@
 - 背景：子任务 2（EMS 空间模型）完成后运行 `npm run build`，TypeScript 在 `src/components/ImportMappingForm.tsx`、`src/lib/importCargo.ts`、`src/lib/packing.ts`、`src/Workbench.tsx` 等处报错：`loadingPriority` 不存在于 `CargoItem` / `PlacedBox` / `ImportTemplateDefaults`。
 - 选项：A. 在本轮恢复 `src/types.ts` 的 `loadingPriority` 类型；B. 遵守块构建计划提醒，本轮不碰 `loadingPriority` 残留，只记录门禁状态。
 - 决策：选择 B。当前 `src/types.ts` 的 `loadingPriority` 删除是进入本轮前已有的未提交改动，且任务说明明确要求本轮不要动该字段，避免混入两套 churn。
-- 影响：`npm run lint` 与 `npm test` 已通过，但 `npm run build` 在既有类型不一致处失败；EMS 子任务本身的 focused test 通过。
+- 影响：`npm run lint` 与 `npm test` 已通过，但 `npm run build` 在既有类型不一致处失败；EMS 子任务本身的 focused test 通过。子任务 3（组块模块）复跑后仍是同一 `loadingPriority` 构建阻断，block focused test / lint / unit suite 均通过。
 - 后续：后续轮次需要先恢复或统一清理 `loadingPriority` 类型契约，再重新跑完整 `lint && test && build`。
 
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-07 (Block-building engine — Subtask 3 block generation)
+
+- Added `src/lib/blocks.ts` as a pure same-SKU block candidate generator. It enumerates integer `nx × ny × nz` blocks per orientation, preserves cargo label/name/color metadata, and exposes block dimensions, count, volume, footprint area, and weight for the later search/placement step.
+- Enforced block-generation constraints without importing `packing.ts`: container fit, cargo quantity, `groundOnly`, `stackable=false`, and `maxStackLayers`.
+- Added tests for the planned Vietnam-width case (`530 × 305` cartons generate an `ny=7` block in 20GP width), ground-only single-layer blocks, non-stackable single-layer blocks, max-stack limiting, and zero-gap volume equality.
+- Verification: `npx vitest run src/lib/blocks.test.ts` passed 1 file / 5 tests; `npm run lint` passed; `npm test` passed 55 files / 344 tests.
+- Build gate: `npm run build` still fails on the pre-existing dirty `src/types.ts` removal of `loadingPriority`; no block-specific TypeScript errors appeared before that known blocker. The repeated gate state is recorded in `decision.md`.
+- E2E not run for this pure `src/lib` block-generation slice; UI/3D/import flows are unchanged in subtask 3.
+
 ## 2026-07-07 (Block-building engine — Subtask 2 EMS space model)
 
 - Added `src/lib/emsSpace.ts` as a pure EMS geometry module with `initEMS`, `splitEMS`, `pruneContained`, and `emsBestFit`. It does not import `packing.ts`; callers pass the container dimensions they want to model.
