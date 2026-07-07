@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-07 (Block-building engine — Subtask 2 EMS space model)
+
+- Added `src/lib/emsSpace.ts` as a pure EMS geometry module with `initEMS`, `splitEMS`, `pruneContained`, and `emsBestFit`. It does not import `packing.ts`; callers pass the container dimensions they want to model.
+- Added intent-focused EMS tests covering the initial full-container EMS, L-shaped remainder after a corner block, preservation of a middle gap between separated blocks, contained-space pruning, and best-fit selection by minimum wasted volume.
+- Verification: `npx vitest run src/lib/emsSpace.test.ts` passed 1 file / 5 tests; `npm run lint` passed; `npm test` passed 54 files / 339 tests.
+- Build gate: `npm run build` failed before Vite because the pre-existing dirty `src/types.ts` edit removed `loadingPriority` while current code still references it in import, packing, custom cargo, and Workbench paths. Per the block-building task warning, this subtask did not touch `loadingPriority`; the failure is recorded in `decision.md`.
+- E2E not run for this pure `src/lib` geometry slice; UI/3D/import flows are unchanged in subtask 2.
+
 ## 2026-06-30 (Loading priority and pallet-top fill — Round 49)
 
 - Subtask 1 data model: added optional `loadingPriority: 'first' | 'normal'` to cargo and placed-box types so priority can flow through packing results, exports, history JSON, and later UI/import work. Also extended import-template defaults with `groundOnly` and `loadingPriority` for the upcoming import-template field pass.
