@@ -1,9 +1,62 @@
 # Decision Log
 
 
-## 2026-07-07 纯散货列间缝隙根因 + 定向：重写空间模型（EMS 最大空长方体）
+## 2026-07-07（下午）算法调研 + 方向修订：主引擎改用「块构建（block-building）+ EMS 最合身放置 + FB 树搜索」
 
-> 状态：根因定位 + 定向决策（与用户拍板）。计划见 `plans/2026-07-07-ems-space-model.md`。这是 06-30 计划里被推迟的「层次2（重写空间模型）」，现因新数据集正式启动。
+> 状态：文献调研 + 根因再定位（用真实 debug snapshot 坐实）+ 方向决策（与用户拍板）。计划见 `plans/2026-07-07-block-building-engine.md`。**取代**同日上午的「纯 EMS 重写空间模型」定向（`plans/2026-07-07-ems-space-model.md` 作废/降级为底座）。
+
+### 根因再定位（用真实 snapshot 坐实，推翻上午的两次误判）
+- 数据来源：用户界面导出 `cargo-debug-snapshot (15).json`（**20GP 柜 5758×2352×2385**，quantity 模式，placed=443/864）。
+- 体素分析（V=50mm）逐格判定：
+  - **内部被困缝（上方压箱）仅 0.1%**——箱子横向挤得很实，无夹心缝。上午「R-D 内部夹心缝」判断**错误**。
+  - **左右/前后被两列夹住的竖缝仅 2.9%**——缝不在两列正中间。
+  - **各高度层占用率从 z=0 到 z=2150 稳定在 87%（均匀缺 13%）**，只有 z>2200 才因天花板留白骤降。→ 缝是**从柜底贯穿到柜顶的竖直空隙**，位置固定，正是用户目视看到的「塔柱间沟槽」。
+- 地面俯视图坐实（真·根因）：**多 SKU 尺寸拼不齐 + 逐箱贪心顺序铺 → 层内二维排布留下固定位置的空洞 → 该图案层层复制叠成贯穿竖缝**。
+  - 柜宽 2352 除各 SKU 排宽都有余料：305×7=2135 剩217；365×6=2190 剩162；400×5=2000 剩352。不同 SKU 排宽不一，交界处凑出锯齿空洞（典型：y=700~1150、x≈2900~3900 一大片空）。
+  - 地面空格率 12.7%，与体素「每层缺 13%」吻合。
+
+### 算法调研结论（谱系与选型，见本条末 Sources）
+- **单件放置**（极值点/角点、EMS 最大空区）：一次放一个箱，util 80~85%。**无法根治列错位**——错位是逐箱贪心的必然产物。EMS 只解决「候选位置可见」，不换「一次一个箱」策略。
+- **墙/层构建**（wall/layer-building）：util 85~88%。
+- **块构建（block-building，Eley 2002；FB 树搜索 Fanslau-Bortfeldt 2010）**：先把**相同箱拼成规整长方体「块」**（块内零缝、支撑100%），再以块为单位摆放 / 树搜索选块。标准 BR 测试集 util **90~95%**，是公开确定性方法的最高水平。
+- **元启发（GA/TS/ACO）**：88~93% 但随机、慢、难解释。
+- **深度强化学习 RL**：近年热，但几乎都针对**在线**装箱与机器人码垛；本项目是**离线**（全货已知），RL 不稳定、难解释、难保证支撑约束——**用错工具，不采用**。
+- **关键匹配**：本数据每个 SKU 都有大量完全相同的箱（TB-C10×126、TB-C13×131、TF-A01×68…），正是块构建被发明来解决的场景。块尺寸是箱尺寸整数倍→更易对齐拼接，把散落锯齿边料集中化，从机制上断掉「每 SKU 独立成列→交界锯齿→贯穿缝」因果链。
+
+### 方向决策（与用户两轮确认）
+1. **主引擎 = 块构建 + EMS 最合身放置 + FB 树搜索前瞻**（用户选「激进」档）。EMS 空间模型不废弃，降级为块放置的**底座**（追踪空区、供块做 best-fit）。
+2. **允许小件填块间边料**（用户选）：块之间不可避免的边料，允许用小件（如 B10 350×260、D 类奶嘴）插入填充——引入**局部混堆**。用户接受「同片区可非单一 SKU」以换利用率。卸货分拣代价用户已知晓。
+3. **上午的纯 EMS 计划降级**：`plans/2026-07-07-ems-space-model.md` 的「EMS 作为唯一候选源、单件放置」定位作废；其 EMS 几何模块（`emsSpace.ts` 单测）仍有效，并入新计划作为块放置底座。
+
+### 必须原样保留（契约，新引擎不可动）
+- 几何门控 `canPlace`（`packing.ts:246-252`）：越界/重叠/支撑率≥0.5/`respectsMaxStackLayers`/`groundOnly` 落地。块摆放后每个箱仍须满足。
+- 数据契约 `PackingResult` 全字段、`physicalLayer`、支撑链——下游 2D/3D/分层/明细/导出共享，不重算。
+- `orientations` 朝向枚举、标签贯穿。
+
+### 影响 / 风险
+- 改动最大的一轮：主循环从「逐箱极值点贪心」重写为「组块→树搜索选块→EMS 放置→小件填缝」。churn 大。
+- fixture 硬坐标断言几乎必然大面积变动——沿用「先冻结基线→逐条 diff→架构师裁决」纪律，不为过测试弱化断言。
+- 树搜索深度/宽度需限，864 箱性能要实测（给上界，超则降级为贪心块放置）。
+- 混堆填缝需在分层/明细/卸货视图如实呈现「该区非单一 SKU」，避免 fail-silently。
+
+### 验收标准（20GP + snapshot 数据 / 40HQ + 越南十一批）
+- 20GP 同数据：**装载包络内填充率显著 > 82.4% 基线**（下界 88%）；地面空格率 < 8%（基线 12.7%）；贯穿竖缝目视消除。
+- 无重叠/越界/支撑违规（几何断言全绿）。
+- fixture 差异逐条报告，无未经确认的断言弱化。
+
+### Sources（调研）
+- Bortfeldt & Wäscher, "Constraints in container loading – A state-of-the-art review"（CLP 综述）。
+- Fanslau & Bortfeldt (2010), "A Tree Search Algorithm for Solving the Container Loading Problem", INFORMS J. Computing — https://pubsonline.informs.org/doi/pdf/10.1287/ijoc.1090.0338
+- "The six elements to block-building approaches for the single container loading problem", Applied Intelligence 2013 — https://link.springer.com/doi/10.1007/s10489-012-0337-0
+- Crainic et al. (2008), "Extreme Point-Based Heuristics for 3D Bin Packing" — https://www.researchgate.net/publication/220668799
+- "Dynamic feedback algorithm based on spatial corner fitness for 3D MBSBPP", Complex & Intelligent Systems 2024 — https://link.springer.com/article/10.1007/s40747-024-01368-5
+- 参考实现（layers + superitems）：https://github.com/Wadaboa/3d-bpp
+
+---
+
+## 2026-07-07（上午）纯散货列间缝隙根因 + 定向：重写空间模型（EMS 最大空长方体）
+
+> 状态：**已被同日下午条目取代/降级**（根因经真实 snapshot 修正，主引擎改块构建）。保留作演进记录。计划见 `plans/2026-07-07-ems-space-model.md`。这是 06-30 计划里被推迟的「层次2（重写空间模型）」。
 
 ### 触发问题
 用户用 `test-data/excel/越南第十一批6.2海运.xlsx` 测试，3D 视图列间仍有明显缝隙。
