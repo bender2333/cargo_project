@@ -1,5 +1,13 @@
 # Decision Log
 
+## 2026-07-07 子任务 6 回归收口：构建门禁未过，暂不部署
+
+- 背景：子任务 6 要求 `lint && test && build`、E2E 和部署收口。子任务 5 完成后已复跑 lint、全量单测、全量 E2E；`npm run build` 仍在 TypeScript 阶段因既有 `src/types.ts` 删除 `loadingPriority` 而失败。
+- 选项：A. 本轮顺手恢复/清理 `loadingPriority` 类型以让 build 过；B. 遵守本轮块构建计划“不清理 loadingPriority”的边界，只记录构建阻断并停止部署。
+- 决策：选择 B。`src/types.ts` 是进入本轮前已有 dirty 文件，修复会把独立类型契约清理混进块构建/混堆呈现提交。
+- 影响：本地 `npm run lint`、`npm test`、`npm run test:e2e` 均通过；`npm run build` 未通过，因此未执行生产部署和远程 E2E。
+- 后续：下一轮先裁决 `loadingPriority` 是恢复到类型契约还是彻底清理所有引用；build 过后再按生产部署流程发布并跑远程 E2E。
+
 ## 2026-07-07 子任务 5 混堆填缝标记边界：运行时来源标记 + 单箱块按填缝呈现
 
 - 背景：子任务 5 要求填缝箱在分层、明细、导出中 fail-loudly 呈现。子任务 4 的后块阶段单箱 fallback 已能作为填缝来源，但越南 20GP 实测主要通过块循环里的 `count=1` 单箱块落位，若只标 fallback，会出现 UI 无提示。

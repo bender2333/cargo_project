@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-07 (Block-building engine — Subtask 6 regression closure)
+
+- Regression closure for the block-building sequence: subtask 2 EMS, subtask 3 block candidates, subtask 4 guarded block route, and subtask 5 mixed gap-fill presentation are committed separately.
+- Fixture裁决状态: Vietnam 20GP meets the planned improvement gates in the committed block-engine tests; Vietnam 40HQ remains above the frozen 76.5% baseline but is not a significant improvement, so it stays recorded as a follow-up optimization rather than a weakened assertion.
+- Verification: `npm run lint` passed; `npm test` passed 56 files / 347 tests; `npm run test:e2e` passed 93 / skipped 1 / failed 0 with a temporary backend on port 3010.
+- Build/deploy gate: `npm run build` still fails before Vite on the pre-existing dirty `src/types.ts` removal of `loadingPriority`. Deployment was not attempted because the production deploy flow requires a passing local build.
+
 ## 2026-07-07 (Block-building engine — Subtask 5 mixed gap-fill presentation)
 
 - Added a runtime placement-source marker for block-engine filler boxes. Post-block single-box fallback placements and one-box block commits are marked as `gap-fill` so mixed fill does not remain silent in downstream views.
