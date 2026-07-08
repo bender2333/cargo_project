@@ -16,7 +16,6 @@ function payloadFromCargo(item: CargoItem): CustomCargoPayload {
     stackable: item.stackable,
     maxStackLayers: item.maxStackLayers,
     groundOnly: item.groundOnly,
-    loadingPriority: item.loadingPriority,
   }
 }
 

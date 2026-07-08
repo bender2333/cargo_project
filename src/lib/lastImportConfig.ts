@@ -64,9 +64,6 @@ function normalizeDefaults(value: unknown): ImportTemplateDefaults {
     out.maxStackLayers = source.maxStackLayers
   }
   if (typeof source.groundOnly === 'boolean') out.groundOnly = source.groundOnly
-  if (source.loadingPriority === 'first' || source.loadingPriority === 'normal') {
-    out.loadingPriority = source.loadingPriority
-  }
   return out
 }
 

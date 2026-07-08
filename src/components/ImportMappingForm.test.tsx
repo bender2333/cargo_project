@@ -14,7 +14,6 @@ const labels: ImportMappingFormLabels = {
   templateDefaultStackable: 'Default stackable',
   templateDefaultMaxStackLayers: 'Default max stack layers',
   templateDefaultGroundOnly: 'Default ground only',
-  templateDefaultLoadingPriority: 'Default loading priority',
   templateDimensionMode: 'Dimension mode',
   templateHelpDimensionMode: 'Dimension mode help',
   templateDimensionSeparate: 'Separate',
@@ -38,13 +37,10 @@ const labels: ImportMappingFormLabels = {
   mappingFieldWeight: 'Weight',
   mappingFieldQuantity: 'Quantity',
   mappingFieldGroundOnly: 'Ground only',
-  mappingFieldLoadingPriority: 'Loading priority',
   color: 'Color',
   rotate: 'Rotate',
   stackable: 'Stackable',
   groundOnly: 'Ground only',
-  loadingFirst: 'First',
-  loadingNormal: 'Normal',
   maxStackLayers: 'Max stack layers',
   mappingUnit: 'Unit',
   mappingAutoUnit: 'Auto',
@@ -134,11 +130,6 @@ describe('ImportMappingForm missing column feedback', () => {
     fireEvent.click(getByTestId('template-default-ground-only'))
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
       defaults: expect.objectContaining({ groundOnly: true }),
-    }))
-
-    fireEvent.change(getByTestId('template-default-loading-priority'), { target: { value: 'first' } })
-    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
-      defaults: expect.objectContaining({ loadingPriority: 'first' }),
     }))
   })
 })

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-08 (Remove deprecated loadingPriority field)
+
+- Popped the pending `src/types.ts` deletion and completed the field removal across import parsing, template defaults, last-import config, custom cargo payloads, Workbench UI, packing output, block-engine routing, unit tests, and E2E fixtures.
+- Kept `groundOnly` intact as the remaining independent cargo constraint. Import/template UI now exposes `Ground only` but no longer reads, maps, defaults, saves, sorts, or displays loading priority.
+- Updated `decision.md` with the formal removal decision and the E2E contract update after stale priority assertions failed.
+- Updated in-app release notes so the current notification history no longer advertises priority controls.
+- Vietnam 20GP deletion check: quantity 462/864, util 91.27%, envelope fill 92.75%, floor empty 4.15%; volume 462/864, util 91.27%, envelope fill 92.75%, floor empty 4.15%. This matches the pre-cleanup block-engine result and confirms the cleanup did not change the Vietnam packing outcome.
+- Verification: `rg -n "loadingPriority" src` returned no matches; `npm run lint` passed; `npm test` passed 56 files / 346 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e -- --reporter=list` passed 93 / skipped 1 / failed 0.
+
 ## 2026-07-08 (Block-building engine — pure carton route expansion)
 
 - Expanded the guarded block-engine route from the original Vietnam-shaped `5+ SKU / quantity >= 20` condition to any large pure carton load: `quantity` / `volume`, at least 2 SKUs, at least 100 cartons, no first-priority cargo, no `groundOnly`, no non-stackable cargo, and no per-item `maxStackLayers`.

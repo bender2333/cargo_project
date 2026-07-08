@@ -1,5 +1,13 @@
 # Decision Log
 
+## 2026-07-08 loadingPriority 正式移除后的 E2E 契约更新
+
+- 背景：Goal B 按 2026-06-30 双模式废弃优先级决策彻底删除 `loadingPriority` 字段后，`npm run test:e2e -- --reporter=list` 结果为 91 passed、2 failed、1 skipped；两条失败均来自 E2E 仍尝试操作或断言 “Loading priority: First”。
+- 选项：A. 恢复 UI/导入优先级以满足旧 E2E；B. 更新 E2E，使其只验证仍保留的 `Ground only` 业务约束和导入/装箱流程。
+- 决策：选择 B。用户本轮明确要求彻底删除 `loadingPriority`，不是恢复；E2E 的优先级交互属于废弃字段残留，应随字段删除一起移除。
+- 影响：E2E 不再寻找优先级下拉或优先级展示文本；仍保留新增货物、Excel 导入、`Ground only` 展示和装箱/导出流程断言。
+- 后续：若未来需要装载优先级，应以新的业务模型和测试契约重新设计，不能复用已删除字段。
+
 ## 2026-07-08 块引擎适用范围扩展：先覆盖大批量纯散货，不接管堆叠约束场景
 
 - 背景：完成子任务 6 后复核原始目标，发现子任务 4 的块引擎仍限定在越南病灶形态（至少 5 个 SKU 且某 SKU 数量 ≥20），比“quantity/volume 两模式都走新引擎”的目标更窄。

@@ -28,7 +28,6 @@ const cargo: CargoItem = {
   stackable: true,
   maxStackLayers: 3,
   groundOnly: true,
-  loadingPriority: 'first',
 }
 
 describe('customCargo api client', () => {
@@ -61,7 +60,6 @@ describe('customCargo api client', () => {
         stackable: true,
         maxStackLayers: 3,
         groundOnly: true,
-        loadingPriority: 'first',
       }),
     })
   })

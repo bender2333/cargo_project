@@ -39,14 +39,11 @@ type CargoSnapshotFixture = {
   cargo: { items: CargoItem[] }
 }
 
-function load0629PriorityFixture() {
+function load0629Fixture() {
   const snapshot = JSON.parse(readFileSync('test-data/json/0629/cargo-debug-snapshot(2).json', 'utf8')) as CargoSnapshotFixture
   return {
     container: snapshot.container.effective,
-    cargoItems: snapshot.cargo.items.map((item) => ({
-      ...item,
-      loadingPriority: item.label === 'A' || item.label === 'B' ? 'first' as const : 'normal' as const,
-    })),
+    cargoItems: snapshot.cargo.items,
   }
 }
 
@@ -326,33 +323,17 @@ describe('calculatePacking', () => {
     expect(calculatePacking(container, items, { loadingMode: 'quantity' }).workSteps.map((step) => step.label).slice(0, 2)).toEqual(['Q', 'Q'])
   })
 
-  it('uses loading priority before every loading mode comparator', () => {
-    const container = testContainer({ length: 1000, width: 1000, height: 1000 })
-    const items = [
-      cargo({ id: 'normal', label: 'N', length: 1000, width: 1000, height: 1000, weight: 500, loadingPriority: 'normal' }),
-      cargo({ id: 'first', label: 'F', length: 1000, width: 1000, height: 1000, weight: 1, loadingPriority: 'first' }),
-    ]
-
-    for (const loadingMode of ['input', 'weight', 'quantity', 'volume'] as const) {
-      const result = calculatePacking(container, items, { loadingMode })
-      expectValidPacking(container, result)
-      expect(result.placed).toHaveLength(1)
-      expect(result.placed[0]).toMatchObject({ cargoId: 'first', loadingPriority: 'first' })
-      expect(result.unplaced).toContainEqual(expect.objectContaining({ cargoId: 'normal', quantity: 1 }))
-    }
-  })
-
-  it('continues loading normal cargo when first-priority cargo cannot fit', () => {
+  it('continues loading later cargo when an earlier cargo cannot fit', () => {
     const container = testContainer({ length: 1000, width: 1000, height: 1000 })
     const result = calculatePacking(container, [
-      cargo({ id: 'oversize-first', label: 'F', length: 1200, width: 1000, height: 1000, loadingPriority: 'first' }),
-      cargo({ id: 'normal', label: 'N', length: 1000, width: 1000, height: 1000, loadingPriority: 'normal' }),
+      cargo({ id: 'oversize', label: 'F', length: 1200, width: 1000, height: 1000 }),
+      cargo({ id: 'normal', label: 'N', length: 1000, width: 1000, height: 1000 }),
     ], { loadingMode: 'quantity' })
 
     expectValidPacking(container, result)
     expect(result.placed.map((box) => box.cargoId)).toEqual(['normal'])
     expect(result.unplaced).toContainEqual(expect.objectContaining({
-      cargoId: 'oversize-first',
+      cargoId: 'oversize',
       quantity: 1,
       reasonCode: UNPLACED_REASON_CODES.EXCEEDS_DIMENSIONS,
     }))
@@ -575,22 +556,8 @@ describe('calculatePacking', () => {
     expect(result.placed.find((box) => box.cargoId === 'top-only')?.z).toBeGreaterThan(0)
   })
 
-  it('loads 0629 first-priority pallets before normal cartons and retries cartons on pallet tops', () => {
-    const { container, cargoItems } = load0629PriorityFixture()
-    const baseline = calculatePacking(container, cargoItems, { loadingMode: 'input' })
-    const result = calculatePacking(container, cargoItems, { loadingMode: 'quantity' })
-
-    expectValidLargePacking(container, result)
-    const count = (label: string) => result.placed.filter((box) => box.label === label).length
-    expect(count('A')).toBe(10)
-    expect(count('B')).toBe(1)
-    expect(count('C') + count('D')).toBeGreaterThanOrEqual(100)
-    expect(result.placedCount).toBeGreaterThanOrEqual(baseline.placedCount)
-    expect(result.volumeUtilization).toBeGreaterThan(76)
-  }, 30_000)
-
   it('keeps 0629 ground-only cartons off pallet tops', () => {
-    const { container, cargoItems } = load0629PriorityFixture()
+    const { container, cargoItems } = load0629Fixture()
     const result = calculatePacking(container, cargoItems.map((item) => item.label === 'C' ? { ...item, groundOnly: true } : item), { loadingMode: 'quantity' })
     const cBoxes = result.placed.filter((box) => box.label === 'C')
 

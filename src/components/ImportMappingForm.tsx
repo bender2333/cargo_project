@@ -30,7 +30,6 @@ export type ImportMappingFormLabels = {
   templateDefaultStackable: string
   templateDefaultMaxStackLayers: string
   templateDefaultGroundOnly: string
-  templateDefaultLoadingPriority: string
   templateDimensionMode: string
   templateHelpDimensionMode: string
   templateDimensionSeparate: string
@@ -54,13 +53,10 @@ export type ImportMappingFormLabels = {
   mappingFieldWeight: string
   mappingFieldQuantity: string
   mappingFieldGroundOnly: string
-  mappingFieldLoadingPriority: string
   color: string
   rotate: string
   stackable: string
   groundOnly: string
-  loadingFirst: string
-  loadingNormal: string
   maxStackLayers: string
   mappingUnit: string
   mappingAutoUnit: string
@@ -82,7 +78,6 @@ const FIELD_KEYS = [
   'stackable',
   'maxStackLayers',
   'groundOnly',
-  'loadingPriority',
 ] as const
 
 const DIMENSION_FIELDS: Record<string, MappingDimensionKey> = { length: 'length', width: 'width', height: 'height' }
@@ -125,7 +120,6 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
     stackable: labels.stackable,
     maxStackLayers: labels.maxStackLayers,
     groundOnly: labels.mappingFieldGroundOnly,
-    loadingPriority: labels.mappingFieldLoadingPriority,
   }
 
   const patchDefaults = (partial: Partial<ImportTemplateDefaults>) =>
@@ -293,18 +287,6 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
             onChange={(event) => patchDefaults({ groundOnly: event.target.checked })}
           />
           {labels.templateDefaultGroundOnly}
-        </label>
-        <label className="font-semibold text-slate-700">
-          {labels.templateDefaultLoadingPriority}
-          <select
-            className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-            value={value.defaults.loadingPriority ?? 'normal'}
-            data-testid={tid('template-default-loading-priority')}
-            onChange={(event) => patchDefaults({ loadingPriority: event.target.value as ImportTemplateDefaults['loadingPriority'] })}
-          >
-            <option value="normal">{labels.loadingNormal}</option>
-            <option value="first">{labels.loadingFirst}</option>
-          </select>
         </label>
         <label className="font-semibold text-slate-700">
           <span className="inline-flex items-center gap-1.5">

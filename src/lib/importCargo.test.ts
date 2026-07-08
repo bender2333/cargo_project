@@ -21,7 +21,6 @@ describe('parseCargoRows', () => {
           允许堆叠: '否',
           最大堆叠层数: 4,
           必须落地: '是',
-          装载优先级: '先装',
         },
       ],
       { createId: () => 'import-1' },
@@ -42,7 +41,6 @@ describe('parseCargoRows', () => {
         stackable: false,
         maxStackLayers: 4,
         groundOnly: true,
-        loadingPriority: 'first',
       },
     ])
     expect(result.errors).toEqual([])
@@ -55,7 +53,7 @@ describe('parseCargoRows', () => {
     expect(typeof result.warnings[0].message).toBe('string')
     expect(result.summary).toEqual({
       importedRows: 1,
-      mappedFields: ['canRotate', 'color', 'height', 'label', 'name', 'quantity', 'stackable', 'maxStackLayers', 'groundOnly', 'loadingPriority', 'weight', 'width', 'length'].sort(),
+      mappedFields: ['canRotate', 'color', 'height', 'label', 'name', 'quantity', 'stackable', 'maxStackLayers', 'groundOnly', 'weight', 'width', 'length'].sort(),
       convertedCentimeterRows: 1,
       skippedRows: 0,
     })
@@ -163,7 +161,6 @@ describe('parseCargoRowsWithMapping', () => {
         stackable: true,
         maxStackLayers: undefined,
         groundOnly: false,
-        loadingPriority: 'normal',
       },
     ])
   })
@@ -231,7 +228,6 @@ describe('parseCargoRowsWithMapping', () => {
           stackable: false,
           maxStackLayers: 4,
           groundOnly: true,
-          loadingPriority: 'first',
         },
       },
       { createId: () => 'template-meta-1' },
@@ -251,7 +247,6 @@ describe('parseCargoRowsWithMapping', () => {
         stackable: false,
         maxStackLayers: 4,
         groundOnly: true,
-        loadingPriority: 'first',
       }),
     ])
   })
