@@ -9,6 +9,8 @@
 - Updated the Vietnam import E2E gap-fill check to explicitly use Volume priority; `decision.md` records why the gap-fill presentation assertion moved off the new count-first default.
 - Release note: added `2026-07-08-r50-loading-modes-priority-removal` for distinct loading-mode behavior and the deprecated priority-field removal.
 - Verification: `rg -n "loadingPriority" src` returned no matches; `npm run lint` passed; `npm test` passed 56 files / 346 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e -- --reporter=list` passed 93 / skipped 1 / failed 0.
+- Deploy: `npm run deploy` completed all 7 steps; remote backup `/root/cargo_project-backup-20260708-085656`; remote HTTP/API health checks passed.
+- Remote E2E regression: `PLAYWRIGHT_BASE_URL=http://101.33.232.150/ PLAYWRIGHT_WORKERS=1 npm run test:e2e -- --reporter=list` passed 93 / skipped 1 / failed 0 against production.
 
 ## 2026-07-08 (Remove deprecated loadingPriority field)
 
