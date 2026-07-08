@@ -52,6 +52,49 @@ function packingMetrics(placed: PlacedBox[], container: ContainerSpec) {
   }
 }
 
+function placedDistributionKey(placed: PlacedBox[]) {
+  const counts = new Map<string, number>()
+  for (const box of placed) counts.set(box.cargoId, (counts.get(box.cargoId) ?? 0) + 1)
+  return [...counts.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([cargoId, count]) => `${cargoId}:${count}`)
+    .join('|')
+}
+
+function boxesOverlap(a: PlacedBox, b: PlacedBox) {
+  return !(
+    a.x + a.length <= b.x ||
+    b.x + b.length <= a.x ||
+    a.y + a.width <= b.y ||
+    b.y + b.width <= a.y ||
+    a.z + a.height <= b.z ||
+    b.z + b.height <= a.z
+  )
+}
+
+function expectNoOverlapOrBounds(container: ContainerSpec, placed: PlacedBox[]) {
+  const effective = effectiveContainer(container)
+  for (const box of placed) {
+    if (
+      box.x < 0 ||
+      box.y < 0 ||
+      box.z < 0 ||
+      box.x + box.length > effective.length ||
+      box.y + box.width > effective.width ||
+      box.z + box.height > effective.height
+    ) {
+      throw new Error(`Box ${box.id} exceeds container bounds`)
+    }
+  }
+  for (let i = 0; i < placed.length; i += 1) {
+    for (let j = i + 1; j < placed.length; j += 1) {
+      if (boxesOverlap(placed[i], placed[j])) {
+        throw new Error(`Boxes ${placed[i].id} and ${placed[j].id} overlap`)
+      }
+    }
+  }
+}
+
 describe('block-building packing engine', () => {
   it('uses the block path for large pure carton loads even below the old five-SKU gate', () => {
     const container: ContainerSpec = {
@@ -83,21 +126,31 @@ describe('block-building packing engine', () => {
 
   it('removes the Vietnam 20GP vertical-gap regression in both optimization modes', () => {
     const fixture = vietnamFixture()
-
-    for (const mode of ['quantity', 'volume'] as const) {
+    const outcomes = (['quantity', 'volume'] as const).map((mode) => {
       const startedAt = Date.now()
       const result = calculatePacking(fixture.container, fixture.items, { loadingMode: mode })
       const elapsedMs = Date.now() - startedAt
       const metrics = packingMetrics(result.placed, fixture.container)
+      return { mode, result, elapsedMs, metrics }
+    })
 
+    for (const { result, elapsedMs, metrics } of outcomes) {
       expect(result.placedCount).toBeGreaterThanOrEqual(443)
       expect(metrics.utilPct).toBeGreaterThanOrEqual(79.6)
       expect(metrics.envelopeFillPct).toBeGreaterThan(88)
       expect(metrics.floorEmptyPct).toBeLessThan(8)
-      expect(result.placed.some(isGapFillBox)).toBe(true)
       expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
+      expectNoOverlapOrBounds(fixture.container, result.placed)
       expect(elapsedMs).toBeLessThan(5000)
     }
+
+    const [quantity, volume] = outcomes
+    expect(outcomes.some(({ result }) => result.placed.some(isGapFillBox))).toBe(true)
+    expect(quantity.result.placedCount).toBeGreaterThanOrEqual(volume.result.placedCount)
+    expect(
+      quantity.result.placedCount !== volume.result.placedCount
+      || placedDistributionKey(quantity.result.placed) !== placedDistributionKey(volume.result.placed),
+    ).toBe(true)
   })
 
   it('keeps Vietnam 40HQ utilization above the frozen baseline', () => {
@@ -113,6 +166,7 @@ describe('block-building packing engine', () => {
 
       expect(metrics.utilPct).toBeGreaterThan(76.5)
       expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
+      expectNoOverlapOrBounds(container, result.placed)
       expect(elapsedMs).toBeLessThan(20_000)
     }
   }, 25_000)

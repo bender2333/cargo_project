@@ -718,8 +718,8 @@ function cargoVolume(item: CargoItem) {
 
 function compareBlockCatalog(a: BlockCandidate, b: BlockCandidate, loadingMode: LoadingMode) {
   if (loadingMode === 'quantity') {
-    return b.volume - a.volume
-      || b.count - a.count
+    return b.count - a.count
+      || b.volume - a.volume
       || b.footprintArea - a.footprintArea
   }
   if (loadingMode === 'weight') {
@@ -734,12 +734,13 @@ function compareBlockCatalog(a: BlockCandidate, b: BlockCandidate, loadingMode: 
 
 function compareBlockChoices(a: BlockPlacementChoice, b: BlockPlacementChoice, loadingMode: LoadingMode) {
   if (loadingMode === 'quantity') {
-    return b.block.volume - a.block.volume
-      || b.block.count - a.block.count
-      || a.waste - b.waste
+    return b.block.count - a.block.count
+      || b.block.volume - a.block.volume
       || a.point.z - b.point.z
       || a.point.x - b.point.x
       || a.point.y - b.point.y
+      || b.block.footprintArea - a.block.footprintArea
+      || a.waste - b.waste
   }
   return b.block.volume - a.block.volume
     || b.block.count - a.block.count
@@ -1059,7 +1060,10 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       rejectionsSinceCommit = 0
     }
 
-    for (const state of cargoStates) {
+    const fallbackStates = loadingMode === 'quantity'
+      ? [...cargoStates].sort((a, b) => b.remaining - a.remaining || cargoVolume(b.item) - cargoVolume(a.item))
+      : cargoStates
+    for (const state of fallbackStates) {
       while (state.remaining > 0) {
         if (usedWeight + state.item.weight > effective.maxWeight + EPSILON) break
         const placement = bestPlacement(

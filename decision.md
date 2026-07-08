@@ -1,5 +1,13 @@
 # Decision Log
 
+## 2026-07-08 双模式分化后的填缝 E2E 覆盖迁移
+
+- 背景：Goal A 将 quantity 模式改为 count-first 后，本地 `npm run test:e2e -- --reporter=list` 为 92 passed、1 failed、1 skipped；失败用例是越南导入流程在默认 quantity 模式下仍期待 `Mixed gap-fill` 文本。新实测中 quantity 20GP 为 463/864、90.63%，不产生 gap-fill 标记；volume 20GP 为 462/864、91.27%，仍产生 gap-fill。
+- 选项：A. 为了旧 E2E 保持 quantity 的 gap-fill 标记；B. 把填缝呈现 E2E 显式切到 volume 模式，保留 UI 覆盖，同时让 quantity 执行新的多件优先语义。
+- 决策：选择 B。Goal A 的核心是两模式语义分化，不能为了旧默认模式断言把 quantity 拉回 volume 行为；填缝呈现仍由 volume 模式覆盖。
+- 影响：越南导入 E2E 会在点击 Load 前选择 Volume priority，再断言 Details 中出现 `Mixed gap-fill`。
+- 后续：若要在 quantity 模式也强制标记填缝，需要另立任务定义 count-first 与填缝阶段的共同契约。
+
 ## 2026-07-08 loadingPriority 正式移除后的 E2E 契约更新
 
 - 背景：Goal B 按 2026-06-30 双模式废弃优先级决策彻底删除 `loadingPriority` 字段后，`npm run test:e2e -- --reporter=list` 结果为 91 passed、2 failed、1 skipped；两条失败均来自 E2E 仍尝试操作或断言 “Loading priority: First”。

@@ -14,6 +14,23 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-07-08-r50-loading-modes-priority-removal',
+    date: '2026-07-08',
+    title: { en: 'Distinct loading modes', zh: '装载模式真正分化' },
+    items: {
+      en: [
+        'Quantity mode now prefers blocks that place more cartons first, while Volume mode keeps choosing larger-volume blocks first.',
+        'Vietnam 20GP now produces different Quantity and Volume plans instead of identical results.',
+        'The deprecated First/Normal priority field has been removed from cargo forms, import templates, saved mappings, and packing output.',
+      ],
+      zh: [
+        '数量优先现在先选择可装更多箱的块；体积优先继续先选择大体积块。',
+        '越南十一批 20GP 的数量/体积两种模式现在会产出不同方案，不再完全一致。',
+        '已废弃的「先装/普通」优先级字段已从货物表单、导入模板、保存映射和装箱输出中移除。',
+      ],
+    },
+  },
+  {
     version: '2026-06-30-r49-loading-priority-ground-only',
     date: '2026-06-30',
     title: { en: 'Ground-only cargo and import flow', zh: '必须落地与导入流程' },

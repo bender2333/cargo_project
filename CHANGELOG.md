@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-08 (Block modes diverge)
+
+- Changed block-engine quantity sorting to prefer higher block counts before block volume, while volume mode keeps volume-first ordering. The post-block quantity fallback now also drains higher-remaining SKUs first so the count-first route keeps the large-container baseline.
+- Added Vietnam 20GP assertions that quantity and volume no longer produce identical results, quantity places at least as many cartons as volume, envelope fill stays above 88%, floor empty stays below 8%, and both modes are checked for overlap/bounds violations.
+- Vietnam 20GP measured result: quantity 463/864, util 90.63%, envelope fill 92.75%, floor empty 5.46%; volume 462/864, util 91.27%, envelope fill 92.75%, floor empty 4.15%.
+- Vietnam 40HQ regression check: quantity 839/864, util 77.87%; volume 823/864, util 76.62%, both above the frozen 76.5% baseline.
+- Updated the Vietnam import E2E gap-fill check to explicitly use Volume priority; `decision.md` records why the gap-fill presentation assertion moved off the new count-first default.
+- Release note: added `2026-07-08-r50-loading-modes-priority-removal` for distinct loading-mode behavior and the deprecated priority-field removal.
+- Verification: `rg -n "loadingPriority" src` returned no matches; `npm run lint` passed; `npm test` passed 56 files / 346 tests; `npm run build` passed with the existing Vite chunk-size warning; `npm run test:e2e -- --reporter=list` passed 93 / skipped 1 / failed 0.
+
 ## 2026-07-08 (Remove deprecated loadingPriority field)
 
 - Popped the pending `src/types.ts` deletion and completed the field removal across import parsing, template defaults, last-import config, custom cargo payloads, Workbench UI, packing output, block-engine routing, unit tests, and E2E fixtures.
