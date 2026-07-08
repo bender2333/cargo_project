@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { containers, effectiveContainer } from '../data/containers'
 import type { ContainerSpec, CargoItem, PlacedBox } from '../types'
-import { calculatePacking } from './packing'
+import { calculatePacking, shouldUseBlockEngine } from './packing'
 import { isGapFillBox } from './placementSource'
 
 const VOXEL_MM = 50
@@ -53,6 +53,34 @@ function packingMetrics(placed: PlacedBox[], container: ContainerSpec) {
 }
 
 describe('block-building packing engine', () => {
+  it('uses the block path for large pure carton loads even below the old five-SKU gate', () => {
+    const container: ContainerSpec = {
+      id: 'two-sku-cartons',
+      label: 'Two SKU carton container',
+      description: 'Enough room to exercise block placement below the old SKU gate',
+      length: 5000,
+      width: 2400,
+      height: 2400,
+      maxWeight: 50_000,
+      doorGap: 0,
+      topGap: 0,
+      sideGap: 0,
+    }
+    const items: CargoItem[] = [
+      { id: 'a', name: 'A carton', label: 'A', length: 1000, width: 600, height: 600, weight: 10, quantity: 49, color: '#f59e0b', canRotate: false, stackable: true },
+      { id: 'b', name: 'B carton', label: 'B', length: 800, width: 600, height: 600, weight: 10, quantity: 51, color: '#0ea5e9', canRotate: false, stackable: true },
+    ]
+
+    expect(shouldUseBlockEngine(items, 'quantity')).toBe(true)
+    expect(shouldUseBlockEngine(items.slice(0, 1), 'quantity')).toBe(false)
+    expect(shouldUseBlockEngine([{ ...items[0], maxStackLayers: 2 }, items[1]], 'quantity')).toBe(false)
+
+    const result = calculatePacking(container, items, { loadingMode: 'quantity' })
+
+    expect(result.placedCount).toBeGreaterThan(0)
+    expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
+  })
+
   it('removes the Vietnam 20GP vertical-gap regression in both optimization modes', () => {
     const fixture = vietnamFixture()
 

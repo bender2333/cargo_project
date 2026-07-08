@@ -1,5 +1,13 @@
 # Decision Log
 
+## 2026-07-08 块引擎适用范围扩展：先覆盖大批量纯散货，不接管堆叠约束场景
+
+- 背景：完成子任务 6 后复核原始目标，发现子任务 4 的块引擎仍限定在越南病灶形态（至少 5 个 SKU 且某 SKU 数量 ≥20），比“quantity/volume 两模式都走新引擎”的目标更窄。
+- 选项：A. 所有非 first-priority 的 quantity/volume 场景都走块引擎；B. 先扩大到大批量纯 carton 场景，保留 groundOnly、non-stackable、maxStackLayers、first-priority、小样本在旧路径；C. 继续维持越南专用门槛。
+- 决策：选择 B。实测 A 会让 31 托、capacity-one/top-fill、groundOnly、maxStackLayers、小样本坐标语义回归；B 去掉旧的“五 SKU”限制，覆盖 2+ SKU / 100+ 箱纯散货，同时避免尚未完成架构裁决的堆叠约束场景。
+- 影响：新增 `shouldUseBlockEngine` 明确路由边界；两 SKU 大批量纯箱用例现在进入块引擎。完整“所有 quantity/volume 都走块引擎”的目标仍未最终达成，后续需要让块引擎原生处理 priority、groundOnly、non-stackable、maxStackLayers 和小样本坐标语义后再继续扩大。
+- 后续：下一步应优先把 stack-capacity/top-fill 规则移植进块选择评价或分阶段路由，而不是继续放宽门槛。
+
 ## 2026-07-07 子任务 6 回归收口：构建门禁未过，暂不部署
 
 - 背景：子任务 6 要求 `lint && test && build`、E2E 和部署收口。子任务 5 完成后已复跑 lint、全量单测、全量 E2E；`npm run build` 仍在 TypeScript 阶段因既有 `src/types.ts` 删除 `loadingPriority` 而失败。

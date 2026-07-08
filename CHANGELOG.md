@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-08 (Block-building engine — pure carton route expansion)
+
+- Expanded the guarded block-engine route from the original Vietnam-shaped `5+ SKU / quantity >= 20` condition to any large pure carton load: `quantity` / `volume`, at least 2 SKUs, at least 100 cartons, no first-priority cargo, no `groundOnly`, no non-stackable cargo, and no per-item `maxStackLayers`.
+- Added `shouldUseBlockEngine` so the route boundary is explicit and testable, and added coverage for a two-SKU / 100-carton load that would have missed the old five-SKU gate.
+- Verification: `npx vitest run src/lib/packing.blockEngine.test.ts src/lib/packing.test.ts src/lib/packing.stackfill.test.ts src/lib/packing.31pallet.test.ts` passed 4 files / 56 tests; `npm run lint` passed; `npm test` passed 56 files / 348 tests.
+- Build gate: `npm run build` still fails on the pre-existing dirty `src/types.ts` removal of `loadingPriority`; this route change does not add new `loadingPriority` type errors.
+- E2E: first full run had one transient startup timeout before the test body (`English` button not found); targeted rerun passed; second full `npm run test:e2e` passed 93 / skipped 1 / failed 0 with the temporary backend stopped after the run.
+
 ## 2026-07-07 (Block-building engine — Subtask 6 regression closure)
 
 - Regression closure for the block-building sequence: subtask 2 EMS, subtask 3 block candidates, subtask 4 guarded block route, and subtask 5 mixed gap-fill presentation are committed separately.

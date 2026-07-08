@@ -803,6 +803,15 @@ function canUseTopSurfacePoints(item: CargoItem, hasFirstPriorityCargo = false) 
   return !item.groundOnly && (stackCapacity(item) === 1 || (hasFirstPriorityCargo && item.loadingPriority !== 'first'))
 }
 
+export function shouldUseBlockEngine(cargoItems: CargoItem[], loadingMode: LoadingMode): boolean {
+  const totalCargoCount = cargoItems.reduce((sum, item) => sum + item.quantity, 0)
+  return (loadingMode === 'quantity' || loadingMode === 'volume')
+    && cargoItems.length >= 2
+    && totalCargoCount >= 100
+    && !cargoItems.some((item) => (item as CargoItem & { loadingPriority?: string }).loadingPriority === 'first')
+    && cargoItems.every((item) => !item.groundOnly && item.stackable && item.maxStackLayers === undefined)
+}
+
 export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[], options: CalculatePackingOptions = {}): PackingResult {
   const effective = effectiveContainer(container)
   const placed: PlacedBox[] = []
@@ -1046,10 +1055,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     return undefined
   }
 
-  const hasRepeatedMultiSkuCartons = cargoItems.length >= 5 && cargoItems.some((item) => item.quantity >= 20)
-  const useBlockEngine = (loadingMode === 'quantity' || loadingMode === 'volume')
-    && hasRepeatedMultiSkuCartons
-    && !hasFirstPriorityCargo
+  const useBlockEngine = shouldUseBlockEngine(cargoStates.map((state) => state.item), loadingMode)
 
   if (useBlockEngine) {
     const rejected = new Set<string>()
