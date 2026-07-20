@@ -3,10 +3,13 @@
 ## 2026-07-20 (issues/0720 fixes in progress)
 
 - [x] Record the approved implementation plan and regression gates.
-- [ ] Fix quick-place orientation metadata and replay the supplied D-cargo dimensions.
+- [x] Fix quick-place orientation metadata and replay the supplied D-cargo dimensions.
 - [ ] Keep supported stacked cargo on its support plane during vertical rotation.
 - [ ] Add a directly importable standard XLSX template download.
 - [ ] Run lint, unit, build, full E2E, release-note, production deploy, and remote E2E gates.
+- Quick-place fix: rotated candidates now start from the cargo's original dimensions and use the shared manual-orientation transform, keeping `base*`, signed axes, stored dimensions, and rendered footprint consistent.
+- Quick-place TDD: the new WLH regression failed with swapped base dimensions/identity axes before the fix; the supplied 0720 D-cargo dimensions reproduced a `305x530` validated footprint rendered as `530x305`. After the fix, 48 dense D placements remained validation/render consistent.
+- Quick-place verification: `npx vitest run src/lib/quickPlace.test.ts src/lib/renderedFootprint.test.ts src/lib/orientationTransform.test.ts` passed 3 files / 18 tests.
 
 ## 2026-07-20 (issues/0720 diagnosis)
 

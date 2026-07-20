@@ -3,6 +3,7 @@ import {
   addBox,
   isBlockingManualIssue,
   makeManualBox,
+  setManualBoxOrientation,
   validateDraft,
 } from './manualPlacement'
 import type { ManualDraft, ManualPlacedBox, ValidationIssue } from './manualPlacement'
@@ -58,11 +59,6 @@ function quickPlaceCandidates(draft: ManualDraft, container: ContainerSpec): Pac
     })
 }
 
-function orientationLabel(orientationKey: BoxOrientation['orientationKey']) {
-  const [x, y, z] = orientationKey.split('')
-  return `X:${x}+ Y:${y}+ Z:${z}+`
-}
-
 function manualBoxAsPlacedBox(box: ManualPlacedBox): PlacedBox {
   return {
     id: box.id,
@@ -103,9 +99,9 @@ function makeCandidateBox(input: QuickPlaceInput, point: PackingPoint, box: BoxO
     cargoId: input.cargo.id,
     label: input.cargo.label ?? input.cargo.name,
     color: input.cargo.color,
-    length: box.length,
-    width: box.width,
-    height: box.height,
+    length: input.cargo.length,
+    width: input.cargo.width,
+    height: input.cargo.height,
     weight: input.cargo.weight,
     canRotate: input.cargo.canRotate,
     stackable: input.cargo.stackable,
@@ -114,13 +110,12 @@ function makeCandidateBox(input: QuickPlaceInput, point: PackingPoint, box: BoxO
     y: point.y,
     z: point.z,
   })
+  const orientedBox = setManualBoxOrientation({ boxes: [manualBox] }, manualBox.id, box.orientationKey).boxes[0]
   return {
-    ...manualBox,
-    orientationKey: box.orientationKey,
-    labelRotationDeg: 0 as const,
-    yawQuarterTurn: 0 as const,
-    pitchQuarterTurn: 0 as const,
-    orientationLabel: orientationLabel(box.orientationKey),
+    ...orientedBox,
+    x: point.x,
+    y: point.y,
+    z: point.z,
   }
 }
 
