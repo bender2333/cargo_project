@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+.worktrees/
 *.local
 
 # SQLite databases must never be committed — they contain password hashes.
