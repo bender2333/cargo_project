@@ -6,7 +6,8 @@
 - [x] Fix quick-place orientation metadata and replay the supplied D-cargo dimensions.
 - [x] Keep supported stacked cargo on its support plane during vertical rotation.
 - [x] Add a directly importable standard XLSX template download.
-- [ ] Run lint, unit, build, full E2E, release-note, production deploy, and remote E2E gates.
+- [x] Run lint, unit, build, local E2E, supplied-batch replay, and release-note gates.
+- [ ] Run production deploy and remote E2E gates.
 - Quick-place fix: rotated candidates now start from the cargo's original dimensions and use the shared manual-orientation transform, keeping `base*`, signed axes, stored dimensions, and rendered footprint consistent.
 - Quick-place TDD: the new WLH regression failed with swapped base dimensions/identity axes before the fix; the supplied 0720 D-cargo dimensions reproduced a `305x530` validated footprint rendered as `530x305`. After the fix, 48 dense D placements remained validation/render consistent.
 - Quick-place verification: `npx vitest run src/lib/quickPlace.test.ts src/lib/renderedFootprint.test.ts src/lib/orientationTransform.test.ts` passed 3 files / 18 tests.
@@ -19,6 +20,9 @@
 - Import-template fixture regression: the unchanged Vietnam combined-dimension workflow and Russian 31-row business workbook workflow both passed (2/2).
 - Import-template local gates: `npm run lint` passed; `npm test` passed 56 files / 351 tests; `npm run build` passed with the existing large-chunk warning.
 - Release note: added `2026-07-20-r51-manual-placement-template-download` with bilingual notes for orientation-accurate quick placement, support-plane-preserving flips, and the standard blank import template download.
+- Supplied-batch replay: replayed the `issues/0720` A-E data in the 5900x2350x2380 effective 20GP container. Quick Place accepted 132 valid boxes (A=10, B=1, C=21, D=100, E=0/no space); every accepted box had `renderedFootprint === stored dimensions`, and final `validateDraft()` returned no boundary, overlap, support, or stacking issues.
+- Full local gates (fresh run): `npm run lint` exited 0; `npm test` passed 56 files / 351 tests; `npm run build` exited 0 with the existing >500 kB chunk warning.
+- Local browser regression: the configured full Playwright suite completed with 94 passed, 0 failed, and 1 source-level static skip (`responsive-3d.spec.ts`). The skipped monotonic-canvas assertion was executed separately without changing the test: 1 passed, measuring 946 px at 1366, 1476 px at 1920, and 2116 px at 2560.
 
 ## 2026-07-20 (issues/0720 diagnosis)
 
