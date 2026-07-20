@@ -915,6 +915,71 @@ test('supports Excel import/export affordance and Chinese mode', async ({ page }
   await expect(page.getByText('边界检查通过：所有已装箱体都在有效货柜内。')).toBeVisible()
 })
 
+test('downloads a standard Chinese XLSX template that imports without mapping', async ({ page }) => {
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByTestId('download-import-template').click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toBe('标准空白货物导入模板.xlsx')
+
+  const downloadPath = await download.path()
+  const workbook = XLSX.read(await fs.readFile(downloadPath), { type: 'buffer' })
+  expect(workbook.SheetNames).toEqual(['货物'])
+  const sheet = workbook.Sheets['货物']
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true })
+  expect(rows[0]).toEqual([
+    '标签',
+    '货物名称',
+    '长mm',
+    '宽mm',
+    '高mm',
+    '重量kg',
+    '数量',
+    '颜色',
+    '允许旋转',
+    '允许堆叠',
+    '最大堆叠层数',
+    '必须落地',
+  ])
+
+  XLSX.utils.sheet_add_aoa(sheet, [[
+    'TPL',
+    '模板回导货物',
+    1200,
+    800,
+    600,
+    125,
+    3,
+    '#1f6feb',
+    '否',
+    '否',
+    2,
+    '是',
+  ]], { origin: -1 })
+  const importBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+  await page.locator('input[accept*="xlsx"]').setInputFiles({
+    name: 'completed-cargo-import.xlsx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    buffer: importBuffer,
+  })
+  await expect(page.getByTestId('import-log-panel').getByText('导入成功: 1')).toBeVisible()
+  await expect(page.getByTestId('mapping-modal')).toHaveCount(0)
+  const cargoItem = page.getByTestId('cargo-list-item').filter({ hasText: '模板回导货物' })
+  await expect(cargoItem).toBeVisible()
+  await expect(cargoItem).toContainText('TPL')
+  await expect(cargoItem).toContainText('1200 x 800 x 600 mm')
+  await expect(cargoItem).toContainText('125 kg, 数量 3')
+  await expect(cargoItem.locator('span[style]')).toHaveCSS('background-color', 'rgb(31, 111, 235)')
+  await expect(cargoItem).toContainText('必须落地')
+  await expect(cargoItem).toContainText('最大堆叠层数: 2 (货物自带)')
+
+  await cargoItem.getByRole('button', { name: '编辑货物: 模板回导货物' }).click()
+  const editForm = page.getByRole('form', { name: '编辑货物项目' })
+  await expect(editForm.getByLabel('允许旋转')).not.toBeChecked()
+  await expect(editForm.getByLabel('允许堆叠')).not.toBeChecked()
+  await expect(editForm.getByLabel('必须落地')).toBeChecked()
+  await expect(editForm.getByLabel('颜色')).toHaveValue('#1f6feb')
+})
+
 test('creates an import template from the visible manager and reuses it for Excel import', async ({ page }) => {
   await openEnglish(page)
   const filePath = await createTemplateWorkbookFile()

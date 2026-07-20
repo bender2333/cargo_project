@@ -208,6 +208,7 @@ const copy = {
     topGap: 'Top gap mm',
     sideGap: 'Side gap mm',
     importExcel: 'Import XLSX',
+    downloadImportTemplate: 'Download import template',
     exportExcel: 'Export XLSX',
     exportView: 'Export view',
     exportLoadingSheetPdf: 'Export loading sheet PDF',
@@ -512,6 +513,7 @@ const copy = {
     topGap: '顶部余量 mm',
     sideGap: '左右预留 mm',
     importExcel: '导入 XLSX',
+    downloadImportTemplate: '下载导入模板',
     exportExcel: '导出 XLSX',
     exportView: '导出视图',
     exportLoadingSheetPdf: '导出作业分解图 PDF',
@@ -2537,6 +2539,24 @@ function Workbench() {
     })
   }
 
+  const downloadImportTemplate = () => {
+    const template = locale === 'zh'
+      ? {
+          filename: '标准空白货物导入模板.xlsx',
+          sheetName: '货物',
+          headers: ['标签', '货物名称', '长mm', '宽mm', '高mm', '重量kg', '数量', '颜色', '允许旋转', '允许堆叠', '最大堆叠层数', '必须落地'],
+        }
+      : {
+          filename: 'standard-cargo-import-template.xlsx',
+          sheetName: 'Cargo',
+          headers: ['Label', 'Name', 'Length mm', 'Width mm', 'Height mm', 'Weight kg', 'Quantity', 'Color', 'Rotate', 'Stackable', 'Max stack layers', 'Ground only'],
+        }
+    const sheet = XLSX.utils.aoa_to_sheet([template.headers])
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, sheet, template.sheetName)
+    XLSX.writeFile(workbook, template.filename)
+  }
+
   const importExcel = async (file: File | null) => {
     if (!file) return
     const MAX_BYTES = 5 * 1024 * 1024
@@ -4081,6 +4101,7 @@ function Workbench() {
                   event.currentTarget.value = ''
                   void importExcel(file)
                 }} /></label>
+                <button className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold" data-testid="download-import-template" type="button" onClick={downloadImportTemplate}>{t.downloadImportTemplate}</button>
                 <select
                   className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold"
                   value={selectedExportTemplateId}
