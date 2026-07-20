@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-20 (issues/0720 fixes in progress)
+
+- [x] Record the approved implementation plan and regression gates.
+- [ ] Fix quick-place orientation metadata and replay the supplied D-cargo dimensions.
+- [ ] Keep supported stacked cargo on its support plane during vertical rotation.
+- [ ] Add a directly importable standard XLSX template download.
+- [ ] Run lint, unit, build, full E2E, release-note, production deploy, and remote E2E gates.
+
 ## 2026-07-20 (issues/0720 diagnosis)
 
 - Located the manual quick-place rendering defect: rotated candidate dimensions are stored as base dimensions while only `orientationKey` is overwritten, so validation and Three.js render different footprints.
