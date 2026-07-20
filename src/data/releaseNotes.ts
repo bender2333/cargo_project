@@ -14,6 +14,23 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-07-20-r51-manual-placement-template-download',
+    date: '2026-07-20',
+    title: { en: 'Safer manual placement and import template', zh: '手动放置修正与导入模板' },
+    items: {
+      en: [
+        'Quick Place now validates bounds and collisions using the same real orientation dimensions shown in 3D, preventing visual overlaps and out-of-container placement.',
+        'Flipping supported cargo up or down now keeps its original support plane; rotations that would leave upper cargo floating or overlapping are rejected.',
+        'A directly re-importable blank standard template is now available beside Import XLSX.',
+      ],
+      zh: [
+        '快捷放置现在使用与 3D 显示一致的真实朝向尺寸校验边界和碰撞，避免视觉重叠或越箱。',
+        '已受支撑货物上下翻转时会保持原支撑面；若旋转会让上层货物浮空或重叠，则拒绝旋转。',
+        '「导入 XLSX」旁新增可直接回导的标准空白模板下载。',
+      ],
+    },
+  },
+  {
     version: '2026-07-08-r50-loading-modes-priority-removal',
     date: '2026-07-08',
     title: { en: 'Distinct loading modes', zh: '装载模式真正分化' },

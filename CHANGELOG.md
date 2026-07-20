@@ -18,6 +18,7 @@
 - Import-template TDD: RED timed out locating the missing `download-import-template` button (1 failed); GREEN downloaded `标准空白货物导入模板.xlsx`, verified sheet `货物` and all 12 headers, appended a complete cargo row with non-default rotation/stacking values, and re-imported every exposed field without opening the mapping modal (1 passed).
 - Import-template fixture regression: the unchanged Vietnam combined-dimension workflow and Russian 31-row business workbook workflow both passed (2/2).
 - Import-template local gates: `npm run lint` passed; `npm test` passed 56 files / 351 tests; `npm run build` passed with the existing large-chunk warning.
+- Release note: added `2026-07-20-r51-manual-placement-template-download` with bilingual notes for orientation-accurate quick placement, support-plane-preserving flips, and the standard blank import template download.
 
 ## 2026-07-20 (issues/0720 diagnosis)
 
