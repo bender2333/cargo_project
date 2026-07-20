@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-20 (issues/0720 diagnosis)
+
+- Located the manual quick-place rendering defect: rotated candidate dimensions are stored as base dimensions while only `orientationKey` is overwritten, so validation and Three.js render different footprints.
+- Parsed the supplied snapshots: the 109-box snapshot contains 47 orientation-metadata mismatches and 49 rendered AABB overlap pairs while the live manual validator reports no issues. The captured coordinates remain inside the effective container, so boundary overflow is not yet proven by the available snapshots.
+- Located the stacked-flip behavior: four-way rotation exists, but non-floor height-changing rotations preserve vertical center instead of the supporting base plane, producing either a support gap (`floating`) or penetration (`overlap`).
+- Confirmed that downloadable cargo-import workbooks are absent. Current “import templates” are saved field-mapping rules; the legacy archive generated CSV client-side, and the current `xlsx` dependency can generate a standard workbook without a backend download endpoint.
+- Verification: focused unit baseline passed 5 files / 78 tests. Focused Playwright run attempted 2 manual-flow tests; both stopped at login because the API backend on `127.0.0.1:3010` was not running (`ECONNREFUSED`). Product code and test assertions were not changed.
+
 ## 2026-07-08 (Block modes diverge)
 
 - Changed block-engine quantity sorting to prefer higher block counts before block volume, while volume mode keeps volume-first ordering. The post-block quantity fallback now also drains higher-remaining SKUs first so the count-first route keeps the large-container baseline.
