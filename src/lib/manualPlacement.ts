@@ -213,6 +213,7 @@ function inferTurnsForOrientation(orientationKey: OrientationKey): { yawQuarterT
 function applyOrientation(
   box: ManualPlacedBox,
   orientationKey: OrientationKey,
+  boxes: ManualPlacedBox[],
   turns: { yawQuarterTurn?: QuarterTurn; pitchQuarterTurn?: QuarterTurn; orientationAxes?: OrientationAxes } = {},
 ) {
   const base = baseDimensionsFor(box)
@@ -221,11 +222,11 @@ function applyOrientation(
   const pitchQuarterTurn = turns.pitchQuarterTurn ?? inferred.pitchQuarterTurn
   const orientationAxes = turns.orientationAxes ?? canonicalAxesForOrientation(orientationKey)
   const nextDimensions = dimensionsForManualOrientation(base, orientationKey)
-  // X/Y still rotate about the footprint centre. Grounded boxes snap back to the floor
-  // after a height-changing rotation; stacked boxes keep their vertical centre.
+  // X/Y rotate about the footprint centre. Supported boxes keep their base plane;
+  // unsupported boxes keep their vertical centre.
   const x = box.x + (box.length - nextDimensions.length) / 2
   const y = box.y + (box.width - nextDimensions.width) / 2
-  const z = box.z <= EPSILON ? 0 : box.z + (box.height - nextDimensions.height) / 2
+  const z = findSupport(box, boxes, 0) ? box.z : box.z + (box.height - nextDimensions.height) / 2
   return {
     ...box,
     ...nextDimensions,
@@ -274,7 +275,7 @@ export function setManualBoxOrientation(
   return {
     boxes: draft.boxes.map((box) => {
       if (box.id !== id) return box
-      return applyOrientation(box, orientationKey)
+      return applyOrientation(box, orientationKey, draft.boxes)
     }),
   }
 }
@@ -292,7 +293,7 @@ export function rotateBoxRight90(draft: ManualDraft, id: string): ManualDraft {
   const orientationKey = orientationKeyForAxes(orientationAxes)
   return {
     boxes: draft.boxes.map((box) =>
-      box.id === id ? applyOrientation(box, orientationKey, { yawQuarterTurn, pitchQuarterTurn, orientationAxes }) : box,
+      box.id === id ? applyOrientation(box, orientationKey, draft.boxes, { yawQuarterTurn, pitchQuarterTurn, orientationAxes }) : box,
     ),
   }
 }
@@ -306,7 +307,7 @@ export function rotateBoxLeft90(draft: ManualDraft, id: string): ManualDraft {
   const orientationKey = orientationKeyForAxes(orientationAxes)
   return {
     boxes: draft.boxes.map((box) =>
-      box.id === id ? applyOrientation(box, orientationKey, { yawQuarterTurn, pitchQuarterTurn, orientationAxes }) : box,
+      box.id === id ? applyOrientation(box, orientationKey, draft.boxes, { yawQuarterTurn, pitchQuarterTurn, orientationAxes }) : box,
     ),
   }
 }
@@ -321,7 +322,7 @@ export function rotateBoxDown90(draft: ManualDraft, id: string): ManualDraft {
   const orientationKey = orientationKeyForAxes(orientationAxes)
   return {
     boxes: draft.boxes.map((box) =>
-      box.id === id ? applyOrientation(box, orientationKey, { yawQuarterTurn, pitchQuarterTurn, orientationAxes }) : box,
+      box.id === id ? applyOrientation(box, orientationKey, draft.boxes, { yawQuarterTurn, pitchQuarterTurn, orientationAxes }) : box,
     ),
   }
 }
@@ -336,7 +337,7 @@ export function rotateBoxUp90(draft: ManualDraft, id: string): ManualDraft {
   const orientationKey = orientationKeyForAxes(orientationAxes)
   return {
     boxes: draft.boxes.map((box) =>
-      box.id === id ? applyOrientation(box, orientationKey, { yawQuarterTurn, pitchQuarterTurn, orientationAxes }) : box,
+      box.id === id ? applyOrientation(box, orientationKey, draft.boxes, { yawQuarterTurn, pitchQuarterTurn, orientationAxes }) : box,
     ),
   }
 }
@@ -367,7 +368,15 @@ export function dryRunRotation(draft: ManualDraft, id: string, container: Contai
         ? rotateBoxUp90(draft, id)
         : rotateBoxRight90(draft, id)
   const rotatedBox = rotated.boxes.find((b) => b.id === id) ?? null
-  const issues = validateDraft(rotated, container, supportPolicy).filter((issue) => issue.boxId === id)
+  const originalBlockingIssueKeys = new Set(
+    validateDraft(draft, container, supportPolicy)
+      .filter(isBlockingManualIssue)
+      .map((issue) => `${issue.boxId}:${issue.type}`),
+  )
+  const issues = validateDraft(rotated, container, supportPolicy).filter((issue) => (
+    issue.boxId === id
+    || (isBlockingManualIssue(issue) && !originalBlockingIssueKeys.has(`${issue.boxId}:${issue.type}`))
+  ))
   return { ok: !issues.some(isBlockingManualIssue), rotatedBox, issues }
 }
 

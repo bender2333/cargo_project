@@ -4,12 +4,16 @@
 
 - [x] Record the approved implementation plan and regression gates.
 - [x] Fix quick-place orientation metadata and replay the supplied D-cargo dimensions.
-- [ ] Keep supported stacked cargo on its support plane during vertical rotation.
+- [x] Keep supported stacked cargo on its support plane during vertical rotation.
 - [ ] Add a directly importable standard XLSX template download.
 - [ ] Run lint, unit, build, full E2E, release-note, production deploy, and remote E2E gates.
 - Quick-place fix: rotated candidates now start from the cargo's original dimensions and use the shared manual-orientation transform, keeping `base*`, signed axes, stored dimensions, and rendered footprint consistent.
 - Quick-place TDD: the new WLH regression failed with swapped base dimensions/identity axes before the fix; the supplied 0720 D-cargo dimensions reproduced a `305x530` validated footprint rendered as `530x305`. After the fix, 48 dense D placements remained validation/render consistent.
 - Quick-place verification: `npx vitest run src/lib/quickPlace.test.ts src/lib/renderedFootprint.test.ts src/lib/orientationTransform.test.ts` passed 3 files / 18 tests.
+- Stacked-rotation fix: height-changing `down` / `up` rotations now keep a box on its existing support plane when it was supported before rotation; unsupported non-floor boxes retain geometric-centre rotation, and `validateDraft()` still enforces support, bounds, overlap, and stacking rules.
+- Stacked-rotation TDD: RED failed both directions with `expected 400 to be 600` (2 failed / 55 passed); GREEN `npx vitest run src/lib/manualPlacement.test.ts src/lib/orientationTransform.test.ts` passed 2 files / 57 tests.
+- Stacked-rotation dependency guard: `dryRunRotation()` now keeps the target box's full issue list and adds newly introduced blocking issues on dependent boxes, while ignoring unrelated blocking issues already present before rotation.
+- Dependency TDD: a valid three-layer fixture RED with the upper-box `floating` issue omitted (`1 failed / 57 passed`); GREEN focused rotation tests passed 2 files / 58 tests.
 
 ## 2026-07-20 (issues/0720 diagnosis)
 

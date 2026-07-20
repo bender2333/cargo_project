@@ -580,6 +580,7 @@
 - 决策：采用第二种。`applyOrientation()` 对 `box.z <= EPSILON` 的贴地箱使用 `z=0`，x/y 仍按尺寸差的一半保持中心补偿；非贴地箱继续按原有 z 中心补偿。同步补全世界轴四向旋转：左/右 yaw、上/下 pitch，`dryRunRotation()` 覆盖四个方向。
 - 影响：关闭 2026-05-29 第二十九轮记录的手动旋转 `WHL` vs `WLH` 待裁定缺口；贴地箱不再因高度变化旋转被判定悬空。贴角旋转仍可能因 x/y 越界被显式阻断，语义不变。后续 UI 浮层可以直接暴露四向旋转按钮。
 - 验证：新增 `src/lib/manualPlacement.test.ts` 覆盖贴地箱高度变化后 `z=0`、`R` 后 `Shift+R` 可到 `WHL`、left/right 与 up/down 互为逆旋转，以及四方向 dry-run。`npx vitest run src/lib/manualPlacement.test.ts` 通过 40 项。
+- 2026-07-20 增补：上述“堆叠箱保留垂直中心补偿”只适用于旋转前没有支撑的非贴地箱。旋转前 `findSupport(box, boxes, 0)` 能找到地面或箱体支撑时保留原 `z` 支撑面，再由既有 50% 支撑、边界和重叠校验决定旋转是否合法；不增加自动找位或放宽校验。`dryRunRotation()` 还会把旋转后新出现的依赖箱 blocking issue（按 `boxId:type`）纳入拒绝，旋转前已存在的其他箱无关问题不会阻断本次旋转。
 
 ## 2026-06-05 手动模式 3D 选中箱浮层替代旧工具栏
 

@@ -484,6 +484,81 @@ describe('manualPlacement', () => {
     expect(validateDraft(down, container()).filter((issue) => issue.boxId === 'box-1')).toEqual([])
   })
 
+  it.each(['down', 'up'] as const)('keeps a supported stacked box on its support plane when rotated %s', (direction) => {
+    const draft = addBox(addBox(emptyDraft(), makeManualBox({
+      id: 'base',
+      cargoId: 'cargo-base',
+      label: 'Base',
+      color: '#fff',
+      length: 1000,
+      width: 1000,
+      height: 600,
+      x: 0,
+      y: 0,
+    })), makeManualBox({
+      id: 'top',
+      cargoId: 'cargo-top',
+      label: 'Top',
+      color: '#fff',
+      length: 800,
+      width: 800,
+      height: 400,
+      x: 100,
+      y: 100,
+      z: 600,
+    }))
+
+    const result = dryRunRotation(draft, 'top', container(), direction)
+
+    expect(result.rotatedBox?.z).toBe(600)
+    expect(result.ok).toBe(true)
+    expect(result.issues.filter((issue) => issue.type === 'floating' || issue.type === 'overlap')).toEqual([])
+  })
+
+  it('rejects rotating a supported middle box when it leaves an upper box floating', () => {
+    const draft = addBox(addBox(addBox(emptyDraft(), makeManualBox({
+      id: 'base',
+      cargoId: 'cargo-base',
+      label: 'Base',
+      color: '#fff',
+      length: 1000,
+      width: 1000,
+      height: 600,
+      x: 0,
+      y: 0,
+    })), makeManualBox({
+      id: 'middle',
+      cargoId: 'cargo-middle',
+      label: 'Middle',
+      color: '#fff',
+      length: 800,
+      width: 400,
+      height: 600,
+      x: 100,
+      y: 300,
+      z: 600,
+    })), makeManualBox({
+      id: 'top',
+      cargoId: 'cargo-top',
+      label: 'Top',
+      color: '#fff',
+      length: 600,
+      width: 300,
+      height: 200,
+      x: 200,
+      y: 350,
+      z: 1200,
+    }))
+
+    expect(validateDraft(draft, container())).toEqual([])
+
+    const result = dryRunRotation(draft, 'middle', container(), 'down')
+
+    expect(result.rotatedBox).toMatchObject({ height: 400, z: 600 })
+    expect(result.issues.some((issue) => issue.boxId === 'top' && issue.type === 'floating')).toBe(true)
+    expect(result.ok).toBe(false)
+  })
+
   it('allows grounded R then Shift+R to reach WHL instead of floating back to WLH', () => {
     const draft = rotateBoxRight90(addBox(emptyDraft(), makeManualBox({
       id: 'box-1',
