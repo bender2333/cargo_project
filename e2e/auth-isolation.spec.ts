@@ -19,6 +19,20 @@ function importTemplateDto(id: string, name: string) {
   }
 }
 
+function exportTemplateDto(id: string, name: string) {
+  return {
+    id,
+    name,
+    columns: [
+      { field: 'label', header: 'Label' },
+      { field: 'name', header: 'Name' },
+      { field: 'originalLength', header: 'Length', unit: 'mm' },
+    ],
+    createdAt: '2026-07-22T00:00:00.000Z',
+    updatedAt: '2026-07-22T00:00:00.000Z',
+  }
+}
+
 function realWorkbookPath() {
   return path.join(process.cwd(), 'test-data', 'excel', '俄罗斯整托装柜尺寸.xlsx')
 }
@@ -697,6 +711,326 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await Promise.all([
       deleteDialog,
       page.getByTestId(`template-manager-delete-${existingTemplate.id}`).click(),
+    ])
+    await expect.poll(() => deletes).toBe(1)
+    await expect(row).toContainText(existingTemplate.name)
+  })
+
+  test('surfaces export template failures without blocking the default export and recovers on retry', async ({ page }) => {
+    let reads = 0
+    await page.route('**/api/export-templates', async (route) => {
+      if (route.request().method() === 'GET') {
+        reads += 1
+        await route.fulfill({
+          status: reads === 1 ? 500 : 200,
+          contentType: 'application/json',
+          body: reads === 1 ? JSON.stringify({ error: 'Database unavailable' }) : '[]',
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+
+    await page.getByTestId('nav-template-manager').click()
+    await expect(page.getByTestId('export-template-load-error')).toHaveText(/导出模板加载失败/)
+    await expect(page.getByTestId('export-template-empty-state')).toHaveCount(0)
+
+    await page.getByTestId('nav-overview').click()
+    const toolbarError = page.getByTestId('export-template-toolbar-load-error')
+    const exportSelect = page.getByTestId('export-template-select')
+    await expect(toolbarError).toHaveText(/导出模板加载失败/)
+    await expect(exportSelect).toBeDisabled()
+
+    const downloadPromise = page.waitForEvent('download')
+    await page.getByRole('button', { name: '导出 XLSX', exact: true }).click()
+    await downloadPromise
+
+    await toolbarError.getByRole('button', { name: '重试', exact: true }).click()
+    await expect.poll(() => reads).toBe(2)
+    await expect(toolbarError).toHaveCount(0)
+    await expect(exportSelect).toBeEnabled()
+
+    await page.getByTestId('nav-template-manager').click()
+    await expect(page.getByTestId('export-template-load-error')).toHaveCount(0)
+    await expect(page.getByTestId('export-template-empty-state')).toBeVisible()
+  })
+
+  test('keeps the latest export template list when an older failure finishes last', async ({ page }) => {
+    let reads = 0
+    let releaseStaleFailure!: () => void
+    const staleFailureGate = new Promise<void>((resolve) => {
+      releaseStaleFailure = resolve
+    })
+    const latestTemplate = exportTemplateDto('latest-export-after-failure', 'Latest export after failure')
+    await page.route('**/api/export-templates', async (route) => {
+      if (route.request().method() === 'GET') {
+        reads += 1
+        if (reads === 2) {
+          await staleFailureGate
+          await route.fulfill({
+            status: 500,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: 'Stale export template failure' }),
+          })
+          return
+        }
+        await route.fulfill({
+          status: reads === 1 ? 500 : 200,
+          contentType: 'application/json',
+          body: reads === 1
+            ? JSON.stringify({ error: 'Database unavailable' })
+            : JSON.stringify([latestTemplate]),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+    await page.getByTestId('nav-template-manager').click()
+    await expect(page.getByTestId('export-template-load-error')).toBeVisible()
+
+    const retry = page.getByTestId('export-template-load-error').getByRole('button', { name: '重试', exact: true })
+    await retry.click()
+    await retry.click()
+    await expect.poll(() => reads).toBe(3)
+    await expect(page.getByTestId(`export-template-row-${latestTemplate.id}`)).toContainText(latestTemplate.name)
+
+    const staleFailureResponse = page.waitForResponse((response) => (
+      new URL(response.url()).pathname === '/api/export-templates'
+      && response.request().method() === 'GET'
+      && response.status() === 500
+    ))
+    releaseStaleFailure()
+    await staleFailureResponse
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    }))
+    await expect(page.getByTestId('export-template-load-error')).toHaveCount(0)
+    await expect(page.getByTestId(`export-template-row-${latestTemplate.id}`)).toContainText(latestTemplate.name)
+  })
+
+  test('keeps the latest export template list when an older success finishes last', async ({ page }) => {
+    let reads = 0
+    let releaseStaleSuccess!: () => void
+    const staleSuccessGate = new Promise<void>((resolve) => {
+      releaseStaleSuccess = resolve
+    })
+    const latestTemplate = exportTemplateDto('latest-export-after-success', 'Latest export after success')
+    await page.route('**/api/export-templates', async (route) => {
+      if (route.request().method() === 'GET') {
+        reads += 1
+        if (reads === 2) {
+          await staleSuccessGate
+          await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+          return
+        }
+        await route.fulfill({
+          status: reads === 1 ? 500 : 200,
+          contentType: 'application/json',
+          body: reads === 1
+            ? JSON.stringify({ error: 'Database unavailable' })
+            : JSON.stringify([latestTemplate]),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+    await page.getByTestId('nav-template-manager').click()
+    await expect(page.getByTestId('export-template-load-error')).toBeVisible()
+
+    const retry = page.getByTestId('export-template-load-error').getByRole('button', { name: '重试', exact: true })
+    await retry.click()
+    await retry.click()
+    await expect.poll(() => reads).toBe(3)
+    await expect(page.getByTestId(`export-template-row-${latestTemplate.id}`)).toContainText(latestTemplate.name)
+
+    const staleSuccessResponse = page.waitForResponse((response) => (
+      new URL(response.url()).pathname === '/api/export-templates'
+      && response.request().method() === 'GET'
+      && response.status() === 200
+    ))
+    releaseStaleSuccess()
+    await staleSuccessResponse
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    }))
+    await expect(page.getByTestId(`export-template-row-${latestTemplate.id}`)).toContainText(latestTemplate.name)
+    await expect(page.getByTestId('export-template-empty-state')).toHaveCount(0)
+  })
+
+  test('keeps authoritative export templates when the bootstrap list finishes after create', async ({ page }) => {
+    let reads = 0
+    let writes = 0
+    let releaseBootstrap!: () => void
+    const bootstrapGate = new Promise<void>((resolve) => {
+      releaseBootstrap = resolve
+    })
+    const createdTemplate = exportTemplateDto('created-export-during-bootstrap', 'Created export during bootstrap')
+    const existingTemplate = exportTemplateDto('existing-export-before-bootstrap', 'Existing export before bootstrap')
+
+    await page.route('**/api/export-templates**', async (route) => {
+      const method = route.request().method()
+      const pathname = new URL(route.request().url()).pathname
+      if (method === 'GET' && pathname === '/api/export-templates') {
+        reads += 1
+        if (reads === 1) {
+          await bootstrapGate
+          await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+          return
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([createdTemplate, existingTemplate]),
+        })
+        return
+      }
+      if (method === 'POST' && pathname === '/api/export-templates') {
+        writes += 1
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify(createdTemplate),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+    await expect.poll(() => reads).toBe(1)
+
+    await page.getByTestId('nav-template-manager').click()
+    await page.getByTestId('export-template-new').click()
+    await page.getByTestId('export-template-new-name').fill(createdTemplate.name)
+    await page.getByTestId('export-template-new-save').click()
+    await expect.poll(() => writes).toBe(1)
+    await expect.poll(() => reads).toBe(2)
+    await expect(page.getByTestId(`export-template-row-${createdTemplate.id}`)).toContainText(createdTemplate.name)
+    await expect(page.getByTestId(`export-template-row-${existingTemplate.id}`)).toContainText(existingTemplate.name)
+
+    const staleBootstrapResponse = page.waitForResponse((response) => (
+      new URL(response.url()).pathname === '/api/export-templates'
+      && response.request().method() === 'GET'
+      && response.status() === 200
+    ))
+    releaseBootstrap()
+    await staleBootstrapResponse
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    }))
+    await expect(page.getByTestId(`export-template-row-${createdTemplate.id}`)).toContainText(createdTemplate.name)
+    await expect(page.getByTestId(`export-template-row-${existingTemplate.id}`)).toContainText(existingTemplate.name)
+  })
+
+  test('keeps export template create update and delete failures visible', async ({ page }) => {
+    const existingTemplate = exportTemplateDto('export-write-failure', 'Protected export template')
+    let creates = 0
+    let updates = 0
+    let deletes = 0
+    await page.route('**/api/export-templates**', async (route) => {
+      const method = route.request().method()
+      const pathname = new URL(route.request().url()).pathname
+      if (method === 'GET' && pathname === '/api/export-templates') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([existingTemplate]),
+        })
+        return
+      }
+      if (method === 'POST' && pathname === '/api/export-templates') {
+        creates += 1
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Template name already exists' }),
+        })
+        return
+      }
+      if (method === 'PUT' && pathname === `/api/export-templates/${existingTemplate.id}`) {
+        updates += 1
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Template name already exists' }),
+        })
+        return
+      }
+      if (method === 'DELETE' && pathname === `/api/export-templates/${existingTemplate.id}`) {
+        deletes += 1
+        await route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Database unavailable' }),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+    await page.getByTestId('nav-template-manager').click()
+
+    await page.getByTestId('export-template-new').click()
+    await page.getByTestId('export-template-new-name').fill('Rejected export template')
+    const createDialog = page.waitForEvent('dialog').then(async (dialog) => {
+      expect(dialog.message()).toBe('创建导出模板失败')
+      await dialog.dismiss()
+    })
+    await Promise.all([createDialog, page.getByTestId('export-template-new-save').click()])
+    await expect.poll(() => creates).toBe(1)
+    await expect(page.locator('[data-testid^="export-template-row-"]').filter({ hasText: 'Rejected export template' })).toHaveCount(0)
+    await page.getByTestId('export-template-new-form').getByRole('button', { name: '取消', exact: true }).click()
+
+    const row = page.getByTestId(`export-template-row-${existingTemplate.id}`)
+    await expect(row).toContainText(existingTemplate.name)
+    await page.getByTestId(`export-template-edit-${existingTemplate.id}`).click()
+    await page.getByTestId(`export-template-name-${existingTemplate.id}`).fill('Rejected export rename')
+    const updateDialog = page.waitForEvent('dialog').then(async (dialog) => {
+      expect(dialog.message()).toBe('更新导出模板失败')
+      await dialog.dismiss()
+    })
+    await Promise.all([
+      updateDialog,
+      page.getByTestId(`export-template-save-${existingTemplate.id}`).click(),
+    ])
+    await expect.poll(() => updates).toBe(1)
+    await row.getByRole('button', { name: '取消', exact: true }).click()
+    await expect(row).toContainText(existingTemplate.name)
+
+    const deleteDialog = page.waitForEvent('dialog').then(async (dialog) => {
+      expect(dialog.message()).toBe('删除导出模板失败')
+      await dialog.dismiss()
+    })
+    await Promise.all([
+      deleteDialog,
+      page.getByTestId(`export-template-delete-${existingTemplate.id}`).click(),
     ])
     await expect.poll(() => deletes).toBe(1)
     await expect(row).toContainText(existingTemplate.name)

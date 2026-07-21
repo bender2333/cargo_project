@@ -59,8 +59,8 @@ import type { ImportCargoRow } from './lib/importCargo'
 import { deleteImportTemplate, readImportTemplates, saveImportTemplate, updateImportTemplate } from './api/importTemplates'
 import type { ImportTemplatePayload } from './api/importTemplates'
 import { saveLastImportConfig } from './lib/lastImportConfig'
-import { deleteExportTemplate, readExportTemplates, saveExportTemplate, updateExportTemplate } from './lib/exportTemplates'
-import type { ExportTemplatePayload } from './lib/exportTemplates'
+import { deleteExportTemplate, readExportTemplates, saveExportTemplate, updateExportTemplate } from './api/exportTemplates'
+import type { ExportTemplatePayload } from './api/exportTemplates'
 import { deleteCustomCargo, readCustomCargo, saveCustomCargo, updateCustomCargo } from './api/customCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
@@ -259,6 +259,8 @@ const copy = {
     exportTemplateManager: 'Export templates',
     exportTemplateDefault: 'Default columns',
     exportTemplateEmpty: 'No export templates yet',
+    exportTemplateLoadFailed: 'Failed to load export templates',
+    exportTemplateRetry: 'Retry',
     exportColumnHeader: 'Column header',
     exportColumnUnit: 'Unit',
     exportAddColumn: 'Add column…',
@@ -568,6 +570,8 @@ const copy = {
     exportTemplateManager: '导出模板',
     exportTemplateDefault: '默认列',
     exportTemplateEmpty: '暂无导出模板',
+    exportTemplateLoadFailed: '导出模板加载失败',
+    exportTemplateRetry: '重试',
     exportColumnHeader: '列表头',
     exportColumnUnit: '单位',
     exportAddColumn: '添加列…',
@@ -1225,6 +1229,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [editingImportTemplateDraft, setEditingImportTemplateDraft] = useState<ImportTemplatePayload | null>(null)
   const [newImportTemplateDraft, setNewImportTemplateDraft] = useState<ImportTemplatePayload | null>(null)
   const [exportTemplates, setExportTemplates] = useState<ExportTemplate[]>([])
+  const [exportTemplateLoadFailed, setExportTemplateLoadFailed] = useState(false)
+  const exportTemplateRequestIdRef = useRef(0)
   const [selectedExportTemplateId, setSelectedExportTemplateId] = useState('')
   const [editingExportTemplateId, setEditingExportTemplateId] = useState('')
   const [editingExportTemplateDraft, setEditingExportTemplateDraft] = useState<ExportTemplatePayload | null>(null)
@@ -1323,11 +1329,21 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const fetchExportTemplates = async () => {
+    const requestId = ++exportTemplateRequestIdRef.current
     try {
-      setExportTemplates(await readExportTemplates())
+      const templates = await readExportTemplates()
+      if (requestId !== exportTemplateRequestIdRef.current) return
+      setExportTemplates(templates)
+      setExportTemplateLoadFailed(false)
     } catch (err) {
+      if (requestId !== exportTemplateRequestIdRef.current) return
       console.error(err)
+      setExportTemplateLoadFailed(true)
     }
+  }
+
+  const invalidateExportTemplateReads = () => {
+    exportTemplateRequestIdRef.current += 1
   }
 
   const fetchCustomCargo = async () => {
@@ -2485,15 +2501,19 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     const draft = newExportTemplateDraft
     const name = draft?.name.trim()
     if (!draft || !name) return
-    const saved = await saveExportTemplate({ name, columns: draft.columns })
-    if (!saved) {
+    setTemplateSaveNotice('')
+    try {
+      const saved = await saveExportTemplate({ name, columns: draft.columns })
+      invalidateExportTemplateReads()
+      setExportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
+      setSelectedExportTemplateId(saved.id)
+      setNewExportTemplateDraft(null)
+      setTemplateSaveNotice(`${t.templateSaved}: ${saved.name}`)
+      await fetchExportTemplates()
+    } catch (err) {
+      console.error(err)
       alert(locale === 'zh' ? '创建导出模板失败' : 'Failed to create export template')
-      return
     }
-    setExportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
-    setSelectedExportTemplateId(saved.id)
-    setNewExportTemplateDraft(null)
-    setTemplateSaveNotice(`${t.templateSaved}: ${saved.name}`)
   }
 
   const editExportTemplate = (template: ExportTemplate) => {
@@ -2505,30 +2525,38 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     const draft = editingExportTemplateDraft
     const name = draft?.name.trim()
     if (!draft || !name || !editingExportTemplateId) return
-    const updated = await updateExportTemplate(editingExportTemplateId, { name, columns: draft.columns })
-    if (!updated) {
+    setTemplateSaveNotice('')
+    try {
+      const updated = await updateExportTemplate(editingExportTemplateId, { name, columns: draft.columns })
+      invalidateExportTemplateReads()
+      setExportTemplates((current) => current.map((item) => item.id === updated.id ? updated : item))
+      setEditingExportTemplateId('')
+      setEditingExportTemplateDraft(null)
+      setTemplateSaveNotice(`${t.templateUpdated}: ${updated.name}`)
+      await fetchExportTemplates()
+    } catch (err) {
+      console.error(err)
       alert(locale === 'zh' ? '更新导出模板失败' : 'Failed to update export template')
-      return
     }
-    setExportTemplates((current) => current.map((item) => item.id === updated.id ? updated : item))
-    setEditingExportTemplateId('')
-    setEditingExportTemplateDraft(null)
-    setTemplateSaveNotice(`${t.templateUpdated}: ${updated.name}`)
   }
 
   const removeExportTemplate = async (id: string) => {
-    const ok = await deleteExportTemplate(id)
-    if (!ok) {
+    setTemplateSaveNotice('')
+    try {
+      await deleteExportTemplate(id)
+      invalidateExportTemplateReads()
+      setExportTemplates((current) => current.filter((item) => item.id !== id))
+      if (selectedExportTemplateId === id) setSelectedExportTemplateId('')
+      if (editingExportTemplateId === id) {
+        setEditingExportTemplateId('')
+        setEditingExportTemplateDraft(null)
+      }
+      setTemplateSaveNotice(t.templateDeleted)
+      await fetchExportTemplates()
+    } catch (err) {
+      console.error(err)
       alert(locale === 'zh' ? '删除导出模板失败' : 'Failed to delete export template')
-      return
     }
-    setExportTemplates((current) => current.filter((item) => item.id !== id))
-    if (selectedExportTemplateId === id) setSelectedExportTemplateId('')
-    if (editingExportTemplateId === id) {
-      setEditingExportTemplateId('')
-      setEditingExportTemplateDraft(null)
-    }
-    setTemplateSaveNotice(t.templateDeleted)
   }
 
   const canAutoMap = (row: ImportCargoRow): boolean => {
@@ -3159,8 +3187,15 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           </div>
         </div>
       )}
-      {exportTemplates.length === 0 ? (
-        <p className="text-sm text-[#64748b]">{t.exportTemplateEmpty}</p>
+      {exportTemplateLoadFailed ? (
+        <div className="flex items-center justify-between gap-3 border border-red-300 bg-red-50 p-3 text-sm text-red-700" data-testid="export-template-load-error">
+          <span>{t.exportTemplateLoadFailed}</span>
+          <button className="archive-button secondary" type="button" onClick={() => void fetchExportTemplates()}>
+            {t.exportTemplateRetry}
+          </button>
+        </div>
+      ) : exportTemplates.length === 0 ? (
+        <p className="text-sm text-[#64748b]" data-testid="export-template-empty-state">{t.exportTemplateEmpty}</p>
       ) : (
         <div className="grid gap-2 md:grid-cols-2">
           {exportTemplates.map((template) => (
@@ -4125,10 +4160,19 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                   void importExcel(file)
                 }} /></label>
                 <button className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold" data-testid="download-import-template" type="button" onClick={downloadImportTemplate}>{t.downloadImportTemplate}</button>
+                {exportTemplateLoadFailed && (
+                  <div className="flex items-center gap-2 border border-red-300 bg-red-50 px-3 py-2 font-semibold text-red-700" data-testid="export-template-toolbar-load-error">
+                    <span>{t.exportTemplateLoadFailed}</span>
+                    <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => void fetchExportTemplates()}>
+                      {t.exportTemplateRetry}
+                    </button>
+                  </div>
+                )}
                 <select
                   className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold"
                   value={selectedExportTemplateId}
                   data-testid="export-template-select"
+                  disabled={exportTemplateLoadFailed}
                   onChange={(event) => setSelectedExportTemplateId(event.target.value)}
                 >
                   <option value="">{t.exportTemplateDefault}</option>
@@ -4136,7 +4180,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                     <option key={template.id} value={template.id}>{template.name}</option>
                   ))}
                 </select>
-                <button className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold" type="button" onClick={exportExcel}>{t.exportExcel}</button>
+                <button className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold" data-testid="export-excel" type="button" onClick={exportExcel}>{t.exportExcel}</button>
                 <button className="border border-[#9b9b9b] bg-white px-3 py-2 font-semibold" type="button" onClick={saveCurrentPlan}>{t.savePlan}</button>
               </div>
             </div>
