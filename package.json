@@ -11,6 +11,8 @@
     "test": "vitest run",
     "test:contracts:update": "node scripts/update-packing-contracts.mjs",
     "test:e2e": "playwright test",
+    "benchmark": "node scripts/frontendBenchmark.mjs",
+    "benchmark:update": "node scripts/frontendBenchmark.mjs --update",
     "start:server": "node server/index.mjs",
     "deploy": "node scripts/deploy.mjs"
   },

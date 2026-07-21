@@ -12,6 +12,7 @@ dist
 dist-ssr
 .worktrees/
 test-results/current/
+test-results/benchmark/
 *.local
 
 # SQLite databases must never be committed — they contain password hashes.
