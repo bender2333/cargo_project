@@ -14,6 +14,23 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-07-21-r52-refactor-safety-baseline',
+    date: '2026-07-21',
+    title: { en: 'Frontend refactor safety baseline', zh: '前端重构安全基线' },
+    items: {
+      en: [
+        'Frontend architecture work now starts from a repeatable regression baseline that runs every browser scenario against an isolated API and database.',
+        'Release verification now fails when any browser scenario is skipped, including the restored responsive 3D workspace check.',
+        'The administrator log panel is now verified through the full server-to-screen flow, preventing a failed log request from appearing successful.',
+      ],
+      zh: [
+        '前端架构重构现已建立可重复回归基线；全部浏览器场景会使用隔离的 API 与数据库运行，不影响开发数据。',
+        '发布验证现在会在任一浏览器场景被跳过时失败，响应式 3D 工作区检查也已恢复为每次实际执行。',
+        '管理员日志面板现已覆盖从服务端读取到界面显示的完整链路，日志请求失败不再呈现为测试成功。',
+      ],
+    },
+  },
+  {
     version: '2026-07-20-r51-manual-placement-template-download',
     date: '2026-07-20',
     title: { en: 'Safer manual placement and import template', zh: '手动放置修正与导入模板' },

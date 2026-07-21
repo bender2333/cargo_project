@@ -725,6 +725,7 @@ test('通知栏按钮显示未读红点，点击后已读', async ({ page }) => 
   await expect(btn).toHaveAttribute('data-release-notes-unread', 'true')
   await btn.click()
   await expect(page.getByTestId('release-notes-modal')).toBeVisible()
+  await expect(page.getByTestId('release-notes-list').locator('li').first()).toContainText('前端重构安全基线')
   await page.getByTestId('release-notes-mark-read').click()
   await page.getByTestId('release-notes-close').click()
   await expect(btn).toHaveAttribute('data-release-notes-unread', 'false')

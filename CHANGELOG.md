@@ -20,6 +20,8 @@
 - Full E2E passed twice with no skipped tests: 95 / 95 in about 6.8 minutes before the stronger log assertion, then 95 / 95 in about 6.1 minutes after it.
 - Final local gates: `npm run lint` passed; `npm test` passed 57 files / 352 tests in 50.0s; `npm run build` passed with the existing large-chunk warning (entry bundle 1,880.11 kB / gzip 562.77 kB); `git diff --check` passed.
 - Isolation proof: `server/database.db` stayed unchanged at 499,712 bytes, SHA-256 `70212B27A8781D648197BAAEABC84E7C550E03B363E856B290CEA66DA331E901`, mtime `2026-07-08T08:46:54.9597407Z`; no listeners remained on ports 3010 or 5176 after verification.
+- Release note: added bilingual `2026-07-21-r52-refactor-safety-baseline` as the newest notification, covering isolated browser regression, the zero-skip gate, restored responsive 3D coverage, and the administrator log end-to-end check. The notification E2E now asserts this entry is rendered first.
+- Release-note verification: focused Playwright passed 1 / 1; `npm run lint` passed; `npm test` passed 57 files / 352 tests; `npm run build` passed with the existing large-chunk warning (entry bundle 1,881.11 kB / gzip 563.36 kB); full `npm run test:e2e` passed 95 / 95 with zero skipped tests in about 5.5 minutes.
 - Plan: `plans/2026-07-21-frontend-architecture-refactor.md`.
 
 ## 2026-07-20 (issues/0720 fixes in progress)
