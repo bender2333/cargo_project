@@ -50,6 +50,147 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await expect(page.getByTestId('container-change-notice')).toHaveCount(0)
   })
 
+  test('surfaces history failures and ignores a stale failure', async ({ page }) => {
+    let reads = 0
+    let releaseStaleFailure!: () => void
+    const staleFailureGate = new Promise<void>((resolve) => {
+      releaseStaleFailure = resolve
+    })
+    await page.route('**/api/history', async (route) => {
+      if (route.request().method() === 'GET') {
+        reads += 1
+        if (reads === 2) {
+          await staleFailureGate
+          await route.fulfill({
+            status: 500,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: 'Stale database failure' }),
+          })
+          return
+        }
+        await route.fulfill({
+          status: reads === 1 ? 500 : 200,
+          contentType: 'application/json',
+          body: reads === 1 ? JSON.stringify({ error: 'Database unavailable' }) : '[]',
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+
+    await page.getByTestId('nav-history').click()
+    await expect(page.getByTestId('history-load-error')).toHaveText(/历史方案加载失败/)
+    await expect(page.getByTestId('history-empty-state')).toHaveCount(0)
+
+    const retry = page.getByRole('button', { name: '重试', exact: true })
+    await retry.click()
+    await retry.click()
+    await expect.poll(() => reads).toBe(3)
+    await expect(page.getByTestId('history-load-error')).toHaveCount(0)
+    await expect(page.getByTestId('history-empty-state')).toBeVisible()
+
+    const staleFailureResponse = page.waitForResponse((response) => (
+      response.url().includes('/api/history')
+      && response.request().method() === 'GET'
+      && response.status() === 500
+    ))
+    releaseStaleFailure()
+    await staleFailureResponse
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    }))
+    await expect(page.getByTestId('history-load-error')).toHaveCount(0)
+    await expect(page.getByTestId('history-empty-state')).toBeVisible()
+  })
+
+  test('keeps the latest history list when an older success finishes last', async ({ page }) => {
+    let reads = 0
+    let releaseStaleSuccess!: () => void
+    const staleSuccessGate = new Promise<void>((resolve) => {
+      releaseStaleSuccess = resolve
+    })
+    const latestPlanDto = {
+      id: 'latest-plan',
+      created_at: '2026-07-21T00:00:00.000Z',
+      project_name: 'Latest history project',
+      shipment_name: 'Latest shipment',
+      loading_mode: 'quantity',
+      data: {
+        containerId: '20gp',
+        container: {
+          id: '20gp',
+          label: '20GP',
+          description: 'Standard container',
+          length: 5898,
+          width: 2352,
+          height: 2393,
+          maxWeight: 28000,
+          doorGap: 0,
+          topGap: 0,
+          sideGap: 0,
+        },
+        cargoItems: [],
+        placedCount: 0,
+        totalCargoCount: 0,
+        layerCount: 0,
+        labelSummary: '',
+      },
+    }
+    await page.route('**/api/history', async (route) => {
+      if (route.request().method() === 'GET') {
+        reads += 1
+        if (reads === 2) {
+          await staleSuccessGate
+          await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+          return
+        }
+        await route.fulfill({
+          status: reads === 1 ? 500 : 200,
+          contentType: 'application/json',
+          body: reads === 1
+            ? JSON.stringify({ error: 'Database unavailable' })
+            : JSON.stringify([latestPlanDto]),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+
+    await page.getByTestId('nav-history').click()
+    await expect(page.getByTestId('history-load-error')).toBeVisible()
+
+    const retry = page.getByRole('button', { name: '重试', exact: true })
+    await retry.click()
+    await retry.click()
+    await expect.poll(() => reads).toBe(3)
+    await expect(page.getByText('Latest history project')).toBeVisible()
+
+    const staleSuccessResponse = page.waitForResponse((response) => (
+      response.url().includes('/api/history')
+      && response.request().method() === 'GET'
+      && response.status() === 200
+    ))
+    releaseStaleSuccess()
+    await staleSuccessResponse
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    }))
+    await expect(page.getByText('Latest history project')).toBeVisible()
+    await expect(page.getByTestId('history-empty-state')).toHaveCount(0)
+  })
+
   test('keeps the workbench available when the custom container dialog chunk fails', async ({ page }) => {
     const modulePattern = /\/(?:src\/components\/CustomContainerDialog\.tsx|assets\/CustomContainerDialog-[^/]+\.js)(?:\?.*)?$/
     await page.route(modulePattern, (route) => route.abort())

@@ -141,24 +141,6 @@ export type PackingResult = {
 
 export type Locale = 'en' | 'zh'
 
-export interface DbHistoryPlan {
-  id: string
-  created_at: string
-  project_name: string
-  shipment_name: string | null
-  loading_mode: LoadingMode
-  data: {
-    containerId: string
-    container: ContainerSpec
-    cargoItems: CargoItem[]
-    placedCount: number
-    totalCargoCount: number
-    layerCount: number
-    labelSummary: string
-    defaultMaxStackLayers?: number
-  }
-}
-
 export type ImportTemplateUnits = {
   length: 'auto' | 'mm' | 'cm'
   width: 'auto' | 'mm' | 'cm'

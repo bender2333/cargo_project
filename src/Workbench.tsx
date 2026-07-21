@@ -53,7 +53,6 @@ import {
 import type { ManualDraft, ManualHistory, ManualRotationDirection, OrientationKey, ValidationIssue } from './lib/manualPlacement'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from './data/containers'
 import { buildExportPlanRows, buildExportRowsFromTemplate, EXPORT_FIELD_KEYS } from './lib/exportPlan'
-import type { HistoryPlan } from './lib/historyPlans'
 import { createClientId } from './lib/clientId'
 import { parseCargoRows, parseCargoRowsWithTemplate } from './lib/importCargo'
 import type { ImportCargoRow } from './lib/importCargo'
@@ -82,9 +81,14 @@ import {
   savePlacementSettings,
   type PlacementSettings,
 } from './lib/placementSettings'
-import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, PackingResult, DbHistoryPlan, ImportTemplate, ImportTemplateUnits, ImportTemplateDefaults, ExportTemplate } from './types'
-import { fetchWithAuth } from './api/client'
+import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, PackingResult, ImportTemplate, ImportTemplateUnits, ImportTemplateDefaults, ExportTemplate } from './types'
 import { readCustomContainers } from './api/customContainers'
+import {
+  deleteHistoryPlan as deleteHistoryPlanRequest,
+  readHistoryPlans,
+  saveHistoryPlan as saveHistoryPlanRequest,
+} from './api/historyPlans'
+import type { HistoryPlan } from './api/historyPlans'
 import type { User } from './lib/auth'
 import { UserManagement } from './components/UserManagement'
 import { DebugPanel } from './components/DebugPanel'
@@ -1120,6 +1124,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [CustomContainerDialog, setCustomContainerDialog] = useState<CustomContainerDialogComponent | null>(null)
   const [customContainerDialogLoadFailed, setCustomContainerDialogLoadFailed] = useState(false)
   const [historyPlans, setHistoryPlans] = useState<HistoryPlan[]>([])
+  const [historyLoadFailed, setHistoryLoadFailed] = useState(false)
+  const historyRequestIdRef = useRef(0)
   const [customCargoItems, setCustomCargoItems] = useState<CargoItem[]>([])
   const [cargoLibraryForm, setCargoLibraryForm] = useState<CargoForm>(emptyForm)
   const [editingLibraryCargoId, setEditingLibraryCargoId] = useState<string | null>(null)
@@ -1273,28 +1279,16 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const fetchHistory = async () => {
+    const requestId = ++historyRequestIdRef.current
     try {
-      const res = await fetchWithAuth('/api/history')
-      if (!res.ok) throw new Error('获取历史方案失败')
-      const data = await res.json()
-      const mapped = data.map((item: DbHistoryPlan) => ({
-        id: item.id,
-        createdAt: item.created_at,
-        projectName: item.project_name,
-        shipmentName: item.shipment_name,
-        loadingMode: item.loading_mode,
-        containerId: item.data.containerId,
-        container: item.data.container,
-        cargoItems: item.data.cargoItems,
-        placedCount: item.data.placedCount,
-        totalCargoCount: item.data.totalCargoCount,
-        layerCount: item.data.layerCount,
-        labelSummary: item.data.labelSummary,
-        defaultMaxStackLayers: item.data.defaultMaxStackLayers,
-      }))
-      setHistoryPlans(mapped)
+      const plans = await readHistoryPlans()
+      if (requestId !== historyRequestIdRef.current) return
+      setHistoryPlans(plans)
+      setHistoryLoadFailed(false)
     } catch (err) {
+      if (requestId !== historyRequestIdRef.current) return
       console.error(err)
+      setHistoryLoadFailed(true)
     }
   }
 
@@ -1327,10 +1321,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       return
     }
     try {
-      const res = await fetchWithAuth(`/api/history/${id}`, {
-        method: 'DELETE',
-      })
-      if (!res.ok) throw new Error('删除失败')
+      await deleteHistoryPlanRequest(id)
       await fetchHistory()
     } catch (err) {
       console.error(err)
@@ -2790,18 +2781,12 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     }
 
     try {
-      const res = await fetchWithAuth('/api/history', {
-        method: 'POST',
-        body: JSON.stringify({
-          projectName,
-          shipmentName,
-          loadingMode,
-          data: planData,
-        }),
+      await saveHistoryPlanRequest({
+        projectName,
+        shipmentName,
+        loadingMode,
+        data: planData,
       })
-      if (!res.ok) {
-        throw new Error('保存历史方案失败')
-      }
       await fetchHistory()
       setActiveNav('history')
     } catch (err) {
@@ -3219,15 +3204,24 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-xl font-bold">{t.historyPage}</h2>
-                <p className="text-sm text-[#64748b]">{t.noHistory}</p>
+                <p className="text-sm text-[#64748b]">
+                  {historyLoadFailed ? (locale === 'zh' ? '历史方案加载失败' : 'Failed to load history plans') : t.noHistory}
+                </p>
               </div>
               <div className="flex gap-2">
                 <button className="archive-button success" type="button" onClick={saveCurrentPlan}>{t.savePlan}</button>
                 <button className="archive-button secondary" type="button" onClick={() => activateNav('overview')}>{t.backToWorkbench}</button>
               </div>
             </div>
-            {historyPlans.length === 0 ? (
-              <p className="border border-[#c6c6c6] bg-white p-3">{t.noHistory}</p>
+            {historyLoadFailed ? (
+              <div className="flex items-center justify-between gap-3 border border-red-300 bg-red-50 p-3 text-red-700" data-testid="history-load-error">
+                <span>{locale === 'zh' ? '历史方案加载失败' : 'Failed to load history plans'}</span>
+                <button className="archive-button secondary" type="button" onClick={() => void fetchHistory()}>
+                  {locale === 'zh' ? '重试' : 'Retry'}
+                </button>
+              </div>
+            ) : historyPlans.length === 0 ? (
+              <p className="border border-[#c6c6c6] bg-white p-3" data-testid="history-empty-state">{t.noHistory}</p>
             ) : (
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {historyPlans.map((plan) => (
