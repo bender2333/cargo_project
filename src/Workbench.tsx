@@ -56,8 +56,8 @@ import { buildExportPlanRows, buildExportRowsFromTemplate, EXPORT_FIELD_KEYS } f
 import { createClientId } from './lib/clientId'
 import { parseCargoRows, parseCargoRowsWithTemplate } from './lib/importCargo'
 import type { ImportCargoRow } from './lib/importCargo'
-import { deleteImportTemplate, readImportTemplates, saveImportTemplate, updateImportTemplate } from './lib/importTemplates'
-import type { ImportTemplatePayload } from './lib/importTemplates'
+import { deleteImportTemplate, readImportTemplates, saveImportTemplate, updateImportTemplate } from './api/importTemplates'
+import type { ImportTemplatePayload } from './api/importTemplates'
 import { saveLastImportConfig } from './lib/lastImportConfig'
 import { deleteExportTemplate, readExportTemplates, saveExportTemplate, updateExportTemplate } from './lib/exportTemplates'
 import type { ExportTemplatePayload } from './lib/exportTemplates'
@@ -247,6 +247,8 @@ const copy = {
     templateUpdated: 'Template updated',
     templateDeleted: 'Template deleted',
     templateEmpty: 'No import templates yet',
+    importTemplateLoadFailed: 'Failed to load import templates',
+    importTemplateRetry: 'Retry',
     templateEdit: 'Edit',
     templateDelete: 'Delete',
     templateUpdate: 'Update template',
@@ -554,6 +556,8 @@ const copy = {
     templateUpdated: '模板已更新',
     templateDeleted: '模板已删除',
     templateEmpty: '暂无导入模板',
+    importTemplateLoadFailed: '导入模板加载失败',
+    importTemplateRetry: '重试',
     templateEdit: '编辑',
     templateDelete: '删除',
     templateUpdate: '更新模板',
@@ -1208,6 +1212,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [templateDimensionOrder, setTemplateDimensionOrder] = useState<Array<'length' | 'width' | 'height'>>(['length', 'width', 'height'])
   const LAST_USED_TEMPLATE_KEY = 'cargo_last_used_template_id'
   const [importTemplates, setImportTemplates] = useState<ImportTemplate[]>([])
+  const [importTemplateLoadFailed, setImportTemplateLoadFailed] = useState(false)
+  const importTemplateRequestIdRef = useRef(0)
   const [selectedImportTemplateId, setSelectedImportTemplateId] = useState('')
   const [templateName, setTemplateName] = useState('')
   const [templateHeaderRow, setTemplateHeaderRow] = useState(1)
@@ -1299,11 +1305,21 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const fetchImportTemplates = async () => {
+    const requestId = ++importTemplateRequestIdRef.current
     try {
-      setImportTemplates(await readImportTemplates())
+      const templates = await readImportTemplates()
+      if (requestId !== importTemplateRequestIdRef.current) return
+      setImportTemplates(templates)
+      setImportTemplateLoadFailed(false)
     } catch (err) {
+      if (requestId !== importTemplateRequestIdRef.current) return
       console.error(err)
+      setImportTemplateLoadFailed(true)
     }
+  }
+
+  const invalidateImportTemplateReads = () => {
+    importTemplateRequestIdRef.current += 1
   }
 
   const fetchExportTemplates = async () => {
@@ -2264,31 +2280,33 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       defaultValues: templateDefaults,
     }
 
-    const saved = isUpdate
-      ? await updateImportTemplate(selected.id, payload)
-      : await saveImportTemplate(payload)
-
-    if (!saved) {
-      alert(locale === 'zh' ? '保存模板失败' : 'Failed to save template')
-      return
-    }
-
-    if (isUpdate) {
-      setImportTemplates((current) => current.map((item) => item.id === saved.id ? saved : item))
-    } else {
-      setImportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
-    }
-    setSelectedImportTemplateId(saved.id)
-    // Saving records the chosen template for telemetry/local continuity, but
-    // the next import starts from "None" and waits for explicit template selection.
+    setTemplateSaveNotice('')
     try {
-      localStorage.setItem(LAST_USED_TEMPLATE_KEY, saved.id)
-    } catch { /* ignore */ }
-    setEditingImportTemplateId('')
-    setEditingImportTemplateDraft(null)
-    const noticeText = isUpdate ? t.templateUpdated : t.templateSaved
-    setTemplateSaveNotice(`${noticeText}: ${saved.name}`)
-    setImportMessages((messages) => [`${noticeText}: ${saved.name}`, ...messages])
+      const saved = isUpdate
+        ? await updateImportTemplate(selected.id, payload)
+        : await saveImportTemplate(payload)
+      invalidateImportTemplateReads()
+      if (isUpdate) {
+        setImportTemplates((current) => current.map((item) => item.id === saved.id ? saved : item))
+      } else {
+        setImportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
+      }
+      setSelectedImportTemplateId(saved.id)
+      // Saving records the chosen template for telemetry/local continuity, but
+      // the next import starts from "None" and waits for explicit template selection.
+      try {
+        localStorage.setItem(LAST_USED_TEMPLATE_KEY, saved.id)
+      } catch { /* ignore */ }
+      setEditingImportTemplateId('')
+      setEditingImportTemplateDraft(null)
+      const noticeText = isUpdate ? t.templateUpdated : t.templateSaved
+      setTemplateSaveNotice(`${noticeText}: ${saved.name}`)
+      setImportMessages((messages) => [`${noticeText}: ${saved.name}`, ...messages])
+      await fetchImportTemplates()
+    } catch (err) {
+      console.error(err)
+      alert(locale === 'zh' ? '保存模板失败' : 'Failed to save template')
+    }
   }
 
   const createBlankImportTemplateDraft = (): ImportTemplatePayload => ({
@@ -2339,29 +2357,33 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     const name = draft?.name.trim()
     if (!template || !draft || !name) return
 
-    const updated = await updateImportTemplate(template.id, {
-      name,
-      mapping: draft.mapping,
-      units: draft.units,
-      headerRow: draft.headerRow,
-      startRow: draft.startRow,
-      mergeRows: draft.mergeRows,
-      dimensionMode: draft.dimensionMode,
-      combinedColumn: draft.combinedColumn || draft.mapping.dimensions || '',
-      dimensionOrder: draft.dimensionOrder,
-      defaultValues: draft.defaultValues,
-    })
-    if (!updated) {
+    setTemplateSaveNotice('')
+    try {
+      const updated = await updateImportTemplate(template.id, {
+        name,
+        mapping: draft.mapping,
+        units: draft.units,
+        headerRow: draft.headerRow,
+        startRow: draft.startRow,
+        mergeRows: draft.mergeRows,
+        dimensionMode: draft.dimensionMode,
+        combinedColumn: draft.combinedColumn || draft.mapping.dimensions || '',
+        dimensionOrder: draft.dimensionOrder,
+        defaultValues: draft.defaultValues,
+      })
+      invalidateImportTemplateReads()
+      setImportTemplates((current) => current.map((item) => item.id === updated.id ? updated : item))
+      setTemplateSaveNotice(`${t.templateUpdated}: ${updated.name}`)
+      if (selectedImportTemplateId === updated.id) {
+        setTemplateName(updated.name)
+      }
+      setEditingImportTemplateId('')
+      setEditingImportTemplateDraft(null)
+      await fetchImportTemplates()
+    } catch (err) {
+      console.error(err)
       alert(locale === 'zh' ? '更新模板失败' : 'Failed to update template')
-      return
     }
-    setImportTemplates((current) => current.map((item) => item.id === updated.id ? updated : item))
-    setTemplateSaveNotice(`${t.templateUpdated}: ${updated.name}`)
-    if (selectedImportTemplateId === updated.id) {
-      setTemplateName(updated.name)
-    }
-    setEditingImportTemplateId('')
-    setEditingImportTemplateDraft(null)
   }
 
   const loadTemplateSampleHeaders = async (file: File | null) => {
@@ -2405,45 +2427,53 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     const draft = newImportTemplateDraft
     const name = draft?.name.trim()
     if (!draft || !name) return
-    const saved = await saveImportTemplate({
-      name,
-      mapping: draft.mapping,
-      units: draft.units,
-      headerRow: draft.headerRow,
-      startRow: draft.startRow,
-      mergeRows: draft.mergeRows,
-      dimensionMode: draft.dimensionMode,
-      combinedColumn: draft.combinedColumn || draft.mapping.dimensions || '',
-      dimensionOrder: draft.dimensionOrder,
-      defaultValues: draft.defaultValues,
-    })
-    if (!saved) {
+    setTemplateSaveNotice('')
+    try {
+      const saved = await saveImportTemplate({
+        name,
+        mapping: draft.mapping,
+        units: draft.units,
+        headerRow: draft.headerRow,
+        startRow: draft.startRow,
+        mergeRows: draft.mergeRows,
+        dimensionMode: draft.dimensionMode,
+        combinedColumn: draft.combinedColumn || draft.mapping.dimensions || '',
+        dimensionOrder: draft.dimensionOrder,
+        defaultValues: draft.defaultValues,
+      })
+      invalidateImportTemplateReads()
+      setImportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
+      setSelectedImportTemplateId(saved.id)
+      setTemplateName(saved.name)
+      setTemplateSaveNotice(`${t.templateSaved}: ${saved.name}`)
+      setNewImportTemplateDraft(null)
+      await fetchImportTemplates()
+    } catch (err) {
+      console.error(err)
       alert(locale === 'zh' ? '创建模板失败' : 'Failed to create template')
-      return
     }
-    setImportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
-    setSelectedImportTemplateId(saved.id)
-    setTemplateName(saved.name)
-    setTemplateSaveNotice(`${t.templateSaved}: ${saved.name}`)
-    setNewImportTemplateDraft(null)
   }
 
   const removeImportTemplate = async (id: string) => {
-    const ok = await deleteImportTemplate(id)
-    if (!ok) {
+    setTemplateSaveNotice('')
+    try {
+      await deleteImportTemplate(id)
+      invalidateImportTemplateReads()
+      setImportTemplates((current) => current.filter((item) => item.id !== id))
+      if (selectedImportTemplateId === id) {
+        setSelectedImportTemplateId('')
+        setTemplateName('')
+      }
+      if (editingImportTemplateId === id) {
+        setEditingImportTemplateId('')
+        setEditingImportTemplateDraft(null)
+      }
+      setTemplateSaveNotice(t.templateDeleted)
+      await fetchImportTemplates()
+    } catch (err) {
+      console.error(err)
       alert(locale === 'zh' ? '删除模板失败' : 'Failed to delete template')
-      return
     }
-    setImportTemplates((current) => current.filter((item) => item.id !== id))
-    if (selectedImportTemplateId === id) {
-      setSelectedImportTemplateId('')
-      setTemplateName('')
-    }
-    if (editingImportTemplateId === id) {
-      setEditingImportTemplateId('')
-      setEditingImportTemplateDraft(null)
-    }
-    setTemplateSaveNotice(t.templateDeleted)
   }
 
   const createBlankExportTemplate = (): ExportTemplatePayload => ({
@@ -3035,8 +3065,15 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           </div>
         </div>
       )}
-      {importTemplates.length === 0 ? (
-        <p className="text-sm text-[#64748b]">{t.templateEmpty}</p>
+      {importTemplateLoadFailed ? (
+        <div className="flex items-center justify-between gap-3 border border-red-300 bg-red-50 p-3 text-sm text-red-700" data-testid="import-template-load-error">
+          <span>{t.importTemplateLoadFailed}</span>
+          <button className="archive-button secondary" type="button" onClick={() => void fetchImportTemplates()}>
+            {t.importTemplateRetry}
+          </button>
+        </div>
+      ) : importTemplates.length === 0 ? (
+        <p className="text-sm text-[#64748b]" data-testid="template-manager-empty-state">{t.templateEmpty}</p>
       ) : (
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {importTemplates.map((template) => (
@@ -4427,6 +4464,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                     className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
                     value={selectedImportTemplateId}
                     data-testid="import-template-select"
+                    disabled={importTemplateLoadFailed}
                     onChange={(event) => applyImportTemplate(event.target.value)}
                   >
                     <option value="">{t.templateNone}</option>
@@ -4456,6 +4494,14 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                 {templateSaveNotice && (
                   <div className="md:col-span-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800" data-testid="template-save-status">
                     {templateSaveNotice}
+                  </div>
+                )}
+                {importTemplateLoadFailed && (
+                  <div className="md:col-span-3 flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700" data-testid="import-template-dialog-load-error">
+                    <span>{t.importTemplateLoadFailed}</span>
+                    <button className="archive-button secondary" type="button" onClick={() => void fetchImportTemplates()}>
+                      {t.importTemplateRetry}
+                    </button>
                   </div>
                 )}
               </div>

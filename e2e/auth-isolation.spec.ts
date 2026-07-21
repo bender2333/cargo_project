@@ -1,4 +1,27 @@
+import path from 'node:path'
 import { expect, test } from '@playwright/test'
+
+function importTemplateDto(id: string, name: string) {
+  return {
+    id,
+    name,
+    mapping: { label: 'Label', length: 'Length', width: 'Width', height: 'Height' },
+    units: { length: 'mm', width: 'mm', height: 'mm' },
+    headerRow: 1,
+    startRow: 2,
+    mergeRows: 'none',
+    dimensionMode: 'separate',
+    combinedColumn: '',
+    dimensionOrder: ['length', 'width', 'height'],
+    defaultValues: { quantity: 1, canRotate: true, stackable: true },
+    createdAt: '2026-07-22T00:00:00.000Z',
+    updatedAt: '2026-07-22T00:00:00.000Z',
+  }
+}
+
+function realWorkbookPath() {
+  return path.join(process.cwd(), 'test-data', 'excel', '俄罗斯整托装柜尺寸.xlsx')
+}
 
 test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
   const testPassword = 'Password123!'
@@ -374,6 +397,309 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
     await Promise.all([deleteDialog, page.getByTestId('cargo-library-delete-cargo-failure-fixture').click()])
     await expect(page.getByText('Failure fixture cargo')).toBeVisible()
+  })
+
+  test('surfaces import template failures and ignores a stale retry error', async ({ page }) => {
+    let reads = 0
+    let releaseStaleFailure!: () => void
+    const staleFailureGate = new Promise<void>((resolve) => {
+      releaseStaleFailure = resolve
+    })
+    await page.route('**/api/import-templates', async (route) => {
+      if (route.request().method() === 'GET') {
+        reads += 1
+        if (reads === 2) {
+          await staleFailureGate
+          await route.fulfill({
+            status: 500,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: 'Stale import template failure' }),
+          })
+          return
+        }
+        await route.fulfill({
+          status: reads === 1 ? 500 : 200,
+          contentType: 'application/json',
+          body: reads === 1 ? JSON.stringify({ error: 'Database unavailable' }) : '[]',
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+
+    await page.getByTestId('nav-template-manager').click()
+    await expect(page.getByTestId('import-template-load-error')).toHaveText(/导入模板加载失败/)
+    await expect(page.getByTestId('template-manager-empty-state')).toHaveCount(0)
+
+    const retry = page.getByRole('button', { name: '重试', exact: true })
+    await retry.click()
+    await retry.click()
+    await expect.poll(() => reads).toBe(3)
+    await expect(page.getByTestId('import-template-load-error')).toHaveCount(0)
+    await expect(page.getByTestId('template-manager-empty-state')).toBeVisible()
+
+    const staleFailureResponse = page.waitForResponse((response) => (
+      response.url().includes('/api/import-templates')
+      && response.request().method() === 'GET'
+      && response.status() === 500
+    ))
+    releaseStaleFailure()
+    await staleFailureResponse
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    }))
+    await expect(page.getByTestId('import-template-load-error')).toHaveCount(0)
+    await expect(page.getByTestId('template-manager-empty-state')).toBeVisible()
+  })
+
+  test('keeps the latest import template list when an older success finishes last', async ({ page }) => {
+    let reads = 0
+    let releaseStaleSuccess!: () => void
+    const staleSuccessGate = new Promise<void>((resolve) => {
+      releaseStaleSuccess = resolve
+    })
+    const latestTemplateDto = {
+      id: 'latest-template',
+      name: 'Latest import template',
+      mapping: { label: 'Label', length: 'Length', width: 'Width', height: 'Height' },
+      units: { length: 'mm', width: 'mm', height: 'mm' },
+      headerRow: 1,
+      startRow: 2,
+      mergeRows: 'none',
+      dimensionMode: 'separate',
+      combinedColumn: '',
+      dimensionOrder: ['length', 'width', 'height'],
+      defaultValues: { quantity: 1, canRotate: true, stackable: true },
+      createdAt: '2026-07-22T00:00:00.000Z',
+      updatedAt: '2026-07-22T00:00:00.000Z',
+    }
+    await page.route('**/api/import-templates', async (route) => {
+      if (route.request().method() === 'GET') {
+        reads += 1
+        if (reads === 2) {
+          await staleSuccessGate
+          await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+          return
+        }
+        await route.fulfill({
+          status: reads === 1 ? 500 : 200,
+          contentType: 'application/json',
+          body: reads === 1
+            ? JSON.stringify({ error: 'Database unavailable' })
+            : JSON.stringify([latestTemplateDto]),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+    await page.getByTestId('nav-template-manager').click()
+    await expect(page.getByTestId('import-template-load-error')).toBeVisible()
+
+    const retry = page.getByRole('button', { name: '重试', exact: true })
+    await retry.click()
+    await retry.click()
+    await expect.poll(() => reads).toBe(3)
+    await expect(page.getByText('Latest import template')).toBeVisible()
+
+    const staleSuccessResponse = page.waitForResponse((response) => (
+      response.url().includes('/api/import-templates')
+      && response.request().method() === 'GET'
+      && response.status() === 200
+    ))
+    releaseStaleSuccess()
+    await staleSuccessResponse
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    }))
+    await expect(page.getByText('Latest import template')).toBeVisible()
+    await expect(page.getByTestId('template-manager-empty-state')).toHaveCount(0)
+  })
+
+  test('shows import template load failure in the mapping dialog and recovers on retry', async ({ page }) => {
+    let reads = 0
+    await page.route('**/api/import-templates', async (route) => {
+      if (route.request().method() === 'GET') {
+        reads += 1
+        await route.fulfill({
+          status: reads === 1 ? 500 : 200,
+          contentType: 'application/json',
+          body: reads === 1 ? JSON.stringify({ error: 'Database unavailable' }) : '[]',
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+
+    await page.locator('input[accept*="xlsx"]').setInputFiles(realWorkbookPath())
+    await expect(page.getByTestId('mapping-modal')).toBeVisible()
+    const dialogError = page.getByTestId('import-template-dialog-load-error')
+    const templateSelect = page.getByTestId('import-template-select')
+    await expect(dialogError).toHaveText(/导入模板加载失败/)
+    await expect(templateSelect).toBeDisabled()
+
+    await dialogError.getByRole('button', { name: '重试', exact: true }).click()
+    await expect.poll(() => reads).toBe(2)
+    await expect(dialogError).toHaveCount(0)
+    await expect(templateSelect).toBeEnabled()
+  })
+
+  test('keeps a newly created import template when the bootstrap list finishes last', async ({ page }) => {
+    let reads = 0
+    let writes = 0
+    let releaseBootstrap!: () => void
+    const bootstrapGate = new Promise<void>((resolve) => {
+      releaseBootstrap = resolve
+    })
+    const createdTemplate = importTemplateDto('created-during-bootstrap', 'Created during bootstrap')
+    const existingTemplate = importTemplateDto('existing-before-bootstrap', 'Existing before bootstrap')
+
+    await page.route('**/api/import-templates**', async (route) => {
+      const method = route.request().method()
+      const pathname = new URL(route.request().url()).pathname
+      if (method === 'GET' && pathname === '/api/import-templates') {
+        reads += 1
+        if (reads === 1) {
+          await bootstrapGate
+          await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+          return
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([createdTemplate, existingTemplate]),
+        })
+        return
+      }
+      if (method === 'POST' && pathname === '/api/import-templates') {
+        writes += 1
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify(createdTemplate),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+    await expect.poll(() => reads).toBe(1)
+
+    await page.getByTestId('nav-template-manager').click()
+    await page.getByTestId('template-manager-new').click()
+    await page.getByTestId('template-manager-new-name').fill(createdTemplate.name)
+    await page.getByTestId('template-manager-new-save').click()
+    await expect.poll(() => writes).toBe(1)
+    await expect.poll(() => reads).toBe(2)
+    await expect(page.getByTestId(`template-manager-row-${createdTemplate.id}`)).toContainText(createdTemplate.name)
+    await expect(page.getByTestId(`template-manager-row-${existingTemplate.id}`)).toContainText(existingTemplate.name)
+
+    const staleBootstrapResponse = page.waitForResponse((response) => (
+      new URL(response.url()).pathname === '/api/import-templates'
+      && response.request().method() === 'GET'
+      && response.status() === 200
+    ))
+    releaseBootstrap()
+    await staleBootstrapResponse
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    }))
+    await expect(page.getByTestId(`template-manager-row-${createdTemplate.id}`)).toContainText(createdTemplate.name)
+    await expect(page.getByTestId(`template-manager-row-${existingTemplate.id}`)).toContainText(existingTemplate.name)
+  })
+
+  test('keeps import template update and delete failures visible', async ({ page }) => {
+    const existingTemplate = importTemplateDto('template-write-failure', 'Protected import template')
+    let updates = 0
+    let deletes = 0
+    await page.route('**/api/import-templates**', async (route) => {
+      const method = route.request().method()
+      const pathname = new URL(route.request().url()).pathname
+      if (method === 'GET' && pathname === '/api/import-templates') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([existingTemplate]),
+        })
+        return
+      }
+      if (method === 'PUT' && pathname === `/api/import-templates/${existingTemplate.id}`) {
+        updates += 1
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Template name already exists' }),
+        })
+        return
+      }
+      if (method === 'DELETE' && pathname === `/api/import-templates/${existingTemplate.id}`) {
+        deletes += 1
+        await route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Database unavailable' }),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+    await page.getByTestId('nav-template-manager').click()
+
+    const row = page.getByTestId(`template-manager-row-${existingTemplate.id}`)
+    await expect(row).toContainText(existingTemplate.name)
+    await page.getByTestId(`template-manager-edit-${existingTemplate.id}`).click()
+    await page.getByTestId(`template-manager-name-${existingTemplate.id}`).fill('Rejected template rename')
+
+    const updateDialog = page.waitForEvent('dialog').then(async (dialog) => {
+      expect(dialog.message()).toBe('更新模板失败')
+      await dialog.dismiss()
+    })
+    await Promise.all([
+      updateDialog,
+      page.getByTestId(`template-manager-save-${existingTemplate.id}`).click(),
+    ])
+    await expect.poll(() => updates).toBe(1)
+    await row.getByRole('button', { name: '取消', exact: true }).click()
+    await expect(row).toContainText(existingTemplate.name)
+
+    const deleteDialog = page.waitForEvent('dialog').then(async (dialog) => {
+      expect(dialog.message()).toBe('删除模板失败')
+      await dialog.dismiss()
+    })
+    await Promise.all([
+      deleteDialog,
+      page.getByTestId(`template-manager-delete-${existingTemplate.id}`).click(),
+    ])
+    await expect.poll(() => deletes).toBe(1)
+    await expect(row).toContainText(existingTemplate.name)
   })
 
   test('keeps the workbench available when the custom container dialog chunk fails', async ({ page }) => {
