@@ -146,18 +146,18 @@
       "assets/index-t8joRCMA.css",
       "index.html"
     ],
-    "initialHtmlGzipBytes": 304,
+    "initialHtmlGzipBytes": 289,
     "initialCssGzipBytes": 9561,
-    "initialJsGzipBytes": 557955,
-    "initialGzipBytes": 567820,
-    "totalJsGzipBytes": 662395,
+    "initialJsGzipBytes": 557940,
+    "initialGzipBytes": 567790,
+    "totalJsGzipBytes": 662372,
     "componentGzipBytes": {
-      "assets/html2canvas-CaMkmim5.js": 46339,
-      "assets/index-BlehjAOh.js": 557955,
+      "assets/html2canvas-CaMkmim5.js": 46335,
+      "assets/index-BlehjAOh.js": 557940,
       "assets/index-t8joRCMA.css": 9561,
-      "assets/index.es-DB4lzz5V.js": 48372,
+      "assets/index.es-DB4lzz5V.js": 48368,
       "assets/purify.es-DLRRNDFG.js": 9729,
-      "index.html": 304
+      "index.html": 289
     }
   }
 }

@@ -1,5 +1,13 @@
 # Decision Log
 
+## 2026-07-21 Bundle gzip 计量先归一化 Vite 内容指纹
+
+- 背景：Phase 1.1 初次构建按旧口径显示 HTML `304→309 B`、初始 JS `557955→558657 B`，但未压缩入口原始字节反而略降。Vite 每次内容变化会生成新的 8 字符 asset hash，HTML 和入口 JS 中这些高熵字符串的 gzip 差异会产生数百字节噪声；甚至仅调整 App import 顺序就能让 gzip 大幅变化而业务代码不变。
+- 选项：A. 接受 hash 随机性并不断调代码碰更小 hash；B. 给初始 gzip 增加容差；C. 保持零增长门禁，但在 level-9 gzip 前把 HTML/CSS/JS 内容中的 `-[8-char].js|css` 指纹替换为等长固定 token，文件集合仍从真实 production HTML 解析。
+- 决策：选择 C。只消除内容地址字符串的压缩熵，不忽略模块、代码、样式或 chunk 内容增长。
+- 影响：Phase 0 commit `7205c63` 在临时 detached worktree 重建后的归一化基线为 HTML `289 B`、CSS `9561 B`、初始 JS `557940 B`、初始总量 `567790 B`、total JS `662372 B`。Phase 1.1 最终同口径为 `289/9561/557937/567787/662369 B`，初始与 total JS 均减少 3 B。
+- 后续：baseline 只迁移 bundle 计量字段，保留 Phase 0 时延样本；新增测试保证不同 Vite hash 归一后完全相同。
+
 ## 2026-07-21 Update 硬门禁允许旧时延合同迁移，但只比较旧 baseline 的硬字段
 
 - 背景：俄罗斯批量合同从 100 提高到 500 后，首次受保护的 `benchmark:update` 在完整报告验证阶段拒绝旧 baseline：`baseline algorithm.russia-volume.iterationsPerSample must be 500`。这说明 update 不能直接复用普通 gate 对旧时延结构的完整校验，否则任何明确记录的时延口径迁移都无法落地。

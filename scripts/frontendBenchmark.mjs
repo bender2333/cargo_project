@@ -77,6 +77,10 @@ export function initialAssetFiles(html) {
   }))].sort()
 }
 
+export function normalizeAssetFingerprints(content) {
+  return content.replace(/-[A-Za-z0-9_-]{8}(?=\.(?:js|css))/g, '-XXXXXXXX')
+}
+
 export function summarizeBundleAssets(initialFiles, componentGzipBytes) {
   const initial = [...new Set(initialFiles)].sort()
   const missing = initial.filter((name) => !Object.hasOwn(componentGzipBytes, name))
@@ -292,7 +296,7 @@ function measureBundle() {
   for (const path of filesUnder(dist)) {
     const name = relative(dist, path).replaceAll('\\', '/')
     if (!/\.(html|css|js)$/.test(name)) continue
-    componentGzipBytes[name] = gzipSync(readFileSync(path), { level: 9 }).length
+    componentGzipBytes[name] = gzipSync(normalizeAssetFingerprints(readFileSync(path, 'utf8')), { level: 9 }).length
   }
   return summarizeBundleAssets([...initialFiles], componentGzipBytes)
 }

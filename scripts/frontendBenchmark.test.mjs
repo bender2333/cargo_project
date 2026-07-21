@@ -121,6 +121,16 @@ describe('frontend architecture benchmark gates', () => {
     ])
   })
 
+  it('normalizes Vite asset fingerprints before measuring compressed content', () => {
+    const first = '<script src="/assets/index-CVqOI5WG.js"></script>import("./html2canvas-C9G8T4ko.js")'
+    const second = '<script src="/assets/index-BwoMdSIx.js"></script>import("./html2canvas-BG6ZGQcf.js")'
+
+    expect(frontendBenchmark.normalizeAssetFingerprints).toBeTypeOf('function')
+    expect(frontendBenchmark.normalizeAssetFingerprints?.(first)).toBe(
+      frontendBenchmark.normalizeAssetFingerprints?.(second),
+    )
+  })
+
   it('fails when production HTML references an asset missing from bundle measurement', () => {
     expect(() => frontendBenchmark.summarizeBundleAssets?.(
       ['index.html', 'assets/missing.js'],
