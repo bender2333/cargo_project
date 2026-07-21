@@ -16,8 +16,7 @@ export function removeToken() {
   localStorage.removeItem('cargo_token')
 }
 
-export function getAuthHeaders(): Record<string, string> {
-  const token = getToken()
+export function getAuthHeaders(token: string | null = getToken()): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
@@ -42,9 +41,10 @@ export function getCurrentUser(): User | null {
 }
 
 export async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
+  const requestToken = getToken()
   const headers = {
     ...options.headers,
-    ...getAuthHeaders(),
+    ...getAuthHeaders(requestToken),
     'Content-Type': 'application/json',
   }
   
@@ -53,7 +53,7 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
     headers,
   })
   
-  if (response.status === 401) {
+  if (response.status === 401 && getToken() === requestToken) {
     // Session expired or unauthorized, logout
     removeToken()
     window.location.href = '/login'

@@ -1,5 +1,13 @@
 # Decision Log
 
+## 2026-07-21 Phase 1.1 远程初始化与 401 只作用于对应会话
+
+- 背景：App 接管退出后不再整页刷新，旧 Workbench 发出的初始化请求可能在用户退出并登录新账号后才返回；旧 `fetchWithAuth` 对任意 `401` 都无条件删除当前 token。同时 Workbench 改为认证后挂载，开发态 `StrictMode` 会重放 mount effect，使五个初始化读取各发送两次。
+- 选项：A. 恢复退出时整页刷新；B. 为本阶段引入完整请求缓存/数据层；C. 让 `401` 仅在请求 token 仍是当前 token 时清理会话，并把初始化 effect 延后一任务，令 StrictMode 的试运行挂载在真正发请求前被 cleanup 取消。
+- 决策：选择 C。保持 App 壳内退出流程，不提前引入 Phase 1.2 数据层；生产挂载仍只执行一次初始化读取，开发态也只发送一组五个请求。
+- 影响：旧会话的延迟响应不能破坏新会话；普通 E2E 的 API 时序恢复为每个初始化端点一次。管理员用户摘要快捷按钮增加稳定 test id，E2E 不再可能误点同名主导航按钮。
+- 后续：Phase 1.2 迁移 API 模块时保留 request-token 隔离合同；若引入取消信号或查询缓存，必须继续通过单次初始化请求断言。
+
 ## 2026-07-21 Bundle gzip 计量先归一化 Vite 内容指纹
 
 - 背景：Phase 1.1 初次构建按旧口径显示 HTML `304→309 B`、初始 JS `557955→558657 B`，但未压缩入口原始字节反而略降。Vite 每次内容变化会生成新的 8 字符 asset hash，HTML 和入口 JS 中这些高熵字符串的 gzip 差异会产生数百字节噪声；甚至仅调整 App import 顺序就能让 gzip 大幅变化而业务代码不变。
@@ -7,6 +15,22 @@
 - 决策：选择 C。只消除内容地址字符串的压缩熵，不忽略模块、代码、样式或 chunk 内容增长。
 - 影响：Phase 0 commit `7205c63` 在临时 detached worktree 重建后的归一化基线为 HTML `289 B`、CSS `9561 B`、初始 JS `557940 B`、初始总量 `567790 B`、total JS `662372 B`。Phase 1.1 最终同口径为 `289/9561/557937/567787/662369 B`，初始与 total JS 均减少 3 B。
 - 后续：baseline 只迁移 bundle 计量字段，保留 Phase 0 时延样本；新增测试保证不同 Vite hash 归一后完全相同。
+
+## 2026-07-21 App 认证壳保留 token 存在与用户解析分离的旧语义
+
+- 背景：旧 Workbench 以 `isLoggedIn()` 判断是否进入工作台，并独立用 `getCurrentUser()` 解析用户；畸形但存在的 token 会先进入 Workbench 且 `currentUser=null`，随后远程 401 再触发既有失效流程。若 App 直接以 `currentUser !== null` 判断登录，会在纯重构中改变行为。
+- 选项：A. 以解析成功的用户作为唯一登录状态；B. 保留 `loggedIn` 与 `currentUser` 两个状态；C. 本阶段顺便重写 JWT 校验和 401 流程。
+- 决策：选择 B。App 仍以 token 是否存在初始化 `loggedIn`，用户解析结果可空；登录/注册成功后重新读取用户，退出清 token 和两项状态。
+- 影响：Phase 1.1 只移动认证所有权，不改变损坏 token、登录、注册或退出的可观察流程；更严格的 token 校验留给独立安全任务。
+- 后续：App 单测固定有效 token、畸形 token 和退出语义；Phase 1.2 不得借 API 迁移静默改变此合同。
+
+## 2026-07-21 管理员快捷入口复用 Workbench 内嵌 users 导航
+
+- 背景：Workbench 同时存在 `activeNav='users'` 的内嵌管理页和 `showUserManagement` 的独立全屏提前返回，两条入口产生重复页面状态。Phase 1.1 要删除认证相关独立跳转状态，同时保持管理员快捷按钮可用。
+- 选项：A. 保留两个用户管理页面状态；B. 删除快捷按钮；C. 快捷按钮调用 `activateNav('users')`，统一进入现有 `users-page`。
+- 决策：选择 C。UserManagement 组件和返回工作台动作继续复用，不新增路由或第三种状态。
+- 影响：管理员从主导航或用户摘要快捷按钮进入同一内嵌页面；普通用户仍无 users 导航。
+- 后续：E2E 精确点击快捷按钮并断言 `users-page`，防止独立全屏分支回归。
 
 ## 2026-07-21 Update 硬门禁允许旧时延合同迁移，但只比较旧 baseline 的硬字段
 

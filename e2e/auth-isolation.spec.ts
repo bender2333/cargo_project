@@ -14,6 +14,20 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
 
   test('registers and logs in a new user', async ({ page }) => {
     const user = `u_reg_${Math.random().toString(36).substring(7)}`
+    const initialReadPaths = [
+      '/api/history',
+      '/api/containers/custom',
+      '/api/import-templates',
+      '/api/export-templates',
+      '/api/custom-cargo',
+    ]
+    const requestCounts = new Map(initialReadPaths.map((path) => [path, 0]))
+    page.on('request', (request) => {
+      const path = new URL(request.url()).pathname
+      if (request.method() === 'GET' && requestCounts.has(path)) {
+        requestCounts.set(path, (requestCounts.get(path) ?? 0) + 1)
+      }
+    })
     await page.goto('/')
     
     // Switch to Register page
@@ -24,11 +38,19 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await page.fill('#username', user)
     await page.fill('#password', testPassword)
     await page.fill('#confirmPassword', testPassword)
+    const initialReads = Promise.all(initialReadPaths.map((path) => page.waitForResponse((response) => (
+      response.request().method() === 'GET' && new URL(response.url()).pathname === path
+    ))))
     await page.click('button[type="submit"]')
 
     // After registration, we should be auto-logged in and see the workbench
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
     await expect(page.getByText(`用户:${user}`)).toBeVisible()
+    await initialReads
+    await page.waitForLoadState('networkidle')
+    expect(Object.fromEntries(requestCounts)).toEqual(Object.fromEntries(
+      initialReadPaths.map((path) => [path, 1]),
+    ))
   })
 
   test('ensures strict data isolation for custom containers and history plans', async ({ page }) => {
@@ -184,7 +206,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
 
     // Open User Management panel
-    await page.click('button:has-text("用户管理")')
+    await page.getByTestId('user-management-shortcut').click()
+    await expect(page.getByTestId('users-page')).toBeVisible()
     await expect(page.getByText('用户账号管理')).toBeVisible()
     await expect(page.getByText('管理员控制面板')).toBeVisible()
 
@@ -217,7 +240,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await page.fill('#username', 'admin')
     await page.fill('#password', 'admin123')
     await page.click('button[type="submit"]')
-    await page.click('button:has-text("用户管理")')
+    await page.getByTestId('user-management-shortcut').click()
+    await expect(page.getByTestId('users-page')).toBeVisible()
 
     page.on('dialog', async (dialog) => {
       expect(dialog.message()).toContain(`确定要删除用户 "${adminUser2}" 吗？`)

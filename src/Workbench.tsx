@@ -83,10 +83,8 @@ import {
   type PlacementSettings,
 } from './lib/placementSettings'
 import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, PackingResult, CustomDbContainer, DbHistoryPlan, ImportTemplate, ImportTemplateUnits, ImportTemplateDefaults, ExportTemplate } from './types'
-import { isLoggedIn, getCurrentUser, fetchWithAuth, removeToken } from './lib/auth'
+import { fetchWithAuth } from './lib/auth'
 import type { User } from './lib/auth'
-import { LoginPage } from './components/LoginPage'
-import { RegisterPage } from './components/RegisterPage'
 import { UserManagement } from './components/UserManagement'
 import { DebugPanel } from './components/DebugPanel'
 import { CustomContainerDialog } from './components/CustomContainerDialog'
@@ -1060,7 +1058,12 @@ function localizeManualIssue(issue: ValidationIssue, localeCopy: typeof copy.en)
   return localeCopy.manualIssueStacking
 }
 
-function Workbench() {
+type WorkbenchProps = {
+  currentUser: User | null
+  onLogout: () => void
+}
+
+function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [locale, setLocale] = useState<Locale>('zh')
   const t = copy[locale]
   const [projectName, setProjectName] = useState(() => defaultProjectName(locale))
@@ -1080,7 +1083,7 @@ function Workbench() {
   const [activeLabelId, setActiveLabelId] = useState('all')
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
   const [sceneViewMode, setSceneViewMode] = useState<SceneViewMode>('iso')
-  const [placementSettings, setPlacementSettings] = useState<PlacementSettings>(() => loadPlacementSettings(getCurrentUser()?.id ?? null))
+  const [placementSettings, setPlacementSettings] = useState<PlacementSettings>(() => loadPlacementSettings(currentUser?.id ?? null))
   const [placementSettingsOpen, setPlacementSettingsOpen] = useState(false)
   const [snapSettingsOpen, setSnapSettingsOpen] = useState(false)
   const gridSnap = placementSettings.snapEnabled && placementSettings.gridSnapEnabled
@@ -1110,10 +1113,6 @@ function Workbench() {
   const suppressContainerChangeNoticeRef = useRef(false)
   
   // Backend integrated states
-  const [loggedIn, setLoggedIn] = useState(() => isLoggedIn())
-  const [showRegister, setShowRegister] = useState(false)
-  const [currentUser, setCurrentUser] = useState<User | null>(() => getCurrentUser())
-  const [showUserManagement, setShowUserManagement] = useState(false)
   const [customContainers, setCustomContainers] = useState<ContainerSpec[]>([])
   const [showCustomContainerDialog, setShowCustomContainerDialog] = useState(false)
   const [historyPlans, setHistoryPlans] = useState<HistoryPlan[]>([])
@@ -1260,7 +1259,6 @@ function Workbench() {
   }, [selectedContainerId, containerOverrides, customContainers, customContainer])
 
   const fetchCustomContainers = async () => {
-    if (!isLoggedIn()) return
     try {
       const res = await fetchWithAuth('/api/containers/custom')
       if (!res.ok) throw new Error('获取自定义柜型失败')
@@ -1284,7 +1282,6 @@ function Workbench() {
   }
 
   const fetchHistory = async () => {
-    if (!isLoggedIn()) return
     try {
       const res = await fetchWithAuth('/api/history')
       if (!res.ok) throw new Error('获取历史方案失败')
@@ -1311,7 +1308,6 @@ function Workbench() {
   }
 
   const fetchImportTemplates = async () => {
-    if (!isLoggedIn()) return
     try {
       setImportTemplates(await readImportTemplates())
     } catch (err) {
@@ -1320,7 +1316,6 @@ function Workbench() {
   }
 
   const fetchExportTemplates = async () => {
-    if (!isLoggedIn()) return
     try {
       setExportTemplates(await readExportTemplates())
     } catch (err) {
@@ -1329,7 +1324,6 @@ function Workbench() {
   }
 
   const fetchCustomCargo = async () => {
-    if (!isLoggedIn()) return
     try {
       setCustomCargoItems(await readCustomCargo())
     } catch (err) {
@@ -1354,14 +1348,17 @@ function Workbench() {
   }
 
   useEffect(() => {
-    if (loggedIn) {
-      fetchHistory()
-      fetchCustomContainers()
-      fetchImportTemplates()
-      fetchExportTemplates()
-      fetchCustomCargo()
-    }
-  }, [loggedIn])
+    // Let StrictMode cancel its development-only trial mount before requests start.
+    const requestTimer = window.setTimeout(() => {
+      void fetchHistory()
+      void fetchCustomContainers()
+      void fetchImportTemplates()
+      void fetchExportTemplates()
+      void fetchCustomCargo()
+    }, 0)
+
+    return () => window.clearTimeout(requestTimer)
+  }, [])
 
   const renderingContainer = effectiveContainer(selectedContainer)
   const displayCargoItems = useMemo(() => normalizeCargoLabelColors(cargoItems), [cargoItems])
@@ -3154,37 +3151,6 @@ function Workbench() {
     </div>
   )
 
-  if (!loggedIn) {
-    if (showRegister) {
-      return (
-        <RegisterPage
-          onRegisterSuccess={() => {
-            setLoggedIn(true)
-            setCurrentUser(getCurrentUser())
-            fetchHistory()
-            fetchCustomContainers()
-          }}
-          onToggleLogin={() => setShowRegister(false)}
-        />
-      )
-    }
-    return (
-      <LoginPage
-        onLoginSuccess={() => {
-          setLoggedIn(true)
-          setCurrentUser(getCurrentUser())
-          fetchHistory()
-          fetchCustomContainers()
-        }}
-        onToggleRegister={() => setShowRegister(true)}
-      />
-    )
-  }
-
-  if (showUserManagement && currentUser?.role === 'admin') {
-    return <UserManagement onBack={() => setShowUserManagement(false)} />
-  }
-
   return (
     <main className="min-h-screen bg-[#f4f7fb] text-[#1f2937]">
       <div className="mx-auto p-5 max-w-[1500px] xl:max-w-[1800px] 2xl:max-w-none 2xl:px-8">
@@ -3211,7 +3177,8 @@ function Workbench() {
                   <span className="font-bold text-xs">{currentUser.username}</span>
                   {currentUser.role === 'admin' && (
                     <button
-                      onClick={() => setShowUserManagement(true)}
+                      onClick={() => activateNav('users')}
+                      data-testid="user-management-shortcut"
                       className="rounded-[6px] bg-indigo-600 hover:bg-indigo-700 px-2 py-1 text-[11px] font-bold text-white transition-colors cursor-pointer animate-pulse"
                       type="button"
                     >
@@ -3219,12 +3186,7 @@ function Workbench() {
                     </button>
                   )}
                   <button
-                    onClick={() => {
-                      removeToken()
-                      setLoggedIn(false)
-                      setCurrentUser(null)
-                      window.location.href = '/'
-                    }}
+                    onClick={onLogout}
                     className="rounded-[6px] bg-red-600 hover:bg-red-700 px-2 py-1 text-[11px] font-bold text-white transition-colors cursor-pointer"
                     type="button"
                   >
