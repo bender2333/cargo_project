@@ -10,6 +10,14 @@
 - 影响：正式命令通过 59 文件/370 测试 + 2 文件/6 测试，总耗时约 69.9 秒；所有原断言、fixture 和 timeout 保持不变，同时避免外部扫描/worker contention 造成假 RED。
 - 后续：新增带硬时延合同的单测时必须放入独占性能阶段；普通业务单测继续保留并行，不把整个套件永久降为单 worker。
 
+## 2026-07-21 Phase 1.2 先建立共享 API client 再迁移领域请求
+
+- 背景：历史方案和自定义柜型都可直接作为首个领域切片，但二者都依赖 `fetchWithAuth`；若先建立 `src/api/historyPlans.ts` 或 `src/api/customContainers.ts` 并继续导入 `src/lib/auth.ts`，后续迁移认证客户端时会再次批量改写所有新 API 模块的依赖。
+- 选项：A. 先做历史方案；B. 先做自定义柜型；C. 先把认证 HTTP client 独立到 `src/api/client.ts`，再按领域迁移。
+- 决策：选择 C。第一提交只移动 `fetchWithAuth` 及其会话隔离测试，token 存储/JWT 解析仍保留在 `src/lib/auth.ts`；不在基础 client 提交里改变各领域当前的成功/失败语义。
+- 影响：后续 API 模块从一开始依赖正确的网络边界，避免重复迁移；首个领域切片确定为自定义柜型，用于消除 Workbench 与弹窗的重复 DTO 映射。
+- 后续：共享 client 全量门禁通过并提交后，实施 `customContainers` API；认证 login/register 和用户管理分别独立提交。
+
 ## 2026-07-21 Phase 1.1 远程初始化与 401 只作用于对应会话
 
 - 背景：App 接管退出后不再整页刷新，旧 Workbench 发出的初始化请求可能在用户退出并登录新账号后才返回；旧 `fetchWithAuth` 对任意 `401` 都无条件删除当前 token。同时 Workbench 改为认证后挂载，开发态 `StrictMode` 会重放 mount effect，使五个初始化读取各发送两次。

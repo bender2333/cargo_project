@@ -1,5 +1,5 @@
 import type { ImportTemplate, ImportTemplateDefaults, ImportTemplateUnits } from '../types'
-import { fetchWithAuth } from './auth'
+import { fetchWithAuth } from '../api/client'
 
 export type ImportTemplatePayload = {
   name: string

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { fetchWithAuth } from '../lib/auth'
+import { fetchWithAuth } from '../api/client'
 import type { ContainerSpec } from '../types'
 
 interface CustomContainerDialogProps {

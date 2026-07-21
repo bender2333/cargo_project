@@ -4,9 +4,9 @@ import {
   deleteImportTemplate,
   updateImportTemplate,
 } from './importTemplates'
-import { fetchWithAuth } from './auth'
+import { fetchWithAuth } from '../api/client'
 
-vi.mock('./auth', () => ({
+vi.mock('../api/client', () => ({
   fetchWithAuth: vi.fn(),
 }))
 

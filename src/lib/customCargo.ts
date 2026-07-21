@@ -1,5 +1,5 @@
 import type { CargoItem } from '../types'
-import { fetchWithAuth } from './auth'
+import { fetchWithAuth } from '../api/client'
 
 type CustomCargoPayload = Omit<CargoItem, 'id' | 'quantity'>
 

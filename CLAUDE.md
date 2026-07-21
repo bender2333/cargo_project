@@ -71,7 +71,7 @@ The app is a two-tier system:
 - `server/middleware.mjs` — `authenticate` (JWT) and `requireAdmin` middleware
 - `server/index.mjs` — all API routes; serves `dist/` as static files in production
 
-**Frontend auth** (`src/lib/auth.ts`): JWT stored in `localStorage`; `fetchWithAuth` wraps `fetch` and redirects to `/login` on 401.
+**Frontend auth**: `src/lib/auth.ts` stores/parses the JWT; `src/api/client.ts` wraps authenticated `fetch` and redirects to `/login` on a matching-session 401.
 
 ### Core data flow
 

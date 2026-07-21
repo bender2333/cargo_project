@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchWithAuth } from '../lib/auth'
+import { fetchWithAuth } from '../api/client'
 
 interface UserItem {
   id: string

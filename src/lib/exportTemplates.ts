@@ -1,5 +1,5 @@
 import type { ExportTemplate, ExportTemplateColumn } from '../types'
-import { fetchWithAuth } from './auth'
+import { fetchWithAuth } from '../api/client'
 
 export type ExportTemplatePayload = {
   name: string

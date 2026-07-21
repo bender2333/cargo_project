@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchWithAuth } from '../lib/auth'
+import { fetchWithAuth } from '../api/client'
 import type { CargoDebugSnapshot } from '../lib/debugSnapshot'
 
 type DebugPanelProps = {

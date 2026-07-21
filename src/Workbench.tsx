@@ -83,7 +83,7 @@ import {
   type PlacementSettings,
 } from './lib/placementSettings'
 import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, PackingResult, CustomDbContainer, DbHistoryPlan, ImportTemplate, ImportTemplateUnits, ImportTemplateDefaults, ExportTemplate } from './types'
-import { fetchWithAuth } from './lib/auth'
+import { fetchWithAuth } from './api/client'
 import type { User } from './lib/auth'
 import { UserManagement } from './components/UserManagement'
 import { DebugPanel } from './components/DebugPanel'
