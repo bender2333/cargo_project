@@ -37,7 +37,7 @@
   - 删除响应式 3D 源码级 skip，修正过时运行说明。
   - 增加 Playwright reporter 或等价门禁：出现 skipped/fixme 用例时整套命令失败。
 - 测试意图：全套 E2E 可以单命令运行，不依赖已有后台进程，不读取或写入开发数据库，95 个用例全部实际执行。
-- 验证：`npm run test:e2e -- --reporter=list`；运行前后校验 `server/database.db` 的大小、哈希和更新时间不变。
+- 验证：直接运行 `npm run test:e2e`，保留配置中的 list + zero-skip reporter；运行前后校验 `server/database.db` 的大小、哈希和更新时间不变。命令行不得用 `--reporter` 覆盖零跳过门禁。
 - 提交：`test(e2e): isolate backend and forbid skipped tests`。
 
 ### 子任务 0.2：确定性业务基线

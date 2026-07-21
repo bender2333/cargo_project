@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 .worktrees/
+test-results/current/
 *.local
 
 # SQLite databases must never be committed — they contain password hashes.

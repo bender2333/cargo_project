@@ -5,7 +5,7 @@ import { randomUUID } from 'crypto'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const dbPath = path.join(__dirname, 'database.db')
+const dbPath = process.env.CARGO_DB_PATH || path.join(__dirname, 'database.db')
 
 const db = new Database(dbPath)
 

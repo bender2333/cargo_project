@@ -397,7 +397,8 @@ test('调试面板 admin 可拉取服务器日志', async ({ page }) => {
   const fetchBtn = page.getByTestId('debug-fetch-logs')
   await expect(fetchBtn).toBeVisible()
   await fetchBtn.click()
-  await page.waitForTimeout(500)
+  await expect(page.getByTestId('debug-panel')).toContainText('E2E server log ready')
+  await expect(page.getByTestId('debug-panel')).not.toContainText('HTTP 500')
 })
 
 test('网格吸附按钮切换 data-grid-snap', async ({ page }) => {

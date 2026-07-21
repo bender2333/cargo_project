@@ -4,7 +4,7 @@
 
 - [x] Audit the current frontend dependency and state boundaries.
 - [x] Approve and record the full phased architecture plan.
-- [ ] Make Playwright self-contained with an isolated in-memory API database and zero skipped tests.
+- [x] Make Playwright self-contained with an isolated in-memory API database and zero skipped tests.
 - [ ] Freeze deterministic Russian/Vietnam packing contracts and golden hashes.
 - [ ] Add repeatable browser, algorithm, and bundle benchmark reporting.
 - [ ] Separate the App authentication shell and remote API modules from Workbench.
@@ -14,6 +14,12 @@
 - [ ] Add measured lazy loading, run all local gates, deploy, and run remote regression.
 - Initial local evidence before edits: `npm run lint` passed in about 41.0s; `npm test` passed 56 files / 351 tests in about 48.7s; `npm run build` passed in about 14.6s with the existing large-chunk warning. `dist` measured 2,321,826 bytes and the entry bundle measured 1,880.11 kB / gzip 562.77 kB.
 - E2E baseline gap: Playwright lists 95 tests, but the responsive 3D spec is source-level skipped and the default runner does not start the API backend; the fixed `server/database.db` path also prevents isolated regression runs.
+- E2E isolation: Playwright now starts both the API and Vite, forces the Vite proxy to the local API, and runs the API with `CARGO_DB_PATH=:memory:`. The production database default remains `server/database.db`.
+- Zero-skip gate: a runtime Playwright reporter fails the run when any test result is `skipped`; its intent test passed 1 / 1. The responsive 3D source-level skip was removed, and its focused regression passed 1 / 1.
+- Admin-log regression: strengthening the browser assertion exposed an actual `HTTP 500` (RED). E2E now points the API at the non-sensitive `test-data/e2e/server-log.txt` fixture, after which the focused regression passed 1 / 1 (GREEN).
+- Full E2E passed twice with no skipped tests: 95 / 95 in about 6.8 minutes before the stronger log assertion, then 95 / 95 in about 6.1 minutes after it.
+- Final local gates: `npm run lint` passed; `npm test` passed 57 files / 352 tests in 50.0s; `npm run build` passed with the existing large-chunk warning (entry bundle 1,880.11 kB / gzip 562.77 kB); `git diff --check` passed.
+- Isolation proof: `server/database.db` stayed unchanged at 499,712 bytes, SHA-256 `70212B27A8781D648197BAAEABC84E7C550E03B363E856B290CEA66DA331E901`, mtime `2026-07-08T08:46:54.9597407Z`; no listeners remained on ports 3010 or 5176 after verification.
 - Plan: `plans/2026-07-21-frontend-architecture-refactor.md`.
 
 ## 2026-07-20 (issues/0720 fixes in progress)

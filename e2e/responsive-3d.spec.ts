@@ -7,15 +7,8 @@ import { expect, test } from '@playwright/test'
  * monitors. After the fix, the canvas clientWidth must strictly grow when
  * the viewport widens through 1366 -> 1920 -> 2560.
  *
- * NOTE: this spec requires the Express backend (server/index.mjs on port 3000)
- * AND a Vite dev server that proxies /api to it. The current playwright.config
- * only starts Vite, so the test is marked test.skip by default to avoid a
- * false failure in CI environments that don't spin up the backend. To run it
- * manually:
- *   1. npm run start:server               # backend on :3000
- *   2. add /api proxy to vite.config.ts   # OR build + serve dist/
- *   3. remove the test.skip line below
- *   4. PLAYWRIGHT_PORT=5181 npx playwright test responsive-3d
+ * The default Playwright config starts both the Express API on port 3010 with
+ * an in-memory SQLite database and the Vite server that proxies /api to it.
  */
 
 const adminUsername = 'admin'
@@ -44,9 +37,6 @@ async function measure3dCanvasWidth(
 }
 
 test.describe('Responsive 3D workspace scaling', () => {
-  // Skip by default — see file header comment for how to run locally.
-  test.skip(true, 'Requires backend server + /api proxy; see file header.')
-
   test('3D canvas width grows monotonically with viewport width', async ({ page }) => {
     await loginAsAdmin(page)
 
