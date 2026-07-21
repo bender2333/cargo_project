@@ -5,7 +5,7 @@
 - [x] Audit the current frontend dependency and state boundaries.
 - [x] Approve and record the full phased architecture plan.
 - [x] Make Playwright self-contained with an isolated in-memory API database and zero skipped tests.
-- [ ] Freeze deterministic Russian/Vietnam packing contracts and golden hashes.
+- [x] Freeze deterministic Russian/Vietnam packing contracts and golden hashes.
 - [ ] Add repeatable browser, algorithm, and bundle benchmark reporting.
 - [ ] Separate the App authentication shell and remote API modules from Workbench.
 - [ ] Introduce atomic automatic/manual packing-session state transitions.
@@ -22,6 +22,9 @@
 - Isolation proof: `server/database.db` stayed unchanged at 499,712 bytes, SHA-256 `70212B27A8781D648197BAAEABC84E7C550E03B363E856B290CEA66DA331E901`, mtime `2026-07-08T08:46:54.9597407Z`; no listeners remained on ports 3010 or 5176 after verification.
 - Release note: added bilingual `2026-07-21-r52-refactor-safety-baseline` as the newest notification, covering isolated browser regression, the zero-skip gate, restored responsive 3D coverage, and the administrator log end-to-end check. The notification E2E now asserts this entry is rendered first.
 - Release-note verification: focused Playwright passed 1 / 1; `npm run lint` passed; `npm test` passed 57 files / 352 tests; `npm run build` passed with the existing large-chunk warning (entry bundle 1,881.11 kB / gzip 563.36 kB); full `npm run test:e2e` passed 95 / 95 with zero skipped tests in about 5.5 minutes.
+- Packing contract baseline: added canonical `PackingResult` normalization and an explicit `npm run test:contracts:update` generator. It fixes Russian IDs as `russia-pallet-01..31`, remaps Vietnam fixture IDs to `vietnam-01..24`, rounds numeric fields to six decimals, sorts set-like fields, and excludes runtime timing and localized diagnostic prose.
+- Golden cases and SHA-256: `russia-volume` 31/31 (`33dd8fb904eec42b3a0a3682506f122e8ae8d1e7481f1e21b5807d987c6f7cdd`); `vietnam-20gp-quantity` 463/864 (`05a4c6155aa7c9b513174539dc16118d60afee6859add231121936d7aadba901`); `vietnam-20gp-volume` 462/864 (`2b3501076d5e3437b448c1ddb154a4cb2c379b5261a8be168208393ce2cfc678`); `vietnam-40hq-quantity` 839/864 (`ea57e870364b2b5943a9ff7167c350f372561c299ce651606412ef806ab1553f`); `vietnam-40hq-volume` 823/864 (`71737f526adb485a90d99906063f54a7dad66a4acb6223c818249803caa30f35`).
+- Contract verification: focused contract tests passed 3 files / 5 tests; regenerating the 3.8 MB golden twice produced the same file SHA-256 `A9A33C8ADD3212FC4F888438F3317BD14B1C1D7F633642C6DB4A04939101AA71`; full local gates passed (`npm run lint`, `npm test` 58 files / 353 tests, `npm run build`); full E2E passed 95 / 95 with zero skipped tests in about 6.7 minutes.
 - Plan: `plans/2026-07-21-frontend-architecture-refactor.md`.
 
 ## 2026-07-20 (issues/0720 fixes in progress)

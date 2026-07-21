@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx'
 import type { ContainerSpec } from '../types'
 import { parseCargoRows } from './importCargo'
 import { calculatePacking } from './packing'
+import { expectPackingResultContract } from './packingContract.testSupport'
 
 const moduleDir = dirname(fileURLToPath(import.meta.url))
 
@@ -18,8 +19,10 @@ describe('calculatePacking — 31 Russian pallets in a custom 13400×2450×2650 
     const rows = XLSX.utils.sheet_to_json(sheet) as Record<string, string | number | null>[]
     expect(rows.length).toBe(31)
 
-    let nextId = 0
-    const { items, errors } = parseCargoRows(rows, { createId: () => `pallet-${nextId++}` })
+    let nextId = 1
+    const { items, errors } = parseCargoRows(rows, {
+      createId: () => `russia-pallet-${String(nextId++).padStart(2, '0')}`,
+    })
     expect(errors).toEqual([])
     expect(items.length).toBe(31)
 
@@ -58,5 +61,7 @@ describe('calculatePacking — 31 Russian pallets in a custom 13400×2450×2650 
       expect(box.y + box.width).toBeLessThanOrEqual(container.width)
       expect(box.z + box.height).toBeLessThanOrEqual(container.height)
     }
+
+    expectPackingResultContract('russia-volume', result)
   })
 })

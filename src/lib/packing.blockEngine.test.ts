@@ -3,12 +3,20 @@ import { describe, expect, it } from 'vitest'
 import { containers, effectiveContainer } from '../data/containers'
 import type { ContainerSpec, CargoItem, PlacedBox } from '../types'
 import { calculatePacking, shouldUseBlockEngine } from './packing'
+import { expectPackingResultContract } from './packingContract.testSupport'
 import { isGapFillBox } from './placementSource'
 
 const VOXEL_MM = 50
 
 function vietnamFixture(): { container: ContainerSpec; items: CargoItem[] } {
-  return JSON.parse(readFileSync('test-data/json/vietnam-11/input.json', 'utf8'))
+  const fixture = JSON.parse(readFileSync('test-data/json/vietnam-11/input.json', 'utf8')) as { container: ContainerSpec; items: CargoItem[] }
+  return {
+    ...fixture,
+    items: fixture.items.map((item, index) => ({
+      ...item,
+      id: `vietnam-${String(index + 1).padStart(2, '0')}`,
+    })),
+  }
 }
 
 function packingMetrics(placed: PlacedBox[], container: ContainerSpec) {
@@ -134,7 +142,7 @@ describe('block-building packing engine', () => {
       return { mode, result, elapsedMs, metrics }
     })
 
-    for (const { result, elapsedMs, metrics } of outcomes) {
+    for (const { mode, result, elapsedMs, metrics } of outcomes) {
       expect(result.placedCount).toBeGreaterThanOrEqual(443)
       expect(metrics.utilPct).toBeGreaterThanOrEqual(79.6)
       expect(metrics.envelopeFillPct).toBeGreaterThan(88)
@@ -142,6 +150,7 @@ describe('block-building packing engine', () => {
       expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
       expectNoOverlapOrBounds(fixture.container, result.placed)
       expect(elapsedMs).toBeLessThan(5000)
+      expectPackingResultContract(`vietnam-20gp-${mode}`, result)
     }
 
     const [quantity, volume] = outcomes
@@ -168,6 +177,7 @@ describe('block-building packing engine', () => {
       expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
       expectNoOverlapOrBounds(container, result.placed)
       expect(elapsedMs).toBeLessThan(20_000)
+      expectPackingResultContract(`vietnam-40hq-${mode}`, result)
     }
   }, 25_000)
 })

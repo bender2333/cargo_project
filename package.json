@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:contracts:update": "node scripts/update-packing-contracts.mjs",
     "test:e2e": "playwright test",
     "start:server": "node server/index.mjs",
     "deploy": "node scripts/deploy.mjs"
