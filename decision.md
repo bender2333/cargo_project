@@ -1,5 +1,19 @@
 # Decision Log
 
+## 2026-07-21 自定义柜型 API 切片不得用 baseline update 吸收 112 B 增长
+
+- 背景：自定义柜型 DTO/CRUD 抽取、错误提示和测试全部通过后，benchmark 的五个 packing hash 与全部时延指标绿色，但归一化 initial JS/initial total 为 `558052/567902 B`，比 Phase 0 零增长门限各高 `112 B`，total JS 同步增长到 `662484 B`。
+- 选项：A. 执行 `benchmark:update` 接受增长；B. 放宽 initial bundle 门限；C. 保持基线和门限，复用现有 notice 状态并精简新增 API 错误实现，直到普通 benchmark 通过。
+- 决策：选择 C。架构边界本身不应成为初始包增长的理由；不改测试、阈值或 baseline。
+- 影响：在该次测量下切片不能提交；此前 96/96 E2E 和 63 文件/382 单测只是行为证据，包体积硬门禁仍优先。
+- 复核：继续精简后，正式 benchmark 的流程用例 1/1 通过，但 initial JS/initial total/total JS 仍为 `557963/567813/662395 B`，比对应基线各高 `23 B`，因此仍保持 RED。
+- 测试观察：新增的柜型 500 E2E 首次冷启动时，登录请求在 5 秒工作台断言期内仍为 pending；不改代码、不改断言重跑后 1/1 通过。不将单次重跑冒充门禁，最终仍由全量 E2E 判定；若再现则单独处理冷启动认证稳定性。
+- 收口决策：不继续做字面量级的压缩技巧；将只在用户打开时需要的 `CustomContainerDialog` 按需加载。Workbench 的认证后柜型初始读取仍保持同步边界，错误使用独立布尔状态，不再把本地化文案当作状态标识。
+- 懒加载复审 RED：浏览器拦截弹窗模块后，局部错误界面成功保留 Workbench，但解除拦截后原地重试仍返回同一 dynamic-import rejection；浏览器已缓存失败的 ES module，该重试按钮不能对用户声称可恢复。
+- 懒加载失败决策：局部弹层提供“关闭”以保留未保存工作，另提供明确的“重新加载页面”作为真实恢复路径；不再使用无效的原地 import 重试。
+- 结果：正式 benchmark 以可比较时延通过，initial JS/initial total 为 `556245/566095 B`，比基线各低 `1695 B`；total JS 为 `663200 B`，增长 `828 B`（`0.13%`，低于 5% 硬上限）。全量 E2E 97/97 零跳过，冷启动失败未再现，dynamic-import 失败也未污染后续流程。
+- 后续：保持失败可见性、四个 CRUD 合同和按需加载边界；下一切片转入历史方案 API。
+
 ## 2026-07-21 Phase 1.2 client 迁移后的 40HQ 单测性能 RED 不放宽
 
 - 背景：共享 API client 只移动 `fetchWithAuth` 和 import 后，首次全量 Vitest 中越南 40HQ block-engine 用例完成正确性、诊断和几何断言，但耗时 `22039 ms`，超过既有 `<20000 ms` 门限；其余 374 项通过。该提交未修改装箱算法、fixture 或测试运行参数。

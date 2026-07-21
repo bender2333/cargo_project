@@ -12,6 +12,65 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await expect(page.getByRole('button', { name: '登录' })).toBeVisible()
   })
 
+  test('surfaces custom container bootstrap failures in the workbench', async ({ page }) => {
+    let reads = 0
+    await page.route('**/api/containers/custom', async (route) => {
+      if (route.request().method() === 'GET') {
+        reads += 1
+        if (reads > 1) {
+          await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+          return
+        }
+        await route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Database unavailable' }),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+    await expect(page.getByTestId('container-change-notice')).toHaveText('柜型加载失败')
+    await page.getByTestId('placement-mode-manual').click()
+    await expect(page.getByTestId('manual-workspace')).toBeVisible()
+    await expect(page.getByTestId('container-change-notice')).toBeVisible()
+    await page.getByRole('button', { name: 'English' }).click()
+    await expect(page.getByTestId('container-change-notice')).toHaveText('Container load failed')
+
+    await page.getByTestId('manage-custom-containers').click()
+    await expect(page.getByText('自定义柜型管理')).toBeVisible()
+    await page.getByRole('button', { name: '×' }).click()
+    await expect(page.getByTestId('container-change-notice')).toHaveCount(0)
+  })
+
+  test('keeps the workbench available when the custom container dialog chunk fails', async ({ page }) => {
+    const modulePattern = /\/(?:src\/components\/CustomContainerDialog\.tsx|assets\/CustomContainerDialog-[^/]+\.js)(?:\?.*)?$/
+    await page.route(modulePattern, (route) => route.abort())
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+
+    await page.getByTestId('manage-custom-containers').click()
+    await expect(page.getByTestId('custom-container-dialog-load-error')).toHaveText('柜型管理加载失败')
+    await expect(page.getByTestId('visual-workspace')).toBeVisible()
+
+    await page.unroute(modulePattern)
+    await page.getByRole('button', { name: '重新加载页面' }).click()
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+    await page.getByTestId('manage-custom-containers').click()
+    await expect(page.getByText('自定义柜型管理')).toBeVisible()
+  })
+
   test('registers and logs in a new user', async ({ page }) => {
     const user = `u_reg_${Math.random().toString(36).substring(7)}`
     const initialReadPaths = [

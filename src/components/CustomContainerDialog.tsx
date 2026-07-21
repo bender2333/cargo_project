@@ -1,23 +1,17 @@
 import { useState, useEffect } from 'react'
-import { fetchWithAuth } from '../api/client'
+import {
+  createCustomContainer,
+  deleteCustomContainer,
+  readCustomContainers,
+  updateCustomContainer,
+} from '../api/customContainers'
+import type { CustomContainerPayload } from '../api/customContainers'
 import type { ContainerSpec } from '../types'
 
 interface CustomContainerDialogProps {
   onClose: () => void
   onSelect: (container: ContainerSpec) => void
   currentSelectedId: string
-}
-
-interface CustomDbContainer {
-  id: string
-  name: string
-  length: number
-  width: number
-  height: number
-  max_weight: number
-  door_gap: number
-  top_gap: number
-  side_gap: number
 }
 
 export function CustomContainerDialog({ onClose, onSelect, currentSelectedId }: CustomContainerDialogProps) {
@@ -41,24 +35,7 @@ export function CustomContainerDialog({ onClose, onSelect, currentSelectedId }: 
     setLoading(true)
     setError('')
     try {
-      const res = await fetchWithAuth('/api/containers/custom')
-      if (!res.ok) {
-        throw new Error('获取自定义柜型失败')
-      }
-      const data: CustomDbContainer[] = await res.json()
-      const mapped: ContainerSpec[] = data.map((item) => ({
-        id: item.id,
-        label: item.name,
-        description: `自定义柜型: ${item.name} (${item.length}x${item.width}x${item.height}mm)`,
-        length: item.length,
-        width: item.width,
-        height: item.height,
-        maxWeight: item.max_weight,
-        doorGap: item.door_gap,
-        topGap: item.top_gap,
-        sideGap: item.side_gap,
-      }))
-      setContainers(mapped)
+      setContainers(await readCustomContainers())
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -112,7 +89,7 @@ export function CustomContainerDialog({ onClose, onSelect, currentSelectedId }: 
       return
     }
 
-    const payload = {
+    const payload: CustomContainerPayload = {
       name: name.trim(),
       length: Number(length),
       width: Number(width),
@@ -124,22 +101,10 @@ export function CustomContainerDialog({ onClose, onSelect, currentSelectedId }: 
     }
 
     try {
-      let res
       if (editingId) {
-        res = await fetchWithAuth(`/api/containers/custom/${editingId}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        })
+        await updateCustomContainer(editingId, payload)
       } else {
-        res = await fetchWithAuth('/api/containers/custom', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        })
-      }
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || '保存失败')
+        await createCustomContainer(payload)
       }
 
       resetForm()
@@ -154,12 +119,7 @@ export function CustomContainerDialog({ onClose, onSelect, currentSelectedId }: 
       return
     }
     try {
-      const res = await fetchWithAuth(`/api/containers/custom/${id}`, {
-        method: 'DELETE',
-      })
-      if (!res.ok) {
-        throw new Error('删除失败')
-      }
+      await deleteCustomContainer(id)
       await fetchCustomContainers()
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err))

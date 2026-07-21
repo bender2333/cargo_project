@@ -82,15 +82,16 @@ import {
   savePlacementSettings,
   type PlacementSettings,
 } from './lib/placementSettings'
-import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, PackingResult, CustomDbContainer, DbHistoryPlan, ImportTemplate, ImportTemplateUnits, ImportTemplateDefaults, ExportTemplate } from './types'
+import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, PackingResult, DbHistoryPlan, ImportTemplate, ImportTemplateUnits, ImportTemplateDefaults, ExportTemplate } from './types'
 import { fetchWithAuth } from './api/client'
+import { readCustomContainers } from './api/customContainers'
 import type { User } from './lib/auth'
 import { UserManagement } from './components/UserManagement'
 import { DebugPanel } from './components/DebugPanel'
-import { CustomContainerDialog } from './components/CustomContainerDialog'
 import { excelStyleLabel } from './lib/excelStyleLabel'
 import { buildCargoDebugSnapshot } from './lib/debugSnapshot'
 
+type CustomContainerDialogComponent = typeof import('./components/CustomContainerDialog')['CustomContainerDialog']
 const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
 type WorksheetCell = string | number | boolean | null | undefined
 
@@ -1107,6 +1108,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [autoHelpOpen, setAutoHelpOpen] = useState(false)
   const [manualNotice, setManualNotice] = useState<ManualOperationNotice | null>(null)
   const [containerChangeNotice, setContainerChangeNotice] = useState('')
+  const [customContainerLoadFailed, setCustomContainerLoadFailed] = useState(false)
   const [rotationNotice, setRotationNotice] = useState('')
   const previousContainerKeyRef = useRef<string | null>(null)
   const previousAutoPlacedCountRef = useRef(0)
@@ -1115,6 +1117,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   // Backend integrated states
   const [customContainers, setCustomContainers] = useState<ContainerSpec[]>([])
   const [showCustomContainerDialog, setShowCustomContainerDialog] = useState(false)
+  const [CustomContainerDialog, setCustomContainerDialog] = useState<CustomContainerDialogComponent | null>(null)
+  const [customContainerDialogLoadFailed, setCustomContainerDialogLoadFailed] = useState(false)
   const [historyPlans, setHistoryPlans] = useState<HistoryPlan[]>([])
   const [customCargoItems, setCustomCargoItems] = useState<CargoItem[]>([])
   const [cargoLibraryForm, setCargoLibraryForm] = useState<CargoForm>(emptyForm)
@@ -1260,24 +1264,11 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   const fetchCustomContainers = async () => {
     try {
-      const res = await fetchWithAuth('/api/containers/custom')
-      if (!res.ok) throw new Error('获取自定义柜型失败')
-      const data = await res.json()
-      const mapped: ContainerSpec[] = data.map((item: CustomDbContainer) => ({
-        id: item.id,
-        label: item.name,
-        description: `自定义柜型: ${item.name} (${item.length}x${item.width}x${item.height}mm)`,
-        length: item.length,
-        width: item.width,
-        height: item.height,
-        maxWeight: item.max_weight,
-        doorGap: item.door_gap,
-        topGap: item.top_gap,
-        sideGap: item.side_gap,
-      }))
-      setCustomContainers(mapped)
+      setCustomContainers(await readCustomContainers())
+      setCustomContainerLoadFailed(false)
     } catch (err) {
       console.error(err)
+      setCustomContainerLoadFailed(true)
     }
   }
 
@@ -1359,6 +1350,23 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
     return () => window.clearTimeout(requestTimer)
   }, [])
+
+  useEffect(() => {
+    if (!showCustomContainerDialog || CustomContainerDialog) return
+    let active = true
+    setCustomContainerDialogLoadFailed(false)
+    void import('./components/CustomContainerDialog')
+      .then((module) => {
+        if (active) setCustomContainerDialog(() => module.CustomContainerDialog)
+      })
+      .catch((err) => {
+        console.error(err)
+        if (active) setCustomContainerDialogLoadFailed(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [showCustomContainerDialog, CustomContainerDialog])
 
   const renderingContainer = effectiveContainer(selectedContainer)
   const displayCargoItems = useMemo(() => normalizeCargoLabelColors(cargoItems), [cargoItems])
@@ -3797,6 +3805,13 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
               }`}
               data-testid="visual-workspace-canvas"
             >
+              {(containerChangeNotice || customContainerLoadFailed) && (
+                <div className="absolute left-6 top-6 z-10 rounded-xl border border-[#facc15] bg-[#fefce8] px-4 py-3 text-sm font-semibold text-[#854d0e]" data-testid="container-change-notice">
+                  {customContainerLoadFailed
+                    ? (locale === 'zh' ? '柜型加载失败' : 'Container load failed')
+                    : containerChangeNotice}
+                </div>
+              )}
               {placementMode === 'manual' ? (
                 <div className="flex h-full w-full flex-col gap-3 p-4" data-testid="manual-workspace" data-workspace-maximized={workspaceMaximized ? 'true' : 'false'}>
                   {manualNotice && (
@@ -3969,11 +3984,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                 </div>
               ) : workspaceView === '3d' ? (
                 <>
-                  {containerChangeNotice && (
-                    <div className="absolute left-6 top-6 z-10 rounded-xl border border-[#facc15] bg-[#fefce8] px-4 py-3 text-sm font-semibold text-[#854d0e]" data-testid="container-change-notice">
-                      {containerChangeNotice}
-                    </div>
-                  )}
                   <div className="relative h-full w-full" data-testid="auto-view-container">
                     <div className="absolute left-3 top-3 z-30">
                       <button
@@ -4012,11 +4022,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                 </>
               ) : (
                 <>
-                  {containerChangeNotice && (
-                    <div className="absolute left-6 top-6 z-10 rounded-xl border border-[#facc15] bg-[#fefce8] px-4 py-3 text-sm font-semibold text-[#854d0e]" data-testid="container-change-notice">
-                      {containerChangeNotice}
-                    </div>
-                  )}
                   <div className="relative h-full w-full" data-testid="auto-view-container">
                     <button
                       className={`archive-tab absolute right-3 top-3 z-30 inline-flex items-center gap-2 bg-white/95 shadow-lg ${workspaceMaximized ? 'active' : ''}`}
@@ -4556,18 +4561,40 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         )}
       </div>
       {showCustomContainerDialog && (
-        <CustomContainerDialog
-          currentSelectedId={selectedContainerId}
-          onClose={() => {
-            setShowCustomContainerDialog(false)
-            fetchCustomContainers()
-          }}
-          onSelect={(container) => {
-            setSelectedContainerId(container.id)
-            setShowCustomContainerDialog(false)
-            fetchCustomContainers()
-          }}
-        />
+        CustomContainerDialog ? (
+          <CustomContainerDialog
+            currentSelectedId={selectedContainerId}
+            onClose={() => {
+              setShowCustomContainerDialog(false)
+              fetchCustomContainers()
+            }}
+            onSelect={(container) => {
+              setSelectedContainerId(container.id)
+              setShowCustomContainerDialog(false)
+              fetchCustomContainers()
+            }}
+          />
+        ) : (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4" data-testid="custom-container-dialog-loader">
+            {customContainerDialogLoadFailed ? (
+              <div className="w-full max-w-md rounded-lg bg-white p-6 text-center shadow-2xl">
+                <p className="text-sm font-semibold text-red-700" data-testid="custom-container-dialog-load-error">
+                  {locale === 'zh' ? '柜型管理加载失败' : 'Failed to load container manager'}
+                </p>
+                <div className="mt-4 flex justify-center gap-2">
+                  <button className="archive-button" type="button" onClick={() => window.location.reload()}>
+                    {locale === 'zh' ? '重新加载页面' : 'Reload page'}
+                  </button>
+                  <button className="archive-button secondary" type="button" onClick={() => setShowCustomContainerDialog(false)}>
+                    {locale === 'zh' ? '关闭' : 'Close'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" role="status" aria-label={locale === 'zh' ? '正在加载柜型管理' : 'Loading container manager'} />
+            )}
+          </div>
+        )
       )}
       <DebugPanel snapshot={debugSnapshot} />
     </main>
