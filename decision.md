@@ -1,5 +1,15 @@
 # Decision Log
 
+## 2026-07-21 Phase 1.2 client 迁移后的 40HQ 单测性能 RED 不放宽
+
+- 背景：共享 API client 只移动 `fetchWithAuth` 和 import 后，首次全量 Vitest 中越南 40HQ block-engine 用例完成正确性、诊断和几何断言，但耗时 `22039 ms`，超过既有 `<20000 ms` 门限；其余 374 项通过。该提交未修改装箱算法、fixture 或测试运行参数。
+- 选项：A. 放宽/删除 20 秒断言；B. 为通过而减少真实夹具或跳过用例；C. 保持断言不变，先在无并发环境隔离复跑，再根据重复证据判断环境抖动或真实性能回归。
+- 决策：选择 C。不得修改测试凑绿；在同一工作树单独复跑 `packing.blockEngine.test.ts`，若仍失败再检查活动进程和基准报告。
+- 影响：未改测试的隔离复跑通过 3 / 3，总测试时间 7.91 秒，支持首次失败来自全套资源抖动而非 API import 迁移导致的算法回归；RED 证据仍保留在执行日志。
+- 追加决策：`threads + 2 workers` 全套 61/376 通过但耗时 252.99 秒；`threads + 4 workers` 又出现 40HQ 与两个 stack-fill 超时。因此不全局串行：正式 `npm test` 先并行运行普通 59 文件，再以单 worker 线程池独占运行 `packing.blockEngine.test.ts` 与 `packing.stackfill.test.ts`。
+- 影响：正式命令通过 59 文件/370 测试 + 2 文件/6 测试，总耗时约 69.9 秒；所有原断言、fixture 和 timeout 保持不变，同时避免外部扫描/worker contention 造成假 RED。
+- 后续：新增带硬时延合同的单测时必须放入独占性能阶段；普通业务单测继续保留并行，不把整个套件永久降为单 worker。
+
 ## 2026-07-21 Phase 1.1 远程初始化与 401 只作用于对应会话
 
 - 背景：App 接管退出后不再整页刷新，旧 Workbench 发出的初始化请求可能在用户退出并登录新账号后才返回；旧 `fetchWithAuth` 对任意 `401` 都无条件删除当前 token。同时 Workbench 改为认证后挂载，开发态 `StrictMode` 会重放 mount effect，使五个初始化读取各发送两次。
