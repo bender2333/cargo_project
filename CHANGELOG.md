@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-07-21 (Frontend architecture refactor in progress)
+
+- [x] Audit the current frontend dependency and state boundaries.
+- [x] Approve and record the full phased architecture plan.
+- [ ] Make Playwright self-contained with an isolated in-memory API database and zero skipped tests.
+- [ ] Freeze deterministic Russian/Vietnam packing contracts and golden hashes.
+- [ ] Add repeatable browser, algorithm, and bundle benchmark reporting.
+- [ ] Separate the App authentication shell and remote API modules from Workbench.
+- [ ] Introduce atomic automatic/manual packing-session state transitions.
+- [ ] Extract history, cargo library, template/import, workspace, and results boundaries.
+- [ ] Split ContainerScene rendering, interaction, and overlay responsibilities after the 3D baseline is protected.
+- [ ] Add measured lazy loading, run all local gates, deploy, and run remote regression.
+- Initial local evidence before edits: `npm run lint` passed in about 41.0s; `npm test` passed 56 files / 351 tests in about 48.7s; `npm run build` passed in about 14.6s with the existing large-chunk warning. `dist` measured 2,321,826 bytes and the entry bundle measured 1,880.11 kB / gzip 562.77 kB.
+- E2E baseline gap: Playwright lists 95 tests, but the responsive 3D spec is source-level skipped and the default runner does not start the API backend; the fixed `server/database.db` path also prevents isolated regression runs.
+- Plan: `plans/2026-07-21-frontend-architecture-refactor.md`.
+
 ## 2026-07-20 (issues/0720 fixes in progress)
 
 - [x] Record the approved implementation plan and regression gates.

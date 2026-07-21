@@ -1,5 +1,13 @@
 # Decision Log
 
+## 2026-07-21 前端架构采用“基线先行 + 原子会话状态 + 功能边界”分阶段重构
+
+- 背景：`src/Workbench.tsx` 已增长到 4615 行，集中管理认证、导航、远程请求、服务端 DTO 映射、导入/导出模板、装箱计算、手动排布、3D/2D 和多个完整页面。当前 351 个单测通过，但 Playwright 默认只启动 Vite、依赖外部 3010 API，且响应式 3D 用例源码级 skip；直接重构无法区分既有失败、数据污染和真实回归。
+- 选项：A. 只把 JSX 拆成多个组件；B. 引入全局状态库/路由后整体重写；C. 先建立隔离基线，再用 React 原生 reducer/hook 建立原子装箱会话，并按 API、功能页、工作台区域、Three.js 内部的顺序迁移。
+- 决策：选择 C。先让 E2E 使用内存 SQLite、自动启动 API、零 skip，并建立真实夹具 golden 与 5 次采样 benchmark；随后启用 `App` 认证壳、统一 `src/api`、引入可测试的 packing session reducer，最后拆 UI 和 `ContainerScene`。不增加 Redux、Zustand、React Router、新 i18n/3D/benchmark 依赖。
+- 影响：本轮是多阶段长任务，每个子任务独立更新 `CHANGELOG.md`、验证和 commit。`PackingResult` 与现有 test id/用户流程保持兼容；重构成功按状态原子性、依赖方向、零跳过测试和 benchmark 判断，而不是按文件行数判断。
+- 后续：按 `plans/2026-07-21-frontend-architecture-refactor.md` 执行。阶段 0 不改变业务行为；任何基线失败先记录本文件，不得通过削弱断言、修改真实夹具或增加 skip 处理。
+
 ## 2026-07-08 双模式分化后的填缝 E2E 覆盖迁移
 
 - 背景：Goal A 将 quantity 模式改为 count-first 后，本地 `npm run test:e2e -- --reporter=list` 为 92 passed、1 failed、1 skipped；失败用例是越南导入流程在默认 quantity 模式下仍期待 `Mixed gap-fill` 文本。新实测中 quantity 20GP 为 463/864、90.63%，不产生 gap-fill 标记；volume 20GP 为 462/864、91.27%，仍产生 gap-fill。
