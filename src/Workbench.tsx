@@ -61,7 +61,7 @@ import type { ImportTemplatePayload } from './lib/importTemplates'
 import { saveLastImportConfig } from './lib/lastImportConfig'
 import { deleteExportTemplate, readExportTemplates, saveExportTemplate, updateExportTemplate } from './lib/exportTemplates'
 import type { ExportTemplatePayload } from './lib/exportTemplates'
-import { deleteCustomCargo, readCustomCargo, saveCustomCargo, updateCustomCargo } from './lib/customCargo'
+import { deleteCustomCargo, readCustomCargo, saveCustomCargo, updateCustomCargo } from './api/customCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
 import { isGapFillBox } from './lib/placementSource'
@@ -193,6 +193,8 @@ const copy = {
     cargoLibraryNoticeSaved: 'Cargo saved',
     cargoLibraryNoticeUpdated: 'Cargo updated',
     cargoLibraryNoticeDeleted: 'Cargo deleted',
+    cargoLibraryLoadFailed: 'Failed to load cargo library',
+    cargoLibraryRetry: 'Retry',
     boundaryRule: 'Effective container boundary',
     payloadRule: 'Max payload',
     supportRule: 'Support and stackability',
@@ -498,6 +500,8 @@ const copy = {
     cargoLibraryNoticeSaved: '货物已保存',
     cargoLibraryNoticeUpdated: '货物已更新',
     cargoLibraryNoticeDeleted: '货物已删除',
+    cargoLibraryLoadFailed: '货物库加载失败',
+    cargoLibraryRetry: '重试',
     boundaryRule: '有效货柜边界',
     payloadRule: '最大载重',
     supportRule: '支撑与堆叠限制',
@@ -1127,6 +1131,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [historyLoadFailed, setHistoryLoadFailed] = useState(false)
   const historyRequestIdRef = useRef(0)
   const [customCargoItems, setCustomCargoItems] = useState<CargoItem[]>([])
+  const [customCargoLoadFailed, setCustomCargoLoadFailed] = useState(false)
+  const customCargoRequestIdRef = useRef(0)
   const [cargoLibraryForm, setCargoLibraryForm] = useState<CargoForm>(emptyForm)
   const [editingLibraryCargoId, setEditingLibraryCargoId] = useState<string | null>(null)
   const [cargoLibraryNotice, setCargoLibraryNotice] = useState('')
@@ -1309,10 +1315,16 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const fetchCustomCargo = async () => {
+    const requestId = ++customCargoRequestIdRef.current
     try {
-      setCustomCargoItems(await readCustomCargo())
+      const items = await readCustomCargo()
+      if (requestId !== customCargoRequestIdRef.current) return
+      setCustomCargoItems(items)
+      setCustomCargoLoadFailed(false)
     } catch (err) {
+      if (requestId !== customCargoRequestIdRef.current) return
       console.error(err)
+      setCustomCargoLoadFailed(true)
     }
   }
 
@@ -2175,17 +2187,21 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const saveLibraryCargo = async (event: FormEvent) => {
     event.preventDefault()
     const item = libraryFormCargo()
-    const saved = editingLibraryCargoId
-      ? await updateCustomCargo(editingLibraryCargoId, item)
-      : await saveCustomCargo(item)
-    if (!saved) {
+    setCargoLibraryNotice('')
+    try {
+      if (editingLibraryCargoId) {
+        await updateCustomCargo(editingLibraryCargoId, item)
+      } else {
+        await saveCustomCargo(item)
+      }
+      setCargoLibraryNotice(editingLibraryCargoId ? t.cargoLibraryNoticeUpdated : t.cargoLibraryNoticeSaved)
+      setEditingLibraryCargoId(null)
+      setCargoLibraryForm(emptyForm)
+      await fetchCustomCargo()
+    } catch (err) {
+      console.error(err)
       alert(locale === 'zh' ? '保存货物失败' : 'Failed to save cargo')
-      return
     }
-    setCargoLibraryNotice(editingLibraryCargoId ? t.cargoLibraryNoticeUpdated : t.cargoLibraryNoticeSaved)
-    setEditingLibraryCargoId(null)
-    setCargoLibraryForm(emptyForm)
-    await fetchCustomCargo()
   }
 
   const editLibraryCargo = (item: CargoItem) => {
@@ -2207,17 +2223,19 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const removeLibraryCargo = async (id: string) => {
-    const ok = await deleteCustomCargo(id)
-    if (!ok) {
+    setCargoLibraryNotice('')
+    try {
+      await deleteCustomCargo(id)
+      setCargoLibraryNotice(t.cargoLibraryNoticeDeleted)
+      if (editingLibraryCargoId === id) {
+        setEditingLibraryCargoId(null)
+        setCargoLibraryForm(emptyForm)
+      }
+      await fetchCustomCargo()
+    } catch (err) {
+      console.error(err)
       alert(locale === 'zh' ? '删除货物失败' : 'Failed to delete cargo')
-      return
     }
-    setCargoLibraryNotice(t.cargoLibraryNoticeDeleted)
-    if (editingLibraryCargoId === id) {
-      setEditingLibraryCargoId(null)
-      setCargoLibraryForm(emptyForm)
-    }
-    await fetchCustomCargo()
   }
 
   const addLibraryCargoToWorkbench = (item: CargoItem) => {
@@ -2929,8 +2947,15 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           )}
         </div>
       </form>
-      {customCargoItems.length === 0 ? (
-        <p className="mt-3 text-sm text-[#64748b]">{t.cargoLibraryEmpty}</p>
+      {customCargoLoadFailed ? (
+        <div className="mt-3 flex items-center justify-between gap-3 border border-red-300 bg-red-50 p-3 text-sm text-red-700" data-testid="cargo-library-load-error">
+          <span>{t.cargoLibraryLoadFailed}</span>
+          <button className="archive-button secondary" type="button" onClick={() => void fetchCustomCargo()}>
+            {t.cargoLibraryRetry}
+          </button>
+        </div>
+      ) : customCargoItems.length === 0 ? (
+        <p className="mt-3 text-sm text-[#64748b]" data-testid="cargo-library-empty-state">{t.cargoLibraryEmpty}</p>
       ) : (
         <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {customCargoItems.map((item) => (

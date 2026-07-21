@@ -191,6 +191,191 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await expect(page.getByTestId('history-empty-state')).toHaveCount(0)
   })
 
+  test('surfaces cargo library failures and ignores a stale retry error', async ({ page }) => {
+    let reads = 0
+    let releaseStaleFailure!: () => void
+    const staleFailureGate = new Promise<void>((resolve) => {
+      releaseStaleFailure = resolve
+    })
+    await page.route('**/api/custom-cargo', async (route) => {
+      if (route.request().method() === 'GET') {
+        reads += 1
+        if (reads === 2) {
+          await staleFailureGate
+          await route.fulfill({
+            status: 500,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: 'Stale cargo library failure' }),
+          })
+          return
+        }
+        await route.fulfill({
+          status: reads === 1 ? 500 : 200,
+          contentType: 'application/json',
+          body: reads === 1 ? JSON.stringify({ error: 'Database unavailable' }) : '[]',
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+
+    await page.getByTestId('nav-cargo-library').click()
+    await expect(page.getByTestId('cargo-library-load-error')).toHaveText(/货物库加载失败/)
+    await expect(page.getByTestId('cargo-library-empty-state')).toHaveCount(0)
+
+    const retry = page.getByRole('button', { name: '重试', exact: true })
+    await retry.click()
+    await retry.click()
+    await expect.poll(() => reads).toBe(3)
+    await expect(page.getByTestId('cargo-library-load-error')).toHaveCount(0)
+    await expect(page.getByTestId('cargo-library-empty-state')).toBeVisible()
+
+    const staleFailureResponse = page.waitForResponse((response) => (
+      response.url().includes('/api/custom-cargo')
+      && response.request().method() === 'GET'
+      && response.status() === 500
+    ))
+    releaseStaleFailure()
+    await staleFailureResponse
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    }))
+    await expect(page.getByTestId('cargo-library-load-error')).toHaveCount(0)
+    await expect(page.getByTestId('cargo-library-empty-state')).toBeVisible()
+  })
+
+  test('keeps the latest cargo library list when an older success finishes last', async ({ page }) => {
+    let reads = 0
+    let releaseStaleSuccess!: () => void
+    const staleSuccessGate = new Promise<void>((resolve) => {
+      releaseStaleSuccess = resolve
+    })
+    const latestCargoDto = {
+      id: 'latest-cargo',
+      name: 'Latest cargo library item',
+      label: 'LC',
+      length: 900,
+      width: 700,
+      height: 500,
+      weight: 33,
+      quantity: 1,
+      color: '#f97316',
+      canRotate: true,
+      stackable: true,
+      maxStackLayers: 2,
+      groundOnly: false,
+      createdAt: '2026-07-22T00:00:00.000Z',
+    }
+    await page.route('**/api/custom-cargo', async (route) => {
+      if (route.request().method() === 'GET') {
+        reads += 1
+        if (reads === 2) {
+          await staleSuccessGate
+          await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+          return
+        }
+        await route.fulfill({
+          status: reads === 1 ? 500 : 200,
+          contentType: 'application/json',
+          body: reads === 1
+            ? JSON.stringify({ error: 'Database unavailable' })
+            : JSON.stringify([latestCargoDto]),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+    await page.getByTestId('nav-cargo-library').click()
+    await expect(page.getByTestId('cargo-library-load-error')).toBeVisible()
+
+    const retry = page.getByRole('button', { name: '重试', exact: true })
+    await retry.click()
+    await retry.click()
+    await expect.poll(() => reads).toBe(3)
+    await expect(page.getByText('Latest cargo library item')).toBeVisible()
+
+    const staleSuccessResponse = page.waitForResponse((response) => (
+      response.url().includes('/api/custom-cargo')
+      && response.request().method() === 'GET'
+      && response.status() === 200
+    ))
+    releaseStaleSuccess()
+    await staleSuccessResponse
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    }))
+    await expect(page.getByText('Latest cargo library item')).toBeVisible()
+    await expect(page.getByTestId('cargo-library-empty-state')).toHaveCount(0)
+  })
+
+  test('keeps cargo library save and delete failures visible', async ({ page }) => {
+    const cargoDto = {
+      id: 'cargo-failure-fixture',
+      name: 'Failure fixture cargo',
+      label: 'FF',
+      length: 900,
+      width: 700,
+      height: 500,
+      weight: 33,
+      quantity: 1,
+      color: '#f97316',
+      canRotate: true,
+      stackable: true,
+      maxStackLayers: 2,
+      groundOnly: false,
+      createdAt: '2026-07-22T00:00:00.000Z',
+    }
+    await page.route('**/api/custom-cargo**', async (route) => {
+      const method = route.request().method()
+      if (method === 'GET') {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([cargoDto]) })
+        return
+      }
+      if (method === 'POST' || method === 'DELETE') {
+        await route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Database unavailable' }),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+    await page.getByTestId('nav-cargo-library').click()
+    await expect(page.getByText('Failure fixture cargo')).toBeVisible()
+
+    const saveDialog = page.waitForEvent('dialog').then(async (dialog) => {
+      expect(dialog.message()).toBe('保存货物失败')
+      await dialog.dismiss()
+    })
+    await Promise.all([saveDialog, page.getByTestId('cargo-library-add').click()])
+
+    const deleteDialog = page.waitForEvent('dialog').then(async (dialog) => {
+      expect(dialog.message()).toBe('删除货物失败')
+      await dialog.dismiss()
+    })
+    await Promise.all([deleteDialog, page.getByTestId('cargo-library-delete-cargo-failure-fixture').click()])
+    await expect(page.getByText('Failure fixture cargo')).toBeVisible()
+  })
+
   test('keeps the workbench available when the custom container dialog chunk fails', async ({ page }) => {
     const modulePattern = /\/(?:src\/components\/CustomContainerDialog\.tsx|assets\/CustomContainerDialog-[^/]+\.js)(?:\?.*)?$/
     await page.route(modulePattern, (route) => route.abort())
