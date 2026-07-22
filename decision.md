@@ -1,5 +1,14 @@
 # Decision Log
 
+## 2026-07-22 Phase 1.2 benchmark RED 与管理页按需加载前移
+
+- 背景：Phase 1.2 收口 benchmark 的合同哈希和浏览器指标保持稳定，但 `initialJsGzipBytes` / `initialGzipBytes` 均比冻结基线增加 526 B，触发不可增长硬门禁；`vietnam-40hq-volume` 还出现一个 7134.656 ms 离群样本，使 P95 超过 20%。
+- 选项：A. 放宽/更新 baseline；B. 削弱 API 信任边界以回收字节；C. 提前实施总计划 Phase 6 已要求的管理页按导航加载；D. 接受阶段 RED 继续。
+- 决策：选择 C。`UserManagement` 及其用户 API 只在管理员进入用户管理页时需要，改为 React 原生 `lazy` + `Suspense`，不新增依赖，也不改变页面路由或行为。禁止选择 A/B；算法 timing 保持原 fixture、采样数和 20% 阈值，先隔离复测判断环境离群点。
+- 影响：这是 Phase 6“管理页面按导航需要加载”的提前落地，直接修复 Phase 1.2 硬门禁并减少初始入口；只拆已有页面边界，不顺带懒加载其他页面或 Three.js。若包体仍不达标，再基于实际报告选择下一最小项。
+- 实测：2026-07-22 fresh `npm run benchmark` 以 Windows 隐藏进程运行至真实 `ExitCode 1`。bundle 硬门禁全部通过：初始 HTML / CSS / JS / 总 gzip 为 289 / 9,561 / 554,955 / 564,805 B，baseline 为 289 / 9,561 / 557,940 / 567,790 B；总 JS 为 666,296 B，比 662,372 B 基线增长 0.592%，未超过 5%。`UserManagement` 归一化 gzip 为 3,770 B，不在 `dist/index.html` 初始资源中；五个合同哈希全部一致。
+- 后续：本次 timing RED 是 `vietnam-20gp-quantity` median 178.386 ms / P95 187.207 ms（基线 132.126 / 133.629 ms）和 `automaticLoadToResultMs` P95 73.650 ms（基线 31.868 ms，其他 4 个样本 24.756–26.032 ms）。运行期 CPU 30 个样本为 63%–100%，平均 90.9%。旧 `vietnam-40hq-volume` 离群未复现，本次 median / P95 为 4,909.922 / 5,097.413 ms，均低于基线；由于失败并非“仅算法 P95”，不执行只针对该旧用例的隔离复跑。保留该 RED 供后续低负载性能收口；baseline、阈值、采样数、fixture 和测试均未修改。
+
 ## 2026-07-22 调试日志 API 边界保持现有错误语义
 
 - 背景：`DebugPanel` 是最后一个直接导入 `fetchWithAuth` 的 React 组件，并在组件内解析 `/api/_debug/recent-logs?limit=120`；成功响应缺少 `lines` 时会静默显示空列表。

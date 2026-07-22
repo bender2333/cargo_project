@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useEffect } from 'react'
+import { lazy, Suspense, useMemo, useRef, useState, useEffect } from 'react'
 import type { FormEvent, DragEvent as ReactDragEvent } from 'react'
 import * as XLSX from 'xlsx'
 import { ContainerScene } from './components/ContainerScene'
@@ -90,12 +90,12 @@ import {
 } from './api/historyPlans'
 import type { HistoryPlan } from './api/historyPlans'
 import type { User } from './lib/auth'
-import { UserManagement } from './components/UserManagement'
 import { DebugPanel } from './components/DebugPanel'
 import { excelStyleLabel } from './lib/excelStyleLabel'
 import { buildCargoDebugSnapshot } from './lib/debugSnapshot'
 
 type CustomContainerDialogComponent = typeof import('./components/CustomContainerDialog')['CustomContainerDialog']
+const UserManagement = lazy(() => import('./components/UserManagement').then((module) => ({ default: module.UserManagement })))
 const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
 type WorksheetCell = string | number | boolean | null | undefined
 
@@ -3294,7 +3294,9 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
         {activeNav === 'users' && currentUser?.role === 'admin' ? (
           <section className="archive-card overflow-hidden p-[18px]" data-testid="users-page">
-            <UserManagement onBack={() => activateNav('overview')} />
+            <Suspense fallback={<div className="py-12 text-center text-sm text-slate-500" role="status">{locale === 'zh' ? '用户管理加载中...' : 'Loading user management...'}</div>}>
+              <UserManagement onBack={() => activateNav('overview')} />
+            </Suspense>
           </section>
         ) : activeNav === 'history' ? (
           <section className="archive-card overflow-hidden p-[18px]" data-testid="history-page">
