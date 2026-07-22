@@ -1,5 +1,40 @@
 # Decision Log
 
+## 2026-07-22 Phase 2 fresh E2E 登录等待 RED
+
+- 背景：审查修复后的 fresh `npm run test:e2e` 执行 113 项时，第 13 项既有导出模板失败恢复用例在登录后等待工作台标题超时；其余 112 项通过，zero-skip reporter 正常生效。
+- 证据：失败点为 `e2e/auth-isolation.spec.ts:738` 的 5 秒可见性断言。Playwright 错误快照仍显示登录表单、已填写 admin 凭据，以及 disabled 的“正在登录...”按钮，表明认证请求尚未完成，而不是工作台标题变化。该测试只 route `/api/export-templates`，不匹配 `/api/auth/login`。开发数据库在全量运行前后均为 499,712 B、SHA-256 `70212B27A8781D648197BAAEABC84E7C550E03B363E856B290CEA66DA331E901`，测试服务也已退出。
+- 选项：A. 增大断言超时或改测试绕过；B. 先隔离复跑原用例并采集认证/页面状态，只有稳定复现且定位生产根因后才改实现；C. 忽略该失败并宣称全量通过。
+- 决策：选择 B。保留原测试、断言和超时；当前先把整套门禁记为 112 passed / 1 failed，按系统化调试继续复现。
+- 影响：原用例隔离复跑通过 1 / 1（用例 11.3 秒），与直接前序用例按文件顺序组合复跑通过 2 / 2；未发现 route 泄漏或服务状态依赖。等待较低 CPU 窗口后完整重跑通过 113 / 113、零跳过，用时 10.25 分钟；首轮失败套件用时 12.8 分钟。数据库指纹在两轮前后均不变。因此门禁由完整重跑解除，但首轮 RED 仍保留为共享资源争用下的认证等待风险，不修改测试凑绿。
+- 后续：后续全量回归若再次在 disabled 登录按钮超时，应记录 `/api/auth/login` 实际响应时长和 bcrypt/CPU 状态；只有稳定复现后才讨论生产性能修复或测试等待策略。
+
+## 2026-07-22 Phase 2 计算请求调度与 action 所有权
+
+- 背景：`dispatch(inputAction)` 与 `calculate()` 若在同一个 React 事件中连续调用，直接从 render 闭包读取 state 会用旧输入提交非空结果。同步在 ref 中重放 reducer 虽能覆盖普通批处理，却建立第二状态源，在并发 lane 下可能读取尚未提交的输入；调用方在 React 消费队列前修改 action payload 还会让 ref 与正式 state 分叉。
+- 选项：A. 约定调用方只能在下一事件计算；B. 用 ref 镜像 reducer；C. 把计算建模为请求，在输入 action 提交后由 effect 从已提交会话计算，并在 dispatch 边界取得 action payload 的浅拷贝所有权。
+- 决策：选择 C。首次结果仍由 reducer initializer 同步建立；后续 `calculate()` 只递增请求序号，effect 每个请求最多执行一次并提交 `calculationCompleted`。`CargoItem` 与 `ContainerSpec` 都是扁平值对象，会话在初始化、货物写入和柜型写入时浅拷贝；hook 也在 action 入队前复制这些 payload。
+- 影响：同一事件内修改输入并计算会消费提交后的最新输入；调用方后续突变不会绕过 reducer 或制造“新输入 + 旧结果”。计算完成相对点击多一次 React 提交，因此继续由 browser benchmark 和完整 E2E 约束。
+- 后续：历史恢复下一切片仍应使用单一 restore action；若未来引入 `startTransition`，必须保持“旧结果可以被失效、但不能与新输入同时成为有效结果”的不变量。
+
+## 2026-07-22 Phase 2 benchmark 计时 RED
+
+- 背景：本切片未修改 `src/lib/packing.ts`、benchmark runner、冻结夹具或 baseline，但完整 benchmark 的 `vietnam-40hq-volume` median / P95 超过同机基线 20% 门禁。
+- 证据：完整样本为 6737.154 / 6424.755 / 6498.467 / 5574.762 / 6402.099 ms，median / P95 为 6424.755 / 6737.154 ms；对应基线为 5197.560 / 5228.996 ms。完整运行期 CPU 平均 72.6%、峰值 100%。首次隔离 worker 复跑为 6304.886 / 7178.602 ms；再次等待到运行前 CPU 连续为 51% / 53% 后复跑，样本仍为 8358.993 / 6406.012 / 6597.538 / 6719.843 / 6608.174 ms，median / P95 为 6608.174 / 8358.993 ms。三次 contract hash 均为 `71737f526adb485a90d99906063f54a7dad66a4acb6223c818249803caa30f35`。
+- 选项：A. 更新 baseline 或放宽阈值；B. 在会话重构中无证据优化装箱算法；C. 保留 RED，记录共享负载/频率等环境变量尚未排除，另开算法性能调查。
+- 决策：选择 C。不得修改 baseline、20% 阈值、采样数或真实夹具；本切片只以合同哈希、包体积、浏览器指标和功能回归判断自身行为，算法 timing 明确保留为失败。
+- 影响：不能声称完整 benchmark 通过，也不能把 timing RED 确认为本切片回退；当前证据只能证明确定性输出未变且慢值可复现。
+- fresh 结果：审查修复后的完整 benchmark 再次构建成功且浏览器用例 1 / 1 通过；五个合同哈希仍一致。算法 RED 扩散为 `russia-volume` 3.836 / 4.405 ms、`vietnam-20gp-volume` 201.352 / 228.407 ms 的 median / P95，以及 `vietnam-40hq-volume` P95 6630.744 ms（其 median 5963.564 ms 已回到门内）。运行前 CPU 为 66.5%-74.2%，运行后为 51.7%-75.6%。随后隔离复跑俄罗斯为 3.537 / 4.155 ms、20GP volume 为 174.869 / 200.116 ms，仍有 P95 或临界 median 超限；合同哈希继续一致。
+- 后续：在独占、温度和电源状态受控的同机环境复跑；若仍稳定超限，再分别 profile 俄罗斯、20GP volume 和 40HQ volume，不得把算法优化混入前端状态重构。
+
+## 2026-07-22 Phase 2 自动结果失效与柜型快照权威
+
+- 背景：旧柜型变更依赖渲染后的 effect，仅在自动模式、已有计算且已装数量大于零时清空结果；手动模式换柜后返回自动模式可能恢复旧结果。远程自定义柜型又由目录动态解析，历史恢复可能用历史规格计算、却用同 ID 的现行目录规格渲染。`defaultMaxStackLayers` 作为算法输入还与用户放置设置混存，首次计算未读取它。
+- 选项：A. 保留旧例外并只把 setter 搬进 reducer；B. 以 Phase 2 计划的原子失效规则为准，同时让会话保存完整柜型快照；C. 每次输入变化立即重算。
+- 决策：选择 B。货物新增/编辑/删除/排序/导入、柜型选择/数值修改、装载模式和全局堆叠层数变化，都在同一个 reducer action 中把 `automaticResult` 置空，不区分当前自动/手动模式或旧结果是否装入货物；手动草稿不因此清空。活动柜型由会话内完整 `ContainerSpec` 快照解析，用户显式选择远程柜型时才用目录新快照替换；同 ID 柜型的标签或描述变化也属于完整快照变化。空或全失败导入继续保持现有 no-op 语义。
+- 影响：删除与新规则冲突的 `clearPlacementOnContainerChange` effect/helper；首次自动计算开始使用当前用户默认堆叠层数。普通规则编辑仍同步保存用户偏好；下一独立历史恢复切片会裁定并实现“方案规则”与“用户默认”的持久化边界，同时把项目元数据纳入单一 restore action。
+- 后续：历史恢复必须以保存时柜型快照为权威，并用单 action 原子恢复项目、货物、柜型、规则和结果；手动会话随后独立接入唯一 `activeResult`。
+
 ## 2026-07-22 Phase 1.2 benchmark RED 与管理页按需加载前移
 
 - 背景：Phase 1.2 收口 benchmark 的合同哈希和浏览器指标保持稳定，但 `initialJsGzipBytes` / `initialGzipBytes` 均比冻结基线增加 526 B，触发不可增长硬门禁；`vietnam-40hq-volume` 还出现一个 7134.656 ms 离群样本，使 P95 超过 20%。

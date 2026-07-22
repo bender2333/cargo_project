@@ -19,6 +19,8 @@ import { exportLoadingSheetPdf } from './lib/exportLoadingSheet'
 import { buildManualPackingResult } from './lib/manualSteps'
 import { usePlaybackController } from './hooks/usePlaybackController'
 import type { PlaybackSpeed } from './hooks/usePlaybackController'
+import { usePackingSession } from './hooks/usePackingSession'
+import { selectPackingContainer } from './lib/packingSession'
 import { computeCenterOfGravity } from './lib/centerOfGravity'
 import { compareContainers } from './lib/containerCompare'
 import { computeRemainingCapacity } from './lib/remainingCapacity'
@@ -65,7 +67,6 @@ import { deleteCustomCargo, readCustomCargo, saveCustomCargo, updateCustomCargo 
 import { normalizeCargoLabelColors } from './lib/labels'
 import { calculatePacking } from './lib/packing'
 import { isGapFillBox } from './lib/placementSource'
-import { clearPlacementOnContainerChange } from './lib/containerChange'
 import {
   deriveClearanceAnnotations,
   measureBoxClearance,
@@ -887,17 +888,6 @@ function formatDimensions(length: number | '', width: number | '', height: numbe
   return length === '' || width === '' || height === '' ? '-' : `${length} x ${width} x ${height}`
 }
 
-function moveItem<T>(items: T[], fromIndex: number, toIndex: number) {
-  if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) {
-    return items
-  }
-
-  const next = [...items]
-  const [item] = next.splice(fromIndex, 1)
-  next.splice(toIndex, 0, item)
-  return next
-}
-
 function formatTemplate(template: string, params?: Record<string, string | number>) {
   if (!params) return template
   return template.replace(/\{(\w+)\}/g, (match, key: string) =>
@@ -1034,20 +1024,6 @@ function defaultProjectName(locale: Locale) {
   return locale === 'zh' ? `装箱方案-${stamp}` : `Packing plan-${stamp}`
 }
 
-function containerPlacementKey(container: ContainerSpec) {
-  const effective = effectiveContainer(container)
-  return [
-    container.id,
-    effective.length,
-    effective.width,
-    effective.height,
-    container.maxWeight,
-    container.doorGap,
-    container.topGap,
-    container.sideGap,
-  ].join(':')
-}
-
 function emptyPackingResult(container: ContainerSpec, cargoItems: CargoItem[]): PackingResult {
   return {
     placed: [],
@@ -1087,20 +1063,33 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [shipmentName, setShipmentName] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeNav, setActiveNav] = useState<NavTarget>('overview')
-  const [selectedContainerId, setSelectedContainerId] = useState(containers[0].id)
-  const [loadingMode, setLoadingMode] = useState<LoadingMode>('quantity')
-  const [containerOverrides, setContainerOverrides] = useState(() => Object.fromEntries(containers.map((container) => [container.id, container])))
-  const [customContainer, setCustomContainer] = useState(customContainerDefaults)
-  const [cargoItems, setCargoItems] = useState<CargoItem[]>(initialCargo)
+  const [placementSettings, setPlacementSettings] = useState<PlacementSettings>(() => loadPlacementSettings(currentUser?.id ?? null))
+  const {
+    state: packingSession,
+    dispatch: dispatchPackingSession,
+    calculate: calculateCurrentPacking,
+  } = usePackingSession({
+    cargoItems: initialCargo,
+    containerSnapshots: [...containers, customContainerDefaults],
+    selectedContainerId: containers[0].id,
+    loadingMode: 'quantity',
+    defaultMaxStackLayers: placementSettings.defaultMaxStackLayers,
+  })
+  const {
+    cargoItems,
+    selectedContainerId,
+    loadingMode,
+    defaultMaxStackLayers,
+    automaticResult,
+  } = packingSession
   const [form, setForm] = useState<CargoForm>(emptyForm)
   const [editingCargo, setEditingCargo] = useState<CargoItem | null>(null)
   const [editForm, setEditForm] = useState<CargoForm>(emptyForm)
-  const [hasCalculated, setHasCalculated] = useState(true)
+  const hasCalculated = automaticResult !== null
   const [activeLayerId, setActiveLayerId] = useState('all')
   const [activeLabelId, setActiveLabelId] = useState('all')
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
   const [sceneViewMode, setSceneViewMode] = useState<SceneViewMode>('iso')
-  const [placementSettings, setPlacementSettings] = useState<PlacementSettings>(() => loadPlacementSettings(currentUser?.id ?? null))
   const [placementSettingsOpen, setPlacementSettingsOpen] = useState(false)
   const [snapSettingsOpen, setSnapSettingsOpen] = useState(false)
   const gridSnap = placementSettings.snapEnabled && placementSettings.gridSnapEnabled
@@ -1126,9 +1115,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [containerChangeNotice, setContainerChangeNotice] = useState('')
   const [customContainerLoadFailed, setCustomContainerLoadFailed] = useState(false)
   const [rotationNotice, setRotationNotice] = useState('')
-  const previousContainerKeyRef = useRef<string | null>(null)
-  const previousAutoPlacedCountRef = useRef(0)
-  const suppressContainerChangeNoticeRef = useRef(false)
   
   // Backend integrated states
   const [customContainers, setCustomContainers] = useState<ContainerSpec[]>([])
@@ -1147,8 +1133,13 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [recentErrors, setRecentErrors] = useState<string[]>([])
 
   useEffect(() => {
-    setPlacementSettings(loadPlacementSettings(currentUser?.id ?? null))
-  }, [currentUser?.id])
+    const settings = loadPlacementSettings(currentUser?.id ?? null)
+    setPlacementSettings(settings)
+    dispatchPackingSession({
+      type: 'defaultMaxStackLayersChanged',
+      defaultMaxStackLayers: settings.defaultMaxStackLayers,
+    })
+  }, [currentUser?.id, dispatchPackingSession])
 
   useEffect(() => {
     savePlacementSettings(currentUser?.id ?? null, placementSettings)
@@ -1276,15 +1267,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const cargoRef = useRef<HTMLFormElement | null>(null)
   const containerRef = useRef<HTMLElement | null>(null)
 
-  const selectedContainer = useMemo(() => {
-    const standard = containerOverrides[selectedContainerId] ?? containers.find(c => c.id === selectedContainerId)
-    if (standard) return standard
-
-    const custom = customContainers.find(c => c.id === selectedContainerId)
-    if (custom) return custom
-
-    return customContainer
-  }, [selectedContainerId, containerOverrides, customContainers, customContainer])
+  const selectedContainer = selectPackingContainer(packingSession)
+  const customContainer = packingSession.containerSnapshots.custom ?? customContainerDefaults
 
   const fetchCustomContainers = async () => {
     try {
@@ -1405,58 +1389,51 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   const renderingContainer = effectiveContainer(selectedContainer)
   const displayCargoItems = useMemo(() => normalizeCargoLabelColors(cargoItems), [cargoItems])
-  const defaultMaxStackLayers = placementSettings.defaultMaxStackLayers
-  const calculateCurrentPacking = () => calculatePacking(selectedContainer, displayCargoItems, { loadingMode, defaultMaxStackLayers })
-  const [calculatedResult, setCalculatedResult] = useState<PackingResult>(() =>
-    calculatePacking(containers[0], normalizeCargoLabelColors(initialCargo), { loadingMode: 'quantity' }),
-  )
-  const result = hasCalculated ? calculatedResult : emptyPackingResult(selectedContainer, displayCargoItems)
+  const result = automaticResult ?? emptyPackingResult(selectedContainer, displayCargoItems)
   const detailRows = useMemo(
     () => buildExportPlanRows(displayCargoItems, result, { defaultMaxStackLayers }),
     [defaultMaxStackLayers, displayCargoItems, result],
   )
-  const currentContainerKey = useMemo(() => containerPlacementKey(selectedContainer), [selectedContainer])
-
-  const markPlacementDirty = () => {
-    setHasCalculated(false)
-    setContainerChangeNotice('')
-  }
 
   const calculateAndShowPlacement = () => {
-    setCalculatedResult(calculateCurrentPacking())
-    setHasCalculated(true)
+    calculateCurrentPacking()
     setContainerChangeNotice('')
   }
 
   const showCalculatedPlacement = (nextResult: PackingResult) => {
-    setCalculatedResult(nextResult)
-    setHasCalculated(true)
+    dispatchPackingSession({ type: 'calculationCompleted', result: nextResult })
     setContainerChangeNotice('')
   }
 
-  useEffect(() => {
-    const previousKey = previousContainerKeyRef.current
-    if (suppressContainerChangeNoticeRef.current) {
-      suppressContainerChangeNoticeRef.current = false
-      previousContainerKeyRef.current = currentContainerKey
-      previousAutoPlacedCountRef.current = placementMode === 'auto' && hasCalculated ? result.placedCount : 0
-      return
-    }
-    if (clearPlacementOnContainerChange({
-      previousKey,
-      nextKey: currentContainerKey,
-      placementMode,
-      hasCalculated,
-      placedCount: previousAutoPlacedCountRef.current,
-    })) {
-      setHasCalculated(false)
-      setSelectedBoxId(null)
-      setActiveLayerId('all')
+  const changeSelectedContainer = (container: ContainerSpec, suppressNotice = false) => {
+    const changed = container.id !== selectedContainer.id
+      || container.label !== selectedContainer.label
+      || container.description !== selectedContainer.description
+      || container.length !== selectedContainer.length
+      || container.width !== selectedContainer.width
+      || container.height !== selectedContainer.height
+      || container.maxWeight !== selectedContainer.maxWeight
+      || container.doorGap !== selectedContainer.doorGap
+      || container.topGap !== selectedContainer.topGap
+      || container.sideGap !== selectedContainer.sideGap
+    if (!changed) return
+
+    if (!suppressNotice && placementMode === 'auto'
+      && ((hasCalculated && result.placedCount > 0) || containerChangeNotice !== '')) {
       setContainerChangeNotice(t.containerChangedNotice)
+    } else {
+      setContainerChangeNotice('')
     }
-    previousContainerKeyRef.current = currentContainerKey
-    previousAutoPlacedCountRef.current = placementMode === 'auto' && hasCalculated ? result.placedCount : 0
-  }, [currentContainerKey, hasCalculated, placementMode, result.placedCount, t.containerChangedNotice])
+    setSelectedBoxId(null)
+    setActiveLayerId('all')
+    dispatchPackingSession({ type: 'containerChanged', container })
+  }
+
+  const selectContainerById = (containerId: string) => {
+    const container = customContainers.find((candidate) => candidate.id === containerId)
+      ?? packingSession.containerSnapshots[containerId]
+    if (container) changeSelectedContainer(container)
+  }
 
   const manualDraft = manualHistory.present
   const manualPool = useMemo(
@@ -1945,8 +1922,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     if (!preset) return
     const clamped = Math.min(quantity, STANDARD_BOX_MAX_PER_CLICK)
     const item = buildStandardCargoItem(preset, clamped, () => createClientId())
-    setCargoItems((current) => [...current, item])
-    markPlacementDirty()
+    dispatchPackingSession({ type: 'cargoAdded', items: [item] })
   }
   const handleAddAllFillCargo = (rows: { preset: { id: string }; maxCount: number }[]) => {
     let added = 0
@@ -1960,8 +1936,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       added += 1
     }
     if (added === 0) return
-    setCargoItems((current) => [...current, ...additions])
-    markPlacementDirty()
+    dispatchPackingSession({ type: 'cargoAdded', items: additions })
   }
   const labelOptions = [...new Set(result.labelStats.map((item) => item.label))]
   const activeLayerIndex = result.layers.findIndex((layer) => layer.id === activeLayerId)
@@ -2002,23 +1977,23 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   const updateDefaultMaxStackLayers = (value: string) => {
     const parsed = Math.floor(Number(value) || 0)
-    setPlacementSettings((current) => ({ ...current, defaultMaxStackLayers: parsed > 0 ? parsed : undefined }))
-    markPlacementDirty()
+    const defaultMaxStackLayers = parsed > 0 ? parsed : undefined
+    setPlacementSettings((current) => ({ ...current, defaultMaxStackLayers }))
+    dispatchPackingSession({ type: 'defaultMaxStackLayersChanged', defaultMaxStackLayers })
   }
 
   const updateContainerNumber = (field: 'length' | 'width' | 'height' | 'maxWeight' | 'doorGap' | 'topGap' | 'sideGap', value: string) => {
     const nextValue = Math.max(0, Number(value) || 0)
-    if (selectedContainerId === 'custom') {
-      setCustomContainer((current) => ({ ...current, [field]: nextValue }))
-      return
+    if (selectedContainer[field] === nextValue) return
+    if (placementMode === 'auto'
+      && ((hasCalculated && result.placedCount > 0) || containerChangeNotice !== '')) {
+      setContainerChangeNotice(t.containerChangedNotice)
+    } else {
+      setContainerChangeNotice('')
     }
-    setContainerOverrides((current) => ({
-      ...current,
-      [selectedContainerId]: {
-        ...(current[selectedContainerId] ?? containers.find((container) => container.id === selectedContainerId) ?? containers[0]),
-        [field]: nextValue,
-      },
-    }))
+    setSelectedBoxId(null)
+    setActiveLayerId('all')
+    dispatchPackingSession({ type: 'containerUpdated', field, value: nextValue })
   }
 
   const addCargo = (event: FormEvent) => {
@@ -2032,14 +2007,13 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       maxStackLayers: form.stackable ? form.maxStackLayers : undefined,
       groundOnly: form.groundOnly ?? false,
     }
-    setCargoItems((items) => [...items, next])
+    dispatchPackingSession({ type: 'cargoAdded', items: [next] })
     setForm((current) => ({
       ...current,
       name: `Carton ${nextLabel(cargoItems.length + 2)}`,
       label: nextLabel(cargoItems.length + 1),
       color: colors[(cargoItems.length + 1) % colors.length],
     }))
-    markPlacementDirty()
   }
 
   const openEditCargo = (cargo: CargoItem) => {
@@ -2074,10 +2048,9 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       groundOnly: editForm.groundOnly ?? false,
     }
 
-    setCargoItems((items) => items.map((item) => item.id === editingCargo.id ? nextCargo : item))
+    dispatchPackingSession({ type: 'cargoEdited', item: nextCargo })
     setEditingCargo(null)
     setSelectedBoxId(null)
-    markPlacementDirty()
   }
 
   const importMessagesFor = (imported: ReturnType<typeof parseCargoRowsWithTemplate>) => [
@@ -2092,9 +2065,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const applyImportedCargo = (imported: ReturnType<typeof parseCargoRowsWithTemplate>) => {
     setImportMessages(importMessagesFor(imported))
     if (imported.items.length > 0) {
-      setCargoItems(imported.items)
+      dispatchPackingSession({ type: 'cargoImported', items: imported.items })
       setSelectedBoxId(null)
-      markPlacementDirty()
     }
     setActiveResultTab('importLog')
   }
@@ -2271,8 +2243,10 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const addLibraryCargoToWorkbench = (item: CargoItem) => {
-    setCargoItems((current) => [...current, { ...item, id: createClientId(), quantity: Math.max(1, item.quantity || 1) }])
-    markPlacementDirty()
+    dispatchPackingSession({
+      type: 'cargoAdded',
+      items: [{ ...item, id: createClientId(), quantity: Math.max(1, item.quantity || 1) }],
+    })
     setActiveNav('overview')
   }
 
@@ -2682,9 +2656,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         ...imported.warnings.map((issue) => `${t.importWarning} row ${issue.row}: ${translateImportIssue(issue, locale)}`),
       ])
       if (imported.items.length > 0) {
-        setCargoItems(imported.items)
+        dispatchPackingSession({ type: 'cargoImported', items: imported.items })
         setSelectedBoxId(null)
-        markPlacementDirty()
       } else if (imported.errors.length === 0) {
         setImportMessages((prev) => [...prev, locale === 'zh'
           ? '未识别到可导入的货物行，建议使用模板管理器手动映射列'
@@ -2872,21 +2845,20 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const restorePlan = (plan: HistoryPlan) => {
-    suppressContainerChangeNoticeRef.current = true
     setProjectName(plan.projectName || defaultProjectName(locale))
     setShipmentName(plan.shipmentName)
-    setSelectedContainerId(plan.containerId)
-    if (plan.containerId === 'custom') {
-      setCustomContainer(plan.container)
-    } else if (containers.some((c) => c.id === plan.containerId)) {
-      setContainerOverrides((current) => ({ ...current, [plan.containerId]: plan.container }))
-    } else {
-      if (!customContainers.some((c) => c.id === plan.containerId)) {
-        setCustomContainers((current) => [...current, plan.container])
-      }
+    changeSelectedContainer(plan.container, true)
+    if (!containers.some((container) => container.id === plan.containerId)
+      && plan.containerId !== 'custom'
+      && !customContainers.some((container) => container.id === plan.containerId)) {
+      setCustomContainers((current) => [...current, plan.container])
     }
-    setCargoItems(plan.cargoItems)
-    setLoadingMode(plan.loadingMode || 'quantity')
+    dispatchPackingSession({ type: 'cargoImported', items: plan.cargoItems })
+    dispatchPackingSession({ type: 'loadingModeChanged', loadingMode: plan.loadingMode || 'quantity' })
+    dispatchPackingSession({
+      type: 'defaultMaxStackLayersChanged',
+      defaultMaxStackLayers: plan.defaultMaxStackLayers,
+    })
     setPlacementSettings((current) => ({ ...current, defaultMaxStackLayers: plan.defaultMaxStackLayers }))
     showCalculatedPlacement(calculatePacking(plan.container, normalizeCargoLabelColors(plan.cargoItems), {
       loadingMode: plan.loadingMode || 'quantity',
@@ -2900,8 +2872,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const deleteCargo = (cargoId: string) => {
-    setCargoItems((items) => items.filter((item) => item.id !== cargoId))
-    markPlacementDirty()
+    dispatchPackingSession({ type: 'cargoDeleted', cargoId })
     setSelectedBoxId((current) => {
       const selectedBox = result.placed.find((box) => box.id === current)
       return selectedBox?.cargoId === cargoId ? null : current
@@ -2914,13 +2885,12 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       return
     }
 
-    setCargoItems((items) => moveItem(
-      items,
-      items.findIndex((item) => item.id === draggedCargoId),
-      items.findIndex((item) => item.id === targetCargoId),
-    ))
+    dispatchPackingSession({
+      type: 'cargoReordered',
+      cargoId: draggedCargoId,
+      targetCargoId,
+    })
     setSelectedBoxId(null)
-    markPlacementDirty()
     setDraggedCargoId(null)
   }
 
@@ -3607,7 +3577,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             {!containerCollapsed && (
               <>
                 <label className="field-label">{t.containerType}
-                  <select className="field-input mt-1" value={selectedContainerId} onChange={(event) => setSelectedContainerId(event.target.value)}>
+                  <select className="field-input mt-1" value={selectedContainerId} onChange={(event) => selectContainerById(event.target.value)}>
                     {containers.map((container) => <option key={container.id} value={container.id}>{container.label}</option>)}
                     {customContainers.map((container) => <option key={container.id} value={container.id}>{container.label}</option>)}
                     <option value="custom">{t.customContainer}</option>
@@ -3623,7 +3593,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                 </button>
                 <div className="mt-3 max-h-[220px] overflow-auto border border-[#d1d1d1]">
                   {[...containers, ...customContainers, customContainer].map((container) => (
-                    <button className={`block w-full border-b border-[#d1d1d1] px-3 py-3 text-left hover:bg-white cursor-pointer ${container.id === selectedContainer.id ? 'bg-white' : 'bg-[#f8fafc]'}`} key={container.id} type="button" onClick={() => setSelectedContainerId(container.id)}>
+                    <button className={`block w-full border-b border-[#d1d1d1] px-3 py-3 text-left hover:bg-white cursor-pointer ${container.id === selectedContainer.id ? 'bg-white' : 'bg-[#f8fafc]'}`} key={container.id} type="button" onClick={() => selectContainerById(container.id)}>
                       <div className="mb-2 ml-auto h-5 w-24 bg-[#5f5f5f]" />
                       <strong>{container.label}</strong>
                       <p className="text-xs">{container.length.toLocaleString()} x {container.width.toLocaleString()} x {container.height.toLocaleString()} mm {container.maxWeight.toLocaleString()} kg</p>
@@ -3700,8 +3670,10 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
               <>
                 <label className="field-label">{t.selectableRules}
                   <select aria-label={t.ruleSummary} className="field-input mt-1" value={loadingMode} onChange={(event) => {
-                    setLoadingMode(event.target.value as LoadingMode)
-                    markPlacementDirty()
+                    dispatchPackingSession({
+                      type: 'loadingModeChanged',
+                      loadingMode: event.target.value as LoadingMode,
+                    })
                   }}>
                     <option value="volume">{t.volumeMode}</option>
                     <option value="weight">{t.weightMode}</option>
@@ -4404,10 +4376,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                   locale={locale}
                   rows={compareRows}
                   selectedIds={compareSelection}
-                  onApplyRecommended={(id) => {
-                    setSelectedContainerId(id)
-                    markPlacementDirty()
-                  }}
+                  onApplyRecommended={selectContainerById}
                   onToggleCandidate={(id) => {
                     setCompareSelection((current) =>
                       current.includes(id)
@@ -4680,7 +4649,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
               fetchCustomContainers()
             }}
             onSelect={(container) => {
-              setSelectedContainerId(container.id)
+              changeSelectedContainer(container)
               setShowCustomContainerDialog(false)
               fetchCustomContainers()
             }}

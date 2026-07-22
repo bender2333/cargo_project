@@ -293,6 +293,33 @@ test('自动模式更换货柜后清空旧画布并提示重新计算', async ({
   await expect(page.getByTestId('container-change-notice')).toContainText('重新计算')
   await expect(scene).toHaveAttribute('data-box-count', '0')
   await expect(scene).toHaveAttribute('data-interaction-mode', 'auto')
+
+  await page.getByLabel('货柜类型').selectOption({ index: 2 })
+  await expect(page.getByTestId('container-change-notice')).toContainText('重新计算')
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+})
+
+test('手动模式更换货柜保留草稿且返回自动模式不会恢复旧计算结果', async ({ page }) => {
+  await ensureChinese(page)
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-box-count', /^[1-9]\d*$/)
+
+  await page.getByTestId('placement-mode-manual').click()
+  const firstPoolItem = page.getByTestId('manual-pool-item').first()
+  const cargoId = await firstPoolItem.getAttribute('data-cargo-id')
+  expect(cargoId).toBeTruthy()
+  await page.getByTestId(`pool-quick-place-${cargoId}`).click()
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+
+  await page.getByLabel('货柜类型').selectOption({ index: 1 })
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+  await page.getByTestId('placement-mode-auto').click()
+
+  await expect(scene).toHaveAttribute('data-interaction-mode', 'auto')
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+
+  await page.getByTestId('placement-mode-manual').click()
+  await expect(scene).toHaveAttribute('data-box-count', '1')
 })
 
 test('从历史方案恢复自定义柜型后 3D 场景重建并显示新箱体', async ({ page }) => {
