@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { setToken } from '../lib/auth'
+import type { User } from '../lib/auth'
 
 type RegisterPageProps = {
-  onRegisterSuccess: () => void
+  onRegisterSuccess: (user: User) => void
   onToggleLogin: () => void
 }
 
@@ -25,39 +26,32 @@ export function RegisterPage({ onRegisterSuccess, onToggleLogin }: RegisterPageP
     setLoading(true)
 
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        let errMsg = data.error || '注册失败'
-        if (errMsg === 'Username is required') {
-          errMsg = '请输入用户名'
-        } else if (errMsg === 'Username must be at least 3 characters long') {
-          errMsg = '用户名长度必须至少为 3 个字符'
-        } else if (errMsg === 'Password is required') {
-          errMsg = '请输入密码'
-        } else if (
-          errMsg === 'Password too short' ||
-          errMsg === 'Password must be at least 6 characters long'
-        ) {
-          errMsg = '密码长度必须至少为 6 个字符'
-        } else if (
-          errMsg === 'Username already exists' ||
-          errMsg === 'Username already taken'
-        ) {
-          errMsg = '用户名已被占用'
-        } else if (errMsg === 'Database error during registration') {
-          errMsg = '注册失败，请稍后重试或联系管理员'
-        }
-        throw new Error(errMsg)
-      }
-      setToken(data.token)
-      onRegisterSuccess()
+      const { register } = await import('../api/auth')
+      const result = await register({ username, password })
+      setToken(result.token)
+      onRegisterSuccess(result.user)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      let message = err instanceof Error ? err.message : String(err)
+      if (message === 'Username is required') {
+        message = '请输入用户名'
+      } else if (message === 'Username must be at least 3 characters long') {
+        message = '用户名长度必须至少为 3 个字符'
+      } else if (message === 'Password is required') {
+        message = '请输入密码'
+      } else if (
+        message === 'Password too short' ||
+        message === 'Password must be at least 6 characters long'
+      ) {
+        message = '密码长度必须至少为 6 个字符'
+      } else if (
+        message === 'Username already exists' ||
+        message === 'Username already taken'
+      ) {
+        message = '用户名已被占用'
+      } else if (message === 'Database error during registration') {
+        message = '注册失败，请稍后重试或联系管理员'
+      }
+      setError(message)
     } finally {
       setLoading(false)
     }

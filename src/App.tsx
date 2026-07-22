@@ -9,8 +9,8 @@ export default function App() {
   const [session, setSession] = useState<User | null | false>(() => getToken() ? getCurrentUser() : false)
   const [showRegister, setShowRegister] = useState(false)
 
-  const handleAuthSuccess = () => {
-    setSession(getCurrentUser())
+  const handleAuthSuccess = (user: User) => {
+    setSession(user)
   }
 
   const handleLogout = () => {

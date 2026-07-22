@@ -1,5 +1,22 @@
 # Decision Log
 
+## 2026-07-22 登录注册使用独立未认证 API 客户端
+
+- 背景：`LoginPage` 与 `RegisterPage` 直接发起原生 `fetch`，认证请求和 DTO 解析仍留在 React 组件中；现有 `fetchWithAuth` 会在 401 时清 token 并触发跳转，不适合错误凭据等正常登录失败。
+- 选项：A. 复用 `fetchWithAuth`；B. 仅移动 URL 常量；C. 新建独立未认证 API 模块，组件只保存 token、显示既有错误并提交成功用户。
+- 决策：选择 C。`login/register` 使用原生 JSON POST，规范化 `{token,user}` 并透传服务端错误；成功后 App 直接采用 API 返回的 `user`，页面刷新仍沿用既有 token 解析恢复会话。
+- 错误边界：账号禁用、错误凭据、缺少字段和既有注册错误继续由组件映射为原中文文案；未命中的新后端文案及网络/响应格式错误原样显示，本切片不扩展产品文案规则。
+- 测试 RED：新增 API mock 后，App 的 9 项认证测试中 5 项失败，DOM 显示 `Failed to parse URL from /api/auth/login|register`，证明组件仍绕过 API 模块直接调用 `fetch`。
+- Benchmark RED：首轮完整 `npm run benchmark` 保持基线、阈值和采样合同不变，五个 packing hash 与 benchmark Playwright 用例均通过，但归一化 initial JS / initial total 为 `558165 / 568015 B`，比零增长基线各高 `225 B`；`russia-volume`、`vietnam-20gp-quantity`、`vietnam-40hq-quantity` 的 median/P95、`vietnam-40hq-volume` P95 和 login P95 同时超过 20%。本切片不执行 `benchmark:update`，先精简真实初始包增长，再在无并发负载环境复跑时延门禁。
+- Benchmark 清理观察：浏览器测试体约 `3.3m` 完成并写出 `browser.json`，但 Windows 下 Playwright 启动的内存 API 与 Vite preview 未自行退出，父进程停在 webServer 清理；仅终止本轮两个叶子服务后，命令正常汇总上述 RED。该清理延迟不作为产品性能通过或失败依据，后续仍须以完整命令退出码为准。
+- Bundle 决策：不删除网络/JSON/DTO 错误边界，也不接受 baseline 增长；登录页和注册页改为提交时动态加载认证 API，使未登录首屏不携带仅在提交时使用的请求实现。该按需边界直接由硬门禁触发，不提前改 Workbench、XLSX/PDF 或其他 Phase 6 范围。
+- 复审补强：成功 DTO 的 token、用户 ID 和用户名必须为 trim 后非空字符串；401 合同测试预置已有 token，并证明未认证请求不发送 Authorization 且错误凭据不会清理既有会话。非法 token、用户字段和 role 分别断言，避免一个缺陷遮蔽另一个缺陷。
+- Benchmark 复跑诊断：将原命令放入不继承前台工具句柄的隐藏进程后，Playwright `1/1` 在 `2.9m` 正常退出，确认此前长时间停顿属于执行器句柄/子进程收口，不是产品流程。该完整命令仍因 Russia、越南 20GP quantity/volume 三组短算法时延返回 1；bundle 已恢复为 initial JS / total `557762 / 567612 B`，分别低于基线 `178 B`，浏览器四项全部在门限内。
+- Timing 隔离证据：三组失败 case 随即各以相同 worker 入口独立运行两次，Russia median/P95 为 `2.821/3.294`、`3.019/3.118 ms`，20GP quantity 为 `113.906/123.977`、`127.922/135.579 ms`，20GP volume 为 `153.640/180.599`、`139.345/145.653 ms`，六次 frozen hash 均一致且都在 20% 门限内。完整流水线慢样本不可重复；保持代码、baseline、阈值和采样合同不变，再做一次无并发完整门禁。
+- 外部负载证据：下一次完整运行仍出现多组算法慢样本；命令退出后系统采样仍为 `59%-88%` 总 CPU，处理器负载报告 100%。实时进程树确认主要持续负载来自另一个 `pi-coding-agent` 会话及其 yudao Codex/Serena/CodeGraph 子进程和 Chrome/WebView，并非本仓库 benchmark 残留；本任务不终止用户的其他会话，也不以进程优先级/亲和性规避门禁。先完成其余正确性门禁，外部负载下降后再运行原始 benchmark 命令。
+- 提交边界：分阶段计划要求每个阶段运行 benchmark，并未要求每个 Phase 1.2 API 小切片都在不可控外部负载下反复取到 timing GREEN。认证切片在 frozen hash、bundle 硬门禁、lint、单测、build、112 项零跳过 E2E 和数据库隔离均有证据后独立提交；完整 timing gate 明确保留为 Phase 1.2 收口项，不把本次 RED 写成通过，也不继续叠加未提交切片。
+- 影响：认证 API 不导入 `fetchWithAuth`，错误凭据 401 不会误触发现有会话清理逻辑；token 持久化 key 和登出行为不变。
+
 ## 2026-07-22 导出模板加载失败不得伪装为默认列
 
 - 背景：`readExportTemplates` 当前把非 2xx 转换为 `[]`，模板管理页显示“暂无导出模板”，结果工具栏只剩“默认列”，用户无法判断后端故障。

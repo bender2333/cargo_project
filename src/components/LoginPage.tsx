@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { setToken } from '../lib/auth'
+import type { User } from '../lib/auth'
 
 type LoginPageProps = {
-  onLoginSuccess: () => void
+  onLoginSuccess: (user: User) => void
   onToggleRegister: () => void
 }
 
@@ -18,27 +19,20 @@ export function LoginPage({ onLoginSuccess, onToggleRegister }: LoginPageProps) 
     setLoading(true)
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        let errMsg = data.error || '登录失败'
-        if (errMsg === 'Account has been disabled') {
-          errMsg = '账号已被禁用'
-        } else if (errMsg === 'Invalid username or password') {
-          errMsg = '用户名或密码错误'
-        } else if (errMsg === 'Username and password are required') {
-          errMsg = '请输入用户名和密码'
-        }
-        throw new Error(errMsg)
-      }
-      setToken(data.token)
-      onLoginSuccess()
+      const { login } = await import('../api/auth')
+      const result = await login({ username, password })
+      setToken(result.token)
+      onLoginSuccess(result.user)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      let message = err instanceof Error ? err.message : String(err)
+      if (message === 'Account has been disabled') {
+        message = '账号已被禁用'
+      } else if (message === 'Invalid username or password') {
+        message = '用户名或密码错误'
+      } else if (message === 'Username and password are required') {
+        message = '请输入用户名和密码'
+      }
+      setError(message)
     } finally {
       setLoading(false)
     }
