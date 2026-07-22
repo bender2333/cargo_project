@@ -1,5 +1,13 @@
 # Decision Log
 
+## 2026-07-22 调试日志 API 边界保持现有错误语义
+
+- 背景：`DebugPanel` 是最后一个直接导入 `fetchWithAuth` 的 React 组件，并在组件内解析 `/api/_debug/recent-logs?limit=120`；成功响应缺少 `lines` 时会静默显示空列表。
+- 选项：A. 仅移动现有请求和 `HTTP <status>` 错误；B. 同时改为显示后端 `{ error }` 并开放 limit 参数；C. 引入通用日志客户端、缓存和竞态控制。
+- 决策：选择 A，并在 API 信任边界校验完整 `{ path, count, lines }` DTO。`readRecentServerLogs()` 固定现有 120 行上限并只返回组件需要的 `string[]`；非 2xx 继续抛出 `HTTP <status>`，成功响应的非法 JSON/DTO 明确报错，不再伪装为空日志。
+- 影响：DebugPanel 的按钮、管理员可见性、已有日志保留和错误展示位置不变；React 组件层不再导入原始客户端或直接调用 fetch。新增结构测试扫描全部组件，阻止该边界回退。
+- 后续：只有产品明确需要选择日志行数或并发刷新时才增加参数/请求序号；本轮不引入未被使用的灵活性。
+
 ## 2026-07-22 用户管理 API 契约与最新请求优先
 
 - 背景：`UserManagement` 直接解析用户表的 snake_case DTO，并允许手动刷新与变更后的刷新并发；较早的 GET 若较晚完成，会覆盖更新后的用户状态或错误提示。

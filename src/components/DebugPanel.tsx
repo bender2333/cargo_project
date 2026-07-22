@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchWithAuth } from '../api/client'
+import { readRecentServerLogs } from '../api/debugLogs'
 import type { CargoDebugSnapshot } from '../lib/debugSnapshot'
 
 type DebugPanelProps = {
@@ -82,13 +82,7 @@ export function DebugPanel({ snapshot }: DebugPanelProps) {
   const fetchLogs = async () => {
     setLogsError(null)
     try {
-      const res = await fetchWithAuth('/api/_debug/recent-logs?limit=120')
-      if (!res.ok) {
-        setLogsError(`HTTP ${res.status}`)
-        return
-      }
-      const body = await res.json()
-      setServerLogs(body.lines ?? [])
+      setServerLogs(await readRecentServerLogs())
     } catch (err) {
       setLogsError(err instanceof Error ? err.message : String(err))
     }
