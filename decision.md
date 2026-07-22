@@ -1,5 +1,15 @@
 # Decision Log
 
+## 2026-07-22 用户管理 API 契约与最新请求优先
+
+- 背景：`UserManagement` 直接解析用户表的 snake_case DTO，并允许手动刷新与变更后的刷新并发；较早的 GET 若较晚完成，会覆盖更新后的用户状态或错误提示。
+- 选项：A. 在组件中继续解析 DTO，并给每个调用点分别加防护；B. 由独立 API 模块校验并映射 DTO，组件用递增请求序号只提交最新 GET；C. 引入请求缓存或状态管理依赖。
+- 决策：选择 B。`src/api/users.ts` 将 `disabled: 0 | 1`、时间和 IP 字段映射为 `ManagedUser` 的 boolean/camelCase 契约；GET、PUT、DELETE 均校验完整 JSON 响应，非 2xx 优先透传非空 `{ error }`，否则保留既有列表/操作 fallback。PUT/DELETE 成功值不作为页面状态来源，均再次 GET；组件只允许最新请求提交列表、错误和 loading 状态。
+- 影响：后端 DTO 不再进入 React 组件，较旧 GET 的成功或失败都不能覆盖较新的权威列表；请求本身不取消，当前低频管理操作无需增加 AbortController、缓存或新依赖。英文页面仍在组件边界映射既有 fallback，任意后端错误原文保持不变。
+- 验证异常：独立重跑 `npm run test:e2e` 时，112 项均逐项输出 `ok`，但前台工具在 zero-skip reporter 与服务清理返回前以 124 终止，因此这些运行不能记为 GREEN。20 分钟与 30 分钟外层时限均复现同一结果，排除单纯时限不足；每次终止后无残留监听/测试进程且开发数据库未变，定位为 Windows 前台工具句柄与 Playwright webServer 收口的运行器问题。保持测试、reporter、断言和服务配置不变，改用隐藏独立进程和重定向日志取得真实进程退出码。
+- 验证结论：隐藏 `Start-Process` 将 stdout/stderr 重定向至 `test-results/e2e-user-management.*.log` 后，同一命令真实返回 ExitCode 0，reporter 汇总 `112 passed (8.0m)`；zero-skip reporter 未报错，服务端口全部释放，开发数据库大小、mtime 与 SHA-256 均未变化。运行器诊断闭环，不修改产品代码或 Playwright 配置。
+- 后续：本阶段不修改服务端路由、用户管理视觉结构或导航；只有出现可测的请求量问题时才考虑取消旧请求。
+
 ## 2026-07-22 登录注册使用独立未认证 API 客户端
 
 - 背景：`LoginPage` 与 `RegisterPage` 直接发起原生 `fetch`，认证请求和 DTO 解析仍留在 React 组件中；现有 `fetchWithAuth` 会在 401 时清 token 并触发跳转，不适合错误凭据等正常登录失败。

@@ -1,15 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
-import { fetchWithAuth } from '../api/client'
-
-interface UserItem {
-  id: string
-  username: string
-  role: 'user' | 'admin'
-  disabled: number
-  created_at: string
-  last_login_at: string | null
-  last_login_ip: string | null
-}
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  deleteManagedUser,
+  readManagedUsers,
+  toggleManagedUserStatus,
+} from '../api/users'
+import type { ManagedUser } from '../api/users'
 
 interface UserManagementProps {
   onBack: () => void
@@ -105,10 +100,10 @@ function resolveLocale(): Locale {
   return 'zh'
 }
 
-function sortByCreatedAtDesc(users: UserItem[]): UserItem[] {
+function sortByCreatedAtDesc(users: ManagedUser[]): ManagedUser[] {
   return [...users].sort((a, b) => {
-    const ta = Date.parse(a.created_at)
-    const tb = Date.parse(b.created_at)
+    const ta = Date.parse(a.createdAt)
+    const tb = Date.parse(b.createdAt)
     if (Number.isNaN(ta) && Number.isNaN(tb)) return 0
     if (Number.isNaN(ta)) return 1
     if (Number.isNaN(tb)) return -1
@@ -117,37 +112,38 @@ function sortByCreatedAtDesc(users: UserItem[]): UserItem[] {
 }
 
 export function UserManagement({ onBack }: UserManagementProps) {
-  const [users, setUsers] = useState<UserItem[]>([])
+  const [users, setUsers] = useState<ManagedUser[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const latestRequestId = useRef(0)
   const locale = resolveLocale()
   const t = copy[locale]
 
+  const errorMessage = (err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err)
+    if (message === copy.zh.actionFail) return t.actionFail
+    if (message.startsWith(`${copy.zh.fetchFail} (HTTP `)) {
+      return message.replace(copy.zh.fetchFail, t.fetchFail)
+    }
+    return message
+  }
+
   const fetchUsers = async () => {
+    const requestId = ++latestRequestId.current
     setLoading(true)
     setError('')
     try {
-      const res = await fetchWithAuth('/api/users')
-      if (!res.ok) {
-        let detail = ''
-        try {
-          const data = await res.json()
-          detail = data?.error || ''
-        } catch {
-          // ignore JSON parse failures, fallback to status text
-        }
-        throw new Error(detail || `${t.fetchFail} (HTTP ${res.status})`)
-      }
-      const data = (await res.json()) as UserItem[]
-      // Defensive: backend already sorts by created_at DESC, but guarantee
-      // ordering even if a future endpoint forgets ORDER BY.
-      setUsers(sortByCreatedAtDesc(Array.isArray(data) ? data : []))
+      const data = await readManagedUsers()
+      if (requestId !== latestRequestId.current) return
+      // Defensive: preserve newest-first ordering if the backend order changes.
+      setUsers(sortByCreatedAtDesc(data))
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      if (requestId !== latestRequestId.current) return
+      setError(errorMessage(err))
     } finally {
-      setLoading(false)
+      if (requestId === latestRequestId.current) setLoading(false)
     }
   }
 
@@ -156,23 +152,17 @@ export function UserManagement({ onBack }: UserManagementProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleToggleStatus = async (user: UserItem) => {
+  const handleToggleStatus = async (user: ManagedUser) => {
     if (user.username === 'admin') {
       alert(t.cannotDisableAdmin)
       return
     }
     setActionLoadingId(user.id)
     try {
-      const res = await fetchWithAuth(`/api/users/${user.id}/toggle-status`, {
-        method: 'PUT',
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || t.actionFail)
-      }
+      await toggleManagedUserStatus(user.id)
       await fetchUsers()
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      const message = errorMessage(err)
       setError(message)
       alert(message)
     } finally {
@@ -180,7 +170,7 @@ export function UserManagement({ onBack }: UserManagementProps) {
     }
   }
 
-  const handleDeleteUser = async (user: UserItem) => {
+  const handleDeleteUser = async (user: ManagedUser) => {
     if (user.username === 'admin') {
       alert(t.cannotDeleteAdmin)
       return
@@ -190,16 +180,10 @@ export function UserManagement({ onBack }: UserManagementProps) {
     }
     setActionLoadingId(user.id)
     try {
-      const res = await fetchWithAuth(`/api/users/${user.id}`, {
-        method: 'DELETE',
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || t.actionFail)
-      }
+      await deleteManagedUser(user.id)
       await fetchUsers()
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
+      const message = errorMessage(err)
       setError(message)
       alert(message)
     } finally {
@@ -341,21 +325,21 @@ export function UserManagement({ onBack }: UserManagementProps) {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                          {new Date(user.created_at).toLocaleString(locale === 'en' ? 'en-US' : 'zh-CN')}
+                          {new Date(user.createdAt).toLocaleString(locale === 'en' ? 'en-US' : 'zh-CN')}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                          {user.last_login_at
-                            ? new Date(user.last_login_at).toLocaleString(locale === 'en' ? 'en-US' : 'zh-CN')
+                          {user.lastLoginAt
+                            ? new Date(user.lastLoginAt).toLocaleString(locale === 'en' ? 'en-US' : 'zh-CN')
                             : '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-mono">
-                          {user.last_login_ip ?? '-'}
+                          {user.lastLoginIp ?? '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            user.disabled === 1 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                            user.disabled ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
                           }`}>
-                            {user.disabled === 1 ? t.statusDisabled : t.statusActive}
+                            {user.disabled ? t.statusDisabled : t.statusActive}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -365,12 +349,12 @@ export function UserManagement({ onBack }: UserManagementProps) {
                                 onClick={() => handleToggleStatus(user)}
                                 disabled={actionLoadingId === user.id}
                                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold focus:outline-none transition duration-150 ${
-                                  user.disabled === 1
+                                  user.disabled
                                     ? 'bg-green-50 text-green-700 hover:bg-green-100'
                                     : 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
                                 }`}
                               >
-                                {user.disabled === 1 ? t.actionEnable : t.actionDisable}
+                                {user.disabled ? t.actionEnable : t.actionDisable}
                               </button>
                               <button
                                 onClick={() => handleDeleteUser(user)}
