@@ -75,10 +75,54 @@ describe('Workbench packing-session boundary', () => {
     expect(source).not.toMatch(/\bsetExportTemplates\b/)
     expect(source).not.toMatch(/\bsetImportTemplateLoadFailed\b/)
     expect(source).not.toMatch(/\bsetExportTemplateLoadFailed\b/)
-    expect(source.match(/if \(!saved\) return/g)).toHaveLength(3)
-    expect(source.match(/if \(!updated\) return/g)).toHaveLength(2)
-    expect(source.match(/if \(!removed\) return/g)).toHaveLength(2)
     expect(source).toContain('shouldClearTemplateReference(selectedImportTemplateId, importTemplates, importTemplateLoadFailed)')
     expect(source).toContain('shouldClearTemplateReference(selectedExportTemplateId, exportTemplates, exportTemplateLoadFailed)')
+    expect(source).toContain('reconcileSelectedTemplateName(current, previousTemplate, selectedTemplate)')
+
+    const selectedNameEffect = source.slice(
+      source.indexOf('useEffect(() => {', source.indexOf('selectedImportTemplateNameRef')),
+      source.indexOf('}, [importTemplateLoadFailed, importTemplates, selectedImportTemplateId]'),
+    )
+    expect(selectedNameEffect).toMatch(
+      /if \(!selectedImportTemplateId\) \{\s*selectedImportTemplateNameRef\.current = null\s*return/,
+    )
+    expect(selectedNameEffect.indexOf('if (!selectedImportTemplateId)')).toBeLessThan(
+      selectedNameEffect.indexOf('if (importTemplateLoadFailed) return'),
+    )
+
+    const applyTemplate = source.slice(
+      source.indexOf('const applyImportTemplate'),
+      source.indexOf('const importMappingValue'),
+    )
+    expect(applyTemplate).toContain('selectedImportTemplateNameRef.current = template')
+    expect(applyTemplate).toContain('? { id: template.id, name: template.name }')
+    expect(applyTemplate).toContain(': null')
+
+    const saveTemplate = source.slice(
+      source.indexOf('const handleSaveImportTemplate'),
+      source.indexOf('const canAutoMap'),
+    )
+    expect(saveTemplate).toContain('selectedImportTemplateNameRef.current = { id: saved.id, name: saved.name }')
+  })
+
+  it('delegates template manager drafts and rendering to the page boundary', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+
+    expect(source).toContain("type TemplateManagerPageComponent = typeof import('./components/TemplateManagerPage')")
+    expect(source).toContain("void import('./components/TemplateManagerPage')")
+    expect(source).toContain('setTemplateManagerPage(() => module.TemplateManagerPage)')
+    expect(source).toContain('templateManagerPageLoadFailed')
+    expect(source).not.toContain("const TemplateManagerPage = lazy(() => import('./components/TemplateManagerPage')")
+    expect(source).not.toContain("import { TemplateManagerPage } from './components/TemplateManagerPage'")
+    expect(source).toContain('<TemplateManagerPage')
+    expect(source).not.toMatch(/\bnewImportTemplateDraft\b/)
+    expect(source).not.toMatch(/\beditingImportTemplate(?:Id|Draft)\b/)
+    expect(source).not.toMatch(/\bnewExportTemplateDraft\b/)
+    expect(source).not.toMatch(/\beditingExportTemplate(?:Id|Draft)\b/)
+    expect(source).not.toMatch(/\btemplateSampleRows\b/)
+    expect(source).not.toMatch(/\btemplateManagerPanel\b/)
+    expect(source).not.toMatch(/\bexportTemplateManagerPanel\b/)
+    expect(source).not.toMatch(/\bonImport(?:Created|Updated|Deleted)=/)
+    expect(source).not.toMatch(/\bonExport(?:Created|Deleted)=/)
   })
 })

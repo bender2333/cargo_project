@@ -1057,6 +1057,32 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await expect(page.getByText('自定义柜型管理')).toBeVisible()
   })
 
+  test('keeps the workbench available when the template manager chunk fails', async ({ page }) => {
+    const modulePattern = /\/(?:src\/components\/TemplateManagerPage\.tsx|assets\/TemplateManagerPage-[^/]+\.js)(?:\?.*)?$/
+    await page.route(modulePattern, (route) => route.abort())
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+
+    await page.getByTestId('nav-template-manager').click()
+    await expect(page.getByTestId('template-manager-page-load-error')).toHaveText('模板管理加载失败')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+
+    await page.getByRole('button', { name: '关闭', exact: true }).click()
+    await expect(page.getByTestId('visual-workspace')).toBeVisible()
+    await page.getByTestId('nav-template-manager').click()
+    await expect(page.getByTestId('template-manager-page-load-error')).toBeVisible()
+
+    await page.unroute(modulePattern)
+    await page.getByRole('button', { name: '重新加载页面' }).click()
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+    await page.getByTestId('nav-template-manager').click()
+    await expect(page.getByTestId('template-manager-list')).toBeVisible()
+  })
+
   test('registers and logs in a new user', async ({ page }) => {
     const user = `u_reg_${Math.random().toString(36).substring(7)}`
     const initialReadPaths = [

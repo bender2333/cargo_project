@@ -1,5 +1,36 @@
 # Decision Log
 
+## 2026-07-23 模板管理页按导航懒加载
+
+- 背景：页面边界功能与测试已稳定，但静态导入使仅在 `template-manager` 导航使用的页面代码进入登录后的 initial JS；正式 benchmark 稳定报告 initial JS/total gzip 比冻结基线增加 `3,718 B`，登录 timing 则在多轮完整采样中临界抖动。首版 `React.lazy + Suspense` 切分经独立复审发现生产风险：部署使用删除旧 hash 的同步策略，旧会话首次打开页面若请求失效 chunk，rejection 会被 `React.lazy` 缓存且根节点没有错误边界，Workbench 会白屏。
+- 选项：A. 保持静态导入并接受包体 RED；B. 保留 `React.lazy + Suspense` 并新增通用 ErrorBoundary；C. 沿用自定义柜型弹窗已经验证的受控动态导入三态，在页面导航内显式呈现加载、失败和成功。
+- 决策：选择 C。模板 catalog controller 仍随 Workbench 生命周期挂载，只有模板管理页面组件、草稿 UI 和导出列编辑器在首次打开该导航时加载；模块失败只影响模板页内容，并提供“重新加载页面”和“关闭”两个确定恢复动作。
+- 影响：登录与主工作台不再解析管理页专属代码；首次打开模板管理页会短暂显示中英文加载状态，随后保留全部原有 `data-testid` 和 CRUD 行为。正式报告的 initial JS/total 增长由切分前 `+3,718 B` 收敛为 `+1,314 B`，total JS 为基线 `+1.79%`、仍低于 5% 门限。Playwright 会真实中止开发/生产两种模块 URL，证明失败时工作台仍可操作、关闭可返回、解除拦截并整页刷新后可恢复。
+
+## 2026-07-23 模板管理页 benchmark 首轮 timing RED
+
+- 背景：完整 lint、547 项单测和 117 项零跳过 E2E 通过后，正式 benchmark 首轮仅有三项 RED：initial JS/total gzip 均为 `561,658 / 571,508 B`，相对冻结基线 `+3,718 B`；`loginClickToInteractiveMs` 中位数为 `559.967 ms`，相对基线 `463.1 ms` 增长 `20.92%`，刚超过 20% 门限。其 5 个样本为 `547.067 / 576.033 / 559.967 / 514.7 / 582.5 ms`，p95 增长 `18.22%` 未越线；冻结 contract 全部一致。
+- 选项：A. 更新基线或放宽门限；B. 立即按真实性能回归修改登录/工作台代码；C. 保持基线与断言不变，先独立复跑浏览器采样判断本机抖动，再以完整 benchmark 复核。
+- 决策：选择 C。初始包体增长继续作为已知 RED 保留；不因单轮、刚越线的 timing 样本修改产品代码或门禁。若独立复跑仍越线，再定位登录到工作台的性能路径。
+- 复测：独立浏览器复跑的登录 median/p95 为 `533.667 / 565.633 ms`，相对基线 `+15.24% / +14.80%`，均回到门限内。随后第二次完整 benchmark 的登录 median 为 `+18.30%`、p95 为 `+29.68%`，且此前稳定的 `vietnam-20gp-volume` 突然从基线 `145.549 / 161.406 ms` 抖到 `445.431 / 513.383 ms`，同轮更重的 40HQ 两个算例仍在门限内；失败指标与首轮不一致。
+- 最终复核：异常 `vietnam-20gp-volume` 独立连续三轮的 median 为 `150.2 / 152.06 / 166.576 ms`、p95 为 `165.996 / 168.345 / 168.686 ms`，均在门限内且 contract hash 一致。懒加载后的完整报告又漂移为 `vietnam-40hq-quantity.p95` 单样本尖峰 `5,008.169 ms` 和登录单样本尖峰 `834.4 ms`；其 median 分别为 `3,805.212 ms` 与 `530 ms`，登录 median 已在门限内。多轮失败指标不一致，判定为本机采样抖动，但正式命令仍按 RED 交付。
+- 交付前最终门禁：在受控 chunk 失败边界和 canonical-name ref 修复后，完整命令的五个合同、Playwright `1/1` 以及全部算法/浏览器 timing 均通过；仅 initial CSS `9567 B`（`+6 B`）、initial JS `559603 B`（`+1663 B`）和 initial total `569459 B`（`+1669 B`）保持 RED，total JS `674554 B` 相对基线 `+1.84%`、低于 5%。
+- 影响：本轮不会执行 `benchmark:update`，也不会把包体失败改写成 PASS；最终 CHANGELOG 以最后一次完整门禁为准，同时保留前述 timing 抖动作为环境风险证据。
+
+## 2026-07-23 模板管理页并发反馈与实体写锁
+
+- 背景：页面边界首次加入 pending/operation epoch 后，聚焦测试出现两项 RED：并发删除 import/export 时较早失败 alert 被较新操作吞掉；同一 export 的删除 pending 时，卸载测试仍尝试启动编辑保存。
+- 选项：A. 所有成功 notice 与失败 alert 都采用全局 latest-wins；B. 只让最新操作发布共享成功 notice，但每个仍挂载页面上的真实失败都独立 alert；同一模板的更新/删除串行，不同模板仍可并发。
+- 决策：选择 B。全局 epoch 只约束共享 notice，不能静默隐藏不同操作的失败；`import:{id}` / `export:{id}` 写锁同时阻止重复提交与同一实体 update/delete 竞争。卸载回归用不同模板并发覆盖，不绕过写锁。
+- 影响：双击或同一模板相互冲突的写入只发送一次；较旧成功不会覆盖较新成功提示，但每个真实失败保持可见。上述 RED 作为契约证据保留，修复实现与测试场景后重新验证。
+
+## 2026-07-23 Phase 3 模板管理页临时状态与共享 catalog 分离
+
+- 背景：导入模板同时服务模板管理页和导入映射弹窗，导出模板同时服务管理页和工作台工具栏；但新建/编辑草稿、样本表头和临时 notice 只在模板管理页可见。旧实现把两类状态都放在 Workbench，离开页面后仍保留半成品草稿，并使异步操作 A 的旧闭包可能清掉后来编辑的 B。
+- 选项：A. 所有 catalog 与草稿都放入按导航挂载的页面；B. 所有状态继续留在 Workbench，只移动 JSX；C. Workbench 级 `useTemplateCatalogs` 持有远程目录和 CRUD，`TemplateManagerPage` 只持有页面临时状态，CRUD 结果仅更新共享 catalog，不直接改工作台选择。
+- 决策：选择 C。离开模板管理页会重置未提交的新建/编辑草稿、样本表头与页面 notice；已成功写入的 catalog 仍在 Workbench 中持续有效。页面卸载后完成的写请求可以更新共享 catalog，但不再弹出旧页面 alert、写页面状态或改变工作台模板选择。新建导入模板固定以 LWH 作为页面默认，不继承隐藏的导入弹窗会话顺序，也不自动选中新建模板。
+- 影响：管理页与跨入口远程数据保持一致；catalog 删除后由 Workbench 对账 effect 清理失效 ID 和名称，catalog 改名会同步仍未被用户改写的选中模板名称，但保留用户已输入的“另存为”名称。导入上传仍先重置为空并要求显式选择，导出流程也由用户显式选择模板。使用 `{ id, draft }` 原子编辑状态和提交对象 identity 校验，异步保存/删除 A 不会清除后来编辑的 B。该边界不抽取 `CargoImportDialog`，也不改变“选择模板只预填、用户确认后导入”的既有语义。
+
 ## 2026-07-23 Phase 3 模板 catalog 控制器 benchmark RED 保留
 
 - 背景：模板 catalog controller 切片的 lint、全量单测、build 和 117 条零跳过 E2E 全部通过；正式 benchmark 的五个冻结 contract hash、Playwright `1/1`、算法和浏览器 timing 也全部通过，但初始包体零增长门禁仍为 RED。

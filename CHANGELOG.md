@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-23 Phase 3 模板管理页面边界
+
+- [x] 抽取 `TemplateManagerPage`，让导入/导出模板的新建、编辑、删除草稿、样本表头与页面 notice 离开 `Workbench`；远程 catalog 继续由 Workbench 生命周期的 `useTemplateCatalogs` 唯一持有。
+- [x] 保留管理页、导入映射弹窗和导出工具栏的现有 `data-testid`、本地化失败反馈与共享目录行为；表头/预览投影移入可测试的 `lib/importTable`。
+- [x] 以同步 pending ref、同实体写锁和成功反馈 epoch 关闭双击重复 POST/DELETE、update/delete 竞争及旧 notice 覆盖；每个真实失败仍独立可见。页面卸载后写请求只更新共享 catalog，不再弹旧页面 alert 或改隐藏选择。
+- [x] Workbench 按共享 catalog 对账当前导入模板 ID/名称：权威改名只同步未被用户改写的 canonical 名称，删除清理失效引用；加载失败期间成功新建模板后也会立即同步 canonical ref，用户随后输入的“另存为”名称不会被重试结果覆盖。
+- [x] 模板管理页采用受控导航级动态导入，生成独立 `TemplateManagerPage` chunk（Vite gzip `3.64 kB`）；首次打开显示中英文加载状态，catalog 仍在 Workbench 生命周期预先加载。旧会话请求已删除的部署 chunk 时，局部失败态会保留工作台壳层，并提供整页重新加载或关闭返回工作台。
+- [x] 新增 r57 双语通知；页面/hook/架构聚焦测试 `4 files / 39 tests` 与模板 chunk 中止恢复 E2E `1/1` 通过。最终 `npm run lint`、`npm test`（普通 78 文件/542 项，性能 2 文件/6 项）、`npm run build`（306 modules）和全量 E2E（118/118，零跳过）通过。E2E 使用 `:memory:` 数据库；`server/database.db` 仍为 499,712 B、SHA-256 `70212B27A8781D648197BAAEABC84E7C550E03B363E856B290CEA66DA331E901`，端口已释放。
+- [ ] 正式 `npm run benchmark` 的 5 个冻结 contract hash、Playwright 1/1、零跳过以及全部算法/浏览器 timing 通过，但整体如实保持包体 RED：initial CSS gzip `9567 B` 比基线 `+6 B`，initial JS `559603 B` 比基线 `+1663 B`，initial total `569459 B` 比基线 `+1669 B`；total JS `674554 B` 为基线 `+1.84%`、低于 5% 门限。未更新 baseline、阈值、采样或夹具；此前多轮不一致的 timing 尖峰保留在 `decision.md` 作为环境抖动证据。
+- [ ] 本子任务待独立 commit、生产部署和远程 E2E 后关闭；不混入 `.codegraph`、`.serena` 或 `issues/` 的用户改动。
+
 ## 2026-07-23 Phase 3 模板 catalog 控制器
 
 - [x] 抽取 `useTemplateCatalogs`，让导入/导出目录的初读、加载失败、请求竞态与 CRUD 离开 `Workbench`，同时保留导入弹窗和导出工具栏对同一 catalog 生命周期的共享。

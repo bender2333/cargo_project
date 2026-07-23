@@ -14,6 +14,27 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-07-23-r57-template-manager-boundary',
+    date: '2026-07-23',
+    title: { en: 'Reliable template manager boundary', zh: '模板管理页面边界' },
+    items: {
+      en: [
+        'Import and export template drafts, sample headers, and page feedback now stay inside the template manager instead of the packing workbench.',
+        'The manager, import mapping dialog, and export toolbar still share one protected template catalog, including retries and stale-response handling.',
+        'Template manager UI now loads only when that page is opened, keeping login and the main workbench bundle focused.',
+        'Delayed saves or deletes no longer clear a newer edit, and leaving the manager cannot surface feedback from an old page operation.',
+        'If a stale deployment chunk cannot load, the workbench stays available with clear reload and close recovery actions.',
+      ],
+      zh: [
+        '导入/导出模板草稿、样本表头和页面反馈现已收口到模板管理页，不再混入装箱工作台状态。',
+        '管理页、导入映射弹窗和导出工具栏继续共享同一套受保护模板目录，包括重试与陈旧响应处理。',
+        '模板管理 UI 仅在首次打开该页面时加载，登录和主工作台初始包不再携带页面专属代码。',
+        '延迟完成的保存或删除不再清除后来开始的编辑；离开管理页后也不会弹出旧页面操作的反馈。',
+        '旧会话若无法加载已失效的部署 chunk，工作台仍保持可用，并明确提供重新加载和关闭恢复操作。',
+      ],
+    },
+  },
+  {
     version: '2026-07-23-r56-cargo-library-boundary',
     date: '2026-07-23',
     title: { en: 'Reliable cargo library boundary', zh: '货物库页面边界' },

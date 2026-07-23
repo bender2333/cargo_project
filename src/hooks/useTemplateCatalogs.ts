@@ -25,6 +25,17 @@ export function shouldClearTemplateReference(
   return !loadFailed && referenceId !== '' && !templates.some((template) => template.id === referenceId)
 }
 
+export function reconcileSelectedTemplateName(
+  currentName: string,
+  previousTemplate: { id: string; name: string } | null,
+  selectedTemplate: { id: string; name: string },
+): string {
+  if (!previousTemplate || previousTemplate.id !== selectedTemplate.id || currentName === previousTemplate.name) {
+    return selectedTemplate.name
+  }
+  return currentName
+}
+
 export type TemplateCatalogsController = {
   importTemplates: ImportTemplate[]
   importLoadFailed: boolean

@@ -14,7 +14,11 @@ import {
   updateImportTemplate,
 } from '../api/importTemplates'
 import type { ExportTemplate, ImportTemplate } from '../types'
-import { shouldClearTemplateReference, useTemplateCatalogs } from './useTemplateCatalogs'
+import {
+  reconcileSelectedTemplateName,
+  shouldClearTemplateReference,
+  useTemplateCatalogs,
+} from './useTemplateCatalogs'
 
 vi.mock('../api/importTemplates', () => ({
   deleteImportTemplate: vi.fn(),
@@ -116,6 +120,30 @@ describe('useTemplateCatalogs', () => {
     expect(shouldClearTemplateReference(importTemplate.id, [importTemplate], false)).toBe(false)
     expect(shouldClearTemplateReference(importTemplate.id, [], true)).toBe(false)
     expect(shouldClearTemplateReference(importTemplate.id, [], false)).toBe(true)
+  })
+
+  it('syncs a selected template rename without overwriting a user-authored save-as name', () => {
+    const previous = { id: 'import-1', name: 'Warehouse columns' }
+    const renamed = { id: 'import-1', name: 'Warehouse columns v2' }
+
+    expect(reconcileSelectedTemplateName('Warehouse columns', previous, renamed)).toBe('Warehouse columns v2')
+    expect(reconcileSelectedTemplateName('My save-as copy', previous, renamed)).toBe('My save-as copy')
+    expect(reconcileSelectedTemplateName('Warehouse columns', previous, { id: 'import-2', name: 'Carrier columns' })).toBe('Carrier columns')
+  })
+
+  it('preserves a save-as name after a failed-load create synchronizes the new canonical template', () => {
+    const createdDuringLoadFailure = { id: 'import-b', name: 'Template B' }
+    const stateAfterCreate = {
+      currentName: createdDuringLoadFailure.name,
+      canonical: { ...createdDuringLoadFailure },
+    }
+    const stateBeforeRetry = { ...stateAfterCreate, currentName: 'Template C' }
+
+    expect(reconcileSelectedTemplateName(
+      stateBeforeRetry.currentName,
+      stateBeforeRetry.canonical,
+      createdDuringLoadFailure,
+    )).toBe('Template C')
   })
 
   it('issues one eager read per catalog when React StrictMode replays effects', async () => {

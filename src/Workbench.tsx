@@ -9,7 +9,6 @@ import { ManualPlacement2D } from './components/ManualPlacement2D'
 import { PlaybackPanel } from './components/PlaybackPanel'
 import { LoadingStepsPanel } from './components/LoadingStepsPanel'
 import { ImportMappingForm, type ImportMappingValue } from './components/ImportMappingForm'
-import { ExportColumnsEditor } from './components/ExportColumnsEditor'
 import { CenterOfGravityPanel } from './components/CenterOfGravityPanel'
 import { ContainerComparisonPanel } from './components/ContainerComparisonPanel'
 import { buildPlaybackSequence, visibleBoxesAt } from './lib/playback'
@@ -23,8 +22,7 @@ import { useManualPlacementSession } from './hooks/useManualPlacementSession'
 import { useHistoryPlans } from './hooks/useHistoryPlans'
 import type { HistoryPlan } from './hooks/useHistoryPlans'
 import { useCustomCargoLibrary } from './hooks/useCustomCargoLibrary'
-import { shouldClearTemplateReference, useTemplateCatalogs } from './hooks/useTemplateCatalogs'
-import type { ExportTemplatePayload, ImportTemplatePayload } from './hooks/useTemplateCatalogs'
+import { reconcileSelectedTemplateName, shouldClearTemplateReference, useTemplateCatalogs } from './hooks/useTemplateCatalogs'
 import { selectPackingContainer } from './lib/packingSession'
 import { computeCenterOfGravity } from './lib/centerOfGravity'
 import { compareContainers } from './lib/containerCompare'
@@ -44,10 +42,11 @@ import {
 } from './lib/manualPlacement'
 import type { ManualRotationDirection, OrientationKey, ValidationIssue } from './lib/manualPlacement'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from './data/containers'
-import { buildExportPlanRows, buildExportRowsFromTemplate, EXPORT_FIELD_KEYS } from './lib/exportPlan'
+import { buildExportPlanRows, buildExportRowsFromTemplate } from './lib/exportPlan'
 import { createClientId } from './lib/clientId'
 import { parseCargoRows, parseCargoRowsWithTemplate } from './lib/importCargo'
 import type { ImportCargoRow } from './lib/importCargo'
+import { importColumnsForHeaderRow, importPreviewRows } from './lib/importTable'
 import { saveLastImportConfig } from './lib/lastImportConfig'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { isGapFillBox } from './lib/placementSource'
@@ -65,7 +64,7 @@ import {
   savePlacementSettings,
   type PlacementSettings,
 } from './lib/placementSettings'
-import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, PackingResult, ImportTemplate, ImportTemplateUnits, ImportTemplateDefaults, ExportTemplate } from './types'
+import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, PackingResult, ImportTemplate, ImportTemplateUnits, ImportTemplateDefaults } from './types'
 import { readCustomContainers } from './api/customContainers'
 import type { User } from './lib/auth'
 import { DebugPanel } from './components/DebugPanel'
@@ -73,6 +72,7 @@ import { excelStyleLabel } from './lib/excelStyleLabel'
 import { buildCargoDebugSnapshot } from './lib/debugSnapshot'
 
 type CustomContainerDialogComponent = typeof import('./components/CustomContainerDialog')['CustomContainerDialog']
+type TemplateManagerPageComponent = typeof import('./components/TemplateManagerPage')['TemplateManagerPage']
 const UserManagement = lazy(() => import('./components/UserManagement').then((module) => ({ default: module.UserManagement })))
 const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
 type WorksheetCell = string | number | boolean | null | undefined
@@ -1026,6 +1026,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const t = copy[locale]
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeNav, setActiveNav] = useState<NavTarget>('overview')
+  const [TemplateManagerPage, setTemplateManagerPage] = useState<TemplateManagerPageComponent | null>(null)
+  const [templateManagerPageLoadFailed, setTemplateManagerPageLoadFailed] = useState(false)
   const [placementSettings, setPlacementSettings] = useState<PlacementSettings>(() => loadPlacementSettings(currentUser?.id ?? null))
   const {
     state: packingSession,
@@ -1192,41 +1194,38 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [templateDimensionOrder, setTemplateDimensionOrder] = useState<Array<'length' | 'width' | 'height'>>(['length', 'width', 'height'])
   const LAST_USED_TEMPLATE_KEY = 'cargo_last_used_template_id'
   const [selectedImportTemplateId, setSelectedImportTemplateId] = useState('')
+  const selectedImportTemplateNameRef = useRef<{ id: string; name: string } | null>(null)
   const [templateName, setTemplateName] = useState('')
   const [templateHeaderRow, setTemplateHeaderRow] = useState(1)
   const [templateStartRow, setTemplateStartRow] = useState(2)
   const [templateDefaults, setTemplateDefaults] = useState<ImportTemplateDefaults>({ quantity: 1, canRotate: true, stackable: true })
   const [templateSaveNotice, setTemplateSaveNotice] = useState('')
   const [missingImportColumns, setMissingImportColumns] = useState<string[]>([])
-  const [editingImportTemplateId, setEditingImportTemplateId] = useState('')
-  const [editingImportTemplateDraft, setEditingImportTemplateDraft] = useState<ImportTemplatePayload | null>(null)
-  const [newImportTemplateDraft, setNewImportTemplateDraft] = useState<ImportTemplatePayload | null>(null)
   const [selectedExportTemplateId, setSelectedExportTemplateId] = useState('')
-  const [editingExportTemplateId, setEditingExportTemplateId] = useState('')
-  const [editingExportTemplateDraft, setEditingExportTemplateDraft] = useState<ExportTemplatePayload | null>(null)
-  const [newExportTemplateDraft, setNewExportTemplateDraft] = useState<ExportTemplatePayload | null>(null)
-  // Header candidates for the standalone template manager mapping dropdowns,
-  // loaded from a sample workbook (the manager page has no live import file).
-  const [templateSampleRows, setTemplateSampleRows] = useState<ImportCargoRow[]>([])
   useEffect(() => {
+    if (!selectedImportTemplateId) {
+      selectedImportTemplateNameRef.current = null
+      return
+    }
+    if (importTemplateLoadFailed) return
     if (shouldClearTemplateReference(selectedImportTemplateId, importTemplates, importTemplateLoadFailed)) {
       setSelectedImportTemplateId('')
+      setTemplateName('')
+      selectedImportTemplateNameRef.current = null
+      return
     }
-    if (shouldClearTemplateReference(editingImportTemplateId, importTemplates, importTemplateLoadFailed)) {
-      setEditingImportTemplateId('')
-      setEditingImportTemplateDraft(null)
-    }
-  }, [editingImportTemplateId, importTemplateLoadFailed, importTemplates, selectedImportTemplateId])
+    const selectedTemplate = importTemplates.find((template) => template.id === selectedImportTemplateId)
+    if (!selectedTemplate) return
+    const previousTemplate = selectedImportTemplateNameRef.current
+    setTemplateName((current) => reconcileSelectedTemplateName(current, previousTemplate, selectedTemplate))
+    selectedImportTemplateNameRef.current = { id: selectedTemplate.id, name: selectedTemplate.name }
+  }, [importTemplateLoadFailed, importTemplates, selectedImportTemplateId])
 
   useEffect(() => {
     if (shouldClearTemplateReference(selectedExportTemplateId, exportTemplates, exportTemplateLoadFailed)) {
       setSelectedExportTemplateId('')
     }
-    if (shouldClearTemplateReference(editingExportTemplateId, exportTemplates, exportTemplateLoadFailed)) {
-      setEditingExportTemplateId('')
-      setEditingExportTemplateDraft(null)
-    }
-  }, [editingExportTemplateId, exportTemplateLoadFailed, exportTemplates, selectedExportTemplateId])
+  }, [exportTemplateLoadFailed, exportTemplates, selectedExportTemplateId])
 
   const { canConfirm: canConfirmMapping, missingFieldsHint } = useMemo(() => {
     const isCombined = templateDimensionMode === 'combined'
@@ -1287,6 +1286,23 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
     return () => window.clearTimeout(requestTimer)
   }, [])
+
+  useEffect(() => {
+    if (activeNav !== 'template-manager' || TemplateManagerPage) return
+    let active = true
+    setTemplateManagerPageLoadFailed(false)
+    void import('./components/TemplateManagerPage')
+      .then((module) => {
+        if (active) setTemplateManagerPage(() => module.TemplateManagerPage)
+      })
+      .catch((err) => {
+        console.error(err)
+        if (active) setTemplateManagerPageLoadFailed(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [activeNav, TemplateManagerPage])
 
   useEffect(() => {
     if (!showCustomContainerDialog || CustomContainerDialog) return
@@ -1978,9 +1994,12 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const applyImportTemplate = (templateId: string) => {
+    const template = importTemplates.find((item) => item.id === templateId)
+    selectedImportTemplateNameRef.current = template
+      ? { id: template.id, name: template.name }
+      : null
     setSelectedImportTemplateId(templateId)
     setMissingImportColumns([])
-    const template = importTemplates.find((item) => item.id === templateId)
     if (!template) {
       setCustomMapping({
         label: '',
@@ -2080,242 +2099,19 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         ? await updateImportTemplateRecord(selected.id, payload)
         : await createImportTemplateRecord(payload)
       if (!saved) return
+      selectedImportTemplateNameRef.current = { id: saved.id, name: saved.name }
       setSelectedImportTemplateId(saved.id)
       // Saving records the chosen template for telemetry/local continuity, but
       // the next import starts from "None" and waits for explicit template selection.
       try {
         localStorage.setItem(LAST_USED_TEMPLATE_KEY, saved.id)
       } catch { /* ignore */ }
-      setEditingImportTemplateId('')
-      setEditingImportTemplateDraft(null)
       const noticeText = isUpdate ? t.templateUpdated : t.templateSaved
       setTemplateSaveNotice(`${noticeText}: ${saved.name}`)
       setImportMessages((messages) => [`${noticeText}: ${saved.name}`, ...messages])
     } catch (err) {
       console.error(err)
       alert(locale === 'zh' ? '保存模板失败' : 'Failed to save template')
-    }
-  }
-
-  const createBlankImportTemplateDraft = (): ImportTemplatePayload => ({
-    name: '',
-    mapping: {
-      label: '',
-      name: '',
-      length: '',
-      width: '',
-      height: '',
-      weight: '',
-      quantity: '',
-    },
-    units: {
-      length: 'auto',
-      width: 'auto',
-      height: 'auto',
-    },
-    headerRow: 1,
-    startRow: 2,
-    mergeRows: 'none',
-    dimensionMode: 'separate',
-    combinedColumn: '',
-    dimensionOrder: templateDimensionOrder,
-    defaultValues: { quantity: 1, canRotate: true, stackable: true },
-  })
-
-  const editImportTemplate = (template: ImportTemplate) => {
-    setEditingImportTemplateId(template.id)
-    setEditingImportTemplateDraft({
-      name: template.name,
-      mapping: { ...template.mapping },
-      units: { ...template.units },
-      headerRow: template.headerRow,
-      startRow: template.startRow,
-      mergeRows: template.mergeRows,
-      dimensionMode: template.dimensionMode ?? 'separate',
-      combinedColumn: template.combinedColumn || template.mapping.dimensions || '',
-      dimensionOrder: template.dimensionOrder ?? ['length', 'width', 'height'],
-      defaultValues: template.defaultValues,
-    })
-    setTemplateDimensionOrder(template.dimensionOrder ?? ['length', 'width', 'height'])
-  }
-
-  const saveEditedImportTemplate = async () => {
-    const template = importTemplates.find((item) => item.id === editingImportTemplateId)
-    const draft = editingImportTemplateDraft
-    const name = draft?.name.trim()
-    if (!template || !draft || !name) return
-
-    setTemplateSaveNotice('')
-    try {
-      const updated = await updateImportTemplateRecord(template.id, {
-        name,
-        mapping: draft.mapping,
-        units: draft.units,
-        headerRow: draft.headerRow,
-        startRow: draft.startRow,
-        mergeRows: draft.mergeRows,
-        dimensionMode: draft.dimensionMode,
-        combinedColumn: draft.combinedColumn || draft.mapping.dimensions || '',
-        dimensionOrder: draft.dimensionOrder,
-        defaultValues: draft.defaultValues,
-      })
-      if (!updated) return
-      setTemplateSaveNotice(`${t.templateUpdated}: ${updated.name}`)
-      if (selectedImportTemplateId === updated.id) {
-        setTemplateName(updated.name)
-      }
-      setEditingImportTemplateId('')
-      setEditingImportTemplateDraft(null)
-    } catch (err) {
-      console.error(err)
-      alert(locale === 'zh' ? '更新模板失败' : 'Failed to update template')
-    }
-  }
-
-  const loadTemplateSampleHeaders = async (file: File | null) => {
-    if (!file) return
-    try {
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
-      const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      setTemplateSampleRows(sheet ? XLSX.utils.sheet_to_json<WorksheetCell[]>(sheet, { header: 1, raw: true }) : [])
-    } catch (error) {
-      console.error('[template-sample]', error)
-      setTemplateSampleRows([])
-    }
-  }
-
-  // Adapt the persisted ImportTemplatePayload draft to/from the shared mapping
-  // form value shape (defaultValues <-> defaults, undefined row fallbacks).
-  const draftToMappingValue = (draft: ImportTemplatePayload): ImportMappingValue => ({
-    mapping: draft.mapping,
-    units: draft.units,
-    headerRow: draft.headerRow ?? 1,
-    startRow: draft.startRow ?? 2,
-    dimensionMode: draft.dimensionMode ?? 'separate',
-    combinedColumn: draft.combinedColumn || draft.mapping.dimensions || '',
-    dimensionOrder: draft.dimensionOrder ?? ['length', 'width', 'height'],
-    defaults: draft.defaultValues ?? {},
-  })
-
-  const applyMappingValueToDraft = (draft: ImportTemplatePayload, next: ImportMappingValue): ImportTemplatePayload => ({
-    ...draft,
-    mapping: next.mapping,
-    units: next.units,
-    headerRow: next.headerRow,
-    startRow: next.startRow,
-    dimensionMode: next.dimensionMode,
-    combinedColumn: next.combinedColumn,
-    dimensionOrder: next.dimensionOrder,
-    defaultValues: next.defaults,
-  })
-
-  const saveNewImportTemplate = async () => {
-    const draft = newImportTemplateDraft
-    const name = draft?.name.trim()
-    if (!draft || !name) return
-    setTemplateSaveNotice('')
-    try {
-      const saved = await createImportTemplateRecord({
-        name,
-        mapping: draft.mapping,
-        units: draft.units,
-        headerRow: draft.headerRow,
-        startRow: draft.startRow,
-        mergeRows: draft.mergeRows,
-        dimensionMode: draft.dimensionMode,
-        combinedColumn: draft.combinedColumn || draft.mapping.dimensions || '',
-        dimensionOrder: draft.dimensionOrder,
-        defaultValues: draft.defaultValues,
-      })
-      if (!saved) return
-      setSelectedImportTemplateId(saved.id)
-      setTemplateName(saved.name)
-      setTemplateSaveNotice(`${t.templateSaved}: ${saved.name}`)
-      setNewImportTemplateDraft(null)
-    } catch (err) {
-      console.error(err)
-      alert(locale === 'zh' ? '创建模板失败' : 'Failed to create template')
-    }
-  }
-
-  const removeImportTemplate = async (id: string) => {
-    setTemplateSaveNotice('')
-    try {
-      const removed = await deleteImportTemplateRecord(id)
-      if (!removed) return
-      if (selectedImportTemplateId === id) {
-        setSelectedImportTemplateId('')
-        setTemplateName('')
-      }
-      if (editingImportTemplateId === id) {
-        setEditingImportTemplateId('')
-        setEditingImportTemplateDraft(null)
-      }
-      setTemplateSaveNotice(t.templateDeleted)
-    } catch (err) {
-      console.error(err)
-      alert(locale === 'zh' ? '删除模板失败' : 'Failed to delete template')
-    }
-  }
-
-  const createBlankExportTemplate = (): ExportTemplatePayload => ({
-    name: '',
-    columns: EXPORT_FIELD_KEYS.map((field) => ({ field, header: field })),
-  })
-
-  const saveNewExportTemplate = async () => {
-    const draft = newExportTemplateDraft
-    const name = draft?.name.trim()
-    if (!draft || !name) return
-    setTemplateSaveNotice('')
-    try {
-      const saved = await createExportTemplateRecord({ name, columns: draft.columns })
-      if (!saved) return
-      setSelectedExportTemplateId(saved.id)
-      setNewExportTemplateDraft(null)
-      setTemplateSaveNotice(`${t.templateSaved}: ${saved.name}`)
-    } catch (err) {
-      console.error(err)
-      alert(locale === 'zh' ? '创建导出模板失败' : 'Failed to create export template')
-    }
-  }
-
-  const editExportTemplate = (template: ExportTemplate) => {
-    setEditingExportTemplateId(template.id)
-    setEditingExportTemplateDraft({ name: template.name, columns: template.columns.map((col) => ({ ...col })) })
-  }
-
-  const saveEditedExportTemplate = async () => {
-    const draft = editingExportTemplateDraft
-    const name = draft?.name.trim()
-    if (!draft || !name || !editingExportTemplateId) return
-    setTemplateSaveNotice('')
-    try {
-      const updated = await updateExportTemplateRecord(editingExportTemplateId, { name, columns: draft.columns })
-      if (!updated) return
-      setEditingExportTemplateId('')
-      setEditingExportTemplateDraft(null)
-      setTemplateSaveNotice(`${t.templateUpdated}: ${updated.name}`)
-    } catch (err) {
-      console.error(err)
-      alert(locale === 'zh' ? '更新导出模板失败' : 'Failed to update export template')
-    }
-  }
-
-  const removeExportTemplate = async (id: string) => {
-    setTemplateSaveNotice('')
-    try {
-      const removed = await deleteExportTemplateRecord(id)
-      if (!removed) return
-      if (selectedExportTemplateId === id) setSelectedExportTemplateId('')
-      if (editingExportTemplateId === id) {
-        setEditingExportTemplateId('')
-        setEditingExportTemplateDraft(null)
-      }
-      setTemplateSaveNotice(t.templateDeleted)
-    } catch (err) {
-      console.error(err)
-      alert(locale === 'zh' ? '删除导出模板失败' : 'Failed to delete export template')
     }
   }
 
@@ -2347,28 +2143,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       groundOnly: ['groundonly', 'ground only', '必须落地', '落地', '不可上托', '不可堆叠在上'],
     }[fieldKey] || []
     return columns.find(col => candidates.some(cand => col.toLowerCase().includes(cand.toLowerCase()))) || ''
-  }
-
-  const importColumnsForHeaderRow = (rows: ImportCargoRow[], headerRow: number): string[] => {
-    if (rows.some(Array.isArray)) {
-      const header = rows[Math.max(0, headerRow - 1)]
-      return Array.isArray(header)
-        ? header.map((cell) => String(cell ?? '').trim()).filter(Boolean)
-        : []
-    }
-    return Object.keys(rows[0] ?? {})
-  }
-
-  const importPreviewRows = (rows: ImportCargoRow[], headerRow: number, startRow: number): Record<string, string | number | boolean | null | undefined>[] => {
-    if (!rows.some(Array.isArray)) return rows.filter((row): row is Record<string, string | number | boolean | null | undefined> => !Array.isArray(row))
-    const columns = importColumnsForHeaderRow(rows, headerRow)
-    return rows.slice(Math.max(headerRow, startRow - 1)).filter(Array.isArray).map((row) => {
-      const next: Record<string, string | number | boolean | null | undefined> = {}
-      columns.forEach((column, index) => {
-        next[column] = row[index]
-      })
-      return next
-    })
   }
 
   const downloadImportTemplate = () => {
@@ -2473,6 +2247,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         initialMap[fieldKey] = preSelectCol(fieldKey, rowKeys)
       })
       setCustomMapping(initialMap)
+      selectedImportTemplateNameRef.current = null
       setSelectedImportTemplateId('')
       setTemplateName('')
       setTemplateSaveNotice('')
@@ -2731,209 +2506,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     ...(currentUser?.role === 'admin' ? [{ target: 'users' as const, label: t.nav[4] }] : []),
   ]
 
-  const templateManagerPanel = (
-    <div className="rounded-lg border border-[#c6c6c6] bg-white p-4" data-testid="template-manager-list">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-lg font-bold">{t.templateManager}</h3>
-        <div className="flex flex-wrap items-center gap-2">
-          {templateSaveNotice && <span className="text-xs font-semibold text-[#047857]">{templateSaveNotice}</span>}
-          <label className="archive-button secondary cursor-pointer px-3 py-1.5 text-xs">
-            {t.templateLoadSample}
-            <input
-              className="hidden"
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              data-testid="template-manager-sample-input"
-              onChange={(event) => { void loadTemplateSampleHeaders(event.target.files?.[0] ?? null); event.target.value = '' }}
-            />
-          </label>
-          <button
-            className="archive-button success px-3 py-1.5 text-xs"
-            data-testid="template-manager-new"
-            type="button"
-            onClick={() => setNewImportTemplateDraft(createBlankImportTemplateDraft())}
-          >
-            {t.templateNew}
-          </button>
-        </div>
-      </div>
-      {templateSampleRows.length > 0 && (
-        <p className="mb-3 text-xs font-semibold text-[#047857]" data-testid="template-manager-sample-status">
-          {t.templateSampleLoaded}: {importColumnsForHeaderRow(templateSampleRows, 1).length}
-        </p>
-      )}
-      {newImportTemplateDraft && (
-        <div className="mb-4 grid gap-2 rounded border border-[#93c5fd] bg-[#eff6ff] p-3 text-sm" data-testid="template-manager-new-form">
-          <label className="text-xs font-semibold text-[#475569]">
-            {t.templateName}
-            <input
-              className="field-input mt-1"
-              data-testid="template-manager-new-name"
-              value={newImportTemplateDraft.name}
-              onChange={(event) => setNewImportTemplateDraft((current) => current ? { ...current, name: event.target.value } : current)}
-            />
-          </label>
-          <ImportMappingForm
-            value={draftToMappingValue(newImportTemplateDraft)}
-            onChange={(next) => setNewImportTemplateDraft((current) => current ? applyMappingValueToDraft(current, next) : current)}
-            availableColumns={importColumnsForHeaderRow(templateSampleRows, newImportTemplateDraft.headerRow ?? 1)}
-            labels={t}
-            testIdPrefix="tm-new-"
-          />
-          <div className="flex flex-wrap gap-2">
-            <button className="archive-button success px-2 py-1 text-xs" data-testid="template-manager-new-save" type="button" onClick={() => void saveNewImportTemplate()} disabled={!newImportTemplateDraft.name.trim()}>{t.templateCreate}</button>
-            <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => setNewImportTemplateDraft(null)}>{t.cancel}</button>
-          </div>
-        </div>
-      )}
-      {importTemplateLoadFailed ? (
-        <div className="flex items-center justify-between gap-3 border border-red-300 bg-red-50 p-3 text-sm text-red-700" data-testid="import-template-load-error">
-          <span>{t.importTemplateLoadFailed}</span>
-          <button className="archive-button secondary" type="button" onClick={() => void fetchImportTemplates()}>
-            {t.importTemplateRetry}
-          </button>
-        </div>
-      ) : importTemplates.length === 0 ? (
-        <p className="text-sm text-[#64748b]" data-testid="template-manager-empty-state">{t.templateEmpty}</p>
-      ) : (
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {importTemplates.map((template) => (
-            <article className="rounded border border-[#d1d5db] bg-[#f8fafc] p-3 text-sm" data-testid={`template-manager-row-${template.id}`} key={template.id}>
-              {editingImportTemplateId === template.id && editingImportTemplateDraft ? (
-                <div className="grid gap-2">
-                  <label className="text-xs font-semibold text-[#475569]">
-                    {t.templateName}
-                    <input
-                      className="field-input mt-1"
-                      data-testid={`template-manager-name-${template.id}`}
-                      value={editingImportTemplateDraft.name}
-                      onChange={(event) => setEditingImportTemplateDraft((current) => current ? { ...current, name: event.target.value } : current)}
-                    />
-                  </label>
-                  <ImportMappingForm
-                    value={draftToMappingValue(editingImportTemplateDraft)}
-                    onChange={(next) => setEditingImportTemplateDraft((current) => current ? applyMappingValueToDraft(current, next) : current)}
-                    availableColumns={importColumnsForHeaderRow(templateSampleRows, editingImportTemplateDraft.headerRow ?? 1)}
-                    labels={t}
-                    testIdPrefix={`tm-edit-${template.id}-`}
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    <button className="archive-button success px-2 py-1 text-xs" data-testid={`template-manager-save-${template.id}`} type="button" onClick={() => void saveEditedImportTemplate()}>{t.templateUpdate}</button>
-                    <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => { setEditingImportTemplateId(''); setEditingImportTemplateDraft(null) }}>{t.cancel}</button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <strong>{template.name}</strong>
-                  <p className="mt-1 text-xs text-[#64748b]">
-                    {t.templateHeaderRow}: {template.headerRow ?? 1} · {t.templateStartRow}: {template.startRow ?? 2} · {t.templateDimensionMode}: {template.dimensionMode ?? 'separate'}
-                  </p>
-                  <p className="mt-1 truncate text-xs text-[#64748b]">
-                    {Object.entries(template.mapping).filter(([, value]) => value).map(([key, value]) => `${key}:${value}`).join(', ') || '-'}
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button className="archive-button secondary px-2 py-1 text-xs" data-testid={`template-manager-edit-${template.id}`} type="button" onClick={() => editImportTemplate(template)}>{t.templateEdit}</button>
-                    <button className="archive-button px-2 py-1 text-xs text-red-700" data-testid={`template-manager-delete-${template.id}`} type="button" onClick={() => void removeImportTemplate(template.id)}>{t.templateDelete}</button>
-                  </div>
-                </>
-              )}
-            </article>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-
-  const exportTemplateManagerPanel = (
-    <div className="mt-4 rounded-lg border border-[#c6c6c6] bg-white p-4" data-testid="export-template-list">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-lg font-bold">{t.exportTemplateManager}</h3>
-        <button
-          className="archive-button success px-3 py-1.5 text-xs"
-          data-testid="export-template-new"
-          type="button"
-          onClick={() => setNewExportTemplateDraft(createBlankExportTemplate())}
-        >
-          {t.templateNew}
-        </button>
-      </div>
-      {newExportTemplateDraft && (
-        <div className="mb-4 grid gap-2 rounded border border-[#93c5fd] bg-[#eff6ff] p-3 text-sm" data-testid="export-template-new-form">
-          <label className="text-xs font-semibold text-[#475569]">
-            {t.templateName}
-            <input
-              className="field-input mt-1"
-              data-testid="export-template-new-name"
-              value={newExportTemplateDraft.name}
-              onChange={(event) => setNewExportTemplateDraft((current) => current ? { ...current, name: event.target.value } : current)}
-            />
-          </label>
-          <ExportColumnsEditor
-            columns={newExportTemplateDraft.columns}
-            onChange={(columns) => setNewExportTemplateDraft((current) => current ? { ...current, columns } : current)}
-            labels={t}
-            testIdPrefix="ex-new-"
-          />
-          <div className="flex flex-wrap gap-2">
-            <button className="archive-button success px-2 py-1 text-xs" data-testid="export-template-new-save" type="button" onClick={() => void saveNewExportTemplate()} disabled={!newExportTemplateDraft.name.trim()}>{t.templateCreate}</button>
-            <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => setNewExportTemplateDraft(null)}>{t.cancel}</button>
-          </div>
-        </div>
-      )}
-      {exportTemplateLoadFailed ? (
-        <div className="flex items-center justify-between gap-3 border border-red-300 bg-red-50 p-3 text-sm text-red-700" data-testid="export-template-load-error">
-          <span>{t.exportTemplateLoadFailed}</span>
-          <button className="archive-button secondary" type="button" onClick={() => void fetchExportTemplates()}>
-            {t.exportTemplateRetry}
-          </button>
-        </div>
-      ) : exportTemplates.length === 0 ? (
-        <p className="text-sm text-[#64748b]" data-testid="export-template-empty-state">{t.exportTemplateEmpty}</p>
-      ) : (
-        <div className="grid gap-2 md:grid-cols-2">
-          {exportTemplates.map((template) => (
-            <article className="rounded border border-[#d1d5db] bg-[#f8fafc] p-3 text-sm" data-testid={`export-template-row-${template.id}`} key={template.id}>
-              {editingExportTemplateId === template.id && editingExportTemplateDraft ? (
-                <div className="grid gap-2">
-                  <label className="text-xs font-semibold text-[#475569]">
-                    {t.templateName}
-                    <input
-                      className="field-input mt-1"
-                      data-testid={`export-template-name-${template.id}`}
-                      value={editingExportTemplateDraft.name}
-                      onChange={(event) => setEditingExportTemplateDraft((current) => current ? { ...current, name: event.target.value } : current)}
-                    />
-                  </label>
-                  <ExportColumnsEditor
-                    columns={editingExportTemplateDraft.columns}
-                    onChange={(columns) => setEditingExportTemplateDraft((current) => current ? { ...current, columns } : current)}
-                    labels={t}
-                    testIdPrefix={`ex-edit-${template.id}-`}
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    <button className="archive-button success px-2 py-1 text-xs" data-testid={`export-template-save-${template.id}`} type="button" onClick={() => void saveEditedExportTemplate()}>{t.templateUpdate}</button>
-                    <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => { setEditingExportTemplateId(''); setEditingExportTemplateDraft(null) }}>{t.cancel}</button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <strong>{template.name}</strong>
-                  <p className="mt-1 truncate text-xs text-[#64748b]">
-                    {template.columns.map((col) => col.header || col.field).join(', ') || '-'}
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button className="archive-button secondary px-2 py-1 text-xs" data-testid={`export-template-edit-${template.id}`} type="button" onClick={() => editExportTemplate(template)}>{t.templateEdit}</button>
-                    <button className="archive-button px-2 py-1 text-xs text-red-700" data-testid={`export-template-delete-${template.id}`} type="button" onClick={() => void removeExportTemplate(template.id)}>{t.templateDelete}</button>
-                  </div>
-                </>
-              )}
-            </article>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-
   return (
     <main className="min-h-screen bg-[#f4f7fb] text-[#1f2937]">
       <div className="mx-auto p-5 max-w-[1500px] xl:max-w-[1800px] 2xl:max-w-none 2xl:px-8">
@@ -3030,14 +2602,47 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             onBack={() => activateNav('overview')}
           />
         ) : activeNav === 'template-manager' ? (
-          <section className="archive-card overflow-hidden p-[18px]" data-testid="template-manager-page">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-xl font-bold">{t.templateManager}</h2>
-              <button className="archive-button secondary" type="button" onClick={() => activateNav('overview')}>{t.backToWorkbench}</button>
-            </div>
-            {templateManagerPanel}
-            {exportTemplateManagerPanel}
-          </section>
+          TemplateManagerPage ? (
+            <TemplateManagerPage
+              locale={locale}
+              labels={t}
+              importTemplates={importTemplates}
+              importLoadFailed={importTemplateLoadFailed}
+              exportTemplates={exportTemplates}
+              exportLoadFailed={exportTemplateLoadFailed}
+              onRetryImport={fetchImportTemplates}
+              onCreateImport={createImportTemplateRecord}
+              onUpdateImport={updateImportTemplateRecord}
+              onDeleteImport={deleteImportTemplateRecord}
+              onRetryExport={fetchExportTemplates}
+              onCreateExport={createExportTemplateRecord}
+              onUpdateExport={updateExportTemplateRecord}
+              onDeleteExport={deleteExportTemplateRecord}
+              onBack={() => activateNav('overview')}
+            />
+          ) : (
+            <section className="archive-card p-[18px] text-center text-sm text-slate-500" data-testid="template-manager-page">
+              {templateManagerPageLoadFailed ? (
+                <div className="py-10">
+                  <p className="font-semibold text-red-700" data-testid="template-manager-page-load-error">
+                    {locale === 'zh' ? '模板管理加载失败' : 'Failed to load template manager'}
+                  </p>
+                  <div className="mt-4 flex justify-center gap-2">
+                    <button className="archive-button" type="button" onClick={() => window.location.reload()}>
+                      {locale === 'zh' ? '重新加载页面' : 'Reload page'}
+                    </button>
+                    <button className="archive-button secondary" type="button" onClick={() => activateNav('overview')}>
+                      {locale === 'zh' ? '关闭' : 'Close'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-12" role="status">
+                  {locale === 'zh' ? '模板管理加载中...' : 'Loading template manager...'}
+                </div>
+              )}
+            </section>
+          )
         ) : (
         <section className={sidebarCollapsed ? "flex gap-5 max-lg:flex-col" : "flex gap-5 max-lg:flex-col"} data-testid="workbench-layout">
           <aside className={`${sidebarCollapsed ? "w-[32px] shrink-0 overflow-hidden flex flex-col items-center" : "w-[340px] lg:w-[360px] shrink-0 space-y-4 max-lg:w-full"} ${workspaceMaximized ? 'hidden' : ''}`}>
