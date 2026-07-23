@@ -23,6 +23,8 @@ import { useManualPlacementSession } from './hooks/useManualPlacementSession'
 import { useHistoryPlans } from './hooks/useHistoryPlans'
 import type { HistoryPlan } from './hooks/useHistoryPlans'
 import { useCustomCargoLibrary } from './hooks/useCustomCargoLibrary'
+import { shouldClearTemplateReference, useTemplateCatalogs } from './hooks/useTemplateCatalogs'
+import type { ExportTemplatePayload, ImportTemplatePayload } from './hooks/useTemplateCatalogs'
 import { selectPackingContainer } from './lib/packingSession'
 import { computeCenterOfGravity } from './lib/centerOfGravity'
 import { compareContainers } from './lib/containerCompare'
@@ -46,11 +48,7 @@ import { buildExportPlanRows, buildExportRowsFromTemplate, EXPORT_FIELD_KEYS } f
 import { createClientId } from './lib/clientId'
 import { parseCargoRows, parseCargoRowsWithTemplate } from './lib/importCargo'
 import type { ImportCargoRow } from './lib/importCargo'
-import { deleteImportTemplate, readImportTemplates, saveImportTemplate, updateImportTemplate } from './api/importTemplates'
-import type { ImportTemplatePayload } from './api/importTemplates'
 import { saveLastImportConfig } from './lib/lastImportConfig'
-import { deleteExportTemplate, readExportTemplates, saveExportTemplate, updateExportTemplate } from './api/exportTemplates'
-import type { ExportTemplatePayload } from './api/exportTemplates'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { isGapFillBox } from './lib/placementSource'
 import {
@@ -1103,6 +1101,20 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     update: updateCustomCargo,
     remove: removeCustomCargo,
   } = useCustomCargoLibrary()
+  const {
+    importTemplates,
+    importLoadFailed: importTemplateLoadFailed,
+    refreshImportTemplates: fetchImportTemplates,
+    createImportTemplate: createImportTemplateRecord,
+    updateImportTemplate: updateImportTemplateRecord,
+    removeImportTemplate: deleteImportTemplateRecord,
+    exportTemplates,
+    exportLoadFailed: exportTemplateLoadFailed,
+    refreshExportTemplates: fetchExportTemplates,
+    createExportTemplate: createExportTemplateRecord,
+    updateExportTemplate: updateExportTemplateRecord,
+    removeExportTemplate: deleteExportTemplateRecord,
+  } = useTemplateCatalogs()
   const [recentErrors, setRecentErrors] = useState<string[]>([])
 
   useEffect(() => {
@@ -1179,9 +1191,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [templateCombinedColumn, setTemplateCombinedColumn] = useState('')
   const [templateDimensionOrder, setTemplateDimensionOrder] = useState<Array<'length' | 'width' | 'height'>>(['length', 'width', 'height'])
   const LAST_USED_TEMPLATE_KEY = 'cargo_last_used_template_id'
-  const [importTemplates, setImportTemplates] = useState<ImportTemplate[]>([])
-  const [importTemplateLoadFailed, setImportTemplateLoadFailed] = useState(false)
-  const importTemplateRequestIdRef = useRef(0)
   const [selectedImportTemplateId, setSelectedImportTemplateId] = useState('')
   const [templateName, setTemplateName] = useState('')
   const [templateHeaderRow, setTemplateHeaderRow] = useState(1)
@@ -1192,9 +1201,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [editingImportTemplateId, setEditingImportTemplateId] = useState('')
   const [editingImportTemplateDraft, setEditingImportTemplateDraft] = useState<ImportTemplatePayload | null>(null)
   const [newImportTemplateDraft, setNewImportTemplateDraft] = useState<ImportTemplatePayload | null>(null)
-  const [exportTemplates, setExportTemplates] = useState<ExportTemplate[]>([])
-  const [exportTemplateLoadFailed, setExportTemplateLoadFailed] = useState(false)
-  const exportTemplateRequestIdRef = useRef(0)
   const [selectedExportTemplateId, setSelectedExportTemplateId] = useState('')
   const [editingExportTemplateId, setEditingExportTemplateId] = useState('')
   const [editingExportTemplateDraft, setEditingExportTemplateDraft] = useState<ExportTemplatePayload | null>(null)
@@ -1202,6 +1208,26 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   // Header candidates for the standalone template manager mapping dropdowns,
   // loaded from a sample workbook (the manager page has no live import file).
   const [templateSampleRows, setTemplateSampleRows] = useState<ImportCargoRow[]>([])
+  useEffect(() => {
+    if (shouldClearTemplateReference(selectedImportTemplateId, importTemplates, importTemplateLoadFailed)) {
+      setSelectedImportTemplateId('')
+    }
+    if (shouldClearTemplateReference(editingImportTemplateId, importTemplates, importTemplateLoadFailed)) {
+      setEditingImportTemplateId('')
+      setEditingImportTemplateDraft(null)
+    }
+  }, [editingImportTemplateId, importTemplateLoadFailed, importTemplates, selectedImportTemplateId])
+
+  useEffect(() => {
+    if (shouldClearTemplateReference(selectedExportTemplateId, exportTemplates, exportTemplateLoadFailed)) {
+      setSelectedExportTemplateId('')
+    }
+    if (shouldClearTemplateReference(editingExportTemplateId, exportTemplates, exportTemplateLoadFailed)) {
+      setEditingExportTemplateId('')
+      setEditingExportTemplateDraft(null)
+    }
+  }, [editingExportTemplateId, exportTemplateLoadFailed, exportTemplates, selectedExportTemplateId])
+
   const { canConfirm: canConfirmMapping, missingFieldsHint } = useMemo(() => {
     const isCombined = templateDimensionMode === 'combined'
     const missing: string[] = []
@@ -1253,48 +1279,10 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     }
   }
 
-  const fetchImportTemplates = async () => {
-    const requestId = ++importTemplateRequestIdRef.current
-    try {
-      const templates = await readImportTemplates()
-      if (requestId !== importTemplateRequestIdRef.current) return
-      setImportTemplates(templates)
-      setImportTemplateLoadFailed(false)
-    } catch (err) {
-      if (requestId !== importTemplateRequestIdRef.current) return
-      console.error(err)
-      setImportTemplateLoadFailed(true)
-    }
-  }
-
-  const invalidateImportTemplateReads = () => {
-    importTemplateRequestIdRef.current += 1
-  }
-
-  const fetchExportTemplates = async () => {
-    const requestId = ++exportTemplateRequestIdRef.current
-    try {
-      const templates = await readExportTemplates()
-      if (requestId !== exportTemplateRequestIdRef.current) return
-      setExportTemplates(templates)
-      setExportTemplateLoadFailed(false)
-    } catch (err) {
-      if (requestId !== exportTemplateRequestIdRef.current) return
-      console.error(err)
-      setExportTemplateLoadFailed(true)
-    }
-  }
-
-  const invalidateExportTemplateReads = () => {
-    exportTemplateRequestIdRef.current += 1
-  }
-
   useEffect(() => {
     // Let StrictMode cancel its development-only trial mount before requests start.
     const requestTimer = window.setTimeout(() => {
       void fetchCustomContainers()
-      void fetchImportTemplates()
-      void fetchExportTemplates()
     }, 0)
 
     return () => window.clearTimeout(requestTimer)
@@ -2089,14 +2077,9 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     setTemplateSaveNotice('')
     try {
       const saved = isUpdate
-        ? await updateImportTemplate(selected.id, payload)
-        : await saveImportTemplate(payload)
-      invalidateImportTemplateReads()
-      if (isUpdate) {
-        setImportTemplates((current) => current.map((item) => item.id === saved.id ? saved : item))
-      } else {
-        setImportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
-      }
+        ? await updateImportTemplateRecord(selected.id, payload)
+        : await createImportTemplateRecord(payload)
+      if (!saved) return
       setSelectedImportTemplateId(saved.id)
       // Saving records the chosen template for telemetry/local continuity, but
       // the next import starts from "None" and waits for explicit template selection.
@@ -2108,7 +2091,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       const noticeText = isUpdate ? t.templateUpdated : t.templateSaved
       setTemplateSaveNotice(`${noticeText}: ${saved.name}`)
       setImportMessages((messages) => [`${noticeText}: ${saved.name}`, ...messages])
-      await fetchImportTemplates()
     } catch (err) {
       console.error(err)
       alert(locale === 'zh' ? '保存模板失败' : 'Failed to save template')
@@ -2165,7 +2147,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
     setTemplateSaveNotice('')
     try {
-      const updated = await updateImportTemplate(template.id, {
+      const updated = await updateImportTemplateRecord(template.id, {
         name,
         mapping: draft.mapping,
         units: draft.units,
@@ -2177,15 +2159,13 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         dimensionOrder: draft.dimensionOrder,
         defaultValues: draft.defaultValues,
       })
-      invalidateImportTemplateReads()
-      setImportTemplates((current) => current.map((item) => item.id === updated.id ? updated : item))
+      if (!updated) return
       setTemplateSaveNotice(`${t.templateUpdated}: ${updated.name}`)
       if (selectedImportTemplateId === updated.id) {
         setTemplateName(updated.name)
       }
       setEditingImportTemplateId('')
       setEditingImportTemplateDraft(null)
-      await fetchImportTemplates()
     } catch (err) {
       console.error(err)
       alert(locale === 'zh' ? '更新模板失败' : 'Failed to update template')
@@ -2235,7 +2215,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     if (!draft || !name) return
     setTemplateSaveNotice('')
     try {
-      const saved = await saveImportTemplate({
+      const saved = await createImportTemplateRecord({
         name,
         mapping: draft.mapping,
         units: draft.units,
@@ -2247,13 +2227,11 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         dimensionOrder: draft.dimensionOrder,
         defaultValues: draft.defaultValues,
       })
-      invalidateImportTemplateReads()
-      setImportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
+      if (!saved) return
       setSelectedImportTemplateId(saved.id)
       setTemplateName(saved.name)
       setTemplateSaveNotice(`${t.templateSaved}: ${saved.name}`)
       setNewImportTemplateDraft(null)
-      await fetchImportTemplates()
     } catch (err) {
       console.error(err)
       alert(locale === 'zh' ? '创建模板失败' : 'Failed to create template')
@@ -2263,9 +2241,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const removeImportTemplate = async (id: string) => {
     setTemplateSaveNotice('')
     try {
-      await deleteImportTemplate(id)
-      invalidateImportTemplateReads()
-      setImportTemplates((current) => current.filter((item) => item.id !== id))
+      const removed = await deleteImportTemplateRecord(id)
+      if (!removed) return
       if (selectedImportTemplateId === id) {
         setSelectedImportTemplateId('')
         setTemplateName('')
@@ -2275,7 +2252,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         setEditingImportTemplateDraft(null)
       }
       setTemplateSaveNotice(t.templateDeleted)
-      await fetchImportTemplates()
     } catch (err) {
       console.error(err)
       alert(locale === 'zh' ? '删除模板失败' : 'Failed to delete template')
@@ -2293,13 +2269,11 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     if (!draft || !name) return
     setTemplateSaveNotice('')
     try {
-      const saved = await saveExportTemplate({ name, columns: draft.columns })
-      invalidateExportTemplateReads()
-      setExportTemplates((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
+      const saved = await createExportTemplateRecord({ name, columns: draft.columns })
+      if (!saved) return
       setSelectedExportTemplateId(saved.id)
       setNewExportTemplateDraft(null)
       setTemplateSaveNotice(`${t.templateSaved}: ${saved.name}`)
-      await fetchExportTemplates()
     } catch (err) {
       console.error(err)
       alert(locale === 'zh' ? '创建导出模板失败' : 'Failed to create export template')
@@ -2317,13 +2291,11 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     if (!draft || !name || !editingExportTemplateId) return
     setTemplateSaveNotice('')
     try {
-      const updated = await updateExportTemplate(editingExportTemplateId, { name, columns: draft.columns })
-      invalidateExportTemplateReads()
-      setExportTemplates((current) => current.map((item) => item.id === updated.id ? updated : item))
+      const updated = await updateExportTemplateRecord(editingExportTemplateId, { name, columns: draft.columns })
+      if (!updated) return
       setEditingExportTemplateId('')
       setEditingExportTemplateDraft(null)
       setTemplateSaveNotice(`${t.templateUpdated}: ${updated.name}`)
-      await fetchExportTemplates()
     } catch (err) {
       console.error(err)
       alert(locale === 'zh' ? '更新导出模板失败' : 'Failed to update export template')
@@ -2333,16 +2305,14 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const removeExportTemplate = async (id: string) => {
     setTemplateSaveNotice('')
     try {
-      await deleteExportTemplate(id)
-      invalidateExportTemplateReads()
-      setExportTemplates((current) => current.filter((item) => item.id !== id))
+      const removed = await deleteExportTemplateRecord(id)
+      if (!removed) return
       if (selectedExportTemplateId === id) setSelectedExportTemplateId('')
       if (editingExportTemplateId === id) {
         setEditingExportTemplateId('')
         setEditingExportTemplateDraft(null)
       }
       setTemplateSaveNotice(t.templateDeleted)
-      await fetchExportTemplates()
     } catch (err) {
       console.error(err)
       alert(locale === 'zh' ? '删除导出模板失败' : 'Failed to delete export template')

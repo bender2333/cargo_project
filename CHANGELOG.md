@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-23 Phase 3 模板 catalog 控制器
+
+- [x] 抽取 `useTemplateCatalogs`，让导入/导出目录的初读、加载失败、请求竞态与 CRUD 离开 `Workbench`，同时保留导入弹窗和导出工具栏对同一 catalog 生命周期的共享。
+- [x] 保持现有写入时序：服务端写成功后立即合并/删除本地列表，再发起受请求序号保护的权威刷新；写成功后的刷新失败不能伪装成写失败。卸载期间完成的成功/失败写入以 `null/false` 标记 stale，调用方不会再写旧会话状态、`localStorage` 或通知。
+- [x] 权威刷新后清理已不存在的导入/导出 selected/editing ID；加载失败时保留引用与导入映射草稿。独立复审提出的生命周期和引用完整性两个 P2，以及“慢 GET 不得阻塞 mutation Promise”和失败保留引用两项测试缺口均已关闭。
+- [x] hook/架构聚焦测试 `2 files / 19 tests` 通过；`npm run lint`、`npm test`（普通 76 文件/522 项，性能 2 文件/6 项）、`npm run build`（304 modules）和全量 E2E（117/117，零跳过）通过。E2E 前后 `server/database.db` 均为 499,712 B、SHA-256 `70212B27A8781D648197BAAEABC84E7C550E03B363E856B290CEA66DA331E901`，端口已释放。
+- [ ] `npm run benchmark` 的 5 个 contract hash、Playwright 1/1、零跳过及全部算法/浏览器 timing 通过，但整体仍因初始包体 RED：initial JS/total gzip 为 `561085 / 570935 B`，相对基线 `557940 / 567790 B` 均 `+3145 B`；total JS `672426 B` 的增幅低于 5%。未修改 baseline、阈值、采样或夹具。
+- [x] 本子任务只抽 catalog controller；模板管理页面组件、导入映射会话和导出选择状态留待下一个独立切片。
+
 ## 2026-07-23 Phase 3 货物库页面边界
 
 - [x] 抽取 `CargoLibraryPage` 与 `useCustomCargoLibrary`：远程列表、加载失败、请求竞态和 CRUD 命令不再由 `Workbench` 直接管理，页面自行管理新建/编辑草稿与临时反馈。

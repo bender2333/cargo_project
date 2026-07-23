@@ -1,5 +1,12 @@
 # Decision Log
 
+## 2026-07-23 Phase 3 模板 catalog 控制器 benchmark RED 保留
+
+- 背景：模板 catalog controller 切片的 lint、全量单测、build 和 117 条零跳过 E2E 全部通过；正式 benchmark 的五个冻结 contract hash、Playwright `1/1`、算法和浏览器 timing 也全部通过，但初始包体零增长门禁仍为 RED。
+- 实测：initial JS gzip `561085 B` 对基线 `557940 B`，initial total gzip `570935 B` 对 `567790 B`，均增加 `3145 B`；total JS gzip `672426 B` 对 `662372 B` 的增幅低于 5%。本轮所有 timing 均在同机 20% 门内，报告位于 `test-results/benchmark/frontend-architecture.json`。
+- 决策：保持 benchmark RED，不修改 baseline、包体阈值、timing 阈值、预热/采样次数、iterations、夹具或 contract，也不通过重复运行挑选更好样本。本切片按正确性和浏览器门禁独立提交，初始包体债务继续留给 Phase 3 的 measured lazy-loading 收口。
+- 影响：不能宣称完整 benchmark GREEN；controller 的行为与确定性合同已经闭合，后续 `TemplateManagerPage` 抽取仍按同一基线记录增量，不能静默吸收当前增长。
+
 ## 2026-07-23 Phase 3 货物库部署后远程 E2E 调试日志夹具 RED
 
 - 背景：生产部署后以 `PLAYWRIGHT_BASE_URL=http://101.33.232.150` 执行全部 117 条 E2E；116 条通过，唯一失败是既有“调试面板 admin 可拉取服务器日志”。
