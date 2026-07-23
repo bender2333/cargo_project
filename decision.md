@@ -1,5 +1,26 @@
 # Decision Log
 
+## 2026-07-23 Phase 2 并发完成结果必须绑定请求与输入版本
+
+- 背景：独立复现证明，`startTransition` 中的货物变更与 urgent `calculate()` 分属不同 React lane 时，旧输入上的 completion 会在 rebase 后覆盖新输入，形成“新输入 + 旧结果”。仅校验输入 revision 会阻止错误结果，但会丢掉仍有效的计算请求。
+- 选项：A. 要求调用方分两个事件；B. 只在 completion 上增加输入 revision；C. 在 packing-session reducer 中同时记录计算请求序号、已完成请求序号和输入 revision，旧 completion 拒绝后让未完成请求在最新提交状态上重算。
+- 决策：选择 C。`calculate()` 只提交 `calculationRequested`；effect 从已提交会话计算，并以 `(requestId, inputRevision)` 提交 completion。普通输入变化推进 revision 并失效结果，但不会产生新请求；因此旧请求不会静默变成自动重算，只有 transition rebase 中尚未完成的同一请求会继续计算。
+- 影响：`automaticResult` 不会与当前货物、柜型、装载模式或堆叠规则版本同时失配；计算结果提交多一次 React reducer 更新，继续由浏览器基线约束。
+
+## 2026-07-23 Phase 2 历史恢复原子边界与持久默认隔离
+
+- 背景：历史恢复原先连续修改项目名、装运名、柜型、货物、装载模式、堆叠规则和结果；恢复还把方案堆叠规则写回用户持久放置设置，影响后续新会话。
+- 选项：A. 保留连续 setter/dispatch；B. 让 reducer 自己计算历史结果；C. hook 边界用历史输入快照计算，再以单一 action 提交完整会话，同时只更新当前会话规则。
+- 决策：选择 C。`historyRestored` 保留会话中的其他柜型快照，只替换历史选中的完整快照；`restoreHistory` 不依赖 Workbench render 闭包，且不调用 `setPlacementSettings`。未知历史柜型仍由 Workbench 作为目录副作用补入，视图筛选/导航重置仍属于页面状态。
+- 影响：历史 API/数据库契约无需变化；项目元数据和装箱结果由同一会话状态源提供，持久默认继续代表用户偏好而非某个历史方案。
+
+## 2026-07-23 Phase 2 历史恢复切片 benchmark timing RED
+
+- 背景：本切片未修改装箱算法、benchmark runner、baseline 或冻结夹具；正式 `npm run benchmark` 的构建、五个合同哈希、bundle 门禁和 browser Playwright 1/1 均通过，但部分同机 timing 超过 20%。
+- 证据：20GP quantity P95 `162.504 ms`，20GP volume P95 `203.667 ms`；40HQ quantity 样本含 `12,215.353 ms`，median/P95 `4,650.333 / 12,215.353 ms`；40HQ volume 样本含 `12,596.859 ms`，median/P95 `5,407.541 / 12,596.859 ms`。登录 median `467.067 ms` 在门内，单个 `706.267 ms` 样本使 P95 超限。自动结果、3D 首像素和 resize 均在门内，五个输出 hash 与基线完全一致。
+- 决策：保持 RED，不执行 `benchmark:update`，不放宽 20% 或减少样本。状态重构不混入算法优化；后续在独占 CPU 条件重跑，若长尾可稳定复现，再按既有性能调查单独 profile。
+- 影响：本切片可以证明正确性、bundle 和主要浏览器交互未回退，但不能声称完整 benchmark GREEN；该性能债继续显式保留。
+
 ## 2026-07-22 Phase 2 fresh E2E 登录等待 RED
 
 - 背景：审查修复后的 fresh `npm run test:e2e` 执行 113 项时，第 13 项既有导出模板失败恢复用例在登录后等待工作台标题超时；其余 112 项通过，zero-skip reporter 正常生效。

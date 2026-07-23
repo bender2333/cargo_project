@@ -65,7 +65,6 @@ import { deleteExportTemplate, readExportTemplates, saveExportTemplate, updateEx
 import type { ExportTemplatePayload } from './api/exportTemplates'
 import { deleteCustomCargo, readCustomCargo, saveCustomCargo, updateCustomCargo } from './api/customCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
-import { calculatePacking } from './lib/packing'
 import { isGapFillBox } from './lib/placementSource'
 import {
   deriveClearanceAnnotations,
@@ -1059,8 +1058,6 @@ type WorkbenchProps = {
 function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [locale, setLocale] = useState<Locale>('zh')
   const t = copy[locale]
-  const [projectName, setProjectName] = useState(() => defaultProjectName(locale))
-  const [shipmentName, setShipmentName] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeNav, setActiveNav] = useState<NavTarget>('overview')
   const [placementSettings, setPlacementSettings] = useState<PlacementSettings>(() => loadPlacementSettings(currentUser?.id ?? null))
@@ -1068,7 +1065,10 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     state: packingSession,
     dispatch: dispatchPackingSession,
     calculate: calculateCurrentPacking,
+    restoreHistory,
   } = usePackingSession({
+    projectName: defaultProjectName(locale),
+    shipmentName: '',
     cargoItems: initialCargo,
     containerSnapshots: [...containers, customContainerDefaults],
     selectedContainerId: containers[0].id,
@@ -1076,6 +1076,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     defaultMaxStackLayers: placementSettings.defaultMaxStackLayers,
   })
   const {
+    projectName,
+    shipmentName,
     cargoItems,
     selectedContainerId,
     loadingMode,
@@ -1397,11 +1399,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   const calculateAndShowPlacement = () => {
     calculateCurrentPacking()
-    setContainerChangeNotice('')
-  }
-
-  const showCalculatedPlacement = (nextResult: PackingResult) => {
-    dispatchPackingSession({ type: 'calculationCompleted', result: nextResult })
     setContainerChangeNotice('')
   }
 
@@ -2845,25 +2842,20 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const restorePlan = (plan: HistoryPlan) => {
-    setProjectName(plan.projectName || defaultProjectName(locale))
-    setShipmentName(plan.shipmentName)
-    changeSelectedContainer(plan.container, true)
     if (!containers.some((container) => container.id === plan.containerId)
       && plan.containerId !== 'custom'
       && !customContainers.some((container) => container.id === plan.containerId)) {
       setCustomContainers((current) => [...current, plan.container])
     }
-    dispatchPackingSession({ type: 'cargoImported', items: plan.cargoItems })
-    dispatchPackingSession({ type: 'loadingModeChanged', loadingMode: plan.loadingMode || 'quantity' })
-    dispatchPackingSession({
-      type: 'defaultMaxStackLayersChanged',
-      defaultMaxStackLayers: plan.defaultMaxStackLayers,
-    })
-    setPlacementSettings((current) => ({ ...current, defaultMaxStackLayers: plan.defaultMaxStackLayers }))
-    showCalculatedPlacement(calculatePacking(plan.container, normalizeCargoLabelColors(plan.cargoItems), {
+    restoreHistory({
+      projectName: plan.projectName || defaultProjectName(locale),
+      shipmentName: plan.shipmentName,
+      container: plan.container,
+      cargoItems: plan.cargoItems,
       loadingMode: plan.loadingMode || 'quantity',
       defaultMaxStackLayers: plan.defaultMaxStackLayers,
-    }))
+    })
+    setContainerChangeNotice('')
     setActiveLayerId('all')
     setActiveLabelId('all')
     setSelectedBoxId(null)
@@ -3363,7 +3355,10 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                   placeholder={t.shipment}
                   aria-label="Shipment name"
                   value={shipmentName}
-                  onChange={(event) => setShipmentName(event.target.value)}
+                  onChange={(event) => dispatchPackingSession({
+                    type: 'shipmentNameChanged',
+                    shipmentName: event.target.value,
+                  })}
                 />
                 <button
                   className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] bg-[#64748b] text-xl font-bold hover:bg-[#475569]"

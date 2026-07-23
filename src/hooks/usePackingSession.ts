@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react'
+import { useCallback, useEffect, useReducer } from 'react'
 import type { Dispatch } from 'react'
 import { normalizeCargoLabelColors } from '../lib/labels'
 import { calculatePacking } from '../lib/packing'
@@ -8,8 +8,9 @@ import {
   selectPackingContainer,
 } from '../lib/packingSession'
 import type {
-  PackingSessionAction,
+  PackingSessionDispatchAction,
   PackingSessionInitialState,
+  PackingSessionRestoreInput,
   PackingSessionState,
 } from '../lib/packingSession'
 
@@ -17,8 +18,9 @@ type PackingSessionOptions = Omit<PackingSessionInitialState, 'automaticResult'>
 
 type PackingSessionController = {
   state: PackingSessionState
-  dispatch: Dispatch<PackingSessionAction>
+  dispatch: Dispatch<PackingSessionDispatchAction>
   calculate: () => void
+  restoreHistory: (snapshot: PackingSessionRestoreInput) => void
 }
 
 function initializePackingSession(options: PackingSessionOptions): PackingSessionState {
@@ -34,7 +36,7 @@ function initializePackingSession(options: PackingSessionOptions): PackingSessio
   return { ...state, automaticResult: result }
 }
 
-function ownActionPayload(action: PackingSessionAction): PackingSessionAction {
+function ownActionPayload(action: PackingSessionDispatchAction): PackingSessionDispatchAction {
   switch (action.type) {
     case 'cargoAdded':
     case 'cargoImported':
@@ -50,18 +52,17 @@ function ownActionPayload(action: PackingSessionAction): PackingSessionAction {
 
 export function usePackingSession(options: PackingSessionOptions): PackingSessionController {
   const [state, reducerDispatch] = useReducer(packingSessionReducer, options, initializePackingSession)
-  const [calculationRequestId, requestCalculation] = useReducer((requestId: number) => requestId + 1, 0)
-  const handledCalculationRequestId = useRef(0)
 
-  const dispatch = useCallback<Dispatch<PackingSessionAction>>((action) => {
+  const dispatch = useCallback<Dispatch<PackingSessionDispatchAction>>((action) => {
     reducerDispatch(ownActionPayload(action))
   }, [])
 
   useEffect(() => {
-    if (calculationRequestId === 0 || handledCalculationRequestId.current === calculationRequestId) return
-    handledCalculationRequestId.current = calculationRequestId
-    dispatch({
+    if (state.calculationRequestId === state.completedCalculationRequestId) return
+    reducerDispatch({
       type: 'calculationCompleted',
+      requestId: state.calculationRequestId,
+      inputRevision: state.inputRevision,
       result: calculatePacking(
         selectPackingContainer(state),
         normalizeCargoLabelColors(state.cargoItems),
@@ -71,9 +72,31 @@ export function usePackingSession(options: PackingSessionOptions): PackingSessio
         },
       ),
     })
-  }, [calculationRequestId, dispatch, state])
+  }, [state])
 
-  const calculate = useCallback(() => requestCalculation(), [])
+  const calculate = useCallback(() => {
+    reducerDispatch({ type: 'calculationRequested' })
+  }, [])
 
-  return { state, dispatch, calculate }
+  const restoreHistory = useCallback((snapshot: PackingSessionRestoreInput) => {
+    const ownedSnapshot = {
+      ...snapshot,
+      container: { ...snapshot.container },
+      cargoItems: snapshot.cargoItems.map((item) => ({ ...item })),
+    }
+    const result = calculatePacking(
+      ownedSnapshot.container,
+      normalizeCargoLabelColors(ownedSnapshot.cargoItems),
+      {
+        loadingMode: ownedSnapshot.loadingMode,
+        defaultMaxStackLayers: ownedSnapshot.defaultMaxStackLayers,
+      },
+    )
+    reducerDispatch({
+      type: 'historyRestored',
+      snapshot: { ...ownedSnapshot, result },
+    })
+  }, [])
+
+  return { state, dispatch, calculate, restoreHistory }
 }

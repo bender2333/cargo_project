@@ -1491,6 +1491,30 @@ test('saves and restores history plans with labels and layers intact', async ({ 
   await expect(page.getByRole('cell', { name: '1' }).first()).toBeVisible()
 })
 
+test('restores a plan stack rule without replacing the persistent user default', async ({ page }) => {
+  await openEnglish(page)
+  const stackLimit = page.getByTestId('global-max-stack-layers-field').getByRole('spinbutton')
+
+  await stackLimit.fill('4')
+  await page.getByLabel('Shipment name').fill('Saved stack rule')
+  await page.getByRole('button', { name: 'History', exact: true }).click()
+  await page.getByRole('button', { name: 'Save plan' }).click()
+  await page.getByRole('button', { name: 'Back to workbench' }).click()
+
+  await stackLimit.fill('2')
+  const persistedStackLimit = () => page.evaluate(() => {
+    const key = Object.keys(localStorage).find((candidate) => candidate.startsWith('cargo-placement-settings:'))
+    if (!key) return null
+    return JSON.parse(localStorage.getItem(key) || '{}').defaultMaxStackLayers ?? null
+  })
+  await expect.poll(persistedStackLimit).toBe(2)
+  await page.getByRole('button', { name: 'History', exact: true }).click()
+  await page.getByRole('button', { name: 'Restore' }).first().click()
+
+  await expect(stackLimit).toHaveValue('4')
+  await expect.poll(persistedStackLimit).toBe(2)
+})
+
 test('keeps history on an independent page with the latest five local plans', async ({ page }) => {
   await openEnglish(page)
 

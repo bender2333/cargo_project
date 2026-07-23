@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-23 Phase 2 自动会话并发与历史恢复
+
+- [x] 将计算请求、输入 `inputRevision` 和完成请求序号纳入同一 packing-session reducer；transition 输入晚于 urgent `calculate()` 提交时，旧 completion 会被拒绝，并由同一请求对最新已提交输入重算。
+- [x] 将项目名、装运名纳入会话；历史恢复通过 `usePackingSession.restoreHistory` 在 hook 边界计算，再由单一 `historyRestored` action 原子写入项目、柜型快照、货物、装载模式、方案堆叠规则和结果。
+- [x] 历史方案的堆叠规则只恢复当前会话，不写回 `cargo-placement-settings:<userId>` 持久默认；新增 reducer、hook、Workbench 边界和浏览器回归测试。
+- RED/GREEN 证据：先观察到 transition 场景出现“新货物输入 + 旧结果”（2 个货物类型、结果仍为旧总数 2），并观察到恢复后持久默认从 2 被错误改为 4；修复后聚焦 Vitest 25/25（含相同 revision 的旧 request completion 拒绝）、持久默认隔离 E2E 1/1、`npm run lint`、`npm run build` 通过。
+- Fresh gates：`npm run lint` 通过；`npm test` 通过普通测试 69 文件 / 457 项及独占性能测试 2 文件 / 6 项；`npm run build` 通过（297 modules，入口 gzip 561.59 kB，仅既有大 chunk warning）；全量 `npm run test:e2e` 通过 114/114、零跳过，用时 10.68 分钟。开发数据库前后均为 499,712 B、SHA-256 `70212B27A8781D648197BAAEABC84E7C550E03B363E856B290CEA66DA331E901`，测试端口已释放。
+- Benchmark 硬门禁：构建与 benchmark Playwright 1/1 通过，五个 frozen contract hash 全部一致；initial HTML/CSS/JS/total gzip 为 289 / 9,561 / 556,062 / 565,912 B，total JS 667,403 B（相对基线 +0.76%，低于 5%）。自动结果 33.358 / 33.468 ms、3D 首像素 346.475 / 380.725 ms、resize 285.900 / 290.450 ms 均在 20% 内。
+- Benchmark timing RED：20GP quantity P95 162.504 ms、20GP volume P95 203.667 ms、40HQ quantity median/P95 4,650.333 / 12,215.353 ms、40HQ volume P95 12,596.859 ms、登录 P95 706.267 ms 超过 20%；合同、bundle 和其余浏览器指标通过。未修改 baseline、阈值、采样数、算法或夹具。
+
 ## 2026-07-21 (Frontend architecture refactor in progress)
 
 - [x] Audit the current frontend dependency and state boundaries.

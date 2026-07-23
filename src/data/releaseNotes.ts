@@ -14,6 +14,23 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-07-23-r53-packing-session-history-restore',
+    date: '2026-07-23',
+    title: { en: 'Concurrent-safe packing sessions', zh: '并发安全的装箱会话' },
+    items: {
+      en: [
+        'Automatic packing results are now tied to the exact input revision, so delayed calculations cannot overwrite newer cargo or container changes.',
+        'History restore now updates the project, shipment, container snapshot, cargo, loading rules, and result as one session transition.',
+        'Restoring a saved plan no longer changes the user default stack setting for future sessions.',
+      ],
+      zh: [
+        '自动装箱结果现在绑定到精确的输入版本，延迟计算不会覆盖更新后的货物或柜型变化。',
+        '历史方案恢复现在以一次会话状态转换同时更新项目、装运、柜型快照、货物、装载规则和结果。',
+        '恢复历史方案不再改变用户未来新会话的默认堆叠层数设置。',
+      ],
+    },
+  },
+  {
     version: '2026-07-21-r52-refactor-safety-baseline',
     date: '2026-07-21',
     title: { en: 'Frontend refactor safety baseline', zh: '前端重构安全基线' },

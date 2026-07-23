@@ -68,6 +68,8 @@ const calculatedResult: PackingResult = {
 
 function makeCalculatedState() {
   return createPackingSessionState({
+    projectName: 'Current project',
+    shipmentName: 'Current shipment',
     cargoItems: [cargoA, cargoB],
     containerSnapshots: [container20],
     selectedContainerId: container20.id,
@@ -203,16 +205,20 @@ describe('packingSessionReducer', () => {
 
   it('publishes a completed calculation without changing its input snapshot', () => {
     const dirtyState = packingSessionReducer(makeCalculatedState(), { type: 'resultInvalidated' })
+    const requestedState = packingSessionReducer(dirtyState, { type: 'calculationRequested' })
     const nextResult = { ...calculatedResult, placedCount: 2 }
 
-    const next = packingSessionReducer(dirtyState, {
+    const next = packingSessionReducer(requestedState, {
       type: 'calculationCompleted',
+      requestId: requestedState.calculationRequestId,
+      inputRevision: requestedState.inputRevision,
       result: nextResult,
     })
 
     expect(next.automaticResult).toBe(nextResult)
-    expect(next.cargoItems).toBe(dirtyState.cargoItems)
-    expect(selectPackingContainer(next)).toBe(selectPackingContainer(dirtyState))
+    expect(next.completedCalculationRequestId).toBe(requestedState.calculationRequestId)
+    expect(next.cargoItems).toBe(requestedState.cargoItems)
+    expect(selectPackingContainer(next)).toBe(selectPackingContainer(requestedState))
   })
 
   it('invalidates a result without changing any packing input', () => {
@@ -231,6 +237,8 @@ describe('packingSessionReducer', () => {
     const initialCargo = { ...cargoA }
     const initialContainer = { ...container20 }
     const state = createPackingSessionState({
+      projectName: 'Current project',
+      shipmentName: 'Current shipment',
       cargoItems: [initialCargo],
       containerSnapshots: [initialContainer],
       selectedContainerId: initialContainer.id,
@@ -244,6 +252,96 @@ describe('packingSessionReducer', () => {
     expect(state.cargoItems[0].quantity).toBe(cargoA.quantity)
     expect(selectPackingContainer(state).length).toBe(container20.length)
     expect(state.automaticResult).toBe(calculatedResult)
+  })
+
+  it('rejects a calculation completed for an older input revision', () => {
+    const calculatedState = makeCalculatedState()
+    const dirtyState = packingSessionReducer(calculatedState, {
+      type: 'cargoAdded',
+      items: [{ ...cargoA, id: 'new-input' }],
+    })
+
+    const next = packingSessionReducer(dirtyState, {
+      type: 'calculationCompleted',
+      requestId: dirtyState.calculationRequestId,
+      inputRevision: calculatedState.inputRevision,
+      result: calculatedResult,
+    })
+
+    expect(next).toBe(dirtyState)
+    expect(next.automaticResult).toBeNull()
+  })
+
+  it('rejects an older request completion at the current input revision', () => {
+    const firstRequest = packingSessionReducer(makeCalculatedState(), {
+      type: 'calculationRequested',
+    })
+    const latestRequest = packingSessionReducer(firstRequest, {
+      type: 'calculationRequested',
+    })
+    const olderResult = { ...calculatedResult, placedCount: 1 }
+
+    const next = packingSessionReducer(latestRequest, {
+      type: 'calculationCompleted',
+      requestId: firstRequest.calculationRequestId,
+      inputRevision: latestRequest.inputRevision,
+      result: olderResult,
+    })
+
+    expect(next).toBe(latestRequest)
+    expect(next.automaticResult).toBe(calculatedResult)
+    expect(next.completedCalculationRequestId).toBe(0)
+  })
+
+  it('restores project metadata, packing inputs, and result in one transition', () => {
+    const state = packingSessionReducer(makeCalculatedState(), {
+      type: 'calculationRequested',
+    })
+    const restoredContainer = { ...container40, label: 'Saved 40HQ' }
+    const restoredCargo = [{ ...cargoA, id: 'restored-cargo', quantity: 5 }]
+    const restoredResult = { ...calculatedResult, totalCargoCount: 5, placedCount: 5 }
+
+    const next = packingSessionReducer(state, {
+      type: 'historyRestored',
+      snapshot: {
+        projectName: 'Restored project',
+        shipmentName: 'Restored shipment',
+        container: restoredContainer,
+        cargoItems: restoredCargo,
+        loadingMode: 'volume',
+        defaultMaxStackLayers: 2,
+        result: restoredResult,
+      },
+    })
+
+    expect(next).toMatchObject({
+      projectName: 'Restored project',
+      shipmentName: 'Restored shipment',
+      selectedContainerId: restoredContainer.id,
+      cargoItems: restoredCargo,
+      loadingMode: 'volume',
+      defaultMaxStackLayers: 2,
+      automaticResult: restoredResult,
+    })
+    expect(selectPackingContainer(next)).toEqual(restoredContainer)
+    expect(selectPackingContainer(next)).not.toBe(restoredContainer)
+    expect(next.cargoItems[0]).not.toBe(restoredCargo[0])
+    expect(next.containerSnapshots[container20.id]).toBe(state.containerSnapshots[container20.id])
+    expect(next.inputRevision).toBe(state.inputRevision + 1)
+    expect(next.completedCalculationRequestId).toBe(state.calculationRequestId)
+  })
+
+  it('updates shipment metadata without invalidating the packing result', () => {
+    const state = makeCalculatedState()
+
+    const next = packingSessionReducer(state, {
+      type: 'shipmentNameChanged',
+      shipmentName: 'Renamed shipment',
+    })
+
+    expect(next.shipmentName).toBe('Renamed shipment')
+    expect(next.automaticResult).toBe(state.automaticResult)
+    expect(next.inputRevision).toBe(state.inputRevision)
   })
 
   it('copies cargo and container objects accepted by reducer actions', () => {

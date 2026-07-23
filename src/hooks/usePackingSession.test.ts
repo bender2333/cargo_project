@@ -1,3 +1,4 @@
+import { startTransition } from 'react'
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { CargoItem, ContainerSpec } from '../types'
@@ -33,6 +34,8 @@ const cargo: CargoItem = {
 describe('usePackingSession', () => {
   it('initializes the automatic result with the complete session rule snapshot', () => {
     const { result } = renderHook(() => usePackingSession({
+      projectName: 'Initial project',
+      shipmentName: '',
       cargoItems: [cargo],
       containerSnapshots: [container],
       selectedContainerId: container.id,
@@ -47,6 +50,8 @@ describe('usePackingSession', () => {
 
   it('recalculates from the latest dirty input snapshot', () => {
     const { result } = renderHook(() => usePackingSession({
+      projectName: 'Initial project',
+      shipmentName: '',
       cargoItems: [cargo],
       containerSnapshots: [container],
       selectedContainerId: container.id,
@@ -69,6 +74,8 @@ describe('usePackingSession', () => {
 
   it('calculates from an input change dispatched in the same event', () => {
     const { result } = renderHook(() => usePackingSession({
+      projectName: 'Initial project',
+      shipmentName: '',
       cargoItems: [cargo],
       containerSnapshots: [container],
       selectedContainerId: container.id,
@@ -88,6 +95,8 @@ describe('usePackingSession', () => {
 
   it('takes ownership of an action payload before queued React work runs', () => {
     const { result } = renderHook(() => usePackingSession({
+      projectName: 'Initial project',
+      shipmentName: '',
       cargoItems: [cargo],
       containerSnapshots: [container],
       selectedContainerId: container.id,
@@ -104,5 +113,75 @@ describe('usePackingSession', () => {
 
     expect(result.current.state.cargoItems.at(-1)?.quantity).toBe(1)
     expect(result.current.state.automaticResult?.totalCargoCount).toBe(3)
+  })
+
+  it('recalculates the latest input when a transition commits after an urgent request', async () => {
+    const { result } = renderHook(() => usePackingSession({
+      projectName: 'Initial project',
+      shipmentName: '',
+      cargoItems: [cargo],
+      containerSnapshots: [container],
+      selectedContainerId: container.id,
+      loadingMode: 'quantity',
+      defaultMaxStackLayers: 1,
+    }))
+    const addedCargo = { ...cargo, id: 'transition-type', label: 'T', quantity: 1 }
+
+    await act(async () => {
+      startTransition(() => {
+        result.current.dispatch({ type: 'cargoAdded', items: [addedCargo] })
+      })
+      result.current.calculate()
+    })
+
+    expect(result.current.state.cargoItems.map((item) => item.id)).toEqual([
+      'stacked-cargo',
+      'transition-type',
+    ])
+    expect(result.current.state.automaticResult?.totalCargoCount).toBe(3)
+  })
+
+  it('restores one complete history snapshot and calculates from its saved rules', () => {
+    const { result } = renderHook(() => usePackingSession({
+      projectName: 'Initial project',
+      shipmentName: '',
+      cargoItems: [cargo],
+      containerSnapshots: [container],
+      selectedContainerId: container.id,
+      loadingMode: 'quantity',
+      defaultMaxStackLayers: 1,
+    }))
+    const historyContainer = { ...container, id: 'history-container', label: 'History container' }
+    const historyCargo = { ...cargo, id: 'history-cargo', quantity: 3 }
+    const restoreHistory = (result.current as typeof result.current & {
+      restoreHistory?: (snapshot: {
+        projectName: string
+        shipmentName: string
+        container: ContainerSpec
+        cargoItems: CargoItem[]
+        loadingMode: 'volume'
+        defaultMaxStackLayers?: number
+      }) => void
+    }).restoreHistory
+
+    act(() => restoreHistory?.({
+      projectName: 'Restored project',
+      shipmentName: 'Restored shipment',
+      container: historyContainer,
+      cargoItems: [historyCargo],
+      loadingMode: 'volume',
+      defaultMaxStackLayers: 2,
+    }))
+
+    expect(result.current.state).toMatchObject({
+      projectName: 'Restored project',
+      shipmentName: 'Restored shipment',
+      selectedContainerId: historyContainer.id,
+      cargoItems: [historyCargo],
+      loadingMode: 'volume',
+      defaultMaxStackLayers: 2,
+    })
+    expect(result.current.state.automaticResult?.totalCargoCount).toBe(3)
+    expect(result.current.state.automaticResult?.placedCount).toBe(2)
   })
 })

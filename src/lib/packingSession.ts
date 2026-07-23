@@ -6,15 +6,29 @@ type ContainerNumberField = keyof Pick<
 >
 
 export type PackingSessionState = {
+  projectName: string
+  shipmentName: string
   cargoItems: CargoItem[]
   containerSnapshots: Record<string, ContainerSpec>
   selectedContainerId: string
   loadingMode: LoadingMode
   defaultMaxStackLayers?: number
   automaticResult: PackingResult | null
+  inputRevision: number
+  calculationRequestId: number
+  completedCalculationRequestId: number
 }
 
-export type PackingSessionAction =
+export type PackingSessionRestoreInput = {
+  projectName: string
+  shipmentName: string
+  container: ContainerSpec
+  cargoItems: CargoItem[]
+  loadingMode: LoadingMode
+  defaultMaxStackLayers?: number
+}
+
+export type PackingSessionDispatchAction =
   | { type: 'cargoAdded'; items: CargoItem[] }
   | { type: 'cargoEdited'; item: CargoItem }
   | { type: 'cargoDeleted'; cargoId: string }
@@ -24,10 +38,26 @@ export type PackingSessionAction =
   | { type: 'containerUpdated'; field: ContainerNumberField; value: number }
   | { type: 'loadingModeChanged'; loadingMode: LoadingMode }
   | { type: 'defaultMaxStackLayersChanged'; defaultMaxStackLayers?: number }
-  | { type: 'calculationCompleted'; result: PackingResult }
+  | { type: 'shipmentNameChanged'; shipmentName: string }
   | { type: 'resultInvalidated' }
 
-export type PackingSessionInitialState = Omit<PackingSessionState, 'containerSnapshots'> & {
+export type PackingSessionAction = PackingSessionDispatchAction
+  | { type: 'calculationRequested' }
+  | {
+    type: 'calculationCompleted'
+    requestId: number
+    inputRevision: number
+    result: PackingResult
+  }
+  | {
+    type: 'historyRestored'
+    snapshot: PackingSessionRestoreInput & { result: PackingResult }
+  }
+
+export type PackingSessionInitialState = Omit<
+  PackingSessionState,
+  'containerSnapshots' | 'inputRevision' | 'calculationRequestId' | 'completedCalculationRequestId'
+> & {
   containerSnapshots: ContainerSpec[]
 }
 
@@ -46,6 +76,9 @@ export function createPackingSessionState(initial: PackingSessionInitialState): 
     containerSnapshots: Object.fromEntries(
       initial.containerSnapshots.map((container) => [container.id, copyContainer(container)]),
     ),
+    inputRevision: 0,
+    calculationRequestId: 0,
+    completedCalculationRequestId: 0,
   }
 }
 
@@ -54,8 +87,11 @@ export function selectPackingContainer(state: PackingSessionState): ContainerSpe
 }
 
 function invalidateResult(state: PackingSessionState): PackingSessionState {
-  if (state.automaticResult === null) return state
-  return { ...state, automaticResult: null }
+  return {
+    ...state,
+    automaticResult: null,
+    inputRevision: state.inputRevision + 1,
+  }
 }
 
 export function packingSessionReducer(
@@ -69,18 +105,29 @@ export function packingSessionReducer(
         ...state,
         cargoItems: [...state.cargoItems, ...copyCargoItems(action.items)],
         automaticResult: null,
+        inputRevision: state.inputRevision + 1,
       }
     case 'cargoEdited': {
       const index = state.cargoItems.findIndex((item) => item.id === action.item.id)
       if (index < 0) return state
       const cargoItems = [...state.cargoItems]
       cargoItems[index] = { ...action.item }
-      return { ...state, cargoItems, automaticResult: null }
+      return {
+        ...state,
+        cargoItems,
+        automaticResult: null,
+        inputRevision: state.inputRevision + 1,
+      }
     }
     case 'cargoDeleted': {
       const cargoItems = state.cargoItems.filter((item) => item.id !== action.cargoId)
       if (cargoItems.length === state.cargoItems.length) return state
-      return { ...state, cargoItems, automaticResult: null }
+      return {
+        ...state,
+        cargoItems,
+        automaticResult: null,
+        inputRevision: state.inputRevision + 1,
+      }
     }
     case 'cargoReordered': {
       const fromIndex = state.cargoItems.findIndex((item) => item.id === action.cargoId)
@@ -89,10 +136,20 @@ export function packingSessionReducer(
       const cargoItems = [...state.cargoItems]
       const [moved] = cargoItems.splice(fromIndex, 1)
       cargoItems.splice(toIndex, 0, moved)
-      return { ...state, cargoItems, automaticResult: null }
+      return {
+        ...state,
+        cargoItems,
+        automaticResult: null,
+        inputRevision: state.inputRevision + 1,
+      }
     }
     case 'cargoImported':
-      return { ...state, cargoItems: copyCargoItems(action.items), automaticResult: null }
+      return {
+        ...state,
+        cargoItems: copyCargoItems(action.items),
+        automaticResult: null,
+        inputRevision: state.inputRevision + 1,
+      }
     case 'containerChanged':
       return {
         ...state,
@@ -102,6 +159,7 @@ export function packingSessionReducer(
           [action.container.id]: copyContainer(action.container),
         },
         automaticResult: null,
+        inputRevision: state.inputRevision + 1,
       }
     case 'containerUpdated': {
       const container = selectPackingContainer(state)
@@ -113,20 +171,59 @@ export function packingSessionReducer(
           [updatedContainer.id]: updatedContainer,
         },
         automaticResult: null,
+        inputRevision: state.inputRevision + 1,
       }
     }
     case 'loadingModeChanged':
       if (state.loadingMode === action.loadingMode) return state
-      return { ...state, loadingMode: action.loadingMode, automaticResult: null }
+      return {
+        ...state,
+        loadingMode: action.loadingMode,
+        automaticResult: null,
+        inputRevision: state.inputRevision + 1,
+      }
     case 'defaultMaxStackLayersChanged':
       if (state.defaultMaxStackLayers === action.defaultMaxStackLayers) return state
       return {
         ...state,
         defaultMaxStackLayers: action.defaultMaxStackLayers,
         automaticResult: null,
+        inputRevision: state.inputRevision + 1,
       }
+    case 'shipmentNameChanged':
+      if (state.shipmentName === action.shipmentName) return state
+      return { ...state, shipmentName: action.shipmentName }
+    case 'calculationRequested':
+      return { ...state, calculationRequestId: state.calculationRequestId + 1 }
     case 'calculationCompleted':
-      return { ...state, automaticResult: action.result }
+      if (action.requestId !== state.calculationRequestId
+        || action.inputRevision !== state.inputRevision) {
+        return state
+      }
+      return {
+        ...state,
+        automaticResult: action.result,
+        completedCalculationRequestId: action.requestId,
+      }
+    case 'historyRestored': {
+      const { snapshot } = action
+      return {
+        ...state,
+        projectName: snapshot.projectName,
+        shipmentName: snapshot.shipmentName,
+        cargoItems: copyCargoItems(snapshot.cargoItems),
+        containerSnapshots: {
+          ...state.containerSnapshots,
+          [snapshot.container.id]: copyContainer(snapshot.container),
+        },
+        selectedContainerId: snapshot.container.id,
+        loadingMode: snapshot.loadingMode,
+        defaultMaxStackLayers: snapshot.defaultMaxStackLayers,
+        automaticResult: snapshot.result,
+        inputRevision: state.inputRevision + 1,
+        completedCalculationRequestId: state.calculationRequestId,
+      }
+    }
     case 'resultInvalidated':
       return invalidateResult(state)
   }
