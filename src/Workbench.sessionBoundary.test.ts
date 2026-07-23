@@ -35,4 +35,15 @@ describe('Workbench packing-session boundary', () => {
     expect(source).not.toContain('const result = automaticResult')
     expect(source).not.toContain('activeStepsResult')
   })
+
+  it('delegates history request state and page rendering to the history boundary', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+
+    expect(source).toContain("from './hooks/useHistoryPlans'")
+    expect(source).toContain("from './components/HistoryPage'")
+    expect(source).toContain('<HistoryPage')
+    expect(source).not.toContain("from './api/historyPlans'")
+    expect(source).not.toMatch(/\b(?:read|delete|save)HistoryPlan(?:s)?\b/)
+    expect(source).not.toMatch(/\bhistoryRequestIdRef\b/)
+  })
 })

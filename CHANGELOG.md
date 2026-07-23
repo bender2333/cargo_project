@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-23 Phase 3 历史页面边界
+
+- [x] 抽取 `HistoryPage` 与 `useHistoryPlans`：历史列表、加载失败、请求竞态以及保存/删除/刷新命令不再由 `Workbench` 直接管理。
+- [x] 保留报告工具栏与历史页两个保存入口；Workbench 只构造当前 `PackingResult` 快照并接收恢复回调，历史 API 和请求序号均收口到 feature controller。
+- [x] 新增 hook/组件/架构边界测试，覆盖 StrictMode 单次初读、保存删除、陈旧成功/失败拒绝、写成功后刷新失败、错误/空状态与页面动作；聚焦 5 文件/17 项通过。
+- [x] `npm run lint`、`npm test`（普通 73 文件/492 项，性能 2 文件/6 项）、`npm run build`（301 modules）和全量 E2E（116/116，零跳过）通过。E2E 前后 `server/database.db` 均为 499,712 B、SHA-256 `70212B27A8781D648197BAAEABC84E7C550E03B363E856B290CEA66DA331E901`，端口已释放。
+- [ ] `npm run benchmark` 的正确性、5 个 contract hash、Playwright 1/1 和零跳过通过，但整体仍 RED：initial JS/total gzip 为 `559735 / 569585 B`，相对基线 `557940 / 567790 B` 均 `+1795 B`；俄罗斯 volume median/P95 为 `4.110 / 12.004 ms`，相对基线 `3.104 / 3.282 ms` 超过 20%。其余 timing 与 total JS 5% 规则未触发，未更新 baseline、阈值、采样或夹具。
+- [x] 新增通知 `2026-07-23-r55-history-page-boundary`；本提交只包含历史页面切片，不混入货物库或模板管理页。
+
 ## 2026-07-23 Phase 2 手动会话与统一活动结果
 
 - [x] 新增 `useManualPlacementSession`，原子管理模式、草稿历史、选择、移动、旋转、删除、撤销/重做与自动结果接管；所有 draft transition 都按当前 `cargoPlan` 裁剪。

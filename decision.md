@@ -1,5 +1,19 @@
 # Decision Log
 
+## 2026-07-23 Phase 3 历史页面 benchmark RED 保留
+
+- 背景：历史页面边界的 lint、单测、build 和 116 条零跳过 E2E 全部通过；正式 benchmark 的正确性、5 个冻结 contract hash 和 Playwright 1/1 也通过，但包体与同机俄罗斯 volume timing 触发硬门禁。
+- 实测：initial JS gzip `559735 B` 对基线 `557940 B`，initial total gzip `569585 B` 对 `567790 B`，均增加 `1795 B`；俄罗斯 volume median/P95 `4.110 / 12.004 ms` 对 `3.104 / 3.282 ms`。total JS `671076 B` 对 `662372 B` 的增幅仍在 5% 限额内，其他算法和浏览器 timing 未触发 20% 门禁。报告位于 `test-results/benchmark/frontend-architecture.json`。
+- 决策：保持 benchmark RED，不修改 baseline、阈值、预热/采样次数、iterations、夹具或 contract。页面拆分提交不得把本轮数据吸收为新基线，也不以重复运行后挑选较好样本替代这次正式结果。
+- 影响：历史功能边界可以按已通过的正确性门禁独立提交，但 Phase 3 整体仍有包体和 timing 稳定化债务；后续页面切片继续记录各自实际值，阶段收口时统一处理分包与采样稳定性。
+
+## 2026-07-23 Phase 3 历史页面采用 feature controller 保留双保存入口
+
+- 背景：阶段计划要求 `HistoryPage` 拥有列表加载、保存和删除状态，但“保存方案”同时存在于历史页和工作台报告工具栏。若只在页面组件内持有状态，外部入口只能改为先导航、使用 imperative ref，或重复一套历史请求。
+- 选项：A. 删除报告工具栏入口或改为只导航；B. 用 ref / Context 从页面暴露命令；C. 以 `useHistoryPlans` 作为历史 feature controller，统一拥有列表、请求序号、加载失败状态和保存/删除命令，`HistoryPage` 负责页面交互，Workbench 只传当前快照与恢复回调。
+- 决策：选择 C。保留两个现有保存入口和用户流程，不引入 Context 或命令式 ref；Workbench 不再导入历史 API，也不持有远程列表的 setter、失败状态或请求序号。
+- 影响：历史远程状态仍由一个 hook 实例管理，报告工具栏和历史页共享同一保存/刷新链路；恢复动作继续进入 `usePackingSession.restoreHistory`，保持原子会话语义。后续抽取其他功能页沿用“feature controller + 页面组件”的边界，但不建立全局状态层。
+
 ## 2026-07-23 Phase 2 benchmark 门禁 RED 保留
 
 - 背景：本轮功能和架构测试全部通过，但 `npm run benchmark` 的硬门禁检测到生产初始包体和同机 timing 回退。benchmark runner 本身的 5 个冻结 contract hash、1 个 Playwright 场景和零跳过门禁均通过。

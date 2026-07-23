@@ -14,6 +14,23 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-07-23-r55-history-page-boundary',
+    date: '2026-07-23',
+    title: { en: 'Reliable history page boundary', zh: '历史方案页面边界' },
+    items: {
+      en: [
+        'History loading, saving, deletion, retries, and stale-response protection now run through one dedicated page controller instead of the packing workbench.',
+        'Saving from either the results toolbar or History page uses the same refresh path, while restoring a plan still updates the packing session atomically.',
+        'History load failures remain visible and retryable, and an older delayed response can no longer replace the latest plan list.',
+      ],
+      zh: [
+        '历史方案的加载、保存、删除、重试和陈旧响应保护现已统一收口到独立页面 controller，不再混入装箱工作台状态。',
+        '从结果工具栏或历史页保存都会走同一刷新链路；恢复方案仍以原子方式更新装箱会话。',
+        '历史加载失败继续明确显示并可重试，较早返回的延迟响应不会再覆盖最新方案列表。',
+      ],
+    },
+  },
+  {
     version: '2026-07-23-r54-manual-session-active-result',
     date: '2026-07-23',
     title: { en: 'Manual sessions and active results', zh: '手动会话与活动结果' },

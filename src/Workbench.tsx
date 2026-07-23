@@ -20,6 +20,8 @@ import { usePlaybackController } from './hooks/usePlaybackController'
 import type { PlaybackSpeed } from './hooks/usePlaybackController'
 import { usePackingSession } from './hooks/usePackingSession'
 import { useManualPlacementSession } from './hooks/useManualPlacementSession'
+import { useHistoryPlans } from './hooks/useHistoryPlans'
+import type { HistoryPlan } from './hooks/useHistoryPlans'
 import { selectPackingContainer } from './lib/packingSession'
 import { computeCenterOfGravity } from './lib/centerOfGravity'
 import { compareContainers } from './lib/containerCompare'
@@ -27,6 +29,7 @@ import { computeRemainingCapacity } from './lib/remainingCapacity'
 import { suggestFillItems } from './lib/fillSuggestion'
 import { buildStandardCargoItem, STANDARD_BOXES, STANDARD_BOX_MAX_PER_CLICK } from './data/standardBoxes'
 import { FillSuggestionPanel } from './components/FillSuggestionPanel'
+import { HistoryPage } from './components/HistoryPage'
 import { ReleaseNotesButton } from './components/ReleaseNotesButton'
 import { buildCogOverlay } from './lib/cogVisual'
 import { deriveCogOverlayState } from './lib/cogView'
@@ -65,12 +68,6 @@ import {
 } from './lib/placementSettings'
 import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, PackingResult, ImportTemplate, ImportTemplateUnits, ImportTemplateDefaults, ExportTemplate } from './types'
 import { readCustomContainers } from './api/customContainers'
-import {
-  deleteHistoryPlan as deleteHistoryPlanRequest,
-  readHistoryPlans,
-  saveHistoryPlan as saveHistoryPlanRequest,
-} from './api/historyPlans'
-import type { HistoryPlan } from './api/historyPlans'
 import type { User } from './lib/auth'
 import { DebugPanel } from './components/DebugPanel'
 import { excelStyleLabel } from './lib/excelStyleLabel'
@@ -1090,9 +1087,13 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [showCustomContainerDialog, setShowCustomContainerDialog] = useState(false)
   const [CustomContainerDialog, setCustomContainerDialog] = useState<CustomContainerDialogComponent | null>(null)
   const [customContainerDialogLoadFailed, setCustomContainerDialogLoadFailed] = useState(false)
-  const [historyPlans, setHistoryPlans] = useState<HistoryPlan[]>([])
-  const [historyLoadFailed, setHistoryLoadFailed] = useState(false)
-  const historyRequestIdRef = useRef(0)
+  const {
+    plans: historyPlans,
+    loadFailed: historyLoadFailed,
+    refresh: refreshHistory,
+    save: saveHistory,
+    remove: removeHistory,
+  } = useHistoryPlans()
   const [customCargoItems, setCustomCargoItems] = useState<CargoItem[]>([])
   const [customCargoLoadFailed, setCustomCargoLoadFailed] = useState(false)
   const customCargoRequestIdRef = useRef(0)
@@ -1249,20 +1250,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     }
   }
 
-  const fetchHistory = async () => {
-    const requestId = ++historyRequestIdRef.current
-    try {
-      const plans = await readHistoryPlans()
-      if (requestId !== historyRequestIdRef.current) return
-      setHistoryPlans(plans)
-      setHistoryLoadFailed(false)
-    } catch (err) {
-      if (requestId !== historyRequestIdRef.current) return
-      console.error(err)
-      setHistoryLoadFailed(true)
-    }
-  }
-
   const fetchImportTemplates = async () => {
     const requestId = ++importTemplateRequestIdRef.current
     try {
@@ -1313,23 +1300,9 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     }
   }
 
-  const deleteHistoryPlan = async (id: string) => {
-    if (!confirm(locale === 'zh' ? '确认删除该历史方案吗？' : 'Are you sure you want to delete this plan?')) {
-      return
-    }
-    try {
-      await deleteHistoryPlanRequest(id)
-      await fetchHistory()
-    } catch (err) {
-      console.error(err)
-      alert(locale === 'zh' ? '删除失败' : 'Failed to delete')
-    }
-  }
-
   useEffect(() => {
     // Let StrictMode cancel its development-only trial mount before requests start.
     const requestTimer = window.setTimeout(() => {
-      void fetchHistory()
       void fetchCustomContainers()
       void fetchImportTemplates()
       void fetchExportTemplates()
@@ -2761,13 +2734,12 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     }
 
     try {
-      await saveHistoryPlanRequest({
+      await saveHistory({
         projectName,
         shipmentName,
         loadingMode,
         data: planData,
       })
-      await fetchHistory()
       setActiveNav('history')
     } catch (err) {
       console.error(err)
@@ -3199,52 +3171,30 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             </Suspense>
           </section>
         ) : activeNav === 'history' ? (
-          <section className="archive-card overflow-hidden p-[18px]" data-testid="history-page">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-bold">{t.historyPage}</h2>
-                <p className="text-sm text-[#64748b]">
-                  {historyLoadFailed ? (locale === 'zh' ? '历史方案加载失败' : 'Failed to load history plans') : t.noHistory}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button className="archive-button success" type="button" onClick={saveCurrentPlan}>{t.savePlan}</button>
-                <button className="archive-button secondary" type="button" onClick={() => activateNav('overview')}>{t.backToWorkbench}</button>
-              </div>
-            </div>
-            {historyLoadFailed ? (
-              <div className="flex items-center justify-between gap-3 border border-red-300 bg-red-50 p-3 text-red-700" data-testid="history-load-error">
-                <span>{locale === 'zh' ? '历史方案加载失败' : 'Failed to load history plans'}</span>
-                <button className="archive-button secondary" type="button" onClick={() => void fetchHistory()}>
-                  {locale === 'zh' ? '重试' : 'Retry'}
-                </button>
-              </div>
-            ) : historyPlans.length === 0 ? (
-              <p className="border border-[#c6c6c6] bg-white p-3" data-testid="history-empty-state">{t.noHistory}</p>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {historyPlans.map((plan) => (
-                  <article className="border border-[#c6c6c6] bg-white p-3 text-sm flex flex-col justify-between" key={plan.id}>
-                    <div>
-                      <strong>{plan.projectName}</strong>
-                      <p>{t.shipmentName}: {plan.shipmentName || '-'}</p>
-                      <p>{new Date(plan.createdAt).toLocaleString()}</p>
-                      <p>{plan.placedCount}/{plan.totalCargoCount} · {plan.layerCount} {t.layers}</p>
-                      <p className="text-xs text-slate-500 mt-1 line-clamp-2">{plan.labelSummary}</p>
-                    </div>
-                    <div className="mt-3 flex gap-2">
-                      <button className="border border-[#9b9b9b] bg-[#eeeeee] px-3 py-1.5 text-xs font-semibold hover:bg-slate-200 transition" type="button" onClick={() => restorePlan(plan)}>
-                        {t.restore}
-                      </button>
-                      <button className="border border-red-300 bg-red-50 text-red-700 px-3 py-1.5 text-xs font-semibold hover:bg-red-100 transition" type="button" onClick={() => deleteHistoryPlan(plan.id)}>
-                        {locale === 'zh' ? '删除' : 'Delete'}
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
+          <HistoryPage
+            labels={{
+              title: t.historyPage,
+              noHistory: t.noHistory,
+              savePlan: t.savePlan,
+              backToWorkbench: t.backToWorkbench,
+              shipmentName: t.shipmentName,
+              layers: t.layers,
+              restore: t.restore,
+              delete: locale === 'zh' ? '删除' : 'Delete',
+              retry: locale === 'zh' ? '重试' : 'Retry',
+              loadFailed: locale === 'zh' ? '历史方案加载失败' : 'Failed to load history plans',
+              confirmDelete: locale === 'zh' ? '确认删除该历史方案吗？' : 'Are you sure you want to delete this plan?',
+              saveFailed: locale === 'zh' ? '保存历史方案失败' : 'Failed to save plan',
+              deleteFailed: locale === 'zh' ? '删除失败' : 'Failed to delete',
+            }}
+            plans={historyPlans}
+            loadFailed={historyLoadFailed}
+            onRetry={refreshHistory}
+            onSave={saveCurrentPlan}
+            onRestore={restorePlan}
+            onDelete={removeHistory}
+            onBack={() => activateNav('overview')}
+          />
         ) : activeNav === 'cargo-library' ? (
           <section className="archive-card overflow-hidden p-[18px]" data-testid="cargo-library-page">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
