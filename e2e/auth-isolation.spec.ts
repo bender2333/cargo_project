@@ -1222,6 +1222,48 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await expect(page.getByText('CargoLib-User1')).not.toBeVisible()
   })
 
+  test('adds exactly one cargo from a saved definition regardless of stored quantity', async ({ page }) => {
+    const cargoDto = {
+      id: 'legacy-quantity-cargo',
+      name: 'Legacy quantity cargo',
+      label: 'LQ',
+      length: 900,
+      width: 700,
+      height: 500,
+      weight: 33,
+      quantity: 9,
+      color: '#0ea5e9',
+      canRotate: true,
+      stackable: true,
+      groundOnly: false,
+      createdAt: '2026-07-23T00:00:00.000Z',
+    }
+    await page.route('**/api/custom-cargo', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([cargoDto]),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+
+    await page.getByTestId('nav-cargo-library').click()
+    await page.getByTestId('cargo-library-use-legacy-quantity-cargo').click()
+
+    const addedCargo = page.getByTestId('cargo-list-item').filter({ hasText: 'Legacy quantity cargo' })
+    await expect(addedCargo).toContainText('数量 1')
+    await expect(addedCargo).not.toContainText('数量 9')
+  })
+
   test('allows administrator to manage user accounts', async ({ page }) => {
     const adminUser1 = `u1_adm_${Math.random().toString(36).substring(7)}`
     const adminUser2 = `u2_adm_${Math.random().toString(36).substring(7)}`

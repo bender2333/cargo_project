@@ -14,6 +14,23 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-07-23-r56-cargo-library-boundary',
+    date: '2026-07-23',
+    title: { en: 'Reliable cargo library boundary', zh: '货物库页面边界' },
+    items: {
+      en: [
+        'Cargo library loading, retries, stale-response protection, and CRUD refreshes now run through one dedicated controller instead of the packing workbench.',
+        'Creating and editing saved cargo keeps quantity-at-use fixed to one, normalizes labels, and removes stack limits whenever stacking is disabled.',
+        'The cargo library page now owns its temporary form and feedback, while adding a saved item still updates the current packing session through the existing workflow.',
+      ],
+      zh: [
+        '货物库加载、重试、陈旧响应保护和 CRUD 后刷新现已统一收口到独立 controller，不再混入装箱工作台状态。',
+        '新建和编辑已保存货物时继续固定单次使用数量为 1、规范化标签，并在关闭堆叠时清除最大堆叠层数。',
+        '货物库页面现在自行管理临时表单和反馈；把已保存货物加入当前方案仍沿用既有装箱会话流程。',
+      ],
+    },
+  },
+  {
     version: '2026-07-23-r55-history-page-boundary',
     date: '2026-07-23',
     title: { en: 'Reliable history page boundary', zh: '历史方案页面边界' },

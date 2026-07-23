@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-23 Phase 3 货物库页面边界
+
+- [x] 抽取 `CargoLibraryPage` 与 `useCustomCargoLibrary`：远程列表、加载失败、请求竞态和 CRUD 命令不再由 `Workbench` 直接管理，页面自行管理新建/编辑草稿与临时反馈。
+- [x] 保留现有业务契约：保存、更新和删除后以服务端列表权威刷新；单次加入工作台固定增加 1 件；标签统一为最多两位大写并支持 Excel 风格 fallback；不可堆叠货物不携带最大堆叠层数。
+- [x] 补齐 hook、页面和 Workbench 架构边界测试，覆盖 StrictMode 单次初读、CRUD 权威刷新、陈旧成功/失败、写成功但刷新失败、卸载期间写完成不再刷新、表单规则和页面动作；聚焦 `4 files / 23 tests` 通过。
+- [x] 独立审查发现并关闭两个 P2：旧/异常持久数据的 `quantity` 不再穿透单件消费边界；CRUD 在退出登录或 Workbench 卸载后完成时不再启动新列表请求。新增恶意 `quantity: 9` 浏览器夹具与 deferred mutation 单测。
+- [x] `npm run lint`、`npm test`（普通 75 文件/507 项，性能 2 文件/6 项）、`npm run build`（303 modules）和全量 E2E（117/117，零跳过）通过。E2E 前后 `server/database.db` 均为 499,712 B、SHA-256 `70212B27A8781D648197BAAEABC84E7C550E03B363E856B290CEA66DA331E901`，端口已释放。
+- [ ] 最终 `npm run benchmark` 的 5 个 contract hash、Playwright 1/1、零跳过及全部算法/浏览器 timing 通过，但整体仍因初始包体 RED：initial JS/total gzip 为 `560692 / 570542 B`，相对基线 `557940 / 567790 B` 均 `+2752 B`；total JS `672033 B` 的增幅低于 5%。未更新 baseline、阈值、采样或夹具。
+- [x] 新增通知 `2026-07-23-r56-cargo-library-boundary`；本提交只包含货物库页面切片，不混入模板管理页。
+- [x] `npm run deploy` 已完成生产构建、静态文件/后端同步、服务重启和远端健康检查；备份为 `/root/cargo_project-backup-20260723-085230`。公网首页返回 `200`，受保护 API 返回预期 `401`，`cargo-server.service` 为 `active`，线上入口 `index-DuOuvaku.js` 包含 r56 版本与标题。
+- [ ] 公网全量 E2E 为 `116 passed / 1 failed`：本轮相关的货物库竞态/失败、持久化/用户隔离、`quantity: 9 -> 1` 和 r56 通知全部通过；唯一 RED 是既有 admin 调试日志用例固定要求本地夹具 `E2E server log ready`，而生产正确返回真实访问日志且无 `HTTP 500`。未删除、跳过或放宽断言，详见 `decision.md`。
+
 ## 2026-07-23 Phase 3 历史页面边界
 
 - [x] 抽取 `HistoryPage` 与 `useHistoryPlans`：历史列表、加载失败、请求竞态以及保存/删除/刷新命令不再由 `Workbench` 直接管理。

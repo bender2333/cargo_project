@@ -22,6 +22,7 @@ import { usePackingSession } from './hooks/usePackingSession'
 import { useManualPlacementSession } from './hooks/useManualPlacementSession'
 import { useHistoryPlans } from './hooks/useHistoryPlans'
 import type { HistoryPlan } from './hooks/useHistoryPlans'
+import { useCustomCargoLibrary } from './hooks/useCustomCargoLibrary'
 import { selectPackingContainer } from './lib/packingSession'
 import { computeCenterOfGravity } from './lib/centerOfGravity'
 import { compareContainers } from './lib/containerCompare'
@@ -30,6 +31,7 @@ import { suggestFillItems } from './lib/fillSuggestion'
 import { buildStandardCargoItem, STANDARD_BOXES, STANDARD_BOX_MAX_PER_CLICK } from './data/standardBoxes'
 import { FillSuggestionPanel } from './components/FillSuggestionPanel'
 import { HistoryPage } from './components/HistoryPage'
+import { CargoLibraryPage } from './components/CargoLibraryPage'
 import { ReleaseNotesButton } from './components/ReleaseNotesButton'
 import { buildCogOverlay } from './lib/cogVisual'
 import { deriveCogOverlayState } from './lib/cogView'
@@ -49,7 +51,6 @@ import type { ImportTemplatePayload } from './api/importTemplates'
 import { saveLastImportConfig } from './lib/lastImportConfig'
 import { deleteExportTemplate, readExportTemplates, saveExportTemplate, updateExportTemplate } from './api/exportTemplates'
 import type { ExportTemplatePayload } from './api/exportTemplates'
-import { deleteCustomCargo, readCustomCargo, saveCustomCargo, updateCustomCargo } from './api/customCargo'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { isGapFillBox } from './lib/placementSource'
 import {
@@ -1094,12 +1095,14 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     save: saveHistory,
     remove: removeHistory,
   } = useHistoryPlans()
-  const [customCargoItems, setCustomCargoItems] = useState<CargoItem[]>([])
-  const [customCargoLoadFailed, setCustomCargoLoadFailed] = useState(false)
-  const customCargoRequestIdRef = useRef(0)
-  const [cargoLibraryForm, setCargoLibraryForm] = useState<CargoForm>(emptyForm)
-  const [editingLibraryCargoId, setEditingLibraryCargoId] = useState<string | null>(null)
-  const [cargoLibraryNotice, setCargoLibraryNotice] = useState('')
+  const {
+    items: customCargoItems,
+    loadFailed: customCargoLoadFailed,
+    refresh: refreshCustomCargo,
+    create: createCustomCargo,
+    update: updateCustomCargo,
+    remove: removeCustomCargo,
+  } = useCustomCargoLibrary()
   const [recentErrors, setRecentErrors] = useState<string[]>([])
 
   useEffect(() => {
@@ -1286,27 +1289,12 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     exportTemplateRequestIdRef.current += 1
   }
 
-  const fetchCustomCargo = async () => {
-    const requestId = ++customCargoRequestIdRef.current
-    try {
-      const items = await readCustomCargo()
-      if (requestId !== customCargoRequestIdRef.current) return
-      setCustomCargoItems(items)
-      setCustomCargoLoadFailed(false)
-    } catch (err) {
-      if (requestId !== customCargoRequestIdRef.current) return
-      console.error(err)
-      setCustomCargoLoadFailed(true)
-    }
-  }
-
   useEffect(() => {
     // Let StrictMode cancel its development-only trial mount before requests start.
     const requestTimer = window.setTimeout(() => {
       void fetchCustomContainers()
       void fetchImportTemplates()
       void fetchExportTemplates()
-      void fetchCustomCargo()
     }, 0)
 
     return () => window.clearTimeout(requestTimer)
@@ -1867,15 +1855,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     setEditForm((current) => ({ ...current, maxStackLayers: parsed > 0 ? parsed : undefined }))
   }
 
-  const updateLibraryNumber = (field: keyof Pick<CargoForm, 'length' | 'width' | 'height' | 'weight' | 'quantity'>, value: string) => {
-    setCargoLibraryForm((current) => ({ ...current, [field]: Number(value) || 0 }))
-  }
-
-  const updateLibraryMaxStackLayers = (value: string) => {
-    const parsed = Math.floor(Number(value) || 0)
-    setCargoLibraryForm((current) => ({ ...current, maxStackLayers: parsed > 0 ? parsed : undefined }))
-  }
-
   const updateDefaultMaxStackLayers = (value: string) => {
     const parsed = Math.floor(Number(value) || 0)
     const defaultMaxStackLayers = parsed > 0 ? parsed : undefined
@@ -2079,74 +2058,10 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       : [])
   }
 
-  const libraryFormCargo = (): CargoItem => ({
-    ...cargoLibraryForm,
-    id: editingLibraryCargoId ?? createClientId(),
-    name: cargoLibraryForm.name.trim() || (locale === 'zh' ? '库货物' : 'Library cargo'),
-    label: (cargoLibraryForm.label || nextLabel(customCargoItems.length)).toUpperCase().slice(0, 2),
-    quantity: 1,
-    maxStackLayers: cargoLibraryForm.stackable ? cargoLibraryForm.maxStackLayers : undefined,
-    groundOnly: cargoLibraryForm.groundOnly ?? false,
-  })
-
-  const saveLibraryCargo = async (event: FormEvent) => {
-    event.preventDefault()
-    const item = libraryFormCargo()
-    setCargoLibraryNotice('')
-    try {
-      if (editingLibraryCargoId) {
-        await updateCustomCargo(editingLibraryCargoId, item)
-      } else {
-        await saveCustomCargo(item)
-      }
-      setCargoLibraryNotice(editingLibraryCargoId ? t.cargoLibraryNoticeUpdated : t.cargoLibraryNoticeSaved)
-      setEditingLibraryCargoId(null)
-      setCargoLibraryForm(emptyForm)
-      await fetchCustomCargo()
-    } catch (err) {
-      console.error(err)
-      alert(locale === 'zh' ? '保存货物失败' : 'Failed to save cargo')
-    }
-  }
-
-  const editLibraryCargo = (item: CargoItem) => {
-    setEditingLibraryCargoId(item.id)
-    setCargoLibraryForm({
-      name: item.name,
-      label: item.label,
-      length: item.length,
-      width: item.width,
-      height: item.height,
-      weight: item.weight,
-      quantity: 1,
-      color: item.color,
-      canRotate: item.canRotate,
-      stackable: item.stackable,
-      maxStackLayers: item.maxStackLayers,
-      groundOnly: item.groundOnly ?? false,
-    })
-  }
-
-  const removeLibraryCargo = async (id: string) => {
-    setCargoLibraryNotice('')
-    try {
-      await deleteCustomCargo(id)
-      setCargoLibraryNotice(t.cargoLibraryNoticeDeleted)
-      if (editingLibraryCargoId === id) {
-        setEditingLibraryCargoId(null)
-        setCargoLibraryForm(emptyForm)
-      }
-      await fetchCustomCargo()
-    } catch (err) {
-      console.error(err)
-      alert(locale === 'zh' ? '删除货物失败' : 'Failed to delete cargo')
-    }
-  }
-
   const addLibraryCargoToWorkbench = (item: CargoItem) => {
     dispatchPackingSession({
       type: 'cargoAdded',
-      items: [{ ...item, id: createClientId(), quantity: Math.max(1, item.quantity || 1) }],
+      items: [{ ...item, id: createClientId(), quantity: 1 }],
     })
     setActiveNav('overview')
   }
@@ -2846,70 +2761,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     ...(currentUser?.role === 'admin' ? [{ target: 'users' as const, label: t.nav[4] }] : []),
   ]
 
-  const cargoLibraryPanel = (
-    <div className="rounded-lg border border-[#c6c6c6] bg-white p-4" data-testid="cargo-library">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-lg font-bold">{t.cargoLibrary}</h3>
-        {cargoLibraryNotice && <span className="text-xs font-semibold text-[#047857]">{cargoLibraryNotice}</span>}
-      </div>
-      <form className="grid gap-2 text-sm md:grid-cols-6" onSubmit={saveLibraryCargo}>
-        <label>{t.name}<input className="field-input mt-1" value={cargoLibraryForm.name} onChange={(event) => setCargoLibraryForm((current) => ({ ...current, name: event.target.value }))} /></label>
-        <label>{t.group}<input className="field-input mt-1" value={cargoLibraryForm.label ?? ''} onChange={(event) => setCargoLibraryForm((current) => ({ ...current, label: event.target.value.toUpperCase().slice(0, 2) }))} /></label>
-        <label>{t.length}<input className="field-input mt-1" type="number" value={cargoLibraryForm.length} onChange={(event) => updateLibraryNumber('length', event.target.value)} /></label>
-        <label>{t.width}<input className="field-input mt-1" type="number" value={cargoLibraryForm.width} onChange={(event) => updateLibraryNumber('width', event.target.value)} /></label>
-        <label>{t.height}<input className="field-input mt-1" type="number" value={cargoLibraryForm.height} onChange={(event) => updateLibraryNumber('height', event.target.value)} /></label>
-        <label>{t.weight}<input className="field-input mt-1" type="number" value={cargoLibraryForm.weight} onChange={(event) => updateLibraryNumber('weight', event.target.value)} /></label>
-        <label>{t.color}<input className="mt-1 h-10 w-full border border-[#aaa] bg-white" type="color" value={cargoLibraryForm.color} onChange={(event) => setCargoLibraryForm((current) => ({ ...current, color: event.target.value }))} /></label>
-        <label className="flex items-center gap-2 pt-7"><input checked={cargoLibraryForm.canRotate} type="checkbox" onChange={(event) => setCargoLibraryForm((current) => ({ ...current, canRotate: event.target.checked }))} />{t.rotate}</label>
-        <label className="flex items-center gap-2 pt-7"><input checked={cargoLibraryForm.stackable} type="checkbox" onChange={(event) => setCargoLibraryForm((current) => ({ ...current, stackable: event.target.checked, maxStackLayers: event.target.checked ? current.maxStackLayers : undefined }))} />{t.stackable}</label>
-        <label className="flex items-center gap-2 pt-7"><input checked={cargoLibraryForm.groundOnly ?? false} type="checkbox" onChange={(event) => setCargoLibraryForm((current) => ({ ...current, groundOnly: event.target.checked }))} />{t.groundOnly}</label>
-        {cargoLibraryForm.stackable && (
-          <label>{t.maxStackLayers}<input className="field-input mt-1" min={1} type="number" value={cargoLibraryForm.maxStackLayers ?? ''} onChange={(event) => updateLibraryMaxStackLayers(event.target.value)} /></label>
-        )}
-        <div className="flex items-end gap-2 md:col-span-2">
-          <button className="archive-button success w-full" data-testid="cargo-library-add" type="submit">
-            {editingLibraryCargoId ? t.cargoLibraryUpdate : t.cargoLibrarySave}
-          </button>
-          {editingLibraryCargoId && (
-            <button className="archive-button secondary" type="button" onClick={() => { setEditingLibraryCargoId(null); setCargoLibraryForm(emptyForm) }}>
-              {t.cancel}
-            </button>
-          )}
-        </div>
-      </form>
-      {customCargoLoadFailed ? (
-        <div className="mt-3 flex items-center justify-between gap-3 border border-red-300 bg-red-50 p-3 text-sm text-red-700" data-testid="cargo-library-load-error">
-          <span>{t.cargoLibraryLoadFailed}</span>
-          <button className="archive-button secondary" type="button" onClick={() => void fetchCustomCargo()}>
-            {t.cargoLibraryRetry}
-          </button>
-        </div>
-      ) : customCargoItems.length === 0 ? (
-        <p className="mt-3 text-sm text-[#64748b]" data-testid="cargo-library-empty-state">{t.cargoLibraryEmpty}</p>
-      ) : (
-        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {customCargoItems.map((item) => (
-            <article className="rounded border border-[#d1d5db] bg-[#f8fafc] p-3 text-sm" data-testid={`cargo-library-row-${item.id}`} key={item.id}>
-              <div className="mb-2 flex items-start gap-2">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded font-bold text-white" style={{ backgroundColor: item.color }}>{item.label}</span>
-                <div>
-                  <strong>{item.name}</strong>
-                  <p className="text-xs text-[#64748b]">{item.length} x {item.width} x {item.height} mm · {item.weight} kg</p>
-                  <p className="text-xs text-[#64748b]">{item.canRotate ? t.rotate : `${t.rotate}: off`} · {item.stackable ? t.stackable : `${t.stackable}: off`}{item.maxStackLayers ? ` · ${t.maxStackLayers}: ${item.maxStackLayers}` : ''}{item.groundOnly ? ` · ${t.groundOnly}` : ''}</p>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button className="archive-button px-2 py-1 text-xs" data-testid={`cargo-library-use-${item.id}`} type="button" onClick={() => addLibraryCargoToWorkbench(item)}>{t.cargoLibraryUse}</button>
-                <button className="archive-button secondary px-2 py-1 text-xs" data-testid={`cargo-library-edit-${item.id}`} type="button" onClick={() => editLibraryCargo(item)}>{t.cargoLibraryEdit}</button>
-                <button className="archive-button px-2 py-1 text-xs text-red-700" data-testid={`cargo-library-delete-${item.id}`} type="button" onClick={() => void removeLibraryCargo(item.id)}>{t.cargoLibraryDelete}</button>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-
   const templateManagerPanel = (
     <div className="rounded-lg border border-[#c6c6c6] bg-white p-4" data-testid="template-manager-list">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -3196,13 +3047,18 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             onBack={() => activateNav('overview')}
           />
         ) : activeNav === 'cargo-library' ? (
-          <section className="archive-card overflow-hidden p-[18px]" data-testid="cargo-library-page">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-xl font-bold">{t.cargoLibrary}</h2>
-              <button className="archive-button secondary" type="button" onClick={() => activateNav('overview')}>{t.backToWorkbench}</button>
-            </div>
-            {cargoLibraryPanel}
-          </section>
+          <CargoLibraryPage
+            locale={locale}
+            labels={t}
+            items={customCargoItems}
+            loadFailed={customCargoLoadFailed}
+            onRetry={refreshCustomCargo}
+            onCreate={createCustomCargo}
+            onUpdate={updateCustomCargo}
+            onDelete={removeCustomCargo}
+            onUseCargo={addLibraryCargoToWorkbench}
+            onBack={() => activateNav('overview')}
+          />
         ) : activeNav === 'template-manager' ? (
           <section className="archive-card overflow-hidden p-[18px]" data-testid="template-manager-page">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

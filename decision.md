@@ -1,5 +1,34 @@
 # Decision Log
 
+## 2026-07-23 Phase 3 货物库部署后远程 E2E 调试日志夹具 RED
+
+- 背景：生产部署后以 `PLAYWRIGHT_BASE_URL=http://101.33.232.150` 执行全部 117 条 E2E；116 条通过，唯一失败是既有“调试面板 admin 可拉取服务器日志”。
+- 证据：远程 `/api/_debug/recent-logs?limit=120` 成功返回生产服务的真实访问日志，调试面板中没有 `HTTP 500`，但测试固定断言本地 `CARGO_LOG_PATH=test-data/e2e/server-log.txt` 夹具文本 `E2E server log ready`。外部服务器模式不会启动 Playwright 本地 API，也不会使用该夹具，因此 5 秒内始终不会出现该字符串。货物库失败/竞态、持久化/用户隔离、`quantity: 9 -> 1`、r56 通知及其余 116 项均在公网通过。
+- 决策：不在货物库页面切片中把生产日志改成测试夹具，不删除、跳过或放宽既有断言，也不把远程套件宣称为全绿。保留 `116 passed / 1 failed` 作为真实结果；后续测试基础设施切片应把该用例拆成“本地夹具内容”与“远程 endpoint 成功且返回真实日志格式”两个明确合同。
+- 影响：部署健康和本轮受影响功能可以通过独立公网检查与已通过的远程用例证明，但完整远程 E2E 门禁仍有一个环境契约 RED；本地隔离套件继续为 `117/117`、零跳过。
+
+## 2026-07-23 Phase 3 货物库单件消费回归首跑登录等待 RED
+
+- 背景：审查修复新增浏览器用例后，聚焦 Playwright 首跑在提交默认管理员登录后的 5 秒工作台标题断言超时，尚未执行货物库数量断言。
+- 证据：失败快照仍停留在登录页，用户名和密码已填写，“正在登录...”按钮处于 disabled，说明 `/api/auth/login` 尚未完成；用例只拦截 `GET /api/custom-cargo`，未匹配认证请求。本次运行紧接持续约 5.5 分钟的正式 benchmark，现象与 2026-07-22 已记录的共享负载下 bcrypt/登录等待风险一致。
+- 决策：不延长 5 秒断言、不绕过登录、不弱化数量断言，也不把本次 RED 当作货物库消费逻辑失败。保持测试源码不变，在负载回落后隔离复跑；若仍失败，再采集 `/api/auth/login` 实际响应时长和服务端状态后定位实现。
+- 影响：首跑后 CPU `LoadPercentage` 为 91%；降至 40% 后保持源码与断言不变的隔离复跑通过 `1/1`，随后全量 E2E 通过 `117/117`、零跳过，真实到达并通过 `quantity: 9 -> 1` 断言。该等待 RED 已关闭但保留为共享负载风险证据。
+
+## 2026-07-23 Phase 3 货物库页面 benchmark RED 保留
+
+- 背景：货物库页面切片的 lint、全量单测、build 和 116 条零跳过 E2E 已通过；审查修复前的正式 benchmark 也完成了构建、5 个冻结 contract 和 Playwright 1/1，但包体与一项同机算法长尾触发硬门禁。
+- 实测：initial JS gzip `560603 B` 对基线 `557940 B`，initial total gzip `570453 B` 对 `567790 B`，均增加 `2663 B`；Vietnam 40HQ volume median/P95 为 `6133.026 / 10013.877 ms`，基线为 `5197.560 / 5228.996 ms`，其中 P95 超过 20%。total JS `671944 B` 对 `662372 B` 的增幅仍低于 5%，五个 contract hash 完全一致，其他算法与浏览器 timing 未触发门禁。报告位于 `test-results/benchmark/frontend-architecture.json`。
+- 决策：保持 benchmark RED，不修改 baseline、阈值、预热/采样次数、iterations、夹具或 contract；也不通过重复运行挑选更好样本覆盖本次结果。审查修复完成后必须重新执行正式 benchmark，并在此条目追加最终切片结果。
+- 最终实测：审查修复后的正式 benchmark 仍只因包体 RED：initial JS/total gzip `560692 / 570542 B`，对基线各增加 `2752 B`；total JS `672033 B` 对 `662372 B` 的增幅低于 5%。五个 contract hash、Playwright `1/1` 和零跳过均通过；全部算法与浏览器 timing 回到 20% 门内，其中 40HQ volume median/P95 为 `5179.374 / 5613.388 ms`，登录 median/P95 为 `555.533 / 572.733 ms`。
+- 影响：货物库切片的正确性、浏览器流程、确定性合同和 timing 已闭合，但不能宣称完整 benchmark GREEN；初始包体零增长仍作为 Phase 3 分包工作的显式债务，未吸收进基线。
+
+## 2026-07-23 Phase 3 货物库远程状态与页面草稿分离
+
+- 背景：货物库列表既要在工作台生命周期内持续接受 API 刷新，又要把新建/编辑表单从 `Workbench` 中移出。旧实现把列表、请求序号、表单草稿和页面提示全部放在 Workbench，导致页面临时状态跨导航保留。
+- 选项：A. 把远程列表和临时表单全部放进按导航挂载的页面；B. 把两者都保留在 Workbench 级 controller；C. `useCustomCargoLibrary` 管理远程列表、竞态和 CRUD，`CargoLibraryPage` 只管理未提交草稿、编辑目标和页面提示。
+- 决策：选择 C。远程列表继续随 Workbench 挂载并在写操作后以服务端权威结果刷新；离开货物库页面会重置未提交的新建/编辑草稿和临时 notice，返回页面时从当前远程列表重新开始。
+- 影响：货物库 API、请求序号和失败状态不再进入 Workbench；页面不会悄悄持久化半成品编辑。已保存货物不受导航影响，加入当前工作台仍通过 packing-session 边界完成。
+
 ## 2026-07-23 Phase 3 历史页面 benchmark RED 保留
 
 - 背景：历史页面边界的 lint、单测、build 和 116 条零跳过 E2E 全部通过；正式 benchmark 的正确性、5 个冻结 contract hash 和 Playwright 1/1 也通过，但包体与同机俄罗斯 volume timing 触发硬门禁。

@@ -46,4 +46,19 @@ describe('Workbench packing-session boundary', () => {
     expect(source).not.toMatch(/\b(?:read|delete|save)HistoryPlan(?:s)?\b/)
     expect(source).not.toMatch(/\bhistoryRequestIdRef\b/)
   })
+
+  it('delegates custom cargo requests and form rendering to the cargo library boundary', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+
+    expect(source).toContain("from './hooks/useCustomCargoLibrary'")
+    expect(source).toContain("from './components/CargoLibraryPage'")
+    expect(source).toContain('<CargoLibraryPage')
+    expect(source).toContain('} = useCustomCargoLibrary()')
+    expect(source).not.toContain("from './api/customCargo'")
+    expect(source).not.toMatch(/\bcustomCargoRequestIdRef\b/)
+    expect(source).not.toMatch(/\bfetchCustomCargo\b/)
+    expect(source).not.toMatch(/\bcargoLibraryForm\b/)
+    expect(source).not.toMatch(/\beditingLibraryCargoId\b/)
+    expect(source).not.toMatch(/\bcargoLibraryNotice\b/)
+  })
 })
