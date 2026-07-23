@@ -117,6 +117,11 @@ export type BuildCargoDebugSnapshotInput = {
     placedCount: number
     totalCargoCount: number
   }
+  activeResult: {
+    placedCount: number
+    totalCargoCount: number
+    layersCount: number
+  }
   manual: {
     draft: ManualDraft
     placedBoxes: PlacedBox[]
@@ -180,9 +185,9 @@ export function buildCargoDebugSnapshot(input: BuildCargoDebugSnapshotInput): Ca
     recentErrors: input.recentErrors,
     summary: {
       cargoItemsCount: input.cargoItems.length,
-      placedCount: input.automatic.placedCount,
-      totalCargoCount: input.automatic.totalCargoCount,
-      layersCount: input.automatic.layersCount,
+      placedCount: input.activeResult.placedCount,
+      totalCargoCount: input.activeResult.totalCargoCount,
+      layersCount: input.activeResult.layersCount,
       manualBoxesCount: input.manual.draft.boxes.length,
       historyCount: input.historyCount,
     },

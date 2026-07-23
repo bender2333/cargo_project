@@ -1,5 +1,7 @@
+import fs from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
+import * as XLSX from 'xlsx'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
@@ -123,6 +125,14 @@ test('手动模式 2D 视角切换前/侧视图，SVG viewBox 随之变化', asy
   await expect(svg).toHaveAttribute('data-view-mode', 'side')
   const sideViewBox = await svg.getAttribute('viewBox')
   expect(sideViewBox).not.toBe(frontViewBox)
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: '导出视图' }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toBe('packing-plan-side.svg')
+  const downloadPath = await download.path()
+  expect(downloadPath).toBeTruthy()
+  expect(await fs.readFile(downloadPath!, 'utf8')).toContain('data-testid="manual-placement-2d"')
 })
 
 test('手动模式 3D 暴露 manualEditable canvas，pool 项目可拖拽', async ({ page }) => {
@@ -402,6 +412,13 @@ test('调试面板可下载手动排布复现场景快照', async ({ page }) => 
   })
   expect(snapshot).toMatchObject({
     schemaVersion: 1,
+    automatic: { placedCount: 18 },
+    summary: {
+      placedCount: 0,
+      totalCargoCount: 18,
+      layersCount: 0,
+      manualBoxesCount: 0,
+    },
     recovery: { testHelper: 'restoreManualDebugScenario' },
     mode: { placement: 'manual' },
   })
@@ -506,6 +523,88 @@ test('手动模式作业回放和装柜步骤使用当前手动摆放结果', as
   await expect(scene).toHaveAttribute('data-box-count', '1')
   await page.getByTestId('playback-next').click()
   await expect(scene).toHaveAttribute('data-box-count', '2')
+})
+
+test('手动活动结果统一驱动汇总、明细、导出和撤销历史', async ({ page }) => {
+  await ensureChinese(page)
+  const scene = page.getByTestId('container-scene')
+  const automaticCount = Number(await scene.getAttribute('data-box-count'))
+  expect(automaticCount).toBe(18)
+
+  await enterManualMode(page)
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+  await expect(page.getByTestId('report-panel')).toContainText('已装载: 0 / 18')
+  await expect(page.getByTestId('report-panel').getByRole('option', { name: /^第1层:/ })).toHaveCount(0)
+
+  await page.locator('[data-testid^="pool-quick-place-"]').first().click()
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+  await expect(page.getByTestId('report-panel')).toContainText('已装载: 1 / 18')
+  await expect(page.getByTestId('report-panel').getByRole('option', { name: '第1层: 1' })).toHaveCount(1)
+
+  await page.getByRole('button', { name: '明细表' }).click()
+  const detailRow = page.getByTestId('report-panel').locator('tbody tr').first()
+  await expect(detailRow.locator('td').nth(5)).toHaveText('18')
+  await expect(detailRow.locator('td').nth(6)).toHaveText('1')
+  await expect(detailRow.locator('td').nth(7)).toHaveText('17')
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByTestId('export-excel').click()
+  const download = await downloadPromise
+  const downloadPath = await download.path()
+  expect(downloadPath).toBeTruthy()
+  const workbook = XLSX.read(await fs.readFile(downloadPath!), { type: 'buffer' })
+  const rows = XLSX.utils.sheet_to_json<Record<string, string | number>>(workbook.Sheets['Packing Plan'])
+  expect(rows[0]).toMatchObject({
+    plannedQuantity: 18,
+    placedQuantity: 1,
+    unplacedQuantity: 17,
+  })
+
+  await page.keyboard.press('Delete')
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+  await expect(page.getByTestId('report-panel')).toContainText('已装载: 0 / 18')
+
+  await page.keyboard.press('Control+z')
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+  await expect(page.getByTestId('report-panel')).toContainText('已装载: 1 / 18')
+
+  await page.keyboard.press('Control+y')
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+  await expect(page.getByTestId('report-panel')).toContainText('已装载: 0 / 18')
+})
+
+test('货物减量和删除会裁剪全部手动历史且撤销不会复活超额箱体', async ({ page }) => {
+  await ensureChinese(page)
+  await enterManualMode(page)
+  const scene = page.getByTestId('container-scene')
+  const quickPlace = page.getByTestId('pool-quick-place-sample-1')
+
+  await quickPlace.click()
+  await quickPlace.click()
+  await expect(scene).toHaveAttribute('data-box-count', '2')
+
+  await page.getByRole('button', { name: '编辑货物: Carton A' }).click()
+  const editDialog = page.getByRole('form', { name: '编辑货物项目' })
+  await editDialog.getByLabel('数量').fill('1')
+  await editDialog.getByRole('button', { name: '保存修改' }).click()
+
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+  await expect(scene).toHaveAttribute('data-selected-orientation', '')
+  await expect(page.getByTestId('report-panel')).toContainText('已装载: 1 / 1')
+
+  await page.keyboard.press('Control+z')
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+  await page.keyboard.press('Control+y')
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+
+  await page.getByRole('button', { name: '删除货物: Carton A' }).click()
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+  await expect(page.getByTestId('report-panel')).toContainText('已装载: 0 / 0')
+
+  await page.keyboard.press('Control+z')
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+  await page.keyboard.press('Control+y')
+  await expect(scene).toHaveAttribute('data-box-count', '0')
 })
 
 test('装载重心面板显示三轴偏移与状态', async ({ page }) => {
@@ -752,7 +851,9 @@ test('通知栏按钮显示未读红点，点击后已读', async ({ page }) => 
   await expect(btn).toHaveAttribute('data-release-notes-unread', 'true')
   await btn.click()
   await expect(page.getByTestId('release-notes-modal')).toBeVisible()
-  await expect(page.getByTestId('release-notes-list').locator('li').first()).toContainText('并发安全的装箱会话')
+  const latestRelease = page.getByTestId('release-notes-list').locator('li').first()
+  await expect(latestRelease).toHaveAttribute('data-version', '2026-07-23-r54-manual-session-active-result')
+  await expect(latestRelease).toContainText('手动会话与活动结果')
   await page.getByTestId('release-notes-mark-read').click()
   await page.getByTestId('release-notes-close').click()
   await expect(btn).toHaveAttribute('data-release-notes-unread', 'false')

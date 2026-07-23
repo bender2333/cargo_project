@@ -16,10 +16,10 @@ import { buildPlaybackSequence, visibleBoxesAt } from './lib/playback'
 import { buildLoadingTaskGroups } from './lib/loadingTaskGroups'
 import { buildLoadingSheetModel } from './lib/loadingSheet'
 import { exportLoadingSheetPdf } from './lib/exportLoadingSheet'
-import { buildManualPackingResult } from './lib/manualSteps'
 import { usePlaybackController } from './hooks/usePlaybackController'
 import type { PlaybackSpeed } from './hooks/usePlaybackController'
 import { usePackingSession } from './hooks/usePackingSession'
+import { useManualPlacementSession } from './hooks/useManualPlacementSession'
 import { selectPackingContainer } from './lib/packingSession'
 import { computeCenterOfGravity } from './lib/centerOfGravity'
 import { compareContainers } from './lib/containerCompare'
@@ -33,26 +33,9 @@ import { deriveCogOverlayState } from './lib/cogView'
 import { DEFAULT_VEHICLE_PROFILE } from './data/vehicleProfiles'
 import type { VehicleProfileId } from './data/vehicleProfiles'
 import {
-  addBox as manualAddBox,
-  buildPool as manualBuildPool,
-  commit as manualCommit,
   dryRunRotation as manualDryRunRotation,
-  emptyHistory as manualEmptyHistory,
-  isBlockingManualIssue,
-  makeManualBox,
-  redo as manualRedo,
-  removeBox as manualRemoveBox,
-  rotateBoxDown90 as manualRotateBoxDown90,
-  rotateBoxLeft90 as manualRotateBoxLeft90,
-  rotateBoxRight90 as manualRotateBoxRight90,
-  rotateBoxUp90 as manualRotateBoxUp90,
-  setBoxPosition as manualSetBoxPosition,
-  toPlacedBoxes as manualToPlacedBoxes,
-  undo as manualUndo,
-  validateBox as manualValidateBox,
-  validateDraft as manualValidateDraft,
 } from './lib/manualPlacement'
-import type { ManualDraft, ManualHistory, ManualRotationDirection, OrientationKey, ValidationIssue } from './lib/manualPlacement'
+import type { ManualRotationDirection, OrientationKey, ValidationIssue } from './lib/manualPlacement'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from './data/containers'
 import { buildExportPlanRows, buildExportRowsFromTemplate, EXPORT_FIELD_KEYS } from './lib/exportPlan'
 import { createClientId } from './lib/clientId'
@@ -70,7 +53,6 @@ import {
   deriveClearanceAnnotations,
   measureBoxClearance,
 } from './lib/measurement'
-import { quickPlaceCargo } from './lib/quickPlace'
 import { buildReviewChecklist } from './lib/reviewChecklist'
 import type { ReviewChecklist } from './lib/reviewChecklist'
 import { createManualOperationNotice } from './lib/manualFeedback'
@@ -847,20 +829,6 @@ function buildRotationNotice(
   return locale === 'zh' ? '旋转后不满足校验，已撤销' : 'Rotation rejected by validation'
 }
 
-function rotateManualDraft(draft: ManualDraft, boxId: string, direction: ManualRotationDirection): ManualDraft {
-  switch (direction) {
-    case 'left':
-      return manualRotateBoxLeft90(draft, boxId)
-    case 'down':
-      return manualRotateBoxDown90(draft, boxId)
-    case 'up':
-      return manualRotateBoxUp90(draft, boxId)
-    case 'right':
-    default:
-      return manualRotateBoxRight90(draft, boxId)
-  }
-}
-
 const emptyForm: CargoForm = {
   name: 'Carton B',
   label: 'B',
@@ -914,11 +882,13 @@ const unplacedReasonMessages: Record<Locale, Record<string, string>> = {
     'exceeds-dimensions': '超出货柜尺寸',
     'exceeds-payload': '超过最大载重',
     'no-space': '没有剩余装载空间',
+    'manual-not-placed': '尚未在手动排布中放置',
   },
   en: {
     'exceeds-dimensions': 'Exceeds container dimensions',
     'exceeds-payload': 'Exceeds maximum payload',
     'no-space': 'No remaining loading space',
+    'manual-not-placed': 'Not placed in the manual arrangement',
   },
 }
 
@@ -1108,9 +1078,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
   const [activeLoadingGroupIndex, setActiveLoadingGroupIndex] = useState(0)
   const [loadingGroupsPlaying, setLoadingGroupsPlaying] = useState(false)
-  const [placementMode, setPlacementMode] = useState<'auto' | 'manual'>('auto')
-  const [manualHistory, setManualHistory] = useState<ManualHistory>(() => manualEmptyHistory())
-  const [manualSelectedId, setManualSelectedId] = useState<string | null>(null)
   const [manualHelpOpen, setManualHelpOpen] = useState(false)
   const [autoHelpOpen, setAutoHelpOpen] = useState(false)
   const [manualNotice, setManualNotice] = useState<ManualOperationNotice | null>(null)
@@ -1391,10 +1358,38 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   const renderingContainer = effectiveContainer(selectedContainer)
   const displayCargoItems = useMemo(() => normalizeCargoLabelColors(cargoItems), [cargoItems])
-  const result = automaticResult ?? emptyPackingResult(selectedContainer, displayCargoItems)
+  const automaticDisplayResult = useMemo(
+    () => automaticResult ?? emptyPackingResult(selectedContainer, displayCargoItems),
+    [automaticResult, displayCargoItems, selectedContainer],
+  )
+  const {
+    mode: placementMode,
+    draft: manualDraft,
+    selectedId: manualSelectedId,
+    pool: manualPool,
+    issues: manualIssues,
+    blockingInvalidBoxIds: manualInvalidBoxIds,
+    placedBoxes: manualPlacedBoxes,
+    activeResult,
+    setMode: setPlacementMode,
+    select: selectManualBox,
+    move: moveManualBox,
+    drop: dropManualBox,
+    quickPlace: quickPlaceManualBox,
+    rotate: rotateManualBox,
+    deleteBox: deleteManualBox,
+    undo: undoManualPlacement,
+    redo: redoManualPlacement,
+    continueFromAutomatic,
+  } = useManualPlacementSession({
+    cargoItems: displayCargoItems,
+    container: renderingContainer,
+    automaticDisplayResult,
+    supportPolicy: placementSettings.supportPolicy,
+  })
   const detailRows = useMemo(
-    () => buildExportPlanRows(displayCargoItems, result, { defaultMaxStackLayers }),
-    [defaultMaxStackLayers, displayCargoItems, result],
+    () => buildExportPlanRows(displayCargoItems, activeResult, { defaultMaxStackLayers }),
+    [activeResult, defaultMaxStackLayers, displayCargoItems],
   )
 
   const calculateAndShowPlacement = () => {
@@ -1416,7 +1411,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     if (!changed) return
 
     if (!suppressNotice && placementMode === 'auto'
-      && ((hasCalculated && result.placedCount > 0) || containerChangeNotice !== '')) {
+      && ((hasCalculated && automaticDisplayResult.placedCount > 0) || containerChangeNotice !== '')) {
       setContainerChangeNotice(t.containerChangedNotice)
     } else {
       setContainerChangeNotice('')
@@ -1432,40 +1427,13 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     if (container) changeSelectedContainer(container)
   }
 
-  const manualDraft = manualHistory.present
-  const manualPool = useMemo(
-    () => manualBuildPool(displayCargoItems, manualDraft),
-    [displayCargoItems, manualDraft],
-  )
-  const manualIssues = useMemo(
-    () => manualValidateDraft(manualDraft, renderingContainer, placementSettings.supportPolicy),
-    [manualDraft, renderingContainer, placementSettings.supportPolicy],
-  )
-  const manualInvalidBoxIds = useMemo(() => {
-    const ids = new Set<string>()
-    for (const issue of manualIssues) {
-      if (isBlockingManualIssue(issue)) ids.add(issue.boxId)
-    }
-    return ids
-  }, [manualIssues])
-  const manualPlacedBoxes = useMemo(
-    () => manualToPlacedBoxes(manualDraft, manualInvalidBoxIds),
-    [manualDraft, manualInvalidBoxIds],
-  )
-  const manualResult = useMemo(
-    () => buildManualPackingResult(manualPlacedBoxes, renderingContainer),
-    [manualPlacedBoxes, renderingContainer],
-  )
   const manualCapacity = useMemo(
     () => computeRemainingCapacity(manualPlacedBoxes, renderingContainer),
     [manualPlacedBoxes, renderingContainer],
   )
-  const commitManual = (nextDraft: ManualDraft) => {
-    setManualHistory((current) => manualCommit(current, nextDraft))
-  }
 
   const notifyManualRejected = (
-    operation: 'move' | 'drop' | 'rotate',
+    operation: 'move' | 'drop' | 'rotate' | 'delete',
     boxId?: string,
     cargoId?: string,
     issues?: ValidationIssue[],
@@ -1482,74 +1450,33 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const handleManualMoveBox = (id: string, x: number, y: number, z?: number) => {
-    const box = manualDraft.boxes.find((b) => b.id === id)
-    const clampedX = box ? Math.max(0, Math.min(renderingContainer.length - box.length, x)) : x
-    const clampedY = box ? Math.max(0, Math.min(renderingContainer.width - box.width, y)) : y
-    const clampedZ = (z !== undefined && box) ? Math.max(0, Math.min(renderingContainer.height - box.height, z)) : z
-    const nextDraft = manualSetBoxPosition(manualDraft, id, clampedX, clampedY, clampedZ)
-    const issues = manualValidateBox(nextDraft, id, renderingContainer, placementSettings.supportPolicy)
-    if (issues.some(isBlockingManualIssue)) {
-      notifyManualRejected('move', id, undefined, issues)
+    const command = moveManualBox(id, x, y, z)
+    if (!command.ok) {
+      notifyManualRejected('move', command.boxId, command.cargoId, command.issues)
       return
     }
     setManualNotice(null)
-    commitManual(nextDraft)
   }
 
   const handleManualDropFromPool = (cargoId: string, dropX: number, dropY: number, dropZ?: number) => {
-    const cargoItem = displayCargoItems.find((item) => item.id === cargoId)
-    if (!cargoItem) return
-    const used = manualDraft.boxes.filter((box) => box.cargoId === cargoId).length
-    if (used >= cargoItem.quantity) {
-      notifyManualRejected('drop', undefined, cargoId, undefined, 'quantity-limit')
-      return
-    }
-    const boxId = `manual-${cargoId}-${Date.now()}-${used + 1}`
-    // ContainerScene's onDrop already produces top-left corner via resolveDropTarget; the legacy
-    // ManualPlacement2D drop path passes the cursor centre, so we centre-shift only when no z
-    // was supplied (3D pool drop always passes z).
-    const supplyZ = typeof dropZ === 'number'
-    const x = supplyZ ? dropX : Math.max(0, dropX - cargoItem.length / 2)
-    const y = supplyZ ? dropY : Math.max(0, dropY - cargoItem.width / 2)
-    const newBox = makeManualBox({
-      id: boxId,
-      cargoId,
-      label: cargoItem.label ?? cargoItem.name,
-      color: cargoItem.color,
-      length: cargoItem.length,
-      width: cargoItem.width,
-      height: cargoItem.height,
-      weight: cargoItem.weight,
-      canRotate: cargoItem.canRotate,
-      stackable: cargoItem.stackable,
-      maxStackLayers: cargoItem.maxStackLayers,
-      x,
-      y,
-      z: supplyZ ? dropZ : 0,
-    })
-    const nextDraft = manualAddBox(manualDraft, newBox)
-    const issues = manualValidateBox(nextDraft, boxId, renderingContainer, placementSettings.supportPolicy)
-    if (issues.some(isBlockingManualIssue)) {
-      notifyManualRejected('drop', boxId, cargoId, issues)
+    const command = dropManualBox(cargoId, dropX, dropY, dropZ)
+    if (!command.ok) {
+      notifyManualRejected(
+        'drop',
+        command.boxId,
+        command.cargoId,
+        command.issues,
+        command.reason === 'quantity-limit' ? 'quantity-limit' : undefined,
+      )
       return
     }
     setManualNotice(null)
-    commitManual(nextDraft)
-    setManualSelectedId(boxId)
   }
 
   const handleQuickPlaceCargo = (cargoId: string) => {
-    const cargoItem = displayCargoItems.find((item) => item.id === cargoId)
-    if (!cargoItem) return
-    const result = quickPlaceCargo({
-      cargo: cargoItem,
-      draft: manualDraft,
-      container: renderingContainer,
-      createId: () => `manual-${cargoId}-${Date.now()}-${manualDraft.boxes.length + 1}`,
-      supportPolicy: placementSettings.supportPolicy,
-    })
-    if (!result.ok) {
-      if (result.reason === 'quantity-limit') {
+    const command = quickPlaceManualBox(cargoId)
+    if (!command.ok) {
+      if (command.reason === 'quantity-limit') {
         notifyManualRejected('drop', undefined, cargoId, undefined, 'quantity-limit')
       } else {
         setManualNotice({
@@ -1568,8 +1495,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       return
     }
     setManualNotice(null)
-    commitManual(result.nextDraft)
-    setManualSelectedId(result.box.id)
   }
 
   const handleManualPoolDragStart = (event: ReactDragEvent<HTMLDivElement>, cargoId: string) => {
@@ -1591,48 +1516,31 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const handleManualRotateBox = (boxId: string, direction: ManualRotationDirection = 'right') => {
-    const dry = manualDryRunRotation(manualDraft, boxId, renderingContainer, direction, placementSettings.supportPolicy)
-    if (!dry.ok) {
-      setRotationNotice(buildRotationNotice(dry, renderingContainer, locale))
-      notifyManualRejected('rotate', boxId, undefined, dry.issues)
+    const command = rotateManualBox(boxId, direction)
+    if (!command.ok) {
+      setRotationNotice(buildRotationNotice({
+        ok: false,
+        issues: command.issues,
+        rotatedBox: command.rotatedBox ?? null,
+      }, renderingContainer, locale))
+      notifyManualRejected('rotate', command.boxId, command.cargoId, command.issues)
       return
     }
-    const nextDraft = rotateManualDraft(manualDraft, boxId, direction)
     setRotationNotice('')
     setManualNotice(null)
-    commitManual(nextDraft)
   }
 
   const handleManualDeleteBox = (boxId: string) => {
-    commitManual(manualRemoveBox(manualDraft, boxId))
-    setManualSelectedId(null)
+    const command = deleteManualBox(boxId)
+    if (!command.ok) {
+      notifyManualRejected('delete', command.boxId, command.cargoId, command.issues)
+    }
   }
 
   const handleContinueManually = () => {
-    const nextDraft = {
-      boxes: result.placed.map((box) => {
-        const cargo = displayCargoItems.find((item) => item.id === box.cargoId)
-        return makeManualBox({
-          id: `manual-${box.id}`,
-          cargoId: box.cargoId,
-          label: box.label,
-          color: box.color,
-          length: box.length,
-          width: box.width,
-          height: box.height,
-          weight: box.weight,
-          canRotate: cargo?.canRotate ?? true,
-          stackable: cargo?.stackable ?? box.stackable,
-          maxStackLayers: cargo?.maxStackLayers ?? box.maxStackLayers,
-          x: box.x,
-          y: box.y,
-          z: box.z,
-        })
-      }),
-    }
-    setManualHistory((current) => manualCommit(current, nextDraft))
-    setManualSelectedId(null)
-    setPlacementMode('manual')
+    continueFromAutomatic()
+    setManualNotice(null)
+    setRotationNotice('')
   }
 
   useEffect(() => {
@@ -1646,6 +1554,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   useEffect(() => {
     setHoverInfo(null)
+    setActiveLayerId('all')
+    setActiveLabelId('all')
   }, [placementMode])
 
   useEffect(() => {
@@ -1663,36 +1573,38 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       if (isMeta && (event.key === 'z' || event.key === 'Z')) {
         event.preventDefault()
         if (event.shiftKey) {
-          setManualHistory((current) => manualRedo(current))
+          redoManualPlacement()
         } else {
-          setManualHistory((current) => manualUndo(current))
+          undoManualPlacement()
         }
         return
       }
       if (isMeta && (event.key === 'y' || event.key === 'Y')) {
         event.preventDefault()
-        setManualHistory((current) => manualRedo(current))
+        redoManualPlacement()
         return
       }
 
       if ((event.key === 'r' || event.key === 'R') && placementMode === 'manual' && manualSelectedId) {
         event.preventDefault()
         const direction: ManualRotationDirection = event.shiftKey ? 'down' : 'right'
-        const dry = manualDryRunRotation(manualDraft, manualSelectedId, renderingContainer, direction, placementSettings.supportPolicy)
-        if (!dry.ok) {
-          setRotationNotice(buildRotationNotice(dry, renderingContainer, locale))
+        const command = rotateManualBox(manualSelectedId, direction)
+        if (!command.ok) {
+          setRotationNotice(buildRotationNotice({
+            ok: false,
+            issues: command.issues,
+            rotatedBox: command.rotatedBox ?? null,
+          }, renderingContainer, locale))
           setManualNotice(createManualOperationNotice({
             operation: 'rotate',
             boxId: manualSelectedId,
-            issues: dry.issues,
+            issues: command.issues,
             locale,
           }))
           return
         }
-        const nextDraft = rotateManualDraft(manualDraft, manualSelectedId, direction)
         setRotationNotice('')
         setManualNotice(null)
-        setManualHistory((current) => manualCommit(current, nextDraft))
         return
       }
 
@@ -1703,14 +1615,14 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       }
 
       if (event.key === 'Escape') {
-        setManualSelectedId(null)
+        selectManualBox(null)
         return
       }
     }
 
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [placementMode, manualSelectedId, manualDraft, renderingContainer, locale, placementSettings.supportPolicy])
+  }, [locale, manualSelectedId, placementMode, redoManualPlacement, renderingContainer, rotateManualBox, selectManualBox, undoManualPlacement])
 
   useEffect(() => {
     if (!manualNotice) return
@@ -1718,31 +1630,29 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     return () => window.clearTimeout(timer)
   }, [manualNotice])
 
-  const activeLayer = result.layers.find((layer) => layer.id === activeLayerId)
-  const layerHasGapFill = (physicalLayer: number) => result.placed.some((box) => box.physicalLayer === physicalLayer && isGapFillBox(box))
-  const activeStepsResult = placementMode === 'manual'
-    ? (manualResult.placed.length > 0 ? manualResult : null)
-    : (hasCalculated ? result : null)
-  const playbackSequence = useMemo(() => buildPlaybackSequence(activeStepsResult), [activeStepsResult])
+  const activeLayer = activeResult.layers.find((layer) => layer.id === activeLayerId)
+  const layerHasGapFill = (physicalLayer: number) => activeResult.placed.some((box) => box.physicalLayer === physicalLayer && isGapFillBox(box))
+  const playbackSequence = useMemo(() => buildPlaybackSequence(activeResult), [activeResult])
   const playbackAvailable = playbackSequence.total > 0
   const playback = usePlaybackController(playbackSequence)
   const playbackActive = playbackAvailable && activeResultTab === 'playback'
-  const loadingTaskGroups = useMemo(() => buildLoadingTaskGroups(activeStepsResult), [activeStepsResult])
+  const loadingTaskGroups = useMemo(() => buildLoadingTaskGroups(activeResult), [activeResult])
   const loadingStepsAvailable = loadingTaskGroups.length > 0
   const activeLoadingGroup = loadingTaskGroups[Math.max(0, Math.min(activeLoadingGroupIndex, loadingTaskGroups.length - 1))] ?? null
   const activeLoadingGroupBoxIds = useMemo(() => activeLoadingGroup ? new Set(activeLoadingGroup.boxIds) : undefined, [activeLoadingGroup])
   const loadingStepsActive = loadingStepsAvailable && activeResultTab === 'loadingSteps'
   const visibleAutoBoxes = useMemo(() => {
-    if (playbackActive) return visibleBoxesAt(playbackSequence, playback.cursor)
-    return hasCalculated ? result.placed : []
-  }, [playbackActive, playbackSequence, playback.cursor, hasCalculated, result.placed])
+    if (placementMode === 'auto' && playbackActive) return visibleBoxesAt(playbackSequence, playback.cursor)
+    return hasCalculated ? automaticDisplayResult.placed : []
+  }, [automaticDisplayResult.placed, hasCalculated, placementMode, playback.cursor, playbackActive, playbackSequence])
   const visibleManualBoxes = useMemo(() => {
     if (placementMode === 'manual' && playbackActive) return visibleBoxesAt(playbackSequence, playback.cursor)
     return manualPlacedBoxes
   }, [manualPlacedBoxes, placementMode, playback.cursor, playbackActive, playbackSequence])
-  const visibleBoxes = hasCalculated
-    ? result.placed.filter((box) => (activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId) && (activeLabelId === 'all' || box.label === activeLabelId))
-    : []
+  const visibleBoxes = activeResult.placed.filter((box) => (
+    (activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId)
+    && (activeLabelId === 'all' || box.label === activeLabelId)
+  ))
 
   useEffect(() => {
     setActiveLoadingGroupIndex(0)
@@ -1765,7 +1675,11 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     return () => window.clearTimeout(timer)
   }, [loadingStepsActive, loadingGroupsPlaying, activeLoadingGroupIndex, loadingTaskGroups.length])
 
-  const cogResult = useMemo(() => computeCenterOfGravity(visibleAutoBoxes.length > 0 ? visibleAutoBoxes : result.placed, selectedContainer), [result.placed, visibleAutoBoxes, selectedContainer])
+  const visibleActiveBoxes = placementMode === 'manual' ? visibleManualBoxes : visibleAutoBoxes
+  const cogResult = useMemo(
+    () => computeCenterOfGravity(visibleActiveBoxes.length > 0 ? visibleActiveBoxes : activeResult.placed, selectedContainer),
+    [activeResult.placed, selectedContainer, visibleActiveBoxes],
+  )
   const cogViewState = useMemo(
     () => deriveCogOverlayState({
       activeResultTab,
@@ -1795,8 +1709,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     return compareContainers(chosen, displayCargoItems, loadingMode, defaultMaxStackLayers)
   }, [activeResultTab, compareSelection, compareCandidates, defaultMaxStackLayers, displayCargoItems, hasCalculated, loadingMode])
   const fillSuggestions = useMemo(
-    () => suggestFillItems(hasCalculated ? result : null, selectedContainer),
-    [hasCalculated, result, selectedContainer],
+    () => suggestFillItems(hasCalculated ? automaticDisplayResult : null, selectedContainer),
+    [automaticDisplayResult, hasCalculated, selectedContainer],
   )
   const clearanceSelectedBox = useMemo(() => {
     if (placementMode === 'manual') {
@@ -1813,13 +1727,13 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   )
   const reviewChecklist: ReviewChecklist = useMemo(
     () => buildReviewChecklist({
-      result,
+      result: activeResult,
       measurements: [],
       cog: cogResult,
-      manualIssues,
+      manualIssues: placementMode === 'manual' ? manualIssues : [],
       locale,
     }),
-    [result, cogResult, manualIssues, locale],
+    [activeResult, cogResult, locale, manualIssues, placementMode],
   )
   const debugSnapshot = useMemo(
     () => buildCargoDebugSnapshot({
@@ -1842,13 +1756,18 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       placementSettings,
       hasCalculated,
       automatic: {
-        placedBoxes: result.placed,
+        placedBoxes: automaticDisplayResult.placed,
         visibleBoxes: visibleAutoBoxes,
-        unplaced: result.unplaced,
-        diagnostics: result.diagnostics,
-        layersCount: result.layers.length,
-        placedCount: result.placedCount,
-        totalCargoCount: result.totalCargoCount,
+        unplaced: automaticDisplayResult.unplaced,
+        diagnostics: automaticDisplayResult.diagnostics,
+        layersCount: automaticDisplayResult.layers.length,
+        placedCount: automaticDisplayResult.placedCount,
+        totalCargoCount: automaticDisplayResult.totalCargoCount,
+      },
+      activeResult: {
+        placedCount: activeResult.placedCount,
+        totalCargoCount: activeResult.totalCargoCount,
+        layersCount: activeResult.layers.length,
       },
       manual: {
         draft: manualDraft,
@@ -1874,6 +1793,15 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       activeLabelId,
       activeLayerId,
       activeResultTab,
+      activeResult.layers.length,
+      activeResult.placedCount,
+      activeResult.totalCargoCount,
+      automaticDisplayResult.diagnostics,
+      automaticDisplayResult.layers.length,
+      automaticDisplayResult.placed,
+      automaticDisplayResult.placedCount,
+      automaticDisplayResult.totalCargoCount,
+      automaticDisplayResult.unplaced,
       clearanceEnabled,
       currentUser,
       defaultMaxStackLayers,
@@ -1898,12 +1826,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       projectName,
       recentErrors,
       renderingContainer,
-      result.diagnostics,
-      result.layers.length,
-      result.placed,
-      result.placedCount,
-      result.totalCargoCount,
-      result.unplaced,
       sceneViewMode,
       selectedContainer,
       shipmentName,
@@ -1935,8 +1857,17 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     if (added === 0) return
     dispatchPackingSession({ type: 'cargoAdded', items: additions })
   }
-  const labelOptions = [...new Set(result.labelStats.map((item) => item.label))]
-  const activeLayerIndex = result.layers.findIndex((layer) => layer.id === activeLayerId)
+  const labelOptions = [...new Set(activeResult.labelStats.map((item) => item.label))]
+  const activeLayerIndex = activeResult.layers.findIndex((layer) => layer.id === activeLayerId)
+  const activeSelectedBoxId = placementMode === 'manual' ? manualSelectedId : selectedBoxId
+  const selectCargoResultBox = (cargoId: string) => {
+    const boxId = activeResult.placed.find((box) => box.cargoId === cargoId)?.id ?? null
+    if (placementMode === 'manual') {
+      selectManualBox(boxId)
+    } else {
+      setSelectedBoxId(boxId)
+    }
+  }
   const loadingModeLabels: Record<LoadingMode, string> = {
     volume: t.volumeMode,
     weight: t.weightMode,
@@ -1983,7 +1914,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     const nextValue = Math.max(0, Number(value) || 0)
     if (selectedContainer[field] === nextValue) return
     if (placementMode === 'auto'
-      && ((hasCalculated && result.placedCount > 0) || containerChangeNotice !== '')) {
+      && ((hasCalculated && automaticDisplayResult.placedCount > 0) || containerChangeNotice !== '')) {
       setContainerChangeNotice(t.containerChangedNotice)
     } else {
       setContainerChangeNotice('')
@@ -2752,12 +2683,12 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const exportLoadingSheet = () => {
-    if (!loadingStepsAvailable || !activeStepsResult) return
-    const model = buildLoadingSheetModel(activeStepsResult, renderingContainer)
+    if (!loadingStepsAvailable) return
+    const model = buildLoadingSheetModel(activeResult, renderingContainer)
     const prefix = filenameSlug(shipmentName)
     const blob = exportLoadingSheetPdf({
       model,
-      boxes: activeStepsResult.placed,
+      boxes: activeResult.placed,
       container: renderingContainer,
       locale,
       title: shipmentName || projectName,
@@ -2791,7 +2722,10 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   const exportCurrentView = () => {
     if (workspaceView === '2d') {
-      const svg = workspaceRef.current?.querySelector('[data-testid="container-plan-2d"]')
+      const selector = placementMode === 'manual'
+        ? '[data-testid="manual-placement-2d"]'
+        : '[data-testid="container-plan-2d"]'
+      const svg = workspaceRef.current?.querySelector(selector)
       if (!(svg instanceof SVGSVGElement)) {
         throw new Error('2D plan is not available for export')
       }
@@ -2819,10 +2753,10 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       containerId: selectedContainer.id,
       container: selectedContainer,
       cargoItems: displayCargoItems,
-      placedCount: result.placedCount,
-      totalCargoCount: result.totalCargoCount,
-      layerCount: result.layers.length,
-      labelSummary: result.labelStats.map((item) => `${item.label}:${item.placed}/${item.planned}`).join(', '),
+      placedCount: activeResult.placedCount,
+      totalCargoCount: activeResult.totalCargoCount,
+      layerCount: activeResult.layers.length,
+      labelSummary: activeResult.labelStats.map((item) => `${item.label}:${item.placed}/${item.planned}`).join(', '),
       defaultMaxStackLayers,
     }
 
@@ -2866,7 +2800,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const deleteCargo = (cargoId: string) => {
     dispatchPackingSession({ type: 'cargoDeleted', cargoId })
     setSelectedBoxId((current) => {
-      const selectedBox = result.placed.find((box) => box.id === current)
+      const selectedBox = automaticDisplayResult.placed.find((box) => box.id === current)
       return selectedBox?.cargoId === cargoId ? null : current
     })
   }
@@ -2887,21 +2821,25 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const selectLayerByOffset = (offset: -1 | 1) => {
-    if (!result.layers.length) {
+    if (!activeResult.layers.length) {
       return
     }
 
     if (activeLayerId === 'all') {
-      setActiveLayerId(result.layers[0].id)
+      setActiveLayerId(activeResult.layers[0].id)
       return
     }
 
-    const nextIndex = Math.min(result.layers.length - 1, Math.max(0, activeLayerIndex + offset))
-    setActiveLayerId(result.layers[nextIndex]?.id ?? 'all')
+    const nextIndex = Math.min(activeResult.layers.length - 1, Math.max(0, activeLayerIndex + offset))
+    setActiveLayerId(activeResult.layers[nextIndex]?.id ?? 'all')
   }
 
   const selectStepBox = (boxId: string, layerId: string) => {
-    setSelectedBoxId(boxId)
+    if (placementMode === 'manual') {
+      selectManualBox(boxId)
+    } else {
+      setSelectedBoxId(boxId)
+    }
     setActiveLayerId(layerId)
   }
 
@@ -3708,7 +3646,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             <div className="space-y-2">
               {displayCargoItems.map((item) => (
                 <div
-                  className={`w-full border p-3 text-left text-sm ${result.placed.some((box) => box.cargoId === item.id && box.id === selectedBoxId) ? 'border-[#f3b21a] bg-[#fff7df]' : 'border-[#c9c9c9] bg-white'}`}
+                  className={`w-full border p-3 text-left text-sm ${activeResult.placed.some((box) => box.cargoId === item.id && box.id === activeSelectedBoxId) ? 'border-[#f3b21a] bg-[#fff7df]' : 'border-[#c9c9c9] bg-white'}`}
                   key={item.id}
                   draggable
                   data-testid="cargo-list-item"
@@ -3717,7 +3655,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                   onDrop={() => reorderCargo(item.id)}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <button className="flex min-w-0 flex-1 items-center gap-2 text-left font-semibold" type="button" onClick={() => setSelectedBoxId(result.placed.find((box) => box.cargoId === item.id)?.id ?? null)}>
+                    <button className="flex min-w-0 flex-1 items-center gap-2 text-left font-semibold" type="button" onClick={() => selectCargoResultBox(item.id)}>
                       <span aria-label={t.dragCargo} className="cursor-grab text-[#64748b]">☰</span>
                       <span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-[#222] text-xs text-white">{item.label}</span>
                       <span className="h-3 w-3 shrink-0" style={{ backgroundColor: item.color }} />
@@ -3751,10 +3689,10 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
         <section className="flex-1 min-w-0 space-y-4" ref={workspaceRef}>
           <div className={`grid grid-cols-5 gap-3 max-xl:grid-cols-2 ${workspaceMaximized ? 'hidden' : ''}`} data-testid="archive-stat-grid">
-            <div className="archive-stat"><div className="archive-stat-value">{result.placedCount}</div><div className="archive-stat-key">{t.loaded}</div></div>
-            <div className="archive-stat"><div className="archive-stat-value">{Math.round(result.usedWeight)}</div><div className="archive-stat-key">{t.weight}</div></div>
-            <div className="archive-stat"><div className="archive-stat-value">{result.weightUtilization.toFixed(1)}%</div><div className="archive-stat-key">{t.weightUse}</div></div>
-            <div className="archive-stat"><div className="archive-stat-value">{result.volumeUtilization.toFixed(1)}%</div><div className="archive-stat-key">{t.volumeUse}</div><div className="text-xs text-[#64748b]">{formatCubicMeters(result.usedVolume)}{' / '}{formatCubicMeters(result.containerVolume)}</div></div>
+            <div className="archive-stat"><div className="archive-stat-value">{activeResult.placedCount}</div><div className="archive-stat-key">{t.loaded}</div></div>
+            <div className="archive-stat"><div className="archive-stat-value">{Math.round(activeResult.usedWeight)}</div><div className="archive-stat-key">{t.weight}</div></div>
+            <div className="archive-stat"><div className="archive-stat-value">{activeResult.weightUtilization.toFixed(1)}%</div><div className="archive-stat-key">{t.weightUse}</div></div>
+            <div className="archive-stat"><div className="archive-stat-value">{activeResult.volumeUtilization.toFixed(1)}%</div><div className="archive-stat-key">{t.volumeUse}</div><div className="text-xs text-[#64748b]">{formatCubicMeters(activeResult.usedVolume)}{' / '}{formatCubicMeters(activeResult.containerVolume)}</div></div>
           </div>
 
           <section
@@ -4015,7 +3953,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                           selectedBoxId={manualSelectedId}
                           selectedManualBoxId={manualSelectedId}
                           viewMode={sceneViewMode}
-                          onClearSelection={() => setManualSelectedId(null)}
+                          onClearSelection={() => selectManualBox(null)}
                           onHoverBox={setHoverInfo}
                           onManualDelete={handleManualDeleteBox}
                           onManualDropFromPool={handleManualDropFromPool}
@@ -4024,7 +3962,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                           onManualRotate={handleManualRotateBox}
                           clearanceEnabled={clearanceEnabled}
                           clearanceAnnotations={clearanceAnnotations}
-                          onSelectBox={setManualSelectedId}
+                          onSelectBox={selectManualBox}
                         />
                       ) : (
                         <ManualPlacement2D
@@ -4034,7 +3972,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                           issues={manualIssues}
                           viewMode={planViewMode}
                           placementSettings={placementSettings}
-                          onSelectBox={setManualSelectedId}
+                          onSelectBox={selectManualBox}
                           onMoveBox={handleManualMoveBox}
                           onDropFromPool={handleManualDropFromPool}
                         />
@@ -4177,7 +4115,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                 <div className="flex gap-2">
                   <select className="w-full border border-[#aaa] bg-white p-2" value={activeLayerId} onChange={(event) => setActiveLayerId(event.target.value)}>
                     <option value="all">{t.allLayers}</option>
-                    {result.layers.map((layer) => <option key={layer.id} value={layer.id}>{layerName(layer, locale)}: {layer.count}</option>)}
+                    {activeResult.layers.map((layer) => <option key={layer.id} value={layer.id}>{layerName(layer, locale)}: {layer.count}</option>)}
                   </select>
                   <button className="border border-[#b8b8b8] bg-white px-3 py-2 text-xs" type="button" onClick={() => selectLayerByOffset(-1)}>
                     {t.previousLayer}
@@ -4193,7 +4131,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                   </select>
                 </label>
                 <div className="mt-2 grid grid-cols-2 gap-2">
-                  {result.layers.map((layer) => (
+                  {activeResult.layers.map((layer) => (
                     <button className={`border px-2 py-1 text-left text-xs ${activeLayerId === layer.id ? 'border-[#f3b21a] bg-white' : 'border-[#bbb] bg-[#eee]'}`} key={layer.id} type="button" onClick={() => setActiveLayerId(layer.id)}>
                       {layerName(layer, locale)}<br />{Math.round(layer.minZ)}-{Math.round(layer.maxZ)} mm<br />
                       {layer.labels.map((entry) => `${entry.label} x${entry.count}`).join(', ')}
@@ -4213,9 +4151,9 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                 <div className="mt-3 border-t border-[#bebebe] pt-2 text-xs">
                   <strong>{t.loadingSteps}</strong>
                   <div className="mt-2 max-h-[180px] space-y-1 overflow-auto">
-                    {result.workSteps.map((step) => {
-                      const isSelected = step.boxId === selectedBoxId
-                      const box = result.placed.find((entry) => entry.id === step.boxId)
+                    {activeResult.workSteps.map((step) => {
+                      const isSelected = step.boxId === activeSelectedBoxId
+                      const box = activeResult.placed.find((entry) => entry.id === step.boxId)
                       return (
                         <button
                           className={`block w-full border px-2 py-1 text-left ${isSelected ? 'border-[#f3b21a] bg-white' : 'border-[#bbb] bg-[#eee]'}`}
@@ -4224,7 +4162,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                           onClick={() => selectStepBox(step.boxId, String(step.physicalLayer))}
                         >
                           <strong>{step.step}</strong> {step.label} · {step.supportType}
-                          {box && <div>{box.name} · {layerName(result.layers.find((layer) => layer.physicalLayer === box.physicalLayer) ?? result.layers[0], locale)}{isGapFillBox(box) ? ` · ${t.mixedPlacementGapFill}` : ''}</div>}
+                          {box && <div>{box.name} · {layerName(activeResult.layers.find((layer) => layer.physicalLayer === box.physicalLayer) ?? activeResult.layers[0], locale)}{isGapFillBox(box) ? ` · ${t.mixedPlacementGapFill}` : ''}</div>}
                         </button>
                       )
                     })}
@@ -4276,13 +4214,13 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
             {activeResultTab === 'diagnostics' && (
               <div className="mt-3 space-y-2 text-xs">
-                {result.diagnostics.map((diagnostic) => (
+                {activeResult.diagnostics.map((diagnostic) => (
                   <div className="border border-[#c6c6c6] bg-white p-2" key={diagnostic.id}>
                     <strong className="uppercase">{diagnostic.severity}</strong>
                     <p>{diagnosticMessage(diagnostic, locale)}</p>
                   </div>
                 ))}
-                {result.unplaced.map((item) => (
+                {activeResult.unplaced.map((item) => (
                   <div className="border border-[#d7b7b7] bg-white p-2" key={item.cargoId}>
                     <strong>{item.label} {item.name}</strong>
                     <p>{t.failureReason}: {failureReason(item.reason || t.noFailure, locale, item.reasonCode)}</p>
@@ -4338,7 +4276,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                     if (group) {
                       setActiveLayerId(String(group.physicalLayer))
                       if (placementMode === 'manual') {
-                        setManualSelectedId(group.boxIds[0] ?? null)
+                        selectManualBox(group.boxIds[0] ?? null)
                       } else {
                         setSelectedBoxId(group.boxIds[0] ?? null)
                       }
@@ -4430,24 +4368,24 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           </div>
           <div className="m-3 border border-[#c9c9c9] bg-white p-3 text-sm">
             <h2 className="font-bold">{t.results}</h2>
-            <p>{t.loaded}: {result.placedCount} / {result.totalCargoCount}</p>
-            <p>{t.cargoTypes}: {result.labelStats.length}</p>
-            <p>{t.volumeUse}: {result.volumeUtilization.toFixed(1)}%</p>
-            <p>{t.weightUse}: {result.weightUtilization.toFixed(1)}%</p>
+            <p>{t.loaded}: {activeResult.placedCount} / {activeResult.totalCargoCount}</p>
+            <p>{t.cargoTypes}: {activeResult.labelStats.length}</p>
+            <p>{t.volumeUse}: {activeResult.volumeUtilization.toFixed(1)}%</p>
+            <p>{t.weightUse}: {activeResult.weightUtilization.toFixed(1)}%</p>
             <p>{t.containerVolume}: {formatCubicMeters(getContainerVolume(selectedContainer))}</p>
             <div className="mt-3 border-t pt-2">
               <strong>{t.showLayer}</strong>
               {visibleBoxes.slice(0, 10).map((box) => (
-                <button className={`mt-1 block w-full rounded px-2 py-1 text-left text-xs ${selectedBoxId === box.id ? 'bg-[#fff0bd]' : 'bg-[#f6f6f6]'}`} key={box.id} type="button" onClick={() => selectStepBox(box.id, String(box.physicalLayer))}>
+                <button className={`mt-1 block w-full rounded px-2 py-1 text-left text-xs ${activeSelectedBoxId === box.id ? 'bg-[#fff0bd]' : 'bg-[#f6f6f6]'}`} key={box.id} type="button" onClick={() => selectStepBox(box.id, String(box.physicalLayer))}>
                   <b>{box.label}</b> {box.name} #{box.index} x:{Math.round(box.x)} y:{Math.round(box.y)} z:{Math.round(box.z)}
-                  <br />{layerName(result.layers.find((layer) => layer.physicalLayer === box.physicalLayer) ?? result.layers[0], locale)} · {box.supportType}
+                  <br />{layerName(activeResult.layers.find((layer) => layer.physicalLayer === box.physicalLayer) ?? activeResult.layers[0], locale)} · {box.supportType}
                 </button>
               ))}
             </div>
-            {result.unplaced.length > 0 && (
+            {activeResult.unplaced.length > 0 && (
               <div className="mt-3 border-t pt-2">
                 <strong>{t.unloaded}</strong>
-                {result.unplaced.map((item) => <p className="text-xs" key={item.cargoId}>{item.name} x {item.quantity}: {failureReason(item.reason, locale, item.reasonCode)}</p>)}
+                {activeResult.unplaced.map((item) => <p className="text-xs" key={item.cargoId}>{item.name} x {item.quantity}: {failureReason(item.reason, locale, item.reasonCode)}</p>)}
               </div>
             )}
           </div>

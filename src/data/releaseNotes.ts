@@ -14,6 +14,23 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-07-23-r54-manual-session-active-result',
+    date: '2026-07-23',
+    title: { en: 'Manual sessions and active results', zh: '手动会话与活动结果' },
+    items: {
+      en: [
+        'Manual placement now owns mode, selection, history, validation, and editing commands as one session, while every shared result view reads the current automatic or manual plan consistently.',
+        'Reducing quantities or deleting cargo trims every manual undo/redo branch, so obsolete or excess boxes cannot remain visible or return through history.',
+        'Continuing from an automatic plan preserves the real 3D pose and future rotation basis; manual debug summaries and 2D view exports now use the active manual plan.',
+      ],
+      zh: [
+        '手动排布现在以单一会话统一管理模式、选择、历史、校验和编辑命令；所有通用结果视图会一致读取当前自动或手动方案。',
+        '减少数量或删除货物时会同步裁剪手动撤销/重做的全部分支，过期或超额箱体不会继续显示，也不会被历史操作复活。',
+        '从自动方案继续手动微调会保留真实 3D 姿态和后续旋转基准；手动调试摘要与 2D 视图导出也会使用当前活动方案。',
+      ],
+    },
+  },
+  {
     version: '2026-07-23-r53-packing-session-history-restore',
     date: '2026-07-23',
     title: { en: 'Concurrent-safe packing sessions', zh: '并发安全的装箱会话' },

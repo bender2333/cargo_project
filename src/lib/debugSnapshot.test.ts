@@ -97,6 +97,11 @@ describe('debug snapshot', () => {
         placedCount: 0,
         totalCargoCount: 2,
       },
+      activeResult: {
+        placedCount: 1,
+        totalCargoCount: 2,
+        layersCount: 1,
+      },
       manual: {
         draft,
         placedBoxes: [manualPlacedBox],
@@ -151,6 +156,11 @@ describe('debug snapshot', () => {
     expect(snapshot.cargo.items[0].label).toBe('A')
     expect(snapshot.defaultMaxStackLayers).toBe(2)
     expect(snapshot.recovery.testHelper).toBe('restoreManualDebugScenario')
+    expect(snapshot.summary).toMatchObject({
+      placedCount: 1,
+      totalCargoCount: 2,
+      layersCount: 1,
+    })
 
     const restored = restoreManualDebugScenario(snapshot)
     expect(restored.container.length).toBe(effectiveContainer(selectedContainer).length)

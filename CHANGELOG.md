@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-23 Phase 2 手动会话与统一活动结果
+
+- [x] 新增 `useManualPlacementSession`，原子管理模式、草稿历史、选择、移动、旋转、删除、撤销/重做与自动结果接管；所有 draft transition 都按当前 `cargoPlan` 裁剪。
+- [x] 让手动草稿生成包含计划数、已放数、待放数、标签统计、层级和作业步骤的完整 `PackingResult`，并保留自动接管的原始姿态/渲染足迹。
+- [x] 建立唯一 `activeResult`，统一驱动 2D/3D、汇总、分层、明细、诊断、复核、装柜步骤和通用导出；柜型比较、补装建议和 automatic 调试通道仍保持明确边界。
+- [x] 以 7 个聚焦 hook/reducer/debug 测试和浏览器流程证明空手动方案不会回退显示旧自动结果，编辑/删除、撤销/重做、自动转手动、手动 2D 导出和 r54 通知均一致更新。
+- [x] 独立规格/质量复审关闭 P0-P2：姿态继承、持续数量裁剪、陈旧选择和同坐标 move 历史污染均有 RED/GREEN 证据；`npm run lint`、`npm test`（普通 71 文件/482 项，性能 2 文件/6 项）、`npm run build`、全量 E2E（116/116，零跳过）通过。E2E 前后 `server/database.db` 均为 499,712 B、SHA-256 `70212B27A8781D648197BAAEABC84E7C550E03B363E856B290CEA66DA331E901`，端口已释放。
+- [ ] `npm run benchmark` 的正确性、五个 contract hash、Playwright 1/1 和零跳过通过，但硬门禁仍 RED：initial JS/total gzip 分别 +611 B，40HQ quantity P95 与登录 median/P95 超过未修改的 20% 阈值；详见 `decision.md`，未更新 baseline、阈值、采样或夹具。
+- [x] 新增通知 `2026-07-23-r54-manual-session-active-result`，仅提交本子任务文件并推送后进入 Phase 3 页面边界；整体重构和 benchmark 门禁不在本提交中宣称完成。
+
 ## 2026-07-23 Phase 2 自动会话并发与历史恢复
 
 - [x] 将计算请求、输入 `inputRevision` 和完成请求序号纳入同一 packing-session reducer；transition 输入晚于 urgent `calculate()` 提交时，旧 completion 会被拒绝，并由同一请求对最新已提交输入重算。

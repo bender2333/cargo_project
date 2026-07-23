@@ -23,4 +23,16 @@ describe('Workbench packing-session boundary', () => {
     expect(source).toContain('container.label !== selectedContainer.label')
     expect(source).toContain('container.description !== selectedContainer.description')
   })
+
+  it('routes manual editing through one session and one active result', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+
+    expect(source).toContain("from './hooks/useManualPlacementSession'")
+    expect(source).toContain('useManualPlacementSession({')
+    expect(source).toContain('activeResult')
+    expect(source).not.toMatch(/\bsetManualHistory\b/)
+    expect(source).not.toMatch(/\bsetManualSelectedId\b/)
+    expect(source).not.toContain('const result = automaticResult')
+    expect(source).not.toContain('activeStepsResult')
+  })
 })
