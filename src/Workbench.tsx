@@ -8,7 +8,7 @@ import type { PlanViewMode } from './components/ContainerPlan2D'
 import { ManualPlacement2D } from './components/ManualPlacement2D'
 import { PlaybackPanel } from './components/PlaybackPanel'
 import { LoadingStepsPanel } from './components/LoadingStepsPanel'
-import { ImportMappingForm, type ImportMappingValue } from './components/ImportMappingForm'
+import { CargoImportDialog } from './components/CargoImportDialog'
 import { CenterOfGravityPanel } from './components/CenterOfGravityPanel'
 import { ContainerComparisonPanel } from './components/ContainerComparisonPanel'
 import { buildPlaybackSequence, visibleBoxesAt } from './lib/playback'
@@ -22,7 +22,7 @@ import { useManualPlacementSession } from './hooks/useManualPlacementSession'
 import { useHistoryPlans } from './hooks/useHistoryPlans'
 import type { HistoryPlan } from './hooks/useHistoryPlans'
 import { useCustomCargoLibrary } from './hooks/useCustomCargoLibrary'
-import { reconcileSelectedTemplateName, shouldClearTemplateReference, useTemplateCatalogs } from './hooks/useTemplateCatalogs'
+import { shouldClearTemplateReference, useTemplateCatalogs } from './hooks/useTemplateCatalogs'
 import { selectPackingContainer } from './lib/packingSession'
 import { computeCenterOfGravity } from './lib/centerOfGravity'
 import { compareContainers } from './lib/containerCompare'
@@ -44,10 +44,10 @@ import type { ManualRotationDirection, OrientationKey, ValidationIssue } from '.
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from './data/containers'
 import { buildExportPlanRows, buildExportRowsFromTemplate } from './lib/exportPlan'
 import { createClientId } from './lib/clientId'
-import { parseCargoRows, parseCargoRowsWithTemplate } from './lib/importCargo'
+import { parseCargoRows } from './lib/importCargo'
 import type { ImportCargoRow } from './lib/importCargo'
-import { importColumnsForHeaderRow, importPreviewRows } from './lib/importTable'
-import { saveLastImportConfig } from './lib/lastImportConfig'
+import { importPreviewRows } from './lib/importTable'
+import { canAutoMap, buildImportMessages } from './lib/importWorkflow'
 import { normalizeCargoLabelColors } from './lib/labels'
 import { isGapFillBox } from './lib/placementSource'
 import {
@@ -64,7 +64,7 @@ import {
   savePlacementSettings,
   type PlacementSettings,
 } from './lib/placementSettings'
-import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, PackingResult, ImportTemplate, ImportTemplateUnits, ImportTemplateDefaults } from './types'
+import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingDiagnostic, PackingLayer, PackingResult } from './types'
 import { readCustomContainers } from './api/customContainers'
 import type { User } from './lib/auth'
 import { DebugPanel } from './components/DebugPanel'
@@ -76,43 +76,6 @@ type TemplateManagerPageComponent = typeof import('./components/TemplateManagerP
 const UserManagement = lazy(() => import('./components/UserManagement').then((module) => ({ default: module.UserManagement })))
 const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
 type WorksheetCell = string | number | boolean | null | undefined
-
-const TEMPLATE_MAPPING_FIELDS = ['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable', 'maxStackLayers', 'groundOnly'] as const
-const TEMPLATE_DIMENSION_FIELDS = new Set(['length', 'width', 'height'])
-
-function importMappingValueFromTemplate(template: ImportTemplate): ImportMappingValue {
-  return {
-    mapping: { ...template.mapping, dimensions: template.combinedColumn || template.mapping.dimensions || '' },
-    units: {
-      length: template.units.length,
-      width: template.units.width,
-      height: template.units.height,
-    },
-    headerRow: template.headerRow ?? 1,
-    startRow: template.startRow ?? 2,
-    dimensionMode: template.dimensionMode ?? 'separate',
-    combinedColumn: template.combinedColumn || template.mapping.dimensions || '',
-    dimensionOrder: template.dimensionOrder ?? ['length', 'width', 'height'],
-    defaults: template.defaultValues ?? { quantity: 1, canRotate: true, stackable: true },
-  }
-}
-
-function mappedColumnsForTemplateValue(value: ImportMappingValue): string[] {
-  const columns: string[] = []
-  if (value.dimensionMode === 'combined') {
-    columns.push(value.combinedColumn || value.mapping.dimensions || '')
-  }
-  TEMPLATE_MAPPING_FIELDS.forEach((field) => {
-    if (value.dimensionMode === 'combined' && TEMPLATE_DIMENSION_FIELDS.has(field)) return
-    columns.push(value.mapping[field] ?? '')
-  })
-  return Array.from(new Set(columns.map((column) => column.trim()).filter(Boolean)))
-}
-
-function missingMappedColumns(value: ImportMappingValue, availableColumns: string[]): string[] {
-  const present = new Set(availableColumns)
-  return mappedColumnsForTemplateValue(value).filter((column) => !present.has(column))
-}
 
 const copy = {
   en: {
@@ -851,28 +814,6 @@ function formatDimensions(length: number | '', width: number | '', height: numbe
   return length === '' || width === '' || height === '' ? '-' : `${length} x ${width} x ${height}`
 }
 
-function formatTemplate(template: string, params?: Record<string, string | number>) {
-  if (!params) return template
-  return template.replace(/\{(\w+)\}/g, (match, key: string) =>
-    Object.prototype.hasOwnProperty.call(params, key) ? String(params[key]) : match,
-  )
-}
-
-const importCodeMessages: Record<Locale, Record<string, string>> = {
-  zh: {
-    'cm-converted': '第 {row} 行已从厘米换算为毫米。',
-    'invalid-dimensions': '第 {row} 行缺少或非法的长宽高。',
-    'invalid-quantity': '第 {row} 行缺少或非法的数量。',
-    'quantity-defaulted': '第 {row} 行未填数量，已默认为 1。',
-  },
-  en: {
-    'cm-converted': 'Row {row}: Centimeter dimensions were converted to millimeters.',
-    'invalid-dimensions': 'Row {row}: Missing or invalid length, width, or height.',
-    'invalid-quantity': 'Row {row}: Missing or invalid quantity.',
-    'quantity-defaulted': 'Row {row}: Quantity was missing and defaulted to 1.',
-  },
-}
-
 const unplacedReasonMessages: Record<Locale, Record<string, string>> = {
   zh: {
     'exceeds-dimensions': '超出货柜尺寸',
@@ -886,17 +827,6 @@ const unplacedReasonMessages: Record<Locale, Record<string, string>> = {
     'no-space': 'No remaining loading space',
     'manual-not-placed': 'Not placed in the manual arrangement',
   },
-}
-
-function translateImportIssue(
-  issue: { code: string; params?: Record<string, string | number>; row: number; message: string },
-  locale: Locale,
-) {
-  const template = importCodeMessages[locale]?.[issue.code]
-  if (template) {
-    return formatTemplate(template, issue.params ?? { row: issue.row })
-  }
-  return issue.message
 }
 
 function diagnosticMessage(diagnostic: PackingDiagnostic, locale: Locale) {
@@ -1168,98 +1098,13 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [draggedCargoId, setDraggedCargoId] = useState<string | null>(null)
   const [showMappingModal, setShowMappingModal] = useState(false)
   const [importRows, setImportRows] = useState<ImportCargoRow[]>([])
-  const [customMapping, setCustomMapping] = useState<Record<string, string>>({
-    label: '',
-    name: '',
-    length: '',
-    width: '',
-    height: '',
-    weight: '',
-    quantity: '',
-    color: '',
-    canRotate: '',
-    stackable: '',
-    maxStackLayers: '',
-    groundOnly: '',
-    dimensions: '',
-  })
-  type DimensionUnit = 'auto' | 'mm' | 'cm'
-  const [customUnits, setCustomUnits] = useState<Record<'length' | 'width' | 'height', DimensionUnit>>({
-    length: 'auto',
-    width: 'auto',
-    height: 'auto',
-  })
-  const [templateDimensionMode, setTemplateDimensionMode] = useState<'separate' | 'combined'>('separate')
-  const [templateCombinedColumn, setTemplateCombinedColumn] = useState('')
-  const [templateDimensionOrder, setTemplateDimensionOrder] = useState<Array<'length' | 'width' | 'height'>>(['length', 'width', 'height'])
-  const LAST_USED_TEMPLATE_KEY = 'cargo_last_used_template_id'
-  const [selectedImportTemplateId, setSelectedImportTemplateId] = useState('')
-  const selectedImportTemplateNameRef = useRef<{ id: string; name: string } | null>(null)
-  const [templateName, setTemplateName] = useState('')
-  const [templateHeaderRow, setTemplateHeaderRow] = useState(1)
-  const [templateStartRow, setTemplateStartRow] = useState(2)
-  const [templateDefaults, setTemplateDefaults] = useState<ImportTemplateDefaults>({ quantity: 1, canRotate: true, stackable: true })
-  const [templateSaveNotice, setTemplateSaveNotice] = useState('')
-  const [missingImportColumns, setMissingImportColumns] = useState<string[]>([])
   const [selectedExportTemplateId, setSelectedExportTemplateId] = useState('')
-  useEffect(() => {
-    if (!selectedImportTemplateId) {
-      selectedImportTemplateNameRef.current = null
-      return
-    }
-    if (importTemplateLoadFailed) return
-    if (shouldClearTemplateReference(selectedImportTemplateId, importTemplates, importTemplateLoadFailed)) {
-      setSelectedImportTemplateId('')
-      setTemplateName('')
-      selectedImportTemplateNameRef.current = null
-      return
-    }
-    const selectedTemplate = importTemplates.find((template) => template.id === selectedImportTemplateId)
-    if (!selectedTemplate) return
-    const previousTemplate = selectedImportTemplateNameRef.current
-    setTemplateName((current) => reconcileSelectedTemplateName(current, previousTemplate, selectedTemplate))
-    selectedImportTemplateNameRef.current = { id: selectedTemplate.id, name: selectedTemplate.name }
-  }, [importTemplateLoadFailed, importTemplates, selectedImportTemplateId])
-
   useEffect(() => {
     if (shouldClearTemplateReference(selectedExportTemplateId, exportTemplates, exportTemplateLoadFailed)) {
       setSelectedExportTemplateId('')
     }
   }, [exportTemplateLoadFailed, exportTemplates, selectedExportTemplateId])
 
-  const { canConfirm: canConfirmMapping, missingFieldsHint } = useMemo(() => {
-    const isCombined = templateDimensionMode === 'combined'
-    const missing: string[] = []
-    let canConfirm = true
-    if (isCombined) {
-      if (!templateCombinedColumn) {
-        missing.push(t.mappingMissingDimensions)
-        canConfirm = false
-      }
-    } else {
-      if (!customMapping.length) {
-        missing.push(t.mappingMissingLength)
-        canConfirm = false
-      }
-      if (!customMapping.width) {
-        missing.push(t.mappingMissingWidth)
-        canConfirm = false
-      }
-      if (!customMapping.height) {
-        missing.push(t.mappingMissingHeight)
-        canConfirm = false
-      }
-    }
-    const hasQuantity = customMapping.quantity !== '' || (templateDefaults.quantity ?? 0) > 0
-    if (!hasQuantity) {
-      missing.push(t.mappingMissingQuantity)
-      canConfirm = false
-    }
-    return {
-      canConfirm,
-      missingFieldsHint: missing.length > 0 ? `${t.mappingRequiredHint}: ${missing.join(', ')}` : t.mappingConfirmReady,
-    }
-  }, [templateDimensionMode, customMapping.length, customMapping.width, customMapping.height, customMapping.quantity, templateCombinedColumn, templateDefaults.quantity, t])
   const workspaceRef = useRef<HTMLElement | null>(null)
   const reportRef = useRef<HTMLElement | null>(null)
   const cargoRef = useRef<HTMLFormElement | null>(null)
@@ -1937,212 +1782,12 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     setSelectedBoxId(null)
   }
 
-  const importMessagesFor = (imported: ReturnType<typeof parseCargoRowsWithTemplate>) => [
-    `${t.importSuccess}: ${imported.summary.importedRows}`,
-    `${t.importMappedFields}: ${imported.summary.mappedFields.join(', ') || '-'}`,
-    `${t.importConvertedRows}: ${imported.summary.convertedCentimeterRows}`,
-    `${t.importSkippedRows}: ${imported.summary.skippedRows}`,
-    ...imported.errors.map((issue) => `${t.importIssue} row ${issue.row}: ${translateImportIssue(issue, locale)}`),
-    ...imported.warnings.map((issue) => `${t.importWarning} row ${issue.row}: ${translateImportIssue(issue, locale)}`),
-  ]
-
-  const applyImportedCargo = (imported: ReturnType<typeof parseCargoRowsWithTemplate>) => {
-    setImportMessages(importMessagesFor(imported))
-    if (imported.items.length > 0) {
-      dispatchPackingSession({ type: 'cargoImported', items: imported.items })
-      setSelectedBoxId(null)
-    }
-    setActiveResultTab('importLog')
-  }
-
-  const rememberSelectedImportTemplate = (templateId: string) => {
-    if (!templateId) return
-    try {
-      localStorage.setItem(LAST_USED_TEMPLATE_KEY, templateId)
-    } catch { /* ignore */ }
-  }
-
-  const confirmMappingImport = () => {
-    const imported = parseCargoRowsWithTemplate(importRows, {
-      mapping: customMapping,
-      units: customUnits,
-      headerRow: templateHeaderRow,
-      startRow: templateStartRow,
-      mergeRows: 'none',
-      dimensionMode: templateDimensionMode,
-      combinedColumn: templateCombinedColumn,
-      dimensionOrder: templateDimensionOrder,
-      defaultValues: templateDefaults,
-    }, { colors })
-    applyImportedCargo(imported)
-    setMissingImportColumns([])
-    setShowMappingModal(false)
-    // Persist the raw mapping the user confirmed. The import dialog no longer
-    // auto-loads it on open; named template selection is now explicit.
-    saveLastImportConfig(currentUser?.id ?? null, {
-      mapping: customMapping,
-      units: customUnits,
-      headerRow: templateHeaderRow,
-      startRow: templateStartRow,
-      dimensionMode: templateDimensionMode,
-      combinedColumn: templateCombinedColumn,
-      dimensionOrder: templateDimensionOrder,
-      defaults: templateDefaults,
-    })
-    if (imported.items.length > 0) rememberSelectedImportTemplate(selectedImportTemplateId)
-    setActiveNav('report')
-  }
-
-  const applyImportTemplate = (templateId: string) => {
-    const template = importTemplates.find((item) => item.id === templateId)
-    selectedImportTemplateNameRef.current = template
-      ? { id: template.id, name: template.name }
-      : null
-    setSelectedImportTemplateId(templateId)
-    setMissingImportColumns([])
-    if (!template) {
-      setCustomMapping({
-        label: '',
-        name: '',
-        length: '',
-        width: '',
-        height: '',
-        weight: '',
-        quantity: '',
-        color: '',
-        canRotate: '',
-        stackable: '',
-        maxStackLayers: '',
-        groundOnly: '',
-        dimensions: '',
-      })
-      setCustomUnits({ length: 'auto', width: 'auto', height: 'auto' })
-      setTemplateHeaderRow(1)
-      setTemplateStartRow(2)
-      setTemplateDimensionMode('separate')
-      setTemplateCombinedColumn('')
-      setTemplateDefaults({ quantity: 1, canRotate: true, stackable: true })
-      setTemplateName('')
-      setTemplateDimensionOrder(['length', 'width', 'height'])
-      return
-    }
-    const next = importMappingValueFromTemplate(template)
-    setCustomMapping(next.mapping)
-    setCustomUnits(next.units)
-    setTemplateHeaderRow(next.headerRow)
-    setTemplateStartRow(next.startRow)
-    setTemplateDimensionMode(next.dimensionMode)
-    setTemplateCombinedColumn(next.combinedColumn)
-    setTemplateDefaults(next.defaults)
-    setTemplateName(template.name)
-    setTemplateDimensionOrder(next.dimensionOrder)
-    setMissingImportColumns(missingMappedColumns(next, importColumnsForHeaderRow(importRows, next.headerRow)))
-  }
-
-
-  const importMappingValue: ImportMappingValue = {
-    mapping: customMapping,
-    units: customUnits,
-    headerRow: templateHeaderRow,
-    startRow: templateStartRow,
-    dimensionMode: templateDimensionMode,
-    combinedColumn: templateCombinedColumn,
-    dimensionOrder: templateDimensionOrder,
-    defaults: templateDefaults,
-  }
-
-  const handleImportMappingChange = (next: ImportMappingValue) => {
-    setCustomMapping(next.mapping)
-    setCustomUnits(next.units)
-    setTemplateHeaderRow(next.headerRow)
-    setTemplateStartRow(next.startRow)
-    setTemplateDimensionMode(next.dimensionMode)
-    setTemplateCombinedColumn(next.combinedColumn)
-    setTemplateDimensionOrder(next.dimensionOrder)
-    setTemplateDefaults(next.defaults)
-    setMissingImportColumns(selectedImportTemplateId
-      ? missingMappedColumns(next, importColumnsForHeaderRow(importRows, next.headerRow))
-      : [])
-  }
-
   const addLibraryCargoToWorkbench = (item: CargoItem) => {
     dispatchPackingSession({
       type: 'cargoAdded',
       items: [{ ...item, id: createClientId(), quantity: 1 }],
     })
     setActiveNav('overview')
-  }
-
-  const handleSaveImportTemplate = async () => {
-    const name = templateName.trim()
-    if (!name) return
-
-    const selected = importTemplates.find((t) => t.id === selectedImportTemplateId)
-    const isUpdate = !!(selectedImportTemplateId && selected && name === selected.name)
-
-    const payload = {
-      name,
-      mapping: customMapping,
-      units: customUnits as ImportTemplateUnits,
-      headerRow: templateHeaderRow,
-      startRow: templateStartRow,
-      mergeRows: 'none' as const,
-      dimensionMode: templateDimensionMode,
-      combinedColumn: templateCombinedColumn || customMapping.dimensions || '',
-      dimensionOrder: templateDimensionOrder,
-      defaultValues: templateDefaults,
-    }
-
-    setTemplateSaveNotice('')
-    try {
-      const saved = isUpdate
-        ? await updateImportTemplateRecord(selected.id, payload)
-        : await createImportTemplateRecord(payload)
-      if (!saved) return
-      selectedImportTemplateNameRef.current = { id: saved.id, name: saved.name }
-      setSelectedImportTemplateId(saved.id)
-      // Saving records the chosen template for telemetry/local continuity, but
-      // the next import starts from "None" and waits for explicit template selection.
-      try {
-        localStorage.setItem(LAST_USED_TEMPLATE_KEY, saved.id)
-      } catch { /* ignore */ }
-      const noticeText = isUpdate ? t.templateUpdated : t.templateSaved
-      setTemplateSaveNotice(`${noticeText}: ${saved.name}`)
-      setImportMessages((messages) => [`${noticeText}: ${saved.name}`, ...messages])
-    } catch (err) {
-      console.error(err)
-      alert(locale === 'zh' ? '保存模板失败' : 'Failed to save template')
-    }
-  }
-
-  const canAutoMap = (row: ImportCargoRow): boolean => {
-    if (Array.isArray(row)) return false
-    const keys = Object.keys(row).map(k => k.toLowerCase())
-    const fieldsToCheck = {
-      length: ['length', '长', '長', '长度', '長度', 'outer_length_mm', '厘米'],
-      width: ['width', '宽', '寬', '宽度', '寬度', 'outer_width_mm', '厘米'],
-      height: ['height', '高', '高度', 'outer_height_mm', '厘米'],
-      weight: ['weight', '重量', '毛重', 'gross_weight_kg'],
-      quantity: ['quantity', '数量', '數量', '箱数', '箱數', '托数', '托數', 'carton_count'],
-    }
-    return Object.values(fieldsToCheck).every(candidates =>
-      keys.some(key => candidates.some(cand => key.includes(cand)))
-    )
-  }
-
-  const preSelectCol = (fieldKey: string, columns: string[]): string => {
-    const candidates = {
-      length: ['length', '长', '長', '长度', '長度', 'outer_length_mm'],
-      width: ['width', '宽', '寬', '宽度', '寬度', 'outer_width_mm'],
-      height: ['height', '高', '高度', 'outer_height_mm'],
-      weight: ['weight', '重量', '毛重', 'gross_weight_kg'],
-      quantity: ['quantity', '数量', '數量', '箱数', '箱數', '托数', '托數', 'carton_count'],
-      name: ['name', '名称', '品名', '名称', '货物名称', 'description'],
-      label: ['label', '标签', '代码', '代号', '托盘'],
-      maxStackLayers: ['maxstacklayers', 'max stack layers', '最大堆叠层数', '最大堆疊層數', '堆叠层数', '堆疊層數'],
-      groundOnly: ['groundonly', 'ground only', '必须落地', '落地', '不可上托', '不可堆叠在上'],
-    }[fieldKey] || []
-    return columns.find(col => candidates.some(cand => col.toLowerCase().includes(cand.toLowerCase()))) || ''
   }
 
   const downloadImportTemplate = () => {
@@ -2194,7 +1839,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       return
     }
 
-    const rowKeys = importColumnsForHeaderRow(rows, 1)
     const autoRows = importPreviewRows(rows, 1, 2)
     const autoMappable = canAutoMap(autoRows[0] ?? {})
 
@@ -2207,14 +1851,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
     if (autoMappable) {
       const imported = parseCargoRows(autoRows, { colors })
-      setImportMessages([
-        `${t.importSuccess}: ${imported.summary.importedRows}`,
-        `${t.importMappedFields}: ${imported.summary.mappedFields.join(', ') || '-'}`,
-        `${t.importConvertedRows}: ${imported.summary.convertedCentimeterRows}`,
-        `${t.importSkippedRows}: ${imported.summary.skippedRows}`,
-        ...imported.errors.map((issue) => `${t.importIssue} row ${issue.row}: ${translateImportIssue(issue, locale)}`),
-        ...imported.warnings.map((issue) => `${t.importWarning} row ${issue.row}: ${translateImportIssue(issue, locale)}`),
-      ])
+      setImportMessages(buildImportMessages(imported, t, locale))
       if (imported.items.length > 0) {
         dispatchPackingSession({ type: 'cargoImported', items: imported.items })
         setSelectedBoxId(null)
@@ -2227,37 +1864,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       setActiveNav('report')
     } else {
       setImportRows(rows)
-      const initialMap: Record<string, string> = {
-        label: '',
-        name: '',
-        length: '',
-        width: '',
-        height: '',
-        weight: '',
-        quantity: '',
-        color: '',
-        canRotate: '',
-        stackable: '',
-        maxStackLayers: '',
-        groundOnly: '',
-        dimensions: '',
-      }
-      const requiredFields = ['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable', 'maxStackLayers', 'groundOnly', 'dimensions']
-      requiredFields.forEach((fieldKey) => {
-        initialMap[fieldKey] = preSelectCol(fieldKey, rowKeys)
-      })
-      setCustomMapping(initialMap)
-      selectedImportTemplateNameRef.current = null
-      setSelectedImportTemplateId('')
-      setTemplateName('')
-      setTemplateSaveNotice('')
-      setTemplateHeaderRow(1)
-      setTemplateStartRow(2)
-      setTemplateDimensionMode('separate')
-      setTemplateCombinedColumn('')
-      setTemplateDefaults({ quantity: 1, canRotate: true, stackable: true })
-      setTemplateDimensionOrder(['length', 'width', 'height'])
-      setMissingImportColumns([])
       setShowMappingModal(true)
     }
   }
@@ -3775,129 +3381,29 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       </section>
         )}
         {showMappingModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" data-testid="mapping-modal">
-            <div className="w-full max-w-5xl rounded-xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in duration-200 max-h-[92vh] overflow-y-auto">
-              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-xl font-bold text-slate-800">{t.mappingTitle}</h3>
-                  <p className="mt-1 text-sm text-slate-500">{t.mappingSubtitle}</p>
-                </div>
-                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600" data-testid="mapping-stats">
-                  {t.mappingTotalRows}: {importRows.length} / {Object.keys(importRows[0] ?? {}).length} {t.mappingTotalCols}
-                </div>
-              </div>
-              <div className="mb-4 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm md:grid-cols-[1fr_1fr_auto]" data-testid="import-template-controls">
-                <label className="font-semibold text-slate-700">
-                  {t.templateLabel}
-                  <select
-                    className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                    value={selectedImportTemplateId}
-                    data-testid="import-template-select"
-                    disabled={importTemplateLoadFailed}
-                    onChange={(event) => applyImportTemplate(event.target.value)}
-                  >
-                    <option value="">{t.templateNone}</option>
-                    {importTemplates.map((template) => (
-                      <option key={template.id} value={template.id}>{template.name}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="font-semibold text-slate-700">
-                  {t.templateName}
-                  <input
-                    className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                    value={templateName}
-                    data-testid="import-template-name"
-                    onChange={(event) => setTemplateName(event.target.value)}
-                  />
-                </label>
-                <button
-                  className="self-end rounded-lg border border-indigo-200 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  type="button"
-                  data-testid="save-import-template"
-                  disabled={!templateName.trim()}
-                  onClick={handleSaveImportTemplate}
-                >
-                  {t.templateSave}
-                </button>
-                {templateSaveNotice && (
-                  <div className="md:col-span-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800" data-testid="template-save-status">
-                    {templateSaveNotice}
-                  </div>
-                )}
-                {importTemplateLoadFailed && (
-                  <div className="md:col-span-3 flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700" data-testid="import-template-dialog-load-error">
-                    <span>{t.importTemplateLoadFailed}</span>
-                    <button className="archive-button secondary" type="button" onClick={() => void fetchImportTemplates()}>
-                      {t.importTemplateRetry}
-                    </button>
-                  </div>
-                )}
-              </div>
-              <ImportMappingForm
-                value={importMappingValue}
-                onChange={handleImportMappingChange}
-                availableColumns={importColumnsForHeaderRow(importRows, templateHeaderRow)}
-                labels={t}
-                missingColumns={missingImportColumns}
-                previewSlot={(
-                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid="mapping-preview">
-                    <div className="mb-2 text-sm font-semibold text-slate-700">{t.mappingPreview}</div>
-                    <div className="max-h-[420px] overflow-auto">
-                      <table className="min-w-full border-collapse text-xs">
-                        <thead className="sticky top-0 bg-slate-100">
-                          <tr>
-                            {importColumnsForHeaderRow(importRows, templateHeaderRow).map((col) => (
-                              <th key={col} className="border border-slate-200 px-2 py-1 text-left font-semibold text-slate-700 whitespace-nowrap">{col}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {importPreviewRows(importRows, templateHeaderRow, templateStartRow).slice(0, 5).map((row, rowIndex) => (
-                            <tr key={rowIndex} className="odd:bg-white even:bg-slate-50">
-                              {importColumnsForHeaderRow(importRows, templateHeaderRow).map((col) => (
-                                <td key={col} className="border border-slate-200 px-2 py-1 text-slate-700 whitespace-nowrap">
-                                  {row[col] === undefined || row[col] === null ? '' : String(row[col])}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              />
-              <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
-                {(customUnits.length === 'cm' || customUnits.width === 'cm' || customUnits.height === 'cm') && (
-                  <span className="mr-auto text-xs font-semibold text-amber-600" data-testid="mapping-convert-hint">
-                    {t.mappingConvertHint}
-                  </span>
-                )}
-                <button
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none"
-                  type="button"
-                  onClick={() => setShowMappingModal(false)}
-                >
-                  {t.mappingCancel}
-                </button>
-                {!canConfirmMapping && (
-                  <span className="mr-auto text-xs font-semibold text-amber-600" data-testid="mapping-missing-hint">
-                    {missingFieldsHint}
-                  </span>
-                )}
-                <button
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  type="button"
-                  data-testid="confirm-mapping"
-                  disabled={!canConfirmMapping}
-                  onClick={confirmMappingImport}
-                >
-                  {t.mappingConfirm}
-                </button>
-              </div>
-            </div>
-          </div>
+          <CargoImportDialog
+            importRows={importRows}
+            importTemplates={importTemplates}
+            importTemplateLoadFailed={importTemplateLoadFailed}
+            locale={locale}
+            labels={t as never}
+            userId={currentUser?.id ?? null}
+            colors={colors}
+            onConfirm={(items, messages) => {
+              setImportMessages(messages)
+              if (items.length > 0) {
+                dispatchPackingSession({ type: 'cargoImported', items })
+                setSelectedBoxId(null)
+              }
+              setActiveResultTab('importLog')
+              setShowMappingModal(false)
+              setActiveNav('report')
+            }}
+            onClose={() => setShowMappingModal(false)}
+            onRefreshTemplates={() => void fetchImportTemplates()}
+            onCreateTemplate={createImportTemplateRecord}
+            onUpdateTemplate={updateImportTemplateRecord}
+          />
         )}
         {editingCargo && (
           <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4">

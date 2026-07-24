@@ -64,7 +64,9 @@ describe('Workbench packing-session boundary', () => {
 
   it('delegates import and export template request state to the catalog boundary', () => {
     const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+    const dialogSource = readFileSync(path.resolve(process.cwd(), 'src/components/CargoImportDialog.tsx'), 'utf8')
 
+    // Workbench still owns the shared catalog lifecycle via useTemplateCatalogs
     expect(source).toContain("from './hooks/useTemplateCatalogs'")
     expect(source).toContain('} = useTemplateCatalogs()')
     expect(source).not.toContain("from './api/importTemplates'")
@@ -75,34 +77,30 @@ describe('Workbench packing-session boundary', () => {
     expect(source).not.toMatch(/\bsetExportTemplates\b/)
     expect(source).not.toMatch(/\bsetImportTemplateLoadFailed\b/)
     expect(source).not.toMatch(/\bsetExportTemplateLoadFailed\b/)
-    expect(source).toContain('shouldClearTemplateReference(selectedImportTemplateId, importTemplates, importTemplateLoadFailed)')
+
+    // Export template ID reconciliation still lives in Workbench (no dialog boundary yet)
     expect(source).toContain('shouldClearTemplateReference(selectedExportTemplateId, exportTemplates, exportTemplateLoadFailed)')
-    expect(source).toContain('reconcileSelectedTemplateName(current, previousTemplate, selectedTemplate)')
 
-    const selectedNameEffect = source.slice(
-      source.indexOf('useEffect(() => {', source.indexOf('selectedImportTemplateNameRef')),
-      source.indexOf('}, [importTemplateLoadFailed, importTemplates, selectedImportTemplateId]'),
-    )
-    expect(selectedNameEffect).toMatch(
-      /if \(!selectedImportTemplateId\) \{\s*selectedImportTemplateNameRef\.current = null\s*return/,
-    )
-    expect(selectedNameEffect.indexOf('if (!selectedImportTemplateId)')).toBeLessThan(
-      selectedNameEffect.indexOf('if (importTemplateLoadFailed) return'),
-    )
+    // Import template dialog state and mapping logic are now owned by CargoImportDialog
+    expect(source).not.toMatch(/\bselectedImportTemplateId\b/)
+    expect(source).not.toMatch(/\bcustomMapping\b/)
+    expect(source).not.toMatch(/\bapplyImportTemplate\b/)
+    expect(source).not.toMatch(/\bhandleSaveImportTemplate\b/)
+    expect(source).not.toMatch(/\breconcileSelectedTemplateName\b/)
 
-    const applyTemplate = source.slice(
-      source.indexOf('const applyImportTemplate'),
-      source.indexOf('const importMappingValue'),
-    )
-    expect(applyTemplate).toContain('selectedImportTemplateNameRef.current = template')
-    expect(applyTemplate).toContain('? { id: template.id, name: template.name }')
-    expect(applyTemplate).toContain(': null')
+    // Workbench delegates to CargoImportDialog and passes catalog as props
+    expect(source).toContain("from './components/CargoImportDialog'")
+    expect(source).toContain('<CargoImportDialog')
+    expect(source).toContain('importTemplates={importTemplates}')
+    expect(source).toContain('importTemplateLoadFailed={importTemplateLoadFailed}')
+    expect(source).toContain('onCreateTemplate={createImportTemplateRecord}')
+    expect(source).toContain('onUpdateTemplate={updateImportTemplateRecord}')
 
-    const saveTemplate = source.slice(
-      source.indexOf('const handleSaveImportTemplate'),
-      source.indexOf('const canAutoMap'),
-    )
-    expect(saveTemplate).toContain('selectedImportTemplateNameRef.current = { id: saved.id, name: saved.name }')
+    // CargoImportDialog owns the reconciliation, mapping state, and template CRUD
+    expect(dialogSource).toContain('selectedImportTemplateId')
+    expect(dialogSource).toContain('applyImportTemplate')
+    expect(dialogSource).toContain('handleSaveImportTemplate')
+    expect(dialogSource).toContain('importMappingValueFromTemplate')
   })
 
   it('delegates template manager drafts and rendering to the page boundary', () => {
