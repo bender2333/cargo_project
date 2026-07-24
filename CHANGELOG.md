@@ -9,7 +9,7 @@
 - [x] 模板管理页采用受控导航级动态导入，生成独立 `TemplateManagerPage` chunk（Vite gzip `3.64 kB`）；首次打开显示中英文加载状态，catalog 仍在 Workbench 生命周期预先加载。旧会话请求已删除的部署 chunk 时，局部失败态会保留工作台壳层，并提供整页重新加载或关闭返回工作台。
 - [x] 新增 r57 双语通知；页面/hook/架构聚焦测试 `4 files / 39 tests` 与模板 chunk 中止恢复 E2E `1/1` 通过。最终 `npm run lint`、`npm test`（普通 78 文件/542 项，性能 2 文件/6 项）、`npm run build`（306 modules）和全量 E2E（118/118，零跳过）通过。E2E 使用 `:memory:` 数据库；`server/database.db` 仍为 499,712 B、SHA-256 `70212B27A8781D648197BAAEABC84E7C550E03B363E856B290CEA66DA331E901`，端口已释放。
 - [ ] 正式 `npm run benchmark` 的 5 个冻结 contract hash、Playwright 1/1、零跳过以及全部算法/浏览器 timing 通过，但整体如实保持包体 RED：initial CSS gzip `9567 B` 比基线 `+6 B`，initial JS `559603 B` 比基线 `+1663 B`，initial total `569459 B` 比基线 `+1669 B`；total JS `674554 B` 为基线 `+1.84%`、低于 5% 门限。未更新 baseline、阈值、采样或夹具；此前多轮不一致的 timing 尖峰保留在 `decision.md` 作为环境抖动证据。
-- [ ] 本子任务待独立 commit、生产部署和远程 E2E 后关闭；不混入 `.codegraph`、`.serena` 或 `issues/` 的用户改动。
+- [x] 生产部署：2026-07-24 备份 `/root/cargo_project-backup-20260724-160426`，`TemplateManagerPage-DIIQaHlk.js` chunk 已上线，`http://127.0.0.1/` 返回 200。本子任务关闭；不混入 `.codegraph`、`.serena` 或 `issues/` 的用户改动。
 
 ## 2026-07-23 Phase 3 模板 catalog 控制器
 
