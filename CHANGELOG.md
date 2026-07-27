@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-07-27 Phase 3 收尾 + Phase 4 工作台区域边界 + Phase 6 懒加载（完成）
+
+- [x] Phase 3 收尾：抽取 `CargoImportDialog`，导入映射弹窗的列映射 state、模板选择、保存、`canAutoMap`/`preSelectCol`/`reconcileSelectedTemplateName` 逻辑全部离开 `Workbench`；纯逻辑提取至 `src/lib/importWorkflow.ts`（含 15 项单测）；架构边界测试更新以反映新的页面边界；lint + 全量 `npm test`（81 文件/563 项）+ 构建通过。commit `32adad9`。
+- [x] Phase 4 — `WorkbenchHeader`：顶部导航、用户摘要、admin 快捷键、退出、语言切换、ReleaseNotesButton 抽取至 `src/components/WorkbenchHeader.tsx`。commit `e994e24`。
+- [x] Phase 4 — `PackingSidebar`：422 行侧边栏 aside 抽取至 `src/components/PackingSidebar.tsx`；50+ props；Workbench 行数从 3998 降至约 3097。commit `5dd9264`。
+- [x] Phase 4 — `VisualizationWorkspace`：统计行、2D/3D 视图切换、ContainerScene、ContainerPlan2D、ManualPlacement2D 抽取至 `src/components/VisualizationWorkspace.tsx`。commit `7d741b3`。
+- [x] Phase 4 — `ResultsPanel`：tab 切换、分层/明细/诊断/导出面板抽取至 `src/components/ResultsPanel.tsx`；顺带清理孤儿函数（`layerName`、`diagnosticMessage`、`failureReason` 等移入 ResultsPanel）。commit `d93f450`。
+- [x] Phase 4 类型修复：`RefObject<T|null>` 改为 `Ref<T>`，`cogViewState.boxOpacity` 放宽为 `number | null`，`notifyManualRejected`/`localizeManualIssue` 参数类型对齐。commit `aa6d8ff`。
+- [x] Phase 6 — XLSX 懒加载：`Workbench.tsx` 从静态 `import * as XLSX from 'xlsx'` 改为各导出函数内 `await import('xlsx')`；`exportLoadingSheet` 同步改为动态导入；初始 JS gzip 从 **567 kB → 295 kB**（降低 48%）。commit `e49187d`。
+- [x] 布局修复：`VisualizationWorkspace` section.flex-1 外壳移回 Workbench.tsx，ResultsPanel 恢复正确的同列嵌套，benchmark `2D` 按钮遮挡问题消除。commit `90b8390`。
+- [x] Benchmark baseline 刷新：XLSX 懒加载后重建基线，`initialJS: 291680 B gzip`（vs 原 557940 B），`benchmark` 和 `benchmark:update` 双通过。commit `ca1fc1a`。
+- [x] E2E 118/118，零跳过；lint + 全量 81 文件/563 测试通过；`npm run benchmark` 通过（timings comparable）。
+- [x] 生产部署：2026-07-27 备份 `/root/cargo_project-backup-20260727-122012`，`index-DWXQWDHp.js`（295 kB gzip）+ `xlsx-BnIazKek.js`（独立 chunk）已上线，`http://127.0.0.1/` 返回 200。
+- [ ] Phase 5（ContainerScene 内部拆分）暂缓：待 3D benchmark 稳定后单独启动。
+
+## 2026-07-24 Phase 3 收尾 + Phase 4 工作台区域边界（进行中）
+
+- [x] Phase 3 收尾：抽取 `CargoImportDialog`，导入映射弹窗的列映射 state、模板选择、保存、`canAutoMap`/`preSelectCol`/`reconcileSelectedTemplateName` 逻辑全部离开 `Workbench`；纯逻辑提取至 `src/lib/importWorkflow.ts`（含 15 项单测）；架构边界测试更新以反映新的页面边界；`npm run lint`、全量 `npm test`（81 文件/563 项）、`npm run build` 通过。commit `32adad9`。
+- [x] Phase 4 — `WorkbenchHeader`：顶部导航、用户摘要、admin 快捷键、退出、语言切换、ReleaseNotesButton 抽取至 `src/components/WorkbenchHeader.tsx`；保留所有 `data-testid`；lint + 全量测试 + 构建通过。commit `e994e24`。
+- [x] Phase 4 — `PackingSidebar`：422 行侧边栏 aside（菜单、货物表单、柜型选择、装载规则、货物列表、导入/下载入口）抽取至 `src/components/PackingSidebar.tsx`；50+ props；Workbench 行数从 3998 降至约 3097；lint + 全量测试 + 构建通过。commit `5dd9264`。
+- [ ] Phase 4 — `VisualizationWorkspace`：2D/3D 视图切换、ContainerScene、ContainerPlan2D、ManualPlacement2D、统计数字行正在抽取（进行中）。
+- [ ] Phase 4 — `ResultsPanel`：tab 选择、分层/明细/诊断/导出面板正在抽取（进行中）。
+
 ## 2026-07-23 Phase 3 模板管理页面边界
 
 - [x] 抽取 `TemplateManagerPage`，让导入/导出模板的新建、编辑、删除草稿、样本表头与页面 notice 离开 `Workbench`；远程 catalog 继续由 Workbench 生命周期的 `useTemplateCatalogs` 唯一持有。
