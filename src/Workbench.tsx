@@ -1,11 +1,9 @@
 import { lazy, Suspense, useMemo, useRef, useState, useEffect } from 'react'
 import type { FormEvent, DragEvent as ReactDragEvent } from 'react'
-import * as XLSX from 'xlsx'
 import { CargoImportDialog } from './components/CargoImportDialog'
 import { buildPlaybackSequence, visibleBoxesAt } from './lib/playback'
 import { buildLoadingTaskGroups } from './lib/loadingTaskGroups'
 import { buildLoadingSheetModel } from './lib/loadingSheet'
-import { exportLoadingSheetPdf } from './lib/exportLoadingSheet'
 import { usePlaybackController } from './hooks/usePlaybackController'
 import { usePackingSession } from './hooks/usePackingSession'
 import { useManualPlacementSession } from './hooks/useManualPlacementSession'
@@ -1692,7 +1690,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     setActiveNav('overview')
   }
 
-  const downloadImportTemplate = () => {
+  const downloadImportTemplate = async () => {
+    const XLSX = await import('xlsx')
     const template = locale === 'zh'
       ? {
           filename: '标准空白货物导入模板.xlsx',
@@ -1721,6 +1720,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     }
     let rows: ImportCargoRow[]
     try {
+      const XLSX = await import('xlsx')
       const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
       rows = sheet ? XLSX.utils.sheet_to_json<WorksheetCell[]>(sheet, { header: 1, raw: true }) : []
@@ -1770,7 +1770,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     }
   }
 
-  const exportExcel = () => {
+  const exportExcel = async () => {
+    const XLSX = await import('xlsx')
     const exportTemplate = exportTemplates.find((item) => item.id === selectedExportTemplateId)
     const planRows = exportTemplate && exportTemplate.columns.length > 0
       ? buildExportRowsFromTemplate(detailRows, exportTemplate.columns)
@@ -1791,8 +1792,9 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     XLSX.writeFile(workbook, `${prefix ? `${prefix}-` : ''}packing-plan.xlsx`)
   }
 
-  const exportPlaybackInstructions = () => {
+  const exportPlaybackInstructions = async () => {
     if (!playbackAvailable) return
+    const XLSX = await import('xlsx')
     const rows = playbackSequence.steps.map((entry) => {
       const supportLabel = entry.box.supportType === 'floor'
         ? (locale === 'zh' ? '地面' : 'floor')
@@ -1823,8 +1825,9 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     XLSX.writeFile(workbook, `${prefix ? `${prefix}-` : ''}loading-instructions.xlsx`)
   }
 
-  const exportLoadingSheet = () => {
+  const exportLoadingSheet = async () => {
     if (!loadingStepsAvailable) return
+    const { exportLoadingSheetPdf } = await import('./lib/exportLoadingSheet')
     const model = buildLoadingSheetModel(activeResult, renderingContainer)
     const prefix = filenameSlug(shipmentName)
     const blob = exportLoadingSheetPdf({
@@ -1845,7 +1848,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     )
   }
 
-  const exportReviewChecklistExcel = () => {
+  const exportReviewChecklistExcel = async () => {
+    const XLSX = await import('xlsx')
     const rows = reviewChecklist.items.map((item) => ({
       source: item.source,
       severity: item.severity,
