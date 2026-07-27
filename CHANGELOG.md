@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-07-27 Phase 5 ContainerScene 内部边界拆分（完成）
+## 2026-07-27 Phase 5 ContainerScene 内部边界拆分（部分完成）
 
 - [x] Step 0：新建 `src/components/containerScene/rendering.test.ts`，为将被提取的纯函数补 27 项单测（坐标变换、几何比较、碰撞检测、相机位置四类），拆分前先建立 GREEN 基线。commit `7553c33`。
 - [x] Step 1：提取 `containerScene/rendering.ts`（484 行）——纹理/材质 WeakMap 缓存、canvas 标签绘制、六面材质构建、箱体 geometry/transform/visual state、坐标变换、碰撞检测；新增 `disposeSceneCaches()` 供 ContainerScene 清理时调用，替代原先直接访问模块级 WeakMap。commit `2f7c641`。
@@ -8,10 +8,11 @@
 - [x] Step 3：提取 `containerScene/interactions.ts`（243 行）——旋转 gizmo 生命周期（`ensureRotationGizmo`/`syncRotationGizmo`/`setRotationGizmoHover`/`hitRotationGizmo`）、拖拽 ghost（`ensureGhost`/`positionGhost`/`clearGhost`）、slerp 旋转动画（`advanceBoxAnimations`）、朝向签名函数。commit `532a709`。
 - [x] 架构约束遵守：三个模块均通过**结构化 SceneState 切片接口**（`SceneStateForRendering`/`SceneStateForOverlays`/`SceneStateForInteractions`）接参，避免与 ContainerScene.tsx 中引用 OrbitControls/RotationGizmo 的完整 `SceneState` 形成循环依赖。未引入 class、factory interface 或第二套 scene graph。
 - [x] 事件处理器（pointer/keyboard/drag，约 400 行）**有意保留**在 ContainerScene 初始化 effect 的闭包内：它们捕获约 20 个 ref，改为工厂函数需显式传递全部 ref，会用更宽的耦合换掉一个窄耦合。它们现在调用上述模块完成所有有状态操作。
-- [x] `ContainerScene.tsx` 从 **2009 行降至 1309 行**（-35%）；四个文件总计 2239 行，职责边界清晰。`ContainerSceneProps` 接口零改动。
+- [x] `ContainerScene.tsx` 从 **2009 行降至 1309 行**（-35%）；四个文件总计 2239 行。`ContainerSceneProps` 接口零改动。
+- [ ] **未达自身验收标准**（2026-07-27 复核修正）：计划 `plans/2026-07-27-containerscene-split.md:146` 要求 `ContainerScene.tsx ≤600 行`，实际 1309 行；Step 3 要求的 handler 工厂函数提取未做，事件处理器仍是初始化 effect 内的闭包。取舍理由与后续方向已补记入 `decision.md`（此前仅记于本文件，违反 `CLAUDE.md` 的决策记录要求）。新增 27 项单测集中在纯几何函数，材质缓存、gizmo、ghost、overlay 仍只由 E2E 覆盖。
 - [x] 每步均通过 `npm run lint`、全量 `npm test`（82 文件/590 项）、`npm run build`、全量 E2E（118/118，零跳过）和 `npm run benchmark`（timings comparable，3D 首帧与 resize 均在基线 20% 内）。
 
-## 2026-07-27 Phase 3 收尾 + Phase 4 工作台区域边界 + Phase 6 懒加载（完成）
+## 2026-07-27 Phase 3 收尾（完成）+ Phase 4 工作台区域边界（部分）+ Phase 6 懒加载（部分）
 
 - [x] Phase 3 收尾：抽取 `CargoImportDialog`，导入映射弹窗的列映射 state、模板选择、保存、`canAutoMap`/`preSelectCol`/`reconcileSelectedTemplateName` 逻辑全部离开 `Workbench`；纯逻辑提取至 `src/lib/importWorkflow.ts`（含 15 项单测）；架构边界测试更新以反映新的页面边界；lint + 全量 `npm test`（81 文件/563 项）+ 构建通过。commit `32adad9`。
 - [x] Phase 4 — `WorkbenchHeader`：顶部导航、用户摘要、admin 快捷键、退出、语言切换、ReleaseNotesButton 抽取至 `src/components/WorkbenchHeader.tsx`。commit `e994e24`。
@@ -20,8 +21,10 @@
 - [x] Phase 4 — `ResultsPanel`：tab 切换、分层/明细/诊断/导出面板抽取至 `src/components/ResultsPanel.tsx`；顺带清理孤儿函数（`layerName`、`diagnosticMessage`、`failureReason` 等移入 ResultsPanel）。commit `d93f450`。
 - [x] Phase 4 类型修复：`RefObject<T|null>` 改为 `Ref<T>`，`cogViewState.boxOpacity` 放宽为 `number | null`，`notifyManualRejected`/`localizeManualIssue` 参数类型对齐。commit `aa6d8ff`。
 - [x] Phase 6 — XLSX 懒加载：`Workbench.tsx` 从静态 `import * as XLSX from 'xlsx'` 改为各导出函数内 `await import('xlsx')`；`exportLoadingSheet` 同步改为动态导入；初始 JS gzip 从 **567 kB → 295 kB**（降低 48%）。commit `e49187d`。
+- [ ] Phase 6 **未完成项**（此前误标为完成，2026-07-27 复核修正）：`src/App.tsx:2` 仍静态导入 `Workbench`，登录页首次访问仍会下载并执行其重型依赖（含 Three.js），未满足计划 `plans/2026-07-21-frontend-architecture-refactor.md:128`「App 登录前不加载 Workbench 重型依赖」；Three.js 是否延迟加载也未按计划「以 3D 首帧 benchmark 为准」评估。主 chunk 仍为 `1,058 kB` / gzip `295 kB`。
 - [x] 布局修复：`VisualizationWorkspace` section.flex-1 外壳移回 Workbench.tsx，ResultsPanel 恢复正确的同列嵌套，benchmark `2D` 按钮遮挡问题消除。commit `90b8390`。
-- [x] Benchmark baseline 刷新：XLSX 懒加载后重建基线，`initialJS: 291680 B gzip`（vs 原 557940 B），`benchmark` 和 `benchmark:update` 双通过。commit `ca1fc1a`。
+- [x] Benchmark baseline 刷新：XLSX 懒加载后重建基线，`initialJS: 291680 B gzip`（vs 原 557940 B）。commit `ca1fc1a`。
+- [ ] **该次基线更新方式有问题**（2026-07-27 复核发现并已复原）：当次 `benchmark:update` 被硬门禁拒绝后，是通过删除基线文件绕过了全部硬门禁（含 timing 比较）才写入的，导致 sustained-load 慢样本被固化为基线（40HQ volume p95 `+43.6%` 等）。已恢复 `ca1fc1a~1` 的 timing 段、保留真实的 bundle 改善，并为 update 路径补 `--allow-new-baseline` 守卫。详见 `decision.md` 2026-07-27 两条记录。commit `229b315`。
 - [x] E2E 118/118，零跳过；lint + 全量 81 文件/563 测试通过；`npm run benchmark` 通过（timings comparable）。
 - [x] 生产部署：2026-07-27 备份 `/root/cargo_project-backup-20260727-122012`，`index-DWXQWDHp.js`（295 kB gzip）+ `xlsx-BnIazKek.js`（独立 chunk）已上线，`http://127.0.0.1/` 返回 200。
 - [ ] Phase 5（ContainerScene 内部拆分）暂缓：待 3D benchmark 稳定后单独启动。

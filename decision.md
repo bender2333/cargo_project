@@ -1,5 +1,13 @@
 # Decision Log
 
+## 2026-07-27 Phase 5 事件处理器保留在闭包内、ContainerScene 未达 ≤600 行
+
+- 背景：Phase 5 计划 `plans/2026-07-27-containerscene-split.md` Step 3 要求把 pointer/keyboard/drag 事件处理器改为 `makeXxxHandler(deps)` 工厂函数，并把 `ContainerScene.tsx` 控制在 `≤600 行`（同文件 `:146` 验收标准）。实际完成后为 `1309 行`，事件处理器仍是初始化 effect 内的闭包。此偏离当时只写入 CHANGELOG，未按 `CLAUDE.md`「需要暂缓、降级或改变某项要求必须写入 decision.md」记录，属流程遗漏，现补记。
+- 未达标的两块构成：约 400 行事件处理器闭包（捕获约 20 个 ref），以及约 700 行 Three.js 初始化 effect（场景/相机/灯光/地板/网格/外壳线框创建 + ResizeObserver + render loop）。
+- 选项：A. 按计划把 handler 全部改为工厂函数，达成 ≤600 行；B. 保留闭包，接受行数超标；C. 另外提取 `sceneSetup.ts` 承载静态几何体创建，压缩初始化 effect。
+- 决策：本轮选择 B。事件处理器捕获约 20 个 ref，改工厂函数需把全部 ref 通过 deps 显式传递，等于用更宽的接口耦合替换当前的闭包耦合，与计划 `:25`「每个新边界必须消除一种职责混合」的意图相悖；且该改动风险集中在手动拖拽/旋转这条只有 E2E 覆盖的路径上。已提取的三个模块（rendering/overlays/interactions）承载了全部有状态操作，handler 只做事件解析与调用。
+- 影响：`ContainerScene.tsx` 保持 1309 行，验收标准 `≤600 行` **未达成**，不应记为 Phase 5 完成。C 是后续可行的下一刀（静态几何体创建不依赖 ref，边界相对干净），但需独立评估与门禁。另：本轮新增的 27 项单测集中在纯几何/数学函数，`getCachedBoxMaterials` 的缓存命中/失效、gizmo 生命周期、ghost 状态转换、overlay 重建仍只由 E2E 覆盖。
+
 ## 2026-07-27 benchmark 基线绕过硬门禁的复原与守卫
 
 - 背景：`ca1fc1a` 更新 benchmark 基线时，`npm run benchmark:update` 被硬门禁以 `initial CSS gzip increased` 拒绝。当时依次尝试手改 bundle 字段、清空 bundle 段均被拒，最后**删除了整个基线文件**——`scripts/frontendBenchmark.mjs:401` 的 `existsSync(baselinePath)` 返回 false 后 `gateBenchmarkUpdate` 被整体跳过，当次报告直接落盘成新基线。该次运行发生在连续数小时 E2E + benchmark 之后，机器处于本文档 2026-07-21 已记录过的 sustained-load 状态，于是慢样本被固化：`vietnam-20gp-volume` median `+21.9%`、`vietnam-40hq-quantity` median/p95 `+22.9% / +28.4%`、`vietnam-40hq-volume` median/p95 `+27.0% / +43.6%`，浏览器侧 `loginClickToInteractiveMs` median 亦 `+26.4%`。绕过的不只是触发拒绝的 CSS 一项，而是包含 timing 比较在内的全部硬门禁。
