@@ -18,20 +18,11 @@ import * as THREE from 'three'
 // './rendering' — that is the only line that will need updating.
 // ---------------------------------------------------------------------------
 import {
-  // coordinate helpers
-  worldCenterForBox,
-  worldPointFromMm,
-  boxOrientationQuaternion,
-  boxGeometryForPlaced,
-  sameBoxGeometry,
-  // collision / geometry helpers
-  isOutOfBounds,
-  rectsOverlap,
-  overlapAreaXY,
-  // camera
+  worldCenterForBox, worldPointFromMm, boxOrientationQuaternion,
+  boxGeometryForPlaced, sameBoxGeometry,
+  isOutOfBounds, rectsOverlap, overlapAreaXY,
   cameraPositionForMode,
-  // @ts-expect-error — exported only for testing; removed after Step 1
-} from '../ContainerScene'
+} from './rendering'
 import type { PlacedBox } from '../../types'
 
 // ---------------------------------------------------------------------------
