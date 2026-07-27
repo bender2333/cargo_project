@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ImportMappingForm } from './ImportMappingForm'
 import type { ImportMappingValue } from './ImportMappingForm'
 import type { CargoItem, ImportTemplate, ImportTemplateDefaults, ImportTemplateUnits, Locale } from '../types'
@@ -15,6 +15,7 @@ import {
   buildImportMessages,
 } from '../lib/importWorkflow'
 import type { BuildImportMessagesLabels } from '../lib/importWorkflow'
+import { reconcileSelectedTemplateName, shouldClearTemplateReference } from '../hooks/useTemplateCatalogs'
 
 type DimensionUnit = 'auto' | 'mm' | 'cm'
 
@@ -104,6 +105,29 @@ export function CargoImportDialog({
   const [templateDefaults, setTemplateDefaults] = useState<ImportTemplateDefaults>({ quantity: 1, canRotate: true, stackable: true })
   const [templateSaveNotice, setTemplateSaveNotice] = useState('')
   const [missingImportColumns, setMissingImportColumns] = useState<string[]>([])
+
+  // Reconcile the selected template against the shared catalog: an authoritative
+  // rename syncs the canonical name (unless the user has typed their own "save
+  // as" name), and a deletion clears the now-dangling reference. A load failure
+  // must not be mistaken for a deletion, so references survive it untouched.
+  useEffect(() => {
+    if (!selectedImportTemplateId) {
+      selectedImportTemplateNameRef.current = null
+      return
+    }
+    if (importTemplateLoadFailed) return
+    if (shouldClearTemplateReference(selectedImportTemplateId, importTemplates, importTemplateLoadFailed)) {
+      setSelectedImportTemplateId('')
+      setTemplateName('')
+      selectedImportTemplateNameRef.current = null
+      return
+    }
+    const selectedTemplate = importTemplates.find((template) => template.id === selectedImportTemplateId)
+    if (!selectedTemplate) return
+    const previousTemplate = selectedImportTemplateNameRef.current
+    setTemplateName((current) => reconcileSelectedTemplateName(current, previousTemplate, selectedTemplate))
+    selectedImportTemplateNameRef.current = { id: selectedTemplate.id, name: selectedTemplate.name }
+  }, [importTemplateLoadFailed, importTemplates, selectedImportTemplateId])
 
   const importMappingValue: ImportMappingValue = {
     mapping: customMapping,
