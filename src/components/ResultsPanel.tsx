@@ -1,4 +1,4 @@
-import type { RefObject } from 'react'
+import type { Ref } from 'react'
 import { PlaybackPanel } from './PlaybackPanel'
 import { LoadingStepsPanel } from './LoadingStepsPanel'
 import { CenterOfGravityPanel } from './CenterOfGravityPanel'
@@ -160,7 +160,7 @@ type ResultsPanelTranslations = {
 }
 
 export type ResultsPanelProps = {
-  reportRef: RefObject<HTMLElement | null>
+  reportRef: Ref<HTMLElement>
   workspaceMaximized: boolean
   locale: Locale
   t: ResultsPanelTranslations

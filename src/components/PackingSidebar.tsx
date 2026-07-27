@@ -1,4 +1,4 @@
-import type { FormEvent, RefObject, Dispatch, SetStateAction } from 'react'
+import type { FormEvent, Ref, Dispatch, SetStateAction } from 'react'
 import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingResult } from '../types'
 import type { PlacementSettings } from '../lib/placementSettings'
 import { DEFAULT_PLACEMENT_SETTINGS } from '../lib/placementSettings'
@@ -100,7 +100,7 @@ export type PackingSidebarProps = {
   placementSettings: PlacementSettings
   setPlacementSettings: Dispatch<SetStateAction<PlacementSettings>>
   // container
-  containerRef: RefObject<HTMLElement | null>
+  containerRef: Ref<HTMLElement>
   containerCollapsed: boolean
   setContainerCollapsed: Dispatch<SetStateAction<boolean>>
   containerSummary: string
@@ -113,7 +113,7 @@ export type PackingSidebarProps = {
   updateContainerNumber: (field: 'length' | 'width' | 'height' | 'maxWeight' | 'doorGap' | 'topGap' | 'sideGap', value: string) => void
   locale: Locale
   // cargo form
-  cargoRef: RefObject<HTMLFormElement | null>
+  cargoRef: Ref<HTMLFormElement>
   form: CargoForm
   setForm: Dispatch<SetStateAction<CargoForm>>
   addCargo: (event: FormEvent) => void

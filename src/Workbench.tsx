@@ -31,6 +31,8 @@ import {
 } from './lib/manualPlacement'
 import type { ManualRotationDirection, OrientationKey, ValidationIssue } from './lib/manualPlacement'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from './data/containers'
+import type { SceneViewMode } from './components/ContainerScene'
+import type { PlanViewMode } from './components/ContainerPlan2D'
 import { buildExportPlanRows, buildExportRowsFromTemplate } from './lib/exportPlan'
 import { createClientId } from './lib/clientId'
 import { parseCargoRows } from './lib/importCargo'
@@ -2196,7 +2198,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             rotationNotice={rotationNotice}
             setRotationNotice={setRotationNotice}
             manualIssues={manualIssues}
-            localizeManualIssue={localizeManualIssue}
+            localizeManualIssue={(issue) => localizeManualIssue(issue, t)}
             manualPool={manualPool}
             handleManualPoolDragStart={handleManualPoolDragStart}
             handleManualPoolDragEnd={handleManualPoolDragEnd}

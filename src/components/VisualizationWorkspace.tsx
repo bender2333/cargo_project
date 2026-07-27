@@ -1,4 +1,4 @@
-import type { RefObject, DragEvent as ReactDragEvent } from 'react'
+import type { Ref, DragEvent as ReactDragEvent } from 'react'
 import { ContainerScene } from './ContainerScene'
 import type { SceneViewMode } from './ContainerScene'
 import { ContainerPlan2D } from './ContainerPlan2D'
@@ -79,7 +79,7 @@ type TranslationKeys = {
 }
 
 export type VisualizationWorkspaceProps = {
-  workspaceRef: RefObject<HTMLElement | null>
+  workspaceRef: Ref<HTMLElement>
   workspaceMaximized: boolean
   setWorkspaceMaximized: (fn: (current: boolean) => boolean) => void
   activeResult: PackingResult
@@ -107,7 +107,7 @@ export type VisualizationWorkspaceProps = {
   rotationNotice: string
   setRotationNotice: (notice: string) => void
   manualIssues: ValidationIssue[]
-  localizeManualIssue: (issue: ValidationIssue, t: TranslationKeys) => string
+  localizeManualIssue: (issue: ValidationIssue) => string
   manualPool: PoolEntry[]
   handleManualPoolDragStart: (event: ReactDragEvent<HTMLDivElement>, cargoId: string) => void
   handleManualPoolDragEnd: () => void
@@ -135,7 +135,7 @@ export type VisualizationWorkspaceProps = {
     boxId?: string,
     cargoId?: string,
     issues?: ValidationIssue[],
-    reasonCode?: string
+    reasonCode?: ManualOperationNotice['reasonCode']
   ) => void
   handleManualRotateBox: (boxId: string, direction?: ManualRotationDirection) => void
   clearanceAnnotations: ClearanceAnnotation[]
@@ -145,7 +145,7 @@ export type VisualizationWorkspaceProps = {
   visibleAutoBoxes: PlacedBox[]
   activeLabelId: string
   activeLayerId: string
-  cogViewState: { boxOpacity: number; showOverlay: boolean }
+  cogViewState: { boxOpacity: number | null; showOverlay: boolean }
   cogOverlay: CogOverlay | null
   selectedBoxId: string | null
   setSelectedBoxId: (id: string | null) => void
@@ -382,7 +382,7 @@ export function VisualizationWorkspace({
                   <div className="mb-1 font-semibold">{t.manualIssues} ({manualIssues.length})</div>
                   <ul className="list-inside list-disc space-y-0.5">
                     {manualIssues.slice(0, 10).map((issue, index) => (
-                      <li key={`${issue.boxId}-${issue.type}-${index}`}>{localizeManualIssue(issue, t)}</li>
+                      <li key={`${issue.boxId}-${issue.type}-${index}`}>{localizeManualIssue(issue)}</li>
                     ))}
                   </ul>
                 </div>
