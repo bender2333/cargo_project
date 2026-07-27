@@ -10,19 +10,12 @@ import { applyManualPlacementSnap } from '../lib/manualPlacementSnap'
 import type { CogOverlay } from '../lib/cogVisual'
 import { DEFAULT_PLACEMENT_SETTINGS, type PlacementSettings } from '../lib/placementSettings'
 import { manualMoveCommitArgs } from '../lib/manualMoveCommit'
-import { orientationAxesOf } from '../lib/orientationTransform'
 import { boxVisualState } from '../lib/boxVisualState'
-import {
-  buildRotationGizmo,
-  disposeRotationGizmo,
-  rotationGizmoAnchorOffsetY,
-  setRotationGizmoHandleHovered,
-  type RotationGizmo,
-} from '../lib/rotationGizmo'
+import { disposeRotationGizmo, type RotationGizmo } from '../lib/rotationGizmo'
 import type { ClearanceAnnotation } from '../lib/measurement'
 import {
   syncLabelFaceSampleAttribute, applyBoxVisualState, getCachedBoxMaterials,
-  worldCenterForBox, boxOrientationQuaternion,
+  boxOrientationQuaternion,
   boxGeometryForPlaced, sameBoxGeometry, applyBoxTransform,
   cameraPositionForMode, rectsOverlap, isOutOfBounds, overlapAreaXY,
   disposeSceneCaches,
@@ -31,6 +24,11 @@ import {
 import {
   clearMeasurementGroup, syncClearanceAnnotations, updateHoverHighlight,
 } from './containerScene/overlays'
+import {
+  selectedAxesAttribute, orientationAnimationSignature,
+  syncRotationGizmo, setRotationGizmoHover, hitRotationGizmo,
+  advanceBoxAnimations, ensureGhost, positionGhost, clearGhost,
+} from './containerScene/interactions'
 
 export type SceneViewMode = 'iso' | 'top' | 'front' | 'side'
 
@@ -104,152 +102,6 @@ type SceneState = {
   width: number
   height: number
   viewMode: SceneViewMode
-}
-
-const GHOST_VALID_COLOR = 0x22c55e
-const GHOST_INVALID_COLOR = 0xef4444
-const ROTATION_ANIMATION_MS = 200
-
-function selectedAxesAttribute(box: PlacedBox | null) {
-  if (!box) return ''
-  const axes = orientationAxesOf(box)
-  return `X:${axes.x} Y:${axes.y} Z:${axes.z}`
-}
-
-function orientationAnimationSignature(box: PlacedBox) {
-  return `${box.orientationKey}:${selectedAxesAttribute(box)}`
-}
-
-function rotationGizmoSignature(box: PlacedBox) {
-  return `${box.length}:${box.width}:${box.height}`
-}
-
-function ensureRotationGizmo(state: SceneState, box: PlacedBox) {
-  const signature = rotationGizmoSignature(box)
-  if (state.rotationGizmo && state.rotationGizmoBoxSignature === signature) {
-    return state.rotationGizmo
-  }
-  if (state.rotationGizmo) {
-    state.scene.remove(state.rotationGizmo.group)
-    disposeRotationGizmo(state.rotationGizmo)
-  }
-  const gizmo = buildRotationGizmo(
-    { length: box.length, width: box.width, height: box.height },
-    state.scale,
-  )
-  gizmo.group.visible = false
-  state.scene.add(gizmo.group)
-  state.rotationGizmo = gizmo
-  state.rotationGizmoBoxSignature = signature
-  state.rotationGizmoHovered = null
-  return gizmo
-}
-
-function syncRotationGizmo(state: SceneState, boxId: string | null) {
-  const entry = boxId ? state.meshEntries.get(boxId) : null
-  if (!state.rotationGizmoVisible || !entry) {
-    if (state.rotationGizmo) state.rotationGizmo.group.visible = false
-    return
-  }
-  if (entry.box.canRotate === false) {
-    if (state.rotationGizmo) state.rotationGizmo.group.visible = false
-    return
-  }
-  const gizmo = ensureRotationGizmo(state, entry.box)
-  const center = worldCenterForBox(entry.box, state.scale, state.length, state.width)
-  center.y = entry.box.z * state.scale + rotationGizmoAnchorOffsetY(entry.box, state.scale, gizmo.radius)
-  gizmo.group.position.copy(center)
-  gizmo.group.rotation.set(0, 0, 0)
-  gizmo.group.visible = true
-}
-
-function setRotationGizmoHover(state: SceneState, direction: ManualRotationDirection | null) {
-  if (state.rotationGizmoHovered === direction) return
-  state.rotationGizmoHovered = direction
-  if (!state.rotationGizmo) return
-  for (const handle of state.rotationGizmo.handles) {
-    setRotationGizmoHandleHovered(handle, handle.direction === direction)
-  }
-}
-
-function hitRotationGizmo(state: SceneState, raycaster: THREE.Raycaster): ManualRotationDirection | null {
-  if (!state.rotationGizmoVisible || !state.rotationGizmo) return null
-  const hit = raycaster.intersectObjects(state.rotationGizmo.pickables, false)[0]
-  const direction = hit?.object.userData.direction
-  if (direction === 'left' || direction === 'right' || direction === 'up' || direction === 'down') {
-    return direction
-  }
-  return null
-}
-
-function advanceBoxAnimations(state: SceneState, now: number) {
-  for (const entry of state.meshEntries.values()) {
-    if (!entry.animFrom || !entry.animTo || entry.animStart === undefined) continue
-    const progress = Math.min(1, (now - entry.animStart) / ROTATION_ANIMATION_MS)
-    const eased = 1 - Math.pow(1 - progress, 3)
-    const next = entry.animFrom.clone().slerp(entry.animTo, eased)
-    entry.mesh.quaternion.copy(next)
-    entry.edges.quaternion.copy(next)
-    if (progress >= 1) {
-      entry.mesh.quaternion.copy(entry.animTo)
-      entry.edges.quaternion.copy(entry.animTo)
-      entry.animFrom = undefined
-      entry.animTo = undefined
-      entry.animStart = undefined
-    }
-  }
-}
-
-function ensureGhost(state: SceneState, box: PlacedBox, scale: number, length: number, width: number) {
-  if (!state.ghost) {
-    const geometry = boxGeometryForPlaced(box, scale)
-    const material = new THREE.MeshBasicMaterial({
-      color: GHOST_VALID_COLOR,
-      transparent: true,
-      opacity: 0.18,
-      depthWrite: false,
-    })
-    const mesh = new THREE.Mesh(geometry, material)
-    const edges = new THREE.LineSegments(
-      new THREE.EdgesGeometry(geometry),
-      new THREE.LineBasicMaterial({ color: GHOST_VALID_COLOR }),
-    )
-    state.scene.add(mesh)
-    state.scene.add(edges)
-    state.ghost = { mesh, edges }
-  } else {
-    if (!sameBoxGeometry(box, state.ghost.mesh.geometry, scale)) {
-      state.ghost.mesh.geometry.dispose()
-      state.ghost.edges.geometry.dispose()
-      const geometry = boxGeometryForPlaced(box, scale)
-      state.ghost.mesh.geometry = geometry
-      state.ghost.edges.geometry = new THREE.EdgesGeometry(geometry)
-    }
-    state.ghost.mesh.visible = true
-    state.ghost.edges.visible = true
-  }
-  void length
-  void width
-}
-
-function positionGhost(state: SceneState, x: number, y: number, z: number, box: PlacedBox, invalid: boolean, scale: number, length: number, width: number) {
-  if (!state.ghost) return
-  const ghostBox = { ...box, x, y, z }
-  const center = worldCenterForBox(ghostBox, scale, length, width)
-  const quaternion = boxOrientationQuaternion(ghostBox)
-  state.ghost.mesh.position.copy(center)
-  state.ghost.mesh.quaternion.copy(quaternion)
-  state.ghost.edges.position.copy(center)
-  state.ghost.edges.quaternion.copy(quaternion)
-  const color = invalid ? GHOST_INVALID_COLOR : GHOST_VALID_COLOR
-  ;(state.ghost.mesh.material as THREE.MeshBasicMaterial).color.setHex(color)
-  ;(state.ghost.edges.material as THREE.LineBasicMaterial).color.setHex(color)
-}
-
-function clearGhost(state: SceneState) {
-  if (!state.ghost) return
-  state.ghost.mesh.visible = false
-  state.ghost.edges.visible = false
 }
 
 export function ContainerScene({
