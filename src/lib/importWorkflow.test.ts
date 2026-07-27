@@ -11,6 +11,7 @@ import {
 } from './importWorkflow'
 import type { ImportTemplate } from '../types'
 import type { ImportMappingValue } from '../components/ImportMappingForm'
+import { fields } from './importCargo'
 
 describe('canAutoMap', () => {
   it('returns false for array row', () => {
@@ -53,6 +54,62 @@ describe('preSelectCol', () => {
   it('returns empty string when no match', () => {
     const columns = ['col1', 'col2']
     expect(preSelectCol('length', columns)).toBe('')
+  })
+
+  // Regression: these two aliases were dropped when preSelectCol was hand-copied
+  // out of importCargo, silently losing the max-stack-layers and ground-only
+  // rules for workbooks that fall back to manual mapping.
+  it('selects max stack layers by traditional-Chinese header 堆疊層數', () => {
+    expect(preSelectCol('maxStackLayers', ['标签', '堆疊層數', '重量'])).toBe('堆疊層數')
+  })
+
+  it('selects ground only by 不可堆叠在上 header', () => {
+    expect(preSelectCol('groundOnly', ['标签', '不可堆叠在上', '重量'])).toBe('不可堆叠在上')
+  })
+
+  // Structural guard against the two lists drifting again.
+  //
+  // Contract: for every field below, manual-mapping pre-selection must recognise
+  // every alias that auto-mapping accepts — otherwise a workbook that falls back
+  // to manual mapping silently loses that field.
+  //
+  // KNOWN_GAPS records aliases that preSelectCol has *never* recognised (verified
+  // against the pre-extraction implementation). They are pre-existing product
+  // gaps, not refactor regressions, so they are documented here rather than
+  // silently widened. Closing them changes which column gets pre-selected for
+  // existing users' workbooks and needs its own decision.
+  const KNOWN_GAPS: Record<string, string[]> = {
+    label: ['標籤', '托盤', '代號'],
+    name: ['名稱', '貨物名稱'],
+    // preSelectCol has no candidates at all for these three fields.
+    color: [...fields.color],
+    canRotate: [...fields.canRotate],
+    stackable: [...fields.stackable],
+  }
+
+  it.each([
+    ['label', 'label'],
+    ['name', 'name'],
+    ['weight', 'weight'],
+    ['quantity', 'quantity'],
+    ['color', 'color'],
+    ['canRotate', 'canRotate'],
+    ['stackable', 'stackable'],
+    ['maxStackLayers', 'maxStackLayers'],
+    ['groundOnly', 'groundOnly'],
+    ['length', 'lengthMm'],
+    ['width', 'widthMm'],
+    ['height', 'heightMm'],
+  ])('recognises every auto-map alias for %s (minus documented gaps)', (workflowField, canonicalField) => {
+    const canonicalAliases = fields[canonicalField as keyof typeof fields]
+    const allowed = new Set(KNOWN_GAPS[workflowField] ?? [])
+    const unexpectedGaps = canonicalAliases.filter(
+      (alias) => preSelectCol(workflowField, [alias]) !== alias && !allowed.has(alias),
+    )
+    expect(
+      unexpectedGaps,
+      `preSelectCol('${workflowField}') stopped recognising aliases that importCargo accepts`,
+    ).toEqual([])
   })
 })
 

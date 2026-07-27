@@ -68,8 +68,8 @@ export function preSelectCol(fieldKey: string, columns: string[]): string {
     quantity: ['quantity', '数量', '數量', '箱数', '箱數', '托数', '托數', 'carton_count'],
     name: ['name', '名称', '品名', '货物名称', 'description'],
     label: ['label', '标签', '代码', '代号', '托盘'],
-    maxStackLayers: ['maxstacklayers', 'max stack layers', '最大堆叠层数', '最大堆疊層數', '堆叠层数'],
-    groundOnly: ['groundonly', 'ground only', '必须落地', '落地', '不可上托'],
+    maxStackLayers: ['maxstacklayers', 'max stack layers', '最大堆叠层数', '最大堆疊層數', '堆叠层数', '堆疊層數'],
+    groundOnly: ['groundonly', 'ground only', '必须落地', '落地', '不可上托', '不可堆叠在上'],
   }
   const list = candidates[fieldKey] ?? []
   return columns.find(col => list.some(cand => col.toLowerCase().includes(cand.toLowerCase()))) ?? ''

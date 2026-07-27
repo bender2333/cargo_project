@@ -82,7 +82,12 @@ export function buildTemplateImportConfig(template: TemplateImportSource): Impor
 
 const defaultColors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
 
-const fields = {
+/**
+ * Canonical header aliases for auto-mapping. Exported so the manual-mapping
+ * column pre-selection (lib/importWorkflow.preSelectCol) can be asserted against
+ * this single source of truth — the two lists drifted once already.
+ */
+export const fields = {
   label: ['label', 'Label', '标签', '標籤', '托盘', '托盤', '代码', '代號'],
   name: ['name', 'Name', 'description', 'Description', '名称', '名稱', '货物名称', '貨物名稱', '品名', '产品名称', '產品名稱'],
   lengthMm: ['length', 'Length', 'Length mm', 'length mm', '长', '長', '长mm', '長mm', '长度', '長度', 'outer_length_mm'],
