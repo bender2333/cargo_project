@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useRef, useState, useEffect } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
 import type { FormEvent, DragEvent as ReactDragEvent } from 'react'
 import { CargoImportDialog } from './components/CargoImportDialog'
 import { buildPlaybackSequence, visibleBoxesAt } from './lib/playback'
@@ -63,7 +63,7 @@ import { ResultsPanel } from './components/ResultsPanel'
 
 type CustomContainerDialogComponent = typeof import('./components/CustomContainerDialog')['CustomContainerDialog']
 type TemplateManagerPageComponent = typeof import('./components/TemplateManagerPage')['TemplateManagerPage']
-const UserManagement = lazy(() => import('./components/UserManagement').then((module) => ({ default: module.UserManagement })))
+type UserManagementComponent = typeof import('./components/UserManagement')['UserManagement']
 const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
 type WorksheetCell = string | number | boolean | null | undefined
 
@@ -859,6 +859,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [activeNav, setActiveNav] = useState<NavTarget>('overview')
   const [TemplateManagerPage, setTemplateManagerPage] = useState<TemplateManagerPageComponent | null>(null)
   const [templateManagerPageLoadFailed, setTemplateManagerPageLoadFailed] = useState(false)
+  const [UserManagement, setUserManagement] = useState<UserManagementComponent | null>(null)
+  const [userManagementLoadFailed, setUserManagementLoadFailed] = useState(false)
   const [placementSettings, setPlacementSettings] = useState<PlacementSettings>(() => loadPlacementSettings(currentUser?.id ?? null))
   const {
     state: packingSession,
@@ -1032,6 +1034,26 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
     return () => window.clearTimeout(requestTimer)
   }, [])
+
+  // Controlled dynamic import: a failed chunk (typically an old session asking for
+  // a hash that no longer exists after a deploy) must degrade to a recoverable
+  // in-page state, not reject into the root and blank the whole workbench.
+  useEffect(() => {
+    if (activeNav !== 'users' || UserManagement) return
+    let active = true
+    setUserManagementLoadFailed(false)
+    void import('./components/UserManagement')
+      .then((module) => {
+        if (active) setUserManagement(() => module.UserManagement)
+      })
+      .catch((err) => {
+        console.error(err)
+        if (active) setUserManagementLoadFailed(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [activeNav, UserManagement])
 
   useEffect(() => {
     if (activeNav !== 'template-manager' || TemplateManagerPage) return
@@ -2036,9 +2058,27 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
         {activeNav === 'users' && currentUser?.role === 'admin' ? (
           <section className="archive-card overflow-hidden p-[18px]" data-testid="users-page">
-            <Suspense fallback={<div className="py-12 text-center text-sm text-slate-500" role="status">{locale === 'zh' ? '用户管理加载中...' : 'Loading user management...'}</div>}>
+            {UserManagement ? (
               <UserManagement onBack={() => activateNav('overview')} />
-            </Suspense>
+            ) : userManagementLoadFailed ? (
+              <div className="py-10 text-center text-sm text-slate-500">
+                <p className="font-semibold text-red-700" data-testid="user-management-load-error">
+                  {locale === 'zh' ? '用户管理加载失败' : 'Failed to load user management'}
+                </p>
+                <div className="mt-4 flex justify-center gap-2">
+                  <button className="archive-button" type="button" onClick={() => window.location.reload()}>
+                    {locale === 'zh' ? '重新加载页面' : 'Reload page'}
+                  </button>
+                  <button className="archive-button secondary" type="button" onClick={() => activateNav('overview')}>
+                    {locale === 'zh' ? '关闭' : 'Close'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="py-12 text-center text-sm text-slate-500" role="status">
+                {locale === 'zh' ? '用户管理加载中...' : 'Loading user management...'}
+              </div>
+            )}
           </section>
         ) : activeNav === 'history' ? (
           <HistoryPage

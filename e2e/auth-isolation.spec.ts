@@ -1083,6 +1083,34 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await expect(page.getByTestId('template-manager-list')).toBeVisible()
   })
 
+  test('keeps the workbench available when the user management chunk fails', async ({ page }) => {
+    const modulePattern = /\/(?:src\/components\/UserManagement\.tsx|assets\/UserManagement-[^/]+\.js)(?:\?.*)?$/
+    await page.route(modulePattern, (route) => route.abort())
+
+    await page.goto('/')
+    await page.fill('#username', 'admin')
+    await page.fill('#password', 'admin123')
+    await page.click('button[type="submit"]')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+
+    // A rejected chunk must surface an in-page failure state; before the fix it
+    // rejected into the root and blanked the entire workbench.
+    await page.getByTestId('nav-users').click()
+    await expect(page.getByTestId('user-management-load-error')).toHaveText('用户管理加载失败')
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+
+    await page.getByRole('button', { name: '关闭', exact: true }).click()
+    await expect(page.getByTestId('visual-workspace')).toBeVisible()
+    await page.getByTestId('nav-users').click()
+    await expect(page.getByTestId('user-management-load-error')).toBeVisible()
+
+    await page.unroute(modulePattern)
+    await page.getByRole('button', { name: '重新加载页面' }).click()
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+    await page.getByTestId('nav-users').click()
+    await expect(page.getByTestId('users-page')).toBeVisible()
+  })
+
   test('registers and logs in a new user', async ({ page }) => {
     const user = `u_reg_${Math.random().toString(36).substring(7)}`
     const initialReadPaths = [
