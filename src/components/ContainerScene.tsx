@@ -491,6 +491,17 @@ function overlapAreaXY(
   return xOverlap * yOverlap
 }
 
+// @vitest-export — temporary exports consumed by containerScene/rendering.test.ts
+// These will be removed when the functions move to containerScene/rendering.ts in Phase 5 Step 1.
+/* eslint-disable react-refresh/only-export-components */
+export {
+  worldCenterForBox, worldPointFromMm, boxOrientationQuaternion,
+  boxGeometryForPlaced, sameBoxGeometry,
+  isOutOfBounds, rectsOverlap, overlapAreaXY,
+  cameraPositionForMode,
+}
+/* eslint-enable react-refresh/only-export-components */
+
 const GHOST_VALID_COLOR = 0x22c55e
 const GHOST_INVALID_COLOR = 0xef4444
 const HOVER_HIGHLIGHT_COLOR = 0xf59e0b
