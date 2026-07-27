@@ -359,6 +359,7 @@ async function measureAlgorithm() {
 
 async function main() {
   const update = process.argv.includes('--update')
+  const allowNewBaseline = process.argv.includes('--allow-new-baseline')
   mkdirSync(resultDir, { recursive: true })
   run('npm run build')
   const algorithm = await measureAlgorithm()
@@ -403,6 +404,17 @@ async function main() {
       if (hardGate.failures.length > 0) {
         throw new Error(`Frontend benchmark baseline update rejected by hard gates:\n- ${hardGate.failures.join('\n- ')}`)
       }
+    } else if (!allowNewBaseline) {
+      // Deleting the baseline used to be an unguarded way around every hard gate,
+      // including the timing comparison. Creating one from scratch is a deliberate
+      // act and must be stated explicitly.
+      throw new Error(
+        `Missing benchmark baseline: ${baselinePath}\n`
+        + 'Refusing to create one implicitly — a missing baseline bypasses every hard gate '
+        + '(contract hashes, bundle non-growth, timing comparison).\n'
+        + 'If the baseline is genuinely absent and you intend to create it, re-run with '
+        + '--allow-new-baseline. If it exists upstream, restore it instead of recreating it.',
+      )
     }
     writeFileSync(baselinePath, `${JSON.stringify(actual, null, 2)}\n`)
     console.log(`Updated ${baselinePath}`)

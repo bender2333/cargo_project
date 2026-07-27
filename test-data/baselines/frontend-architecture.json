@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-27T04:13:19.461Z",
+  "generatedAt": "2026-07-21T11:31:13.839Z",
   "environment": {
     "platform": "win32",
     "arch": "x64",
@@ -26,62 +26,62 @@
     "cases": {
       "russia-volume": {
         "samples": [
-          3.098,
-          3.075,
-          3.095,
-          2.969,
-          3.113
+          3.182,
+          3.017,
+          3.104,
+          3.093,
+          3.282
         ],
-        "medianMs": 3.095,
-        "p95Ms": 3.113,
+        "medianMs": 3.104,
+        "p95Ms": 3.282,
         "iterationsPerSample": 500
       },
       "vietnam-20gp-quantity": {
         "samples": [
-          141.595,
-          135.414,
-          141.391,
-          143.776,
-          144.364
+          132.126,
+          133.172,
+          130.253,
+          133.629,
+          123.802
         ],
-        "medianMs": 141.595,
-        "p95Ms": 144.364,
+        "medianMs": 132.126,
+        "p95Ms": 133.629,
         "iterationsPerSample": 10
       },
       "vietnam-20gp-volume": {
         "samples": [
-          185.376,
-          174.219,
-          179.391,
-          177.362,
-          172.309
+          146.939,
+          141.386,
+          145.551,
+          137.178,
+          161.406
         ],
-        "medianMs": 177.362,
-        "p95Ms": 185.376,
+        "medianMs": 145.551,
+        "p95Ms": 161.406,
         "iterationsPerSample": 10
       },
       "vietnam-40hq-quantity": {
         "samples": [
-          4307.339,
-          4615.457,
-          4005.885,
-          4198.741,
-          4259.866
+          3578.205,
+          3595.852,
+          3464.805,
+          3261.849,
+          3154.259
         ],
-        "medianMs": 4259.866,
-        "p95Ms": 4615.457,
+        "medianMs": 3464.805,
+        "p95Ms": 3595.852,
         "iterationsPerSample": 1
       },
       "vietnam-40hq-volume": {
         "samples": [
-          6477.439,
-          6250.208,
-          7509.055,
-          7112.932,
-          6599.882
+          5197.56,
+          5067.474,
+          5022,
+          5228.996,
+          5219.805
         ],
-        "medianMs": 6599.882,
-        "p95Ms": 7509.055,
+        "medianMs": 5197.56,
+        "p95Ms": 5228.996,
         "iterationsPerSample": 1
       }
     }
@@ -92,50 +92,50 @@
     "metrics": {
       "loginClickToInteractiveMs": {
         "samples": [
-          584.933,
-          578.833,
-          590.267,
-          585.5,
-          597.3
+          485.733,
+          492.733,
+          444.167,
+          463.1,
+          442.433
         ],
-        "medianMs": 585.5,
-        "p95Ms": 597.3,
+        "medianMs": 463.1,
+        "p95Ms": 492.733,
         "iterationsPerSample": 3
       },
       "automaticLoadToResultMs": {
         "samples": [
-          35.47,
-          36.166,
-          32.786,
-          33.006,
-          33.354
+          29.696,
+          31.868,
+          29.872,
+          28.688,
+          29.184
         ],
-        "medianMs": 33.354,
-        "p95Ms": 36.166,
+        "medianMs": 29.696,
+        "p95Ms": 31.868,
         "iterationsPerSample": 50
       },
       "canvasFirstNonEmptyPixelsMs": {
         "samples": [
-          350.95,
-          353.8,
-          351.6,
-          336.625,
-          332.425
+          299.125,
+          299.925,
+          319.775,
+          322.8,
+          337.725
         ],
-        "medianMs": 350.95,
-        "p95Ms": 353.8,
+        "medianMs": 319.775,
+        "p95Ms": 337.725,
         "iterationsPerSample": 4
       },
       "viewportResizeToStableCanvasMs": {
         "samples": [
-          287.95,
-          279.85,
-          286.15,
-          285.225,
-          288.525
+          299.2,
+          318.075,
+          294.075,
+          287.7,
+          286.825
         ],
-        "medianMs": 286.15,
-        "p95Ms": 288.525,
+        "medianMs": 294.075,
+        "p95Ms": 318.075,
         "iterationsPerSample": 4
       }
     }

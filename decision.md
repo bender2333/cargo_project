@@ -1,5 +1,22 @@
 # Decision Log
 
+## 2026-07-27 benchmark 基线绕过硬门禁的复原与守卫
+
+- 背景：`ca1fc1a` 更新 benchmark 基线时，`npm run benchmark:update` 被硬门禁以 `initial CSS gzip increased` 拒绝。当时依次尝试手改 bundle 字段、清空 bundle 段均被拒，最后**删除了整个基线文件**——`scripts/frontendBenchmark.mjs:401` 的 `existsSync(baselinePath)` 返回 false 后 `gateBenchmarkUpdate` 被整体跳过，当次报告直接落盘成新基线。该次运行发生在连续数小时 E2E + benchmark 之后，机器处于本文档 2026-07-21 已记录过的 sustained-load 状态，于是慢样本被固化：`vietnam-20gp-volume` median `+21.9%`、`vietnam-40hq-quantity` median/p95 `+22.9% / +28.4%`、`vietnam-40hq-volume` median/p95 `+27.0% / +43.6%`，浏览器侧 `loginClickToInteractiveMs` median 亦 `+26.4%`。绕过的不只是触发拒绝的 CSS 一项，而是包含 timing 比较在内的全部硬门禁。
+- 另查明触发拒绝的判断本身用错了口径：当时依据 `npm run build` 的 raw 输出 `gzip: 9.72 kB` 认定 CSS 增长 `159 B`，但 benchmark 会先规范化 Vite 资产指纹再做 level-9 gzip（`c5f9d2d` 引入规范化正是为消除 hash 假信号）。按 benchmark 自身口径，旧基线 `9561 B` 与新基线 `9567 B` 实际只差 `+6 B`。
+- 选项：A. 保留现状，承认基线已放宽；B. 在空载机器上重跑 `benchmark:update` 建立新基线；C. 恢复 `ca1fc1a~1` 的 timing 段、保留新的 bundle 段，并为「基线缺失」补显式门禁。
+- 决策：选择 C。contract hashes 在两版基线间逐字段一致，证明业务输出未变，被覆盖的只是采样环境噪声；bundle 段的改善（initial JS `557940 → 291680 B`）来自 XLSX/exportLoadingSheet 懒加载，是真实收益，予以保留。同时给 update 路径补 `--allow-new-baseline`：基线缺失时不再隐式创建，必须显式声明。
+- 验证：恢复后 `npm run benchmark` 的全部 timing 门禁在同一台机器上通过，反证那 22%~44% 确为负载噪声而非真实回归。
+- 影响：timing 容许窗口回到 2026-07-21 的水平；删除基线文件不再是绕过门禁的可用路径。
+
+## 2026-07-27 三项修复带来的 initial JS `+327 B` 保持 RED
+
+- 背景：本轮修复三个 review 问题——导入模板改名/删除对账（`f1ef7eb`）、手动映射两个丢失别名（`4e3eeb7`）、用户管理 chunk 失败白屏（`53cb920`）。修复后 initial JS gzip 相对恢复后的基线为 `292007 B`（`+327 B`，`+0.11%`），initial total 同增 `+327 B`，total JS `+333 B`（`+0.05%`）。initial JS 为非增长硬门禁，故 `npm run benchmark` 报 RED。
+- 增量来源：主要是用户管理受控动态导入替换裸 `React.lazy` 后新增的三态失败 UI（加载中/失败/成功，含双语文案与两个恢复动作按钮），以及 CargoImportDialog 的对账 effect 与其两个 import。
+- 选项：A. 执行 `benchmark:update` 吞掉增长；B. 把失败 UI 抽成 `ChunkLoadFailure` 共享组件以抵消增量；C. 保持 RED 如实交付，由人决定是否接受。
+- 决策：选择 C。A 与本文档上一条刚确立的原则直接冲突。B 已实测：抽取共享组件后增量反而从 `+327 B` 扩大到 `+487 B`（独立模块的注册开销超过它消除的重复 JSX），且需改动模板页渲染路径、超出本次修复范围，故已回退。
+- 影响：三个修复的功能价值（数据错误、静默丢字段、白屏）与 `+327 B`（`+0.11%`）的取舍需人工确认。若接受，应在空载机器上走正常 `benchmark:update` 路径并记录；不应通过删除基线绕过。timing 门禁与五个 contract hash 均通过，本次 RED 仅限包体三项。
+
 ## 2026-07-23 模板管理页按导航懒加载
 
 - 背景：页面边界功能与测试已稳定，但静态导入使仅在 `template-manager` 导航使用的页面代码进入登录后的 initial JS；正式 benchmark 稳定报告 initial JS/total gzip 比冻结基线增加 `3,718 B`，登录 timing 则在多轮完整采样中临界抖动。首版 `React.lazy + Suspense` 切分经独立复审发现生产风险：部署使用删除旧 hash 的同步策略，旧会话首次打开页面若请求失效 chunk，rejection 会被 `React.lazy` 缓存且根节点没有错误边界，Workbench 会白屏。
