@@ -2173,8 +2173,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             t={t}
           />
 
+        <section className="flex-1 min-w-0 space-y-4" ref={workspaceRef}>
         <VisualizationWorkspace
-            workspaceRef={workspaceRef}
             workspaceMaximized={workspaceMaximized}
             setWorkspaceMaximized={setWorkspaceMaximized}
             activeResult={activeResult}
@@ -2305,6 +2305,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             selectManualBox={selectManualBox}
             setSelectedBoxId={setSelectedBoxId}
           />
+        </section>
         </section>
         )}
         {showMappingModal && (

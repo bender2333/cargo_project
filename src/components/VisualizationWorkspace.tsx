@@ -1,4 +1,4 @@
-import type { Ref, DragEvent as ReactDragEvent } from 'react'
+import type { DragEvent as ReactDragEvent } from 'react'
 import { ContainerScene } from './ContainerScene'
 import type { SceneViewMode } from './ContainerScene'
 import { ContainerPlan2D } from './ContainerPlan2D'
@@ -79,7 +79,6 @@ type TranslationKeys = {
 }
 
 export type VisualizationWorkspaceProps = {
-  workspaceRef: Ref<HTMLElement>
   workspaceMaximized: boolean
   setWorkspaceMaximized: (fn: (current: boolean) => boolean) => void
   activeResult: PackingResult
@@ -153,7 +152,6 @@ export type VisualizationWorkspaceProps = {
   hoverInfo: HoverInfo | null
 }
 export function VisualizationWorkspace({
-  workspaceRef,
   workspaceMaximized,
   setWorkspaceMaximized,
   activeResult,
@@ -221,7 +219,7 @@ export function VisualizationWorkspace({
   hoverInfo,
 }: VisualizationWorkspaceProps) {
   return (
-    <section className="flex-1 min-w-0 space-y-4" ref={workspaceRef}>
+    <>
       <div className={`grid grid-cols-5 gap-3 max-xl:grid-cols-2 ${workspaceMaximized ? 'hidden' : ''}`} data-testid="archive-stat-grid">
         <div className="archive-stat"><div className="archive-stat-value">{activeResult.placedCount}</div><div className="archive-stat-key">{t.loaded}</div></div>
         <div className="archive-stat"><div className="archive-stat-value">{Math.round(activeResult.usedWeight)}</div><div className="archive-stat-key">{t.weight}</div></div>
@@ -589,7 +587,7 @@ export function VisualizationWorkspace({
           )}
         </div>
       </section>
-    </section>
+    </>
   )
 }
 
