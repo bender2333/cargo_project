@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-27 Phase 5 ContainerScene 内部边界拆分（完成）
+
+- [x] Step 0：新建 `src/components/containerScene/rendering.test.ts`，为将被提取的纯函数补 27 项单测（坐标变换、几何比较、碰撞检测、相机位置四类），拆分前先建立 GREEN 基线。commit `7553c33`。
+- [x] Step 1：提取 `containerScene/rendering.ts`（484 行）——纹理/材质 WeakMap 缓存、canvas 标签绘制、六面材质构建、箱体 geometry/transform/visual state、坐标变换、碰撞检测；新增 `disposeSceneCaches()` 供 ContainerScene 清理时调用，替代原先直接访问模块级 WeakMap。commit `2f7c641`。
+- [x] Step 2：提取 `containerScene/overlays.ts`（203 行）——间距标注组（`clearMeasurementGroup`/`createClearanceLabelSprite`/`clearanceLinePoints`/`syncClearanceAnnotations`）和悬停高亮（`updateHoverHighlight`）。commit `b604653`。
+- [x] Step 3：提取 `containerScene/interactions.ts`（243 行）——旋转 gizmo 生命周期（`ensureRotationGizmo`/`syncRotationGizmo`/`setRotationGizmoHover`/`hitRotationGizmo`）、拖拽 ghost（`ensureGhost`/`positionGhost`/`clearGhost`）、slerp 旋转动画（`advanceBoxAnimations`）、朝向签名函数。commit `532a709`。
+- [x] 架构约束遵守：三个模块均通过**结构化 SceneState 切片接口**（`SceneStateForRendering`/`SceneStateForOverlays`/`SceneStateForInteractions`）接参，避免与 ContainerScene.tsx 中引用 OrbitControls/RotationGizmo 的完整 `SceneState` 形成循环依赖。未引入 class、factory interface 或第二套 scene graph。
+- [x] 事件处理器（pointer/keyboard/drag，约 400 行）**有意保留**在 ContainerScene 初始化 effect 的闭包内：它们捕获约 20 个 ref，改为工厂函数需显式传递全部 ref，会用更宽的耦合换掉一个窄耦合。它们现在调用上述模块完成所有有状态操作。
+- [x] `ContainerScene.tsx` 从 **2009 行降至 1309 行**（-35%）；四个文件总计 2239 行，职责边界清晰。`ContainerSceneProps` 接口零改动。
+- [x] 每步均通过 `npm run lint`、全量 `npm test`（82 文件/590 项）、`npm run build`、全量 E2E（118/118，零跳过）和 `npm run benchmark`（timings comparable，3D 首帧与 resize 均在基线 20% 内）。
+
 ## 2026-07-27 Phase 3 收尾 + Phase 4 工作台区域边界 + Phase 6 懒加载（完成）
 
 - [x] Phase 3 收尾：抽取 `CargoImportDialog`，导入映射弹窗的列映射 state、模板选择、保存、`canAutoMap`/`preSelectCol`/`reconcileSelectedTemplateName` 逻辑全部离开 `Workbench`；纯逻辑提取至 `src/lib/importWorkflow.ts`（含 15 项单测）；架构边界测试更新以反映新的页面边界；lint + 全量 `npm test`（81 文件/563 项）+ 构建通过。commit `32adad9`。
