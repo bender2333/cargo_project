@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-21T11:31:13.839Z",
+  "generatedAt": "2026-07-28T08:16:06.053Z",
   "environment": {
     "platform": "win32",
     "arch": "x64",
@@ -14,11 +14,11 @@
     "browserRuntime": "production-preview"
   },
   "contractHashes": {
-    "russia-volume": "33dd8fb904eec42b3a0a3682506f122e8ae8d1e7481f1e21b5807d987c6f7cdd",
-    "vietnam-20gp-quantity": "05a4c6155aa7c9b513174539dc16118d60afee6859add231121936d7aadba901",
-    "vietnam-20gp-volume": "2b3501076d5e3437b448c1ddb154a4cb2c379b5261a8be168208393ce2cfc678",
-    "vietnam-40hq-quantity": "ea57e870364b2b5943a9ff7167c350f372561c299ce651606412ef806ab1553f",
-    "vietnam-40hq-volume": "71737f526adb485a90d99906063f54a7dad66a4acb6223c818249803caa30f35"
+    "russia-volume": "6b224f7689046674d93286678e2b2715fbda61e81e24efc5222d9daa7508aa04",
+    "vietnam-20gp-quantity": "4a2775e3ffed7fb5e4594d996cca61c2e0b8e3933330be69a0236e645da54581",
+    "vietnam-20gp-volume": "63c43484e0d574c4fd7d4b0fd1699fc58525f218dae214a288036216627ed0ce",
+    "vietnam-40hq-quantity": "db967314ea81886488902a7cc074e88a58174de11277ceaf6b25d2ecd59af415",
+    "vietnam-40hq-volume": "51aaa4b5d1986b730edcf7b64a5d1f47a10ea2024d8d33af78ab79a605f6c677"
   },
   "algorithm": {
     "warmupRuns": 1,
@@ -26,62 +26,62 @@
     "cases": {
       "russia-volume": {
         "samples": [
-          3.182,
-          3.017,
-          3.104,
-          3.093,
-          3.282
+          3.156,
+          3.052,
+          3.07,
+          3.063,
+          3.094
         ],
-        "medianMs": 3.104,
-        "p95Ms": 3.282,
+        "medianMs": 3.07,
+        "p95Ms": 3.156,
         "iterationsPerSample": 500
       },
       "vietnam-20gp-quantity": {
         "samples": [
-          132.126,
-          133.172,
-          130.253,
-          133.629,
-          123.802
+          135.006,
+          134.198,
+          139.098,
+          130.657,
+          134.3
         ],
-        "medianMs": 132.126,
-        "p95Ms": 133.629,
+        "medianMs": 134.3,
+        "p95Ms": 139.098,
         "iterationsPerSample": 10
       },
       "vietnam-20gp-volume": {
         "samples": [
-          146.939,
-          141.386,
-          145.551,
-          137.178,
-          161.406
+          155.061,
+          155.273,
+          157.541,
+          152.581,
+          145.112
         ],
-        "medianMs": 145.551,
-        "p95Ms": 161.406,
+        "medianMs": 155.061,
+        "p95Ms": 157.541,
         "iterationsPerSample": 10
       },
       "vietnam-40hq-quantity": {
         "samples": [
-          3578.205,
-          3595.852,
-          3464.805,
-          3261.849,
-          3154.259
+          3334.909,
+          3251.969,
+          3020.506,
+          2990.54,
+          3001.963
         ],
-        "medianMs": 3464.805,
-        "p95Ms": 3595.852,
+        "medianMs": 3020.506,
+        "p95Ms": 3334.909,
         "iterationsPerSample": 1
       },
       "vietnam-40hq-volume": {
         "samples": [
-          5197.56,
-          5067.474,
-          5022,
-          5228.996,
-          5219.805
+          5495.696,
+          5168.511,
+          5526.746,
+          5142.378,
+          5194.192
         ],
-        "medianMs": 5197.56,
-        "p95Ms": 5228.996,
+        "medianMs": 5194.192,
+        "p95Ms": 5526.746,
         "iterationsPerSample": 1
       }
     }
@@ -92,50 +92,50 @@
     "metrics": {
       "loginClickToInteractiveMs": {
         "samples": [
-          485.733,
-          492.733,
-          444.167,
-          463.1,
-          442.433
+          541.133,
+          568.3,
+          471.633,
+          478.833,
+          575.767
         ],
-        "medianMs": 463.1,
-        "p95Ms": 492.733,
+        "medianMs": 541.133,
+        "p95Ms": 575.767,
         "iterationsPerSample": 3
       },
       "automaticLoadToResultMs": {
         "samples": [
-          29.696,
-          31.868,
-          29.872,
-          28.688,
-          29.184
+          28.174,
+          26.66,
+          26.134,
+          30.902,
+          30.3
         ],
-        "medianMs": 29.696,
-        "p95Ms": 31.868,
+        "medianMs": 28.174,
+        "p95Ms": 30.902,
         "iterationsPerSample": 50
       },
       "canvasFirstNonEmptyPixelsMs": {
         "samples": [
-          299.125,
-          299.925,
-          319.775,
-          322.8,
-          337.725
+          216.375,
+          205.1,
+          206.625,
+          238.125,
+          195.025
         ],
-        "medianMs": 319.775,
-        "p95Ms": 337.725,
+        "medianMs": 206.625,
+        "p95Ms": 238.125,
         "iterationsPerSample": 4
       },
       "viewportResizeToStableCanvasMs": {
         "samples": [
-          299.2,
-          318.075,
-          294.075,
-          287.7,
-          286.825
+          281.65,
+          282.425,
+          283.875,
+          277.95,
+          281.125
         ],
-        "medianMs": 294.075,
-        "p95Ms": 318.075,
+        "medianMs": 281.65,
+        "p95Ms": 283.875,
         "iterationsPerSample": 4
       }
     }
@@ -143,26 +143,26 @@
   "bundle": {
     "initialFiles": [
       "assets/index-1YqZlRUw.css",
-      "assets/index-DWXQWDHp.js",
+      "assets/index-DTUTI7UK.js",
       "index.html"
     ],
     "initialHtmlGzipBytes": 289,
     "initialCssGzipBytes": 9567,
-    "initialJsGzipBytes": 291680,
-    "initialGzipBytes": 301536,
-    "totalJsGzipBytes": 677588,
+    "initialJsGzipBytes": 292322,
+    "initialGzipBytes": 302178,
+    "totalJsGzipBytes": 678236,
     "componentGzipBytes": {
       "assets/auth-CX80_amU.js": 626,
-      "assets/CustomContainerDialog-UDfbUo0m.js": 2516,
-      "assets/exportLoadingSheet-BHMluaeC.js": 130666,
-      "assets/html2canvas--rRfZsUj.js": 46336,
+      "assets/CustomContainerDialog-CdCTqLCe.js": 2516,
+      "assets/exportLoadingSheet-C9EiTwD8.js": 130666,
+      "assets/html2canvas-pDqXCiI6.js": 46336,
       "assets/index-1YqZlRUw.css": 9567,
-      "assets/index-DWXQWDHp.js": 291680,
-      "assets/index.es-C-dlpZ0f.js": 48375,
+      "assets/index-DTUTI7UK.js": 292322,
+      "assets/index.es-BBuJ9Msh.js": 48375,
       "assets/purify.es-BieIMJM0.js": 9729,
-      "assets/TemplateManagerPage-2etz-vA9.js": 3606,
+      "assets/TemplateManagerPage-DiqPK3gu.js": 3612,
       "assets/typeof-mVVFPGHC.js": 169,
-      "assets/UserManagement-JtPxGXQA.js": 3771,
+      "assets/UserManagement-zmX3QMQa.js": 3771,
       "assets/xlsx-BnIazKek.js": 140114,
       "index.html": 289
     }
