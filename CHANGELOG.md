@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-28 P1-3 手动合规闭环（完成）
+
+- [x] **归因**：`validateDraft` 缺少总重量检查（`manualPlacement.ts:699`）；`buildManualPackingResult` `diagnostics: []` 硬编码（`manualSteps.ts:128`）；`ResultsPanel` 的保存/导出按钮无合规守卫（`ResultsPanel.tsx:324`）。
+- [x] `validateDraft` 加超重检查：累加所有箱 weight，超过 `container.maxWeight` 时推一条 `{type: 'overweight', severity: 'error'}` issue。新增 `'overweight'` 到 `ValidationIssue.type` 联合类型。`manualFeedback.ts` 补 zh/en 翻译条目。
+- [x] `buildManualPackingResult` 加 `validationIssues?: ValidationIssue[]` 可选参数；新增 `buildManualDiagnostics`：对超重从 placed 重新累计（保证独立于草稿状态），对其他 issue 类型做 `issueToDiagnosticId` 映射去重后推入 `diagnostics[]`。
+- [x] `useManualPlacementSession` hook 的 `buildManualPackingResult` 调用改为传入 `issues`，令 `manualResult.diagnostics` 真正反映当前校验状态。
+- [x] `ResultsPanel` 加 `manualIssues: ValidationIssue[]` prop；计算 `hasBlockingManualIssues = placementMode === 'manual' && manualIssues.some(isBlockingManualIssue)`；保存和导出按钮在为 `true` 时 `disabled`。`Workbench` 传入 `manualIssues`。
+- [x] 测试：新增6项测试（超重检查、isBlockingManualIssue 覆盖、toPlacedBoxes 架构说明测试、diagnostics 转换2项）；明确记录 toPlacedBoxes 的「包含无效箱」是架构正确行为（invalidBoxIds 给渲染层染红用）。
+- [x] 门禁：lint 通过、单测 82 文件/625 项（仅1条已知 capacity-1 RED）、构建通过。commit `6cdc66f`。
+
 ## 2026-07-28 分层与支撑契约统一（完成）
 
 - [x] **归因**：`assignDepthLayers`（`cfeea91`）把 X 轴推靠语义写进 `physicalLayer`/`supportedBy`/`supportType`，而 PRD 9.3 定义这三个字段为垂直堆叠语义。实测五组夹具：589 个落地箱（z=0）不在第 1 层、2590 个箱支撑字段与真实底面接触不符、1129 条支撑边作业顺序颠倒（现场先装上层再装支撑物）。影子图 `verticalSupportGraph` 让测试结构上无法发现覆盖，golden 只断言快照相等把错误状态冻结。
