@@ -554,3 +554,25 @@ describe('parseCargoRowsWithMapping', () => {
     expect(result.errors).toEqual([])
     expect(result.items[0]!).toMatchObject({ length: 580, width: 365, height: 435 })
   })
+
+
+// P1-6 RED tests — invalid weight bypass
+describe('weight validation in parseCargoRows', () => {
+  it('clamps negative weight to zero on import', () => {
+    const result = parseCargoRows([
+      { Label: 'A', Length: 400, Width: 500, Height: 600, Weight: -10, Quantity: 1 },
+    ], { createId: () => 'w-test' })
+
+    expect(result.errors).toEqual([])
+    expect(result.items[0]!.weight).toBe(0)
+  })
+
+  it('treats missing weight as zero', () => {
+    const result = parseCargoRows([
+      { Label: 'A', Length: 400, Width: 500, Height: 600, Quantity: 1 },
+    ], { createId: () => 'w-missing' })
+
+    expect(result.errors).toEqual([])
+    expect(result.items[0]!.weight).toBe(0)
+  })
+})

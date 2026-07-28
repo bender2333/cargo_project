@@ -284,7 +284,7 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
       length: length.value,
       width: width.value,
       height: height.value,
-      weight: numberValue(valueFor(row, fields.weight)),
+      weight: Math.max(0, numberValue(valueFor(row, fields.weight))),
       quantity,
       color,
       canRotate: boolValue(valueFor(row, fields.canRotate), true),
