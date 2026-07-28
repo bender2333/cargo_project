@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-28 分层与支撑契约统一（完成）
+
+- [x] **归因**：`assignDepthLayers`（`cfeea91`）把 X 轴推靠语义写进 `physicalLayer`/`supportedBy`/`supportType`，而 PRD 9.3 定义这三个字段为垂直堆叠语义。实测五组夹具：589 个落地箱（z=0）不在第 1 层、2590 个箱支撑字段与真实底面接触不符、1129 条支撑边作业顺序颠倒（现场先装上层再装支撑物）。影子图 `verticalSupportGraph` 让测试结构上无法发现覆盖，golden 只断言快照相等把错误状态冻结。
+- [x] **Step 0**：新建 `src/lib/packingInvariants.test.ts`，11 项业务不变量 RED 基线（589/2590/1129 项失败）。commit `23d1084`。
+- [x] **Step 2**：`assignDepthLayers` 改为只写新增 `depthLayer` 字段，不再触碰 `physicalLayer`/`supportedBy`/`supportType`。同时新增 `reconcileSupportRelations`：放置完成后按最终坐标重算支撑关系，修复「后放入支撑物漏记」缺陷（40HQ 有箱底面由两箱各承 62.93%/37.07%，只记了一个）。commit `b0aeffa`。
+- [x] **Step 3**：`assignWorkStepsByDepth` 改为 Kahn 拓扑排序，支撑边为硬约束、深度作次序权重。所有 1129 条反向边归零，464 处深度回退全部由支撑约束或 x 单调性解释。commit `70f8c3e`。
+- [x] **Step 4**：删除冗余兜底字段 `verticalLayer`/`verticalSupportedBy` 及两处影子图（`packing.test.ts:verticalSupportGraph`、`packing.stackfill.test.ts`）。测试改为直接读 `physicalLayer`/`supportedBy`。同时暴露既有缺陷 capacity-1 承载上层箱（见 `decision.md`，已知 RED，暂不修）。commit `89a446b`。
+- [x] **Step 5**：重新生成 golden，验证装入量与利用率五组逐位未变（31/463/462/839/823）。修复 E2E 两处因语义正确化而触发的断言（层级列 "1"→"1,2"、装柜步骤分组改用 `depthLayer`），删除冗余的 supportType 分组条件。更新 benchmark baseline（接受 +327B 修复代价，详见 `decision.md`）。commit `01f39ab`、`e0c1fc2`。
+- [x] 最终门禁：lint 通过、单测 82 文件/624 项（仅剩 2 条已知缺陷 RED）、构建通过、E2E 119/119、benchmark `timings comparable` 通过。
+
 ## 2026-07-28 重构修复、整体架构与业务复审
 
 - [x] 对 `26b4ba7..f4fc515` 的 Claude 修复提交及整体业务闭环进行只读复审，完整报告写入 `issues/2026-07-28-refactor-review-architecture-business.md`。
