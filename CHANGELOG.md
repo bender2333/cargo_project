@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-28 重构修复、整体架构与业务复审
+
+- [x] 对 `26b4ba7..f4fc515` 的 Claude 修复提交及整体业务闭环进行只读复审，完整报告写入 `issues/2026-07-28-refactor-review-architecture-business.md`。
+- [x] 确认模板改名/删除对账、两个手动映射别名、UserManagement chunk 局部恢复、benchmark 数值恢复和 Phase 4/5/6 状态修正文档均有效；同时记录剩余测试和守卫缺口。
+- [ ] 当前仍有 9 项 P1 验收阻塞：层级/支撑字段被 X 轴深度关系覆盖、作业步骤违反支撑拓扑、非法手动方案可保存导出、手动草稿不随货物编辑同步、历史方案未保存实际结果、非法重量绕过载重限制、导入非事务式、标签编辑截断、默认导出缺少实际朝向。
+- [x] 量化核对五组 golden：2,618 个箱体中 2,495 个层级与垂直层级不一致、2,590 个支撑关系不一致，并存在 1,129 条支撑物晚于上层箱的反向作业边。
+- [x] 完整验证：`npm run lint` 通过；普通单测 81 文件/603 项和装箱性能测试 2 文件/6 项通过；`npm run build` 通过；全量 E2E 119/119、零跳过；开发数据库 SHA-256 前后不变且测试端口已释放。
+- [ ] `npm run benchmark` 保持真实 RED：首屏 JS gzip `292007 B`、首屏总 gzip `301863 B`，相对 baseline 均增加 `327 B`；未更新 baseline、阈值或采样。
+
 ## 2026-07-27 Phase 5 ContainerScene 内部边界拆分（部分完成）
 
 - [x] Step 0：新建 `src/components/containerScene/rendering.test.ts`，为将被提取的纯函数补 27 项单测（坐标变换、几何比较、碰撞检测、相机位置四类），拆分前先建立 GREEN 基线。commit `7553c33`。
