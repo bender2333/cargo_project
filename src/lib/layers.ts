@@ -1,15 +1,25 @@
 import type { PackingLayer, PlacedBox } from '../types'
 
+/**
+ * Assign the loading wave along the container depth axis.
+ *
+ * A container opens at one end only, so loading proceeds from the far wall outward:
+ * boxes against the far wall are wave 1, boxes pushed against those are wave 2, and
+ * so on. This is a horizontal concept and writes only `depthLayer`.
+ *
+ * It must not touch `physicalLayer` / `supportedBy` / `supportType`, which carry the
+ * vertical stacking semantics defined in PRD 9.3. Overwriting them (as this function
+ * used to) made 589 floor boxes report a layer above 1 while claiming to be
+ * fully supported by a horizontal neighbour standing beside them, not beneath them.
+ */
 export function assignDepthLayers(placed: PlacedBox[]): PlacedBox[] {
   const EPSILON = 0.001
   // 按照 x 坐标升序排序（从里到外）
   const sorted = [...placed].sort((a, b) => a.x - b.x)
-  
+
   sorted.forEach((box) => {
     if (box.x <= EPSILON) {
-      box.physicalLayer = 1
-      box.supportedBy = []
-      box.supportType = 'floor'
+      box.depthLayer = 1
     } else {
       // 寻找在 X 轴方向紧贴在 box 后方（更靠里）的箱子
       // 也就是候选 candidate 的 x + length 大致等于 box.x
@@ -34,9 +44,7 @@ export function assignDepthLayers(placed: PlacedBox[]): PlacedBox[] {
       })
       
       if (pushers.length > 0) {
-        box.physicalLayer = Math.max(...pushers.map((p) => p.physicalLayer), 0) + 1
-        box.supportedBy = pushers.map((p) => p.id)
-        box.supportType = 'fully-supported'
+        box.depthLayer = Math.max(...pushers.map((p) => p.depthLayer), 0) + 1
       } else {
         // 如果没有直接接触的推靠箱子，寻找更后方投影重叠且 x+length 最大的作为虚拟推靠源
         const backboxes = sorted.filter((candidate) => {
@@ -56,14 +64,9 @@ export function assignDepthLayers(placed: PlacedBox[]): PlacedBox[] {
         
         if (backboxes.length > 0) {
           backboxes.sort((a, b) => (b.x + b.length) - (a.x + a.length))
-          const primaryPusher = backboxes[0]
-          box.physicalLayer = primaryPusher.physicalLayer + 1
-          box.supportedBy = [primaryPusher.id]
-          box.supportType = 'partially-supported'
+          box.depthLayer = backboxes[0].depthLayer + 1
         } else {
-          box.physicalLayer = 1
-          box.supportedBy = []
-          box.supportType = 'floor'
+          box.depthLayer = 1
         }
       }
     }

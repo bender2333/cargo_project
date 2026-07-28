@@ -87,7 +87,11 @@ function expectValidPacking(container: ContainerSpec, result: PackingResult) {
     expect(['LWH', 'WLH', 'LHW', 'HLW', 'WHL', 'HWL']).toContain(box.orientationKey)
     expect([0, 90, 180, 270]).toContain(box.labelRotationDeg)
     expect(box.supportedBy.every((id) => placedIds.has(id))).toBe(true)
-    if (box.x === 0) {
+    // PRD 9.3: floor support is a vertical property — a box is floor-supported when
+    // its base is on the container floor (z === 0), regardless of how deep into the
+    // container it sits. This previously keyed off `x === 0`, which encoded the
+    // X-axis push-against semantics that used to overwrite the support fields.
+    if (box.z === 0) {
       expect(box.supportType).toBe('floor')
       expect(box.supportedBy).toEqual([])
     } else {
@@ -428,9 +432,14 @@ describe('calculatePacking', () => {
     ])
 
     const secondLayerBoxes = result.placed.filter((box) => box.physicalLayer === 2)
-    expect(new Set(secondLayerBoxes.map((box) => box.z))).toEqual(new Set([0, 500]))
-    expect(result.layers[1].minZ).toBe(0)
-    expect(result.layers[1].maxZ).toBe(1000)
+    // Layer 2 holds the two genuinely stacked boxes: one at z=1000 on the tall base and
+    // one at z=500 on the half box beside it. Two different heights in the same layer is
+    // exactly the point — layering follows support depth, not z buckets.
+    // (The old expectation of z ∈ {0, 500} counted a floor box at z=0 as layer 2, which
+    // came from the X-axis push-against semantics that used to overwrite these fields.)
+    expect(new Set(secondLayerBoxes.map((box) => box.z))).toEqual(new Set([500, 1000]))
+    expect(result.layers[1].minZ).toBe(500)
+    expect(result.layers[1].maxZ).toBe(1500)
     expect(secondLayerBoxes.every((box) => box.supportType === 'fully-supported')).toBe(true)
   })
 
@@ -444,7 +453,9 @@ describe('calculatePacking', () => {
     expectValidPacking(container, result)
     expect(result.labelStats).toEqual([
       { label: 'A', name: 'Alpha', color: '#f59e0b', planned: 2, placed: 1, unplaced: 1, layers: [1] },
-      { label: 'B', name: 'Beta', color: '#f59e0b', planned: 1, placed: 1, unplaced: 0, layers: [1] },
+      // B rests on A at z=500, so it belongs to layer 2. It previously reported layer 1
+      // because the X-axis overwrite put both boxes at x=0 in the same depth wave.
+      { label: 'B', name: 'Beta', color: '#f59e0b', planned: 1, placed: 1, unplaced: 0, layers: [2] },
     ])
     expect(result.unplaced[0]).toMatchObject({ cargoId: 'a', label: 'A', quantity: 1, reasonCode: UNPLACED_REASON_CODES.EXCEEDS_PAYLOAD })
   })

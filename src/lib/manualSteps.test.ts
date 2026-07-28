@@ -72,7 +72,7 @@ function cargoForBoxes(boxes: PlacedBox[]): CargoItem[] {
 }
 
 describe('buildManualPackingResult', () => {
-  it('infers loading-depth physical layers for manually placed boxes', () => {
+  it('infers loading-depth waves for manually placed boxes', () => {
     const boxes = [
       makeBox({ id: 'inner', x: 0 }),
       makeBox({ id: 'middle', x: 600 }),
@@ -80,12 +80,17 @@ describe('buildManualPackingResult', () => {
     ]
     const result = buildManualPackingResult(boxes, container, cargoForBoxes(boxes))
 
-    expect(result.placed.map((box) => [box.id, box.physicalLayer])).toEqual([
+    // All three sit on the floor and differ only in depth, so the wave they belong to
+    // is `depthLayer`. They are all vertical layer 1 — nothing is stacked on anything.
+    // This previously asserted `physicalLayer`/`supportedBy`, which conflated the
+    // horizontal push-against wave with vertical support.
+    expect(result.placed.map((box) => [box.id, box.depthLayer])).toEqual([
       ['inner', 1],
       ['middle', 2],
       ['door', 3],
     ])
-    expect(result.placed.find((box) => box.id === 'door')?.supportedBy).toEqual(['middle'])
+    expect(result.placed.every((box) => box.physicalLayer === 1)).toBe(true)
+    expect(result.placed.find((box) => box.id === 'door')?.supportedBy).toEqual([])
   })
 
   it('orders manual work steps by layer, low height, then width position', () => {

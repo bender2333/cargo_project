@@ -70,8 +70,10 @@ export function buildManualPackingResult(
     ? enrichPlacedBoxes(boxes, cargoItems)
     : boxes.map((box) => ({ ...box, supportedBy: [...box.supportedBy] }))
   const placed = assignDepthLayers(inputBoxes)
+  // Manual loading order follows the depth wave (far wall outward), then bottom-up
+  // within a wave. `depthLayer` carries that; `physicalLayer` is vertical stacking.
   const ordered = [...placed].sort((a, b) =>
-    a.physicalLayer - b.physicalLayer ||
+    a.depthLayer - b.depthLayer ||
     a.z - b.z ||
     a.y - b.y ||
     a.x - b.x ||

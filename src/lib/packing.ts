@@ -170,6 +170,58 @@ function supportOverlap(candidate: PlacedBox, point: PackingPoint, box: BoxSize)
   return overlapX * overlapY
 }
 
+/**
+ * Recompute `supportedBy` / `supportType` / `physicalLayer` from final coordinates.
+ *
+ * `supportDetails` runs while a box is being placed and therefore cannot see supporters
+ * that land afterwards, leaving an incomplete support graph (observed on the Vietnam
+ * 40HQ fixture: a box resting on two boxes recorded only one, hiding 37% of its
+ * supported area from capacity and support-chain validation).
+ *
+ * Layers are resolved in ascending z so a box's supporters always have their final
+ * layer assigned before it is used.
+ */
+function reconcileSupportRelations(placed: PlacedBox[]) {
+  const byId = new Map(placed.map((box) => [box.id, box]))
+
+  for (const box of [...placed].sort((a, b) => a.z - b.z)) {
+    if (box.z <= EPSILON) {
+      box.supportedBy = []
+      box.supportType = 'floor'
+      box.physicalLayer = 1
+      continue
+    }
+
+    const baseArea = box.length * box.width
+    let supportedArea = 0
+    const supporters: string[] = []
+    for (const candidate of placed) {
+      if (candidate.id === box.id) continue
+      const overlap = supportOverlap(candidate, { x: box.x, y: box.y, z: box.z }, box)
+      if (overlap > 0) {
+        supporters.push(candidate.id)
+        supportedArea += overlap
+      }
+    }
+
+    box.supportedBy = supporters
+    if (supporters.length === 0) {
+      // Airborne: keep it visible to the support diagnostics rather than silently
+      // reclassifying it as floor-supported.
+      box.supportType = 'partially-supported'
+      box.physicalLayer = 1
+      continue
+    }
+
+    const ratio = baseArea ? supportedArea / baseArea : 0
+    box.supportType = ratio >= 1 - EPSILON ? 'fully-supported' : 'partially-supported'
+    box.physicalLayer = Math.max(
+      ...supporters.map((id) => byId.get(id)?.physicalLayer ?? 0),
+      0,
+    ) + 1
+  }
+}
+
 function supportDetails(point: PackingPoint, box: BoxSize, placed: PlacedBox[]) {
   if (point.z <= EPSILON) {
     return {
@@ -919,6 +971,8 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       groundOnly: entry.item.groundOnly,
       physicalLayer: support.physicalLayer,
       verticalLayer: support.physicalLayer,
+      // Overwritten by assignDepthLayers once all boxes are placed.
+      depthLayer: 1,
       workStep,
       supportType: support.supportType,
       supportedBy: support.supportedBy.map((candidate) => candidate.id),
@@ -1240,7 +1294,13 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   const volumeUtilization = containerVolume ? (usedVolume / containerVolume) * 100 : 0
   const weightUtilization = effective.maxWeight ? (usedWeight / effective.maxWeight) * 100 : 0
 
-  // 1. Generate compliance diagnostics under original Z-gravity physical support relations
+  // Support relations are first recorded while a box is being placed, so a supporter
+  // that lands later is missing from the earlier box's `supportedBy`. Recompute them
+  // from the final coordinates so layering, capacity checks and loading order all see
+  // the complete support graph.
+  reconcileSupportRelations(placed)
+
+  // Generate compliance diagnostics under the reconciled Z-gravity support relations
   const diagnostics = buildDiagnostics(
     placed,
     unplaced,

@@ -79,7 +79,9 @@ describe('buildExportPlanRows', () => {
         plannedQuantity: 1,
         placedQuantity: 1,
         unplacedQuantity: 0,
-        layer: '1',
+        // B rests on A at z=500, so it exports as vertical layer 2. It previously read
+        // layer 1 because both boxes sat at x=0 in the same push-against wave.
+        layer: '2',
         workStep: '2',
         placementNote: '',
         failureReason: '',
