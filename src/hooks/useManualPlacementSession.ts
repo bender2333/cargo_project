@@ -157,7 +157,14 @@ export function useManualPlacementSession(options: UseManualPlacementSessionOpti
     createId = defaultCreateId,
   } = options
   const cargoPlan = useMemo(
-    () => cargoItems.map(({ id, quantity }) => ({ id, quantity })),
+    () => cargoItems.map(({ id, quantity, weight, stackable, maxStackLayers, groundOnly }) => ({
+      id,
+      quantity,
+      weight,
+      stackable,
+      maxStackLayers,
+      groundOnly,
+    })),
     [cargoItems],
   )
   const [state, dispatch] = useReducer(

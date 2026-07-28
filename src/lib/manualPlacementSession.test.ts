@@ -163,3 +163,71 @@ describe('manualPlacementSessionReducer', () => {
     expect(staleSelection.selectedId).toBeNull()
   })
 })
+
+// P1-4 RED tests — cargo edit sync
+
+describe('cargo attribute sync on reconcile', () => {
+  it('updates weight in placed boxes when cargo weight changes', () => {
+    const draft = addBox(emptyDraft(), box('b1'))
+    const state = createManualPlacementSessionState({
+      mode: 'manual',
+      history: { past: [], present: draft, future: [] },
+    })
+
+    const reconciled = reconcileManualPlacementSessionState(state, [
+      { id: 'cargo-a', quantity: 2, weight: 99, stackable: true, maxStackLayers: undefined, groundOnly: undefined },
+    ])
+
+    expect(reconciled.history.present.boxes[0].weight).toBe(99)
+  })
+
+  it('updates stackable and maxStackLayers when cargo rules change', () => {
+    const draft = addBox(emptyDraft(), { ...box('b1'), stackable: true, maxStackLayers: undefined })
+    const state = createManualPlacementSessionState({
+      mode: 'manual',
+      history: { past: [], present: draft, future: [] },
+    })
+
+    const reconciled = reconcileManualPlacementSessionState(state, [
+      { id: 'cargo-a', quantity: 2, weight: 10, stackable: false, maxStackLayers: 2, groundOnly: undefined },
+    ])
+
+    expect(reconciled.history.present.boxes[0].stackable).toBe(false)
+    expect(reconciled.history.present.boxes[0].maxStackLayers).toBe(2)
+  })
+
+  it('preserves state identity when attributes have not changed', () => {
+    const draft = addBox(emptyDraft(), { ...box('b1'), weight: 10, stackable: true })
+    const state = createManualPlacementSessionState({
+      mode: 'manual',
+      history: { past: [], present: draft, future: [] },
+    })
+
+    const reconciled = reconcileManualPlacementSessionState(state, [
+      { id: 'cargo-a', quantity: 2, weight: 10, stackable: true, maxStackLayers: undefined, groundOnly: undefined },
+    ])
+
+    // No attribute change → same reference
+    expect(reconciled).toBe(state)
+  })
+
+  it('syncs attribute changes through past and future history snapshots', () => {
+    const oldBox = { ...box('b1'), weight: 5 }
+    const state = createManualPlacementSessionState({
+      mode: 'manual',
+      history: {
+        past: [addBox(emptyDraft(), oldBox)],
+        present: addBox(emptyDraft(), { ...oldBox, x: 400 }),
+        future: [addBox(emptyDraft(), { ...oldBox, x: 800 })],
+      },
+    })
+
+    const reconciled = reconcileManualPlacementSessionState(state, [
+      { id: 'cargo-a', quantity: 2, weight: 42, stackable: true, maxStackLayers: undefined, groundOnly: undefined },
+    ])
+
+    expect(reconciled.history.past[0].boxes[0].weight).toBe(42)
+    expect(reconciled.history.present.boxes[0].weight).toBe(42)
+    expect(reconciled.history.future[0].boxes[0].weight).toBe(42)
+  })
+})

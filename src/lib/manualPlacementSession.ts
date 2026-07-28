@@ -7,7 +7,14 @@ import {
 import type { ManualDraft, ManualHistory } from './manualPlacement'
 
 export type ManualPlacementMode = 'auto' | 'manual'
-export type ManualCargoPlanItem = { id: string; quantity: number }
+export type ManualCargoPlanItem = {
+  id: string
+  quantity: number
+  weight?: number
+  stackable?: boolean
+  maxStackLayers?: number
+  groundOnly?: boolean
+}
 
 export type ManualPlacementSessionState = {
   mode: ManualPlacementMode
@@ -36,15 +43,40 @@ function cargoQuantityLimits(cargoPlan: ManualCargoPlanItem[]) {
   ]))
 }
 
-function reconcileDraft(draft: ManualDraft, limits: Map<string, number>) {
+function reconcileDraft(draft: ManualDraft, limits: Map<string, number>, attrs: Map<string, ManualCargoPlanItem>) {
   const used = new Map<string, number>()
+  let attrChanged = false
   const boxes = draft.boxes.filter((box) => {
     const count = used.get(box.cargoId) ?? 0
     const keep = count < (limits.get(box.cargoId) ?? 0)
     if (keep) used.set(box.cargoId, count + 1)
     return keep
+  }).map((box) => {
+    const cargo = attrs.get(box.cargoId)
+    if (!cargo) return box
+    const nextWeight = cargo.weight ?? box.weight
+    const nextStackable = cargo.stackable ?? box.stackable
+    const nextMaxStackLayers = 'maxStackLayers' in cargo ? cargo.maxStackLayers : box.maxStackLayers
+    const nextGroundOnly = 'groundOnly' in cargo ? cargo.groundOnly : box.groundOnly
+    if (
+      nextWeight === box.weight &&
+      nextStackable === box.stackable &&
+      nextMaxStackLayers === box.maxStackLayers &&
+      nextGroundOnly === box.groundOnly
+    ) {
+      return box
+    }
+    attrChanged = true
+    return {
+      ...box,
+      weight: nextWeight,
+      stackable: nextStackable,
+      maxStackLayers: nextMaxStackLayers,
+      groundOnly: nextGroundOnly,
+    }
   })
-  return boxes.length === draft.boxes.length ? draft : { ...draft, boxes }
+  const countChanged = boxes.length !== draft.boxes.length
+  return countChanged || attrChanged ? { ...draft, boxes } : draft
 }
 
 export function reconcileManualPlacementSessionState(
@@ -52,9 +84,10 @@ export function reconcileManualPlacementSessionState(
   cargoPlan: ManualCargoPlanItem[],
 ): ManualPlacementSessionState {
   const limits = cargoQuantityLimits(cargoPlan)
-  const past = state.history.past.map((draft) => reconcileDraft(draft, limits))
-  const present = reconcileDraft(state.history.present, limits)
-  const future = state.history.future.map((draft) => reconcileDraft(draft, limits))
+  const attrs = new Map(cargoPlan.map((item) => [item.id, item]))
+  const past = state.history.past.map((draft) => reconcileDraft(draft, limits, attrs))
+  const present = reconcileDraft(state.history.present, limits, attrs)
+  const future = state.history.future.map((draft) => reconcileDraft(draft, limits, attrs))
   const historyChanged = past.some((draft, index) => draft !== state.history.past[index])
     || present !== state.history.present
     || future.some((draft, index) => draft !== state.history.future[index])
