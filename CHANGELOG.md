@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-28 P1-4 / P1-6 / P1-8 修复（完成）
+
+- [x] **P1-4** 货物编辑同步手动草稿：`ManualCargoPlanItem` 扩展 `weight/stackable/maxStackLayers/groundOnly`；`reconcileDraft` 新增属性同步逻辑（保持 state identity 优化）；`useManualPlacementSession` 的 `cargoPlan` useMemo 传入所有属性字段。新增4项测试（属性同步、history 全路径同步、identity 保持、stackable+maxStackLayers）。commit `ae1714c`。
+- [x] **P1-6** 非法重量绕过载重：`importCargo.ts:287` 加 `Math.max(0, ...)` 防止负数重量进入货物列表。新增2项测试（负重量归零、缺失重量归零）。commit `21801da`。
+- [x] **P1-8** 标签编辑截断：移除 `Workbench.tsx` `addCargo`/`saveEditedCargo`、`PackingSidebar.tsx`、`CargoLibraryPage.tsx` 中的 `.slice(0, 2)` 截断；输入框 `maxLength` 从2提升到12，保留大写转换。commit `fcb11e9`。
+- [x] 门禁：lint 通过、单测 82文件/631项（仅1条已知 capacity-1 RED）、构建通过。
+
 ## 2026-07-28 P1-3 手动合规闭环（完成）
 
 - [x] **归因**：`validateDraft` 缺少总重量检查（`manualPlacement.ts:699`）；`buildManualPackingResult` `diagnostics: []` 硬编码（`manualSteps.ts:128`）；`ResultsPanel` 的保存/导出按钮无合规守卫（`ResultsPanel.tsx:324`）。
