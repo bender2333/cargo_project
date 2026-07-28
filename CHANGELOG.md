@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-28 P1-9 导出朝向修复（完成）
+
+- [x] **归因**：`buildExportPlanRows`（`exportPlan.ts:41`）对 `actualLength/Width/Height` 总取 `placedBoxes[0]` 尺寸，同货物多朝向时第2+个箱体的实际尺寸被静默丢弃。
+- [x] 修复：当同货物所有箱体 `orientationKey` 一致时，`actualLength/Width/Height` 取 `placedBoxes[0]` 值；存在多种朝向时改为 `''`，并在 `placementNote` 追加 `"Mixed orientations: WLH, LWH"` 等描述。
+- [x] 测试：新增2项（单一朝向保留实际尺寸、混合朝向返回空）；更新 `CargoLibraryPage.test.tsx` 反映 P1-8 标签不截断的新行为（`'AB'→'ABZ'`）。
+- [x] 门禁：lint 通过、单测 82文件/633项（仅1条已知 capacity-1 RED）、构建通过。commit `7ad8511`。
+
 ## 2026-07-28 P1-4 / P1-6 / P1-8 修复（完成）
 
 - [x] **P1-4** 货物编辑同步手动草稿：`ManualCargoPlanItem` 扩展 `weight/stackable/maxStackLayers/groundOnly`；`reconcileDraft` 新增属性同步逻辑（保持 state identity 优化）；`useManualPlacementSession` 的 `cargoPlan` useMemo 传入所有属性字段。新增4项测试（属性同步、history 全路径同步、identity 保持、stackable+maxStackLayers）。commit `ae1714c`。
