@@ -1,5 +1,24 @@
 # Decision Log
 
+## 2026-07-28 分层与支撑契约统一（Step 1-5 完成）
+
+- 背景：`assignDepthLayers` 把 X 轴推靠语义写进 `physicalLayer`/`supportedBy`/`supportType`，而 PRD 9.3 定义这三个字段为垂直堆叠语义。实测五组 golden 夹具：2618 箱中 589 个落地箱（`z=0`）不在第 1 层且被标为 `fully-supported`，2590 个箱的支撑关系与真实底面接触不符，1129 条支撑边的作业顺序颠倒（现场会被要求先装上层再装支撑物）。
+- 归因：`cfeea91` 引入时冲突已被察觉——注释写明诊断必须在覆盖前跑，作者用**执行顺序**绕开而非消除冲突；`7107135` 又加 `verticalLayer`/`verticalSupportedBy` 兜底副本。缺陷存活两个月的原因是三层防护同时失效：`packing.test.ts` 的 `verticalSupportGraph` 影子图从兜底字段还原语义再断言（结构上无法因覆盖失败）、golden 只断言快照相等（冻结了错误状态）、视图层一致地消费错误值（一致≠正确）。
+- 决策：`physicalLayer`/`supportedBy`/`supportType` 恢复纯垂直语义；推靠深度独立为 `depthLayer`（可选字段，永远由 `assignDepthLayers` 派生）；`workStep` 改为拓扑排序，支撑边为硬约束、深度作次序权重；删除兜底字段与影子图。
+- 关键发现（改变了解法）：深度序与支撑序**真冲突**——3467 条支撑边中 1080 条的支撑物比被支撑箱更靠外，严格按 x 排序必然违反支撑。故深度不能作全局排序键，只能作拓扑排序内的次序权重。
+- 连带修复：`supportDetails` 在放置当时执行，晚放入的支撑物永久漏记（40HQ 上有箱子底面由两箱各承 62.93%/37.07%，只记了一个）。新增 `reconcileSupportRelations` 按最终坐标重算，让容量校验与作业顺序看到完整支撑图。
+- 影响：装入数量与利用率五组逐位未变（31/463/462/839/823，体积利用率完全一致），证明几何未动；仅层级、支撑、作业顺序改变。`stacking-check` 诊断现在跑在正确的图上，能报出真实违约。装柜阶段分组改用 `depthLayer` 并移除按 `supportType` 切分（旧语义下该条件与深度切分冗余，恢复真实语义后会把每垛碎成单箱阶段）。
+- 验证：新增 `packingInvariants.test.ts` 11 项业务不变量（先立 RED 基线再改算法，最后才重新生成 golden）；589→0、2590→0、1129→0；464 处深度回退全部由支撑约束或 x 单调性解释；`lint`、单测 624 项、`build`、E2E 119/119 通过。
+
+## 2026-07-28 capacity-one 货物承载上层箱（已知缺陷，未修）
+
+- 背景：移除 `verticalSupportedBy` 影子图后，两条既有测试转 RED：`packing.stackfill.test.ts` 的 capacity-one 场景与 `packing.test.ts` 的 snapshot-11 场景。独立核实确认 7 个箱子压在 `maxStackLayers: 1` 的货物上（如 z=1200 的 capacity-1 箱承载 z=1800 的箱子）。
+- 根因：`respectsMaxStackLayers` 只**向下**遍历被放置箱的支撑链。当箱子被插入到已有箱子**下方**时，没有任何检查回头验证它上方的箱子。7 处全部是「支撑物后插入」，与 `reconcileSupportRelations` 修的漏记支撑同一根因（放置时快照无法预见后续插入）。
+- 为何长期隐藏：这两条测试原先读 `verticalSupportedBy`，该字段在构造时写入一次、从不刷新，因此断言**结构上无法**看到后插入的支撑物。
+- 选项：A. 放宽断言；B. 在放置时增加向上校验（拒绝会使自己成为非法支撑物的位置）；C. 保持 RED 如实交付。
+- 决策：选择 C。A 违反「不为变绿改断言」；B 需改动放置合法性判定，会改变装入数量与利用率，与本轮「几何不变」的验收前提冲突，且会让 golden 差异无法归因。两条测试已加注释说明 KNOWN RED 与根因。
+- 影响：真实业务夹具（五组 golden）上零违约，缺陷只在构造的 capacity-1 密集场景出现。`stacking-check` 现在报 `error`，缺陷对用户可见而非静默。修复需单独一轮，建议与 review 的 P1-3（手动合规闭环）合并处理，因两者都涉及「非法方案不得产出」。
+
 ## 2026-07-27 Phase 5 事件处理器保留在闭包内、ContainerScene 未达 ≤600 行
 
 - 背景：Phase 5 计划 `plans/2026-07-27-containerscene-split.md` Step 3 要求把 pointer/keyboard/drag 事件处理器改为 `makeXxxHandler(deps)` 工厂函数，并把 `ContainerScene.tsx` 控制在 `≤600 行`（同文件 `:146` 验收标准）。实际完成后为 `1309 行`，事件处理器仍是初始化 effect 内的闭包。此偏离当时只写入 CHANGELOG，未按 `CLAUDE.md`「需要暂缓、降级或改变某项要求必须写入 decision.md」记录，属流程遗漏，现补记。

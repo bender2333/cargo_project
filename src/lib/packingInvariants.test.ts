@@ -54,6 +54,8 @@ const russianContainer: ContainerSpec = {
   sideGap: 0,
 }
 
+// Computing all five fixtures takes ~10-20s, and the 40HQ cases alone are multi-second.
+// The default 10s hook timeout flakes under parallel load.
 beforeAll(() => {
   const russianItems = loadRussianItems()
   const vietnamInput = JSON.parse(readFileSync(join(dataDir, 'json/vietnam-11/input.json'), 'utf8'))
@@ -78,7 +80,7 @@ beforeAll(() => {
       result: calculatePacking(spec.container, spec.items, { loadingMode: spec.loadingMode }),
     })
   }
-})
+}, 120_000)
 
 /**
  * Boxes whose base sits on another box's top face with real footprint overlap.
@@ -201,13 +203,18 @@ describe('PackingResult loading-order invariants', () => {
       const byId = new Map(result.placed.map((box) => [box.id, box]))
       const sequence = [...result.placed].sort((a, b) => a.workStep - b.workStep)
       const unjustified: string[] = []
+      // depthLayer is optional on input but must be populated on every result box.
+      const depthOf = (box: PlacedBox) => {
+        expect(box.depthLayer, `${name}: ${box.id} has no depthLayer`).toBeDefined()
+        return box.depthLayer as number
+      }
       for (let i = 1; i < sequence.length; i++) {
         const previous = sequence[i - 1]
         const current = sequence[i]
-        if (previous.depthLayer <= current.depthLayer) continue
+        if (depthOf(previous) <= depthOf(current)) continue
         const waitedOnOutwardSupporter = current.supportedBy.some((id) => {
           const supporter = byId.get(id)
-          return supporter !== undefined && supporter.depthLayer >= current.depthLayer
+          return supporter !== undefined && depthOf(supporter) >= depthOf(current)
         })
         const previousWasSupporter = result.placed.some((box) => box.supportedBy.includes(previous.id))
         const xStillAdvances = current.x >= previous.x
@@ -249,7 +256,7 @@ describe('PackingResult depth invariants (loading from the far end outward)', ()
       const offenders = result.placed.filter((box) => {
         // A box further out than the far wall must be at depth >= 2.
         if (box.x <= 1) return false
-        return box.depthLayer < 2
+        return (box.depthLayer ?? 0) < 2
       })
       expect(
         offenders.length,

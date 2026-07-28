@@ -73,7 +73,7 @@ export function buildManualPackingResult(
   // Manual loading order follows the depth wave (far wall outward), then bottom-up
   // within a wave. `depthLayer` carries that; `physicalLayer` is vertical stacking.
   const ordered = [...placed].sort((a, b) =>
-    a.depthLayer - b.depthLayer ||
+    (a.depthLayer ?? 1) - (b.depthLayer ?? 1) ||
     a.z - b.z ||
     a.y - b.y ||
     a.x - b.x ||

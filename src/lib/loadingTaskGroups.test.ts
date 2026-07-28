@@ -22,6 +22,7 @@ function makeBox(overrides: Partial<PlacedBox> & Pick<PlacedBox, 'id' | 'workSte
     canRotate: true,
     stackable: true,
     physicalLayer: overrides.physicalLayer ?? 1,
+    depthLayer: overrides.depthLayer ?? 1,
     workStep: overrides.workStep,
     supportType: overrides.supportType ?? 'floor',
     supportedBy: overrides.supportedBy ?? [],
@@ -68,13 +69,25 @@ describe('buildLoadingTaskGroups', () => {
     expect(groups[0].labels).toEqual([{ label: 'A', color: '#f59e0b', count: 3 }])
   })
 
-  it('splits across physical layers', () => {
+  it('keeps one stack in a single stage', () => {
+    // Placing a floor box then stacking on it is one continuous action for the crew, so
+    // it stays one stage. This previously split because the stage boundary keyed off
+    // `physicalLayer`/`supportType`, which the X-axis overwrite made a proxy for depth.
     const groups = buildLoadingTaskGroups(makeResult([
-      makeBox({ id: 'floor', workStep: 1, physicalLayer: 1 }),
-      makeBox({ id: 'top', workStep: 2, physicalLayer: 2, z: 100, supportType: 'fully-supported', supportedBy: ['floor'] }),
+      makeBox({ id: 'floor', workStep: 1, depthLayer: 1 }),
+      makeBox({ id: 'top', workStep: 2, depthLayer: 1, z: 100, supportType: 'fully-supported', supportedBy: ['floor'] }),
     ]))
 
-    expect(groups.map((group) => group.boxIds)).toEqual([['floor'], ['top']])
+    expect(groups.map((group) => group.boxIds)).toEqual([['floor', 'top']])
+  })
+
+  it('splits across loading waves', () => {
+    const groups = buildLoadingTaskGroups(makeResult([
+      makeBox({ id: 'wave-1', workStep: 1, depthLayer: 1 }),
+      makeBox({ id: 'wave-2', workStep: 2, depthLayer: 2 }),
+    ]))
+
+    expect(groups.map((group) => group.boxIds)).toEqual([['wave-1'], ['wave-2']])
   })
 
   it('splits across obvious depth segments', () => {
@@ -87,14 +100,19 @@ describe('buildLoadingTaskGroups', () => {
     expect(groups.map((group) => group.boxIds)).toEqual([['inner-a', 'inner-b'], ['outer']])
   })
 
-  it('splits when support state changes', () => {
+  it('reports mixed support states within one stage instead of splitting on them', () => {
+    // Under the old X-axis overwrite `supportType` was a function of x alone, so it was
+    // constant inside a wave and this split never fired independently of the depth split.
+    // With real support semantics it would fragment every stack, so the stage keeps the
+    // boxes together and surfaces both states through `supportTypes`.
     const groups = buildLoadingTaskGroups(makeResult([
       makeBox({ id: 'floor-a', workStep: 1, supportType: 'floor' }),
       makeBox({ id: 'floor-b', workStep: 2, supportType: 'floor' }),
       makeBox({ id: 'partial', workStep: 3, supportType: 'partially-supported', supportedBy: ['floor-a'] }),
     ]))
 
-    expect(groups.map((group) => group.boxIds)).toEqual([['floor-a', 'floor-b'], ['partial']])
+    expect(groups.map((group) => group.boxIds)).toEqual([['floor-a', 'floor-b', 'partial']])
+    expect(groups[0].supportTypes).toEqual(['floor', 'partially-supported'])
   })
 
   it('preserves every placed box through step ranges and ids', () => {

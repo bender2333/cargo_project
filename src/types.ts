@@ -62,8 +62,11 @@ export type PlacedBox = {
    * boxes pushed against those are 2, and so on. A container only opens at one end,
    * so loading proceeds from the far wall outward. Distinct from `physicalLayer`,
    * which is vertical.
+   *
+   * Always derived by `assignDepthLayers` from final coordinates, never supplied by a
+   * caller, so it is optional on input and populated on any result.
    */
-  depthLayer: number
+  depthLayer?: number
   workStep: number
   supportType: 'floor' | 'fully-supported' | 'partially-supported'
   supportedBy: string[]

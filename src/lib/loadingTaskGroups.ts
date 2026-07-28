@@ -11,7 +11,8 @@ export type LoadingTaskGroup = {
   sequence: number
   stepStart: number
   stepEnd: number
-  physicalLayer: number
+  /** Loading wave this stage belongs to (depth from the far wall), not a vertical level. */
+  depthLayer: number
   labels: LoadingTaskGroupLabel[]
   boxIds: string[]
   bounds: {
@@ -38,10 +39,6 @@ function depthSegment(box: PlacedBox) {
   return Math.floor(box.x / DEPTH_SEGMENT_MM)
 }
 
-function supportSignature(box: PlacedBox) {
-  return box.supportType
-}
-
 function shouldStartNewGroup(current: GroupDraft | null, next: PlacedBox) {
   if (!current || current.boxes.length === 0) return false
 
@@ -50,10 +47,17 @@ function shouldStartNewGroup(current: GroupDraft | null, next: PlacedBox) {
   const labels = new Set(current.boxes.map((box) => box.label))
   labels.add(next.label)
 
+  // A stage is a run of consecutive work steps the crew performs together, so it breaks
+  // on loading wave, depth segment, a gap in the step sequence, or too many labels.
+  //
+  // It deliberately does *not* break on `supportType`: building one stack means placing
+  // a floor box then boxes on top of it, which is a single continuous action. Splitting
+  // there fragmented every stack into one-box stages once `supportType` stopped being
+  // overwritten by the push-against relation. `supportTypes` is a list precisely because
+  // a stage may span floor and stacked boxes.
   return (
-    next.physicalLayer !== first.physicalLayer ||
+    (next.depthLayer ?? 1) !== (first.depthLayer ?? 1) ||
     depthSegment(next) !== depthSegment(first) ||
-    supportSignature(next) !== supportSignature(first) ||
     next.workStep !== previous.workStep + 1 ||
     labels.size > MAX_LABELS_PER_GROUP
   )
@@ -93,7 +97,7 @@ function toGroup(draft: GroupDraft, sequence: number): LoadingTaskGroup {
     sequence,
     stepStart,
     stepEnd,
-    physicalLayer: boxes[0].physicalLayer,
+    depthLayer: boxes[0].depthLayer ?? 1,
     labels,
     boxIds: boxes.map((box) => box.id),
     bounds: { xMin, xMax, yMin, yMax, zMin, zMax },

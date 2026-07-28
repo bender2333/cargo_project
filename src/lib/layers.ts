@@ -44,7 +44,7 @@ export function assignDepthLayers(placed: PlacedBox[]): PlacedBox[] {
       })
       
       if (pushers.length > 0) {
-        box.depthLayer = Math.max(...pushers.map((p) => p.depthLayer), 0) + 1
+        box.depthLayer = Math.max(...pushers.map((p) => p.depthLayer ?? 1), 0) + 1
       } else {
         // 如果没有直接接触的推靠箱子，寻找更后方投影重叠且 x+length 最大的作为虚拟推靠源
         const backboxes = sorted.filter((candidate) => {
@@ -64,7 +64,7 @@ export function assignDepthLayers(placed: PlacedBox[]): PlacedBox[] {
         
         if (backboxes.length > 0) {
           backboxes.sort((a, b) => (b.x + b.length) - (a.x + a.length))
-          box.depthLayer = backboxes[0].depthLayer + 1
+          box.depthLayer = (backboxes[0].depthLayer ?? 1) + 1
         } else {
           box.depthLayer = 1
         }

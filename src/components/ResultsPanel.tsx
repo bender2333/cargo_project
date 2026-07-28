@@ -507,7 +507,10 @@ export function ResultsPanel({
                 setActiveLoadingGroupIndex(nextIndex)
                 setLoadingGroupsPlaying(false)
                 if (group) {
-                  setActiveLayerId(String(group.physicalLayer))
+                  // A stage is a loading wave, but the layer filter is by vertical level,
+                  // so take it from the stage's own boxes.
+                  const firstBox = activeResult.placed.find((box) => box.id === group.boxIds[0])
+                  setActiveLayerId(String(firstBox?.physicalLayer ?? 1))
                   if (placementMode === 'manual') {
                     selectManualBox(group.boxIds[0] ?? null)
                   } else {

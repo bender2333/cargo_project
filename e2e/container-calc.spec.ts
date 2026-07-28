@@ -345,7 +345,10 @@ test('applies global max stack layers to cargo without per-item limits', async (
   await expect(row.getByRole('cell').nth(5)).toHaveText('3')
   await expect(row.getByRole('cell').nth(6)).toHaveText('2')
   await expect(row.getByRole('cell').nth(7)).toHaveText('1')
-  await expect(row.getByRole('cell').nth(8)).toHaveText('1')
+  // Two crates fit: one on the floor (layer 1) and one stacked on it at z=500 (layer 2).
+  // The layers cell previously read '1' because the X-axis push-against overwrite put
+  // both boxes at x=0 into the same wave and called that the physical layer.
+  await expect(row.getByRole('cell').nth(8)).toHaveText('1, 2')
   await expect(row.getByRole('cell').nth(9)).toHaveText('1, 2')
 })
 

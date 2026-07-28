@@ -13,6 +13,7 @@ const T = {
     play: 'Play',
     pause: 'Pause',
     layer: 'Layer',
+    wave: 'Loading wave',
     steps: 'Steps',
     boxes: 'Boxes',
     labels: 'Labels',
@@ -37,6 +38,7 @@ const T = {
     play: '播放',
     pause: '暂停',
     layer: '层级',
+    wave: '装载波次',
     steps: '步骤',
     boxes: '箱体',
     labels: '标签',
@@ -136,7 +138,7 @@ export function LoadingStepsPanel({ groups, activeIndex, playing, locale, availa
           {t.stage} {activeGroup.sequence}: {activeGroup.summary}
         </div>
         <div>{t.steps}: {rangeLabel(activeGroup.stepStart, activeGroup.stepEnd)} · {t.boxes}: {activeGroup.boxIds.length}</div>
-        <div>{t.layer}: {activeGroup.physicalLayer} · {t.support}: {activeGroup.supportTypes.map((type) => supportLabel(type, locale)).join(', ')}</div>
+        <div>{t.wave}: {activeGroup.depthLayer} · {t.support}: {activeGroup.supportTypes.map((type) => supportLabel(type, locale)).join(', ')}</div>
         <div>{t.depth}: {formatMm(activeGroup.bounds.xMin)}-{formatMm(activeGroup.bounds.xMax)} mm · {t.width}: {formatMm(activeGroup.bounds.yMin)}-{formatMm(activeGroup.bounds.yMax)} mm · {t.height}: {formatMm(activeGroup.bounds.zMin)}-{formatMm(activeGroup.bounds.zMax)} mm</div>
         {activeGroup.supportedBy.length > 0 && <div>{t.supportedBy}: {activeGroup.supportedBy.join(', ')}</div>}
         <div className="mt-2 flex flex-wrap gap-1" data-testid="loading-steps-labels">
