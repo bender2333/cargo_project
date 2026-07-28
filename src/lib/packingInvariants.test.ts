@@ -192,6 +192,36 @@ describe('PackingResult loading-order invariants', () => {
     }
   })
 
+  it('only steps back to a shallower depth when support order or x position requires it', () => {
+    // Loading runs far-wall-outward, but support edges outrank depth, and `depthLayer`
+    // is not monotonic in x (a box further out can be in an earlier push-against wave
+    // when nothing sits directly behind it). Every step back must have one of those
+    // reasons; anything else means the ordering itself regressed.
+    for (const { name, result } of cases) {
+      const byId = new Map(result.placed.map((box) => [box.id, box]))
+      const sequence = [...result.placed].sort((a, b) => a.workStep - b.workStep)
+      const unjustified: string[] = []
+      for (let i = 1; i < sequence.length; i++) {
+        const previous = sequence[i - 1]
+        const current = sequence[i]
+        if (previous.depthLayer <= current.depthLayer) continue
+        const waitedOnOutwardSupporter = current.supportedBy.some((id) => {
+          const supporter = byId.get(id)
+          return supporter !== undefined && supporter.depthLayer >= current.depthLayer
+        })
+        const previousWasSupporter = result.placed.some((box) => box.supportedBy.includes(previous.id))
+        const xStillAdvances = current.x >= previous.x
+        if (!waitedOnOutwardSupporter && !previousWasSupporter && !xStillAdvances) {
+          unjustified.push(`${previous.id}(depth=${previous.depthLayer},x=${previous.x}) then ${current.id}(depth=${current.depthLayer},x=${current.x})`)
+        }
+      }
+      expect(
+        unjustified.length,
+        `${name}: ${unjustified.length} unjustified depth reversals — ${describeFew(unjustified, (s) => s)}`,
+      ).toBe(0)
+    }
+  })
+
   it('assigns every placed box a unique work step', () => {
     for (const { name, result } of cases) {
       const steps = result.placed.map((box) => box.workStep)

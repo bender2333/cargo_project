@@ -634,13 +634,67 @@ function loadingSequenceScore(box: PlacedBox, container: ContainerSpec) {
   )
 }
 
+/**
+ * Assign loading order: supporters first, then as deep-to-shallow as that allows.
+ *
+ * Loading wants to run from the far wall outward (a container opens at one end), but
+ * that cannot override physics: a box must be loaded after everything holding it up.
+ * These two goals genuinely conflict — on the Vietnam fixtures 1,080 of 3,467 support
+ * edges have the supporter sitting *further out* than the box it supports. Sorting by
+ * position alone therefore produced 1,129 edges telling the crew to place a box before
+ * its own support.
+ *
+ * So support edges are hard constraints (Kahn topological sort) and depth-first is the
+ * tiebreaker among boxes that are currently loadable.
+ */
 function assignWorkStepsByDepth(placed: PlacedBox[], container: ContainerSpec) {
-  const ordered = [...placed].sort(
-    (a, b) =>
-      loadingSequenceScore(a, container) - loadingSequenceScore(b, container) ||
-      a.index - b.index ||
-      a.id.localeCompare(b.id),
-  )
+  const score = new Map(placed.map((box) => [box.id, loadingSequenceScore(box, container)]))
+  const byId = new Map(placed.map((box) => [box.id, box]))
+
+  const preferred = (a: PlacedBox, b: PlacedBox) =>
+    (score.get(a.id) ?? 0) - (score.get(b.id) ?? 0) ||
+    a.index - b.index ||
+    a.id.localeCompare(b.id)
+
+  // remaining[box] = supporters not yet loaded; dependents[supporter] = boxes waiting on it
+  const remaining = new Map<string, number>()
+  const dependents = new Map<string, string[]>()
+  for (const box of placed) {
+    const supporters = box.supportedBy.filter((id) => byId.has(id) && id !== box.id)
+    remaining.set(box.id, supporters.length)
+    for (const supporterId of supporters) {
+      dependents.set(supporterId, [...(dependents.get(supporterId) ?? []), box.id])
+    }
+  }
+
+  const ready = placed.filter((box) => (remaining.get(box.id) ?? 0) === 0).sort(preferred)
+  const ordered: PlacedBox[] = []
+
+  while (ready.length > 0) {
+    const next = ready.shift()
+    if (!next) break
+    ordered.push(next)
+    for (const dependentId of dependents.get(next.id) ?? []) {
+      const left = (remaining.get(dependentId) ?? 0) - 1
+      remaining.set(dependentId, left)
+      if (left === 0) {
+        const dependent = byId.get(dependentId)
+        if (!dependent) continue
+        // Keep `ready` sorted so the deepest loadable box always goes next.
+        const at = ready.findIndex((candidate) => preferred(dependent, candidate) < 0)
+        if (at === -1) ready.push(dependent)
+        else ready.splice(at, 0, dependent)
+      }
+    }
+  }
+
+  if (ordered.length < placed.length) {
+    // Vertical support cannot form a cycle, so this means the support graph is
+    // inconsistent. Fall back to positional order for the remainder rather than
+    // dropping boxes out of the loading plan entirely.
+    const seen = new Set(ordered.map((box) => box.id))
+    ordered.push(...placed.filter((box) => !seen.has(box.id)).sort(preferred))
+  }
 
   ordered.forEach((box, index) => {
     box.workStep = index + 1

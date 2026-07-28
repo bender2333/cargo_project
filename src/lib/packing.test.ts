@@ -261,12 +261,35 @@ describe('calculatePacking', () => {
     expectValidPacking(effectiveContainer(containers[0]), result)
 
     const byStep = [...result.placed].sort((a, b) => a.workStep - b.workStep)
+    const byId = new Map(result.placed.map((box) => [box.id, box]))
     const firstOuterDepthStep = byStep.find((box) => box.x > 0)?.workStep
-    const innerTopFillSteps = byStep.filter((box) => box.x === 0 && box.z >= 1800).map((box) => box.workStep)
+    const innerTopFill = byStep.filter((box) => box.x === 0 && box.z >= 1800)
 
     expect(firstOuterDepthStep).toBeDefined()
-    expect(innerTopFillSteps.length).toBeGreaterThan(0)
-    expect(Math.max(...innerTopFillSteps)).toBeLessThan(firstOuterDepthStep!)
+    expect(innerTopFill.length).toBeGreaterThan(0)
+
+    // Inner top-fill loads before moving outward — unless the box is physically resting
+    // on something further out, in which case its support has to go in first. In this
+    // fixture `carton-18-5` sits at x=0 but half of its base is carried by a box at
+    // x=400; loading it earlier would ask the crew to balance it on air. (The previous
+    // expectation required *all* inner top-fill before *any* outer box, which that
+    // support edge makes physically impossible.)
+    for (const box of innerTopFill) {
+      const restsOnOuterBox = box.supportedBy.some((id) => (byId.get(id)?.x ?? 0) > 0)
+      if (restsOnOuterBox) continue
+      expect(
+        box.workStep,
+        `${box.id} has no outward supporter, so it must load before the first outer box`,
+      ).toBeLessThan(firstOuterDepthStep!)
+    }
+
+    // And the ones that do wait must still wait only for their own support.
+    for (const box of innerTopFill) {
+      for (const supporterId of box.supportedBy) {
+        const supporter = byId.get(supporterId)
+        if (supporter) expect(supporter.workStep).toBeLessThan(box.workStep)
+      }
+    }
   })
 
   it('can preserve input order as a loading mode instead of volume-priority order', () => {
