@@ -89,11 +89,9 @@ export function canonicalizePackingResult(result: PackingResult) {
         maxStackLayers: box.maxStackLayers ?? null,
         groundOnly: box.groundOnly ?? null,
         physicalLayer: box.physicalLayer,
-        verticalLayer: box.verticalLayer ?? null,
         workStep: box.workStep,
         supportType: box.supportType,
         supportedBy: sorted(box.supportedBy),
-        verticalSupportedBy: box.verticalSupportedBy ? sorted(box.verticalSupportedBy) : null,
       }))
       .sort((a, b) => compareText(a.id, b.id)),
     unplaced: result.unplaced

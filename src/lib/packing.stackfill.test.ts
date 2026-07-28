@@ -63,26 +63,32 @@ function snapshot12EquivalentCargo(): CargoItem[] {
   ]
 }
 
-function verticalSupportGraph(placed: PlacedBox[]) {
-  return new Map(placed.map((box) => [box.id, {
-    ...box,
-    physicalLayer: box.verticalLayer ?? box.physicalLayer,
-    supportedBy: box.verticalSupportedBy ?? [],
-  }]))
-}
-
 function expectNoStackCapacityViolations(placed: PlacedBox[]) {
-  const graph = verticalSupportGraph(placed)
+  const graph = new Map(placed.map((box) => [box.id, box]))
   for (const box of graph.values()) {
     expect(violatesStackChain(box, graph)).toBeNull()
   }
 }
 
 function topOccupiedSupportIds(placed: PlacedBox[]) {
-  return new Set(placed.filter((box) => box.z > 0).flatMap((box) => box.verticalSupportedBy ?? []))
+  return new Set(placed.filter((box) => box.z > 0).flatMap((box) => box.supportedBy))
 }
 
 describe('calculatePacking stack-fill optimization', () => {
+  // KNOWN RED — exposes a real engine defect, do not relax this assertion.
+  //
+  // `expectNoStackCapacityViolations` fails here: 7 boxes rest on `maxStackLayers: 1`
+  // cargo. In every case the supporter was placed *after* its rider, and
+  // `respectsMaxStackLayers` only walks *down* from the box being placed — it never
+  // re-checks boxes already sitting above a newly inserted slot. Same root cause as the
+  // stale support relations fixed by `reconcileSupportRelations`.
+  //
+  // This test used to pass only because it read the `verticalSupportedBy` snapshot,
+  // which was written once at construction and never refreshed, so the assertion was
+  // structurally incapable of seeing a later insertion. Removing that shadow graph
+  // surfaced the defect. The result now reports `stacking-check: error`, so it is at
+  // least visible to users. Fixing it means changing placement legality, which is out
+  // of scope for the layer/support contract work — see decision.md 2026-07-28.
   it('uses capacity-one cargo as top passengers in the snapshot-12 style automatic load', () => {
     const result = calculatePacking(snapshot12Container, snapshot12EquivalentCargo(), { loadingMode: 'quantity' })
 
@@ -93,7 +99,7 @@ describe('calculatePacking stack-fill optimization', () => {
     expectNoStackCapacityViolations(result.placed)
 
     const capacityOne = result.placed.filter((box) => stackCapacity(box) === 1)
-    const capacityOneTopPassengers = capacityOne.filter((box) => (box.verticalSupportedBy ?? []).length > 0)
+    const capacityOneTopPassengers = capacityOne.filter((box) => box.supportedBy.length > 0)
     const lockedCapacityOneFloorBoxes = capacityOne
       .filter((box) => box.z === 0)
       .filter((box) => !topOccupiedSupportIds(result.placed).has(box.id))

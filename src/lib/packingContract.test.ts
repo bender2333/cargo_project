@@ -34,7 +34,6 @@ function packingResult(): PackingResult {
     placed: [
       placedBox({
         orientationAxes: { x: 'W+', y: 'L-', z: 'H+' },
-        verticalSupportedBy: ['vertical-z', 'vertical-a'],
       }),
       placedBox({ id: 'box-a', cargoId: 'cargo-a', label: 'A', index: 1, workStep: 1, supportedBy: [] }),
     ],
@@ -77,9 +76,7 @@ describe('canonicalizePackingResult', () => {
     expect(summary.placements[1]).toMatchObject({
       x: 1.234568,
       maxStackLayers: null,
-      verticalLayer: null,
       supportedBy: ['support-a', 'support-z'],
-      verticalSupportedBy: ['vertical-a', 'vertical-z'],
     })
     expect(summary.layers.map((layer) => layer.physicalLayer)).toEqual([1, 2])
     expect(summary.workSteps.map((step) => step.step)).toEqual([1, 2])

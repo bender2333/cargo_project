@@ -129,14 +129,6 @@ function expectValidLargePacking(container: ContainerSpec, result: PackingResult
   expect(result.usedWeight).toBeLessThanOrEqual(container.maxWeight)
 }
 
-function verticalSupportGraph(placed: PlacedBox[]) {
-  return new Map(placed.map((box) => [box.id, {
-    ...box,
-    physicalLayer: box.verticalLayer ?? box.physicalLayer,
-    supportedBy: box.verticalSupportedBy ?? [],
-  }]))
-}
-
 function maxSupportedDistance(box: PlacedBox, graph: Map<string, PlacedBox>) {
   let maxDistance = 1
   for (const candidate of graph.values()) {
@@ -540,6 +532,10 @@ describe('calculatePacking', () => {
     expect(result.unplaced[0]).toMatchObject({ quantity: 1, reasonCode: UNPLACED_REASON_CODES.NO_SPACE })
   })
 
+  // KNOWN RED — same engine defect as the capacity-one case in packing.stackfill.test.ts:
+  // a box inserted beneath an existing stack is never re-validated as a supporter, so
+  // capacity-one cargo ends up carrying riders. Previously hidden by the
+  // `verticalSupportedBy` shadow graph. Do not relax; see decision.md 2026-07-28.
   it('treats non-stackable cargo as capacity-one top cargo in a snapshot-11 style mixed stack-capacity load', () => {
     const container = containers[0]
     const result = calculatePacking(container, [
@@ -555,7 +551,7 @@ describe('calculatePacking', () => {
     expectValidLargePacking(container, result)
     expect(result.placedCount).toBeGreaterThan(150)
 
-    const verticalById = verticalSupportGraph(result.placed)
+    const verticalById = new Map(result.placed.map((box) => [box.id, box]))
     for (const box of verticalById.values()) {
       expect(violatesStackChain(box, verticalById)).toBeNull()
     }
@@ -565,7 +561,7 @@ describe('calculatePacking', () => {
     const capacityTwo = result.placed.filter((box) => box.cargoId.startsWith('capacity-two-'))
     expect(nonStackable.length).toBeGreaterThan(0)
     expect(nonStackable.every((box) =>
-      result.placed.every((other) => !(other.verticalSupportedBy ?? []).includes(box.id)),
+      result.placed.every((other) => !other.supportedBy.includes(box.id)),
     )).toBe(true)
     expect(capacityTwo.every((box) => maxSupportedDistance(box, verticalById) <= 2)).toBe(true)
     const averageZ = (boxes: PlacedBox[]) => boxes.reduce((sum, box) => sum + box.z, 0) / boxes.length
@@ -581,7 +577,7 @@ describe('calculatePacking', () => {
     ], { loadingMode: 'quantity' })
 
     expectValidPacking(container, result)
-    const graph = verticalSupportGraph(result.placed)
+    const graph = new Map(result.placed.map((box) => [box.id, box]))
     for (const box of graph.values()) {
       expect(violatesStackChain(box, graph)).toBeNull()
     }
@@ -949,7 +945,7 @@ describe('orientation preference and clustering', () => {
     expectValidPacking(container, result)
     let sameHeightStacks = 0
     for (const box of result.placed) {
-      const below = (box.verticalSupportedBy ?? [])
+      const below = box.supportedBy
         .map((id) => result.placed.find((b) => b.id === id))
         .filter(Boolean) as PlacedBox[]
       for (const supporter of below) {

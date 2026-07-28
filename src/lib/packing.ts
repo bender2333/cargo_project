@@ -1024,13 +1024,11 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       maxStackLayers: entry.item.maxStackLayers,
       groundOnly: entry.item.groundOnly,
       physicalLayer: support.physicalLayer,
-      verticalLayer: support.physicalLayer,
       // Overwritten by assignDepthLayers once all boxes are placed.
       depthLayer: 1,
       workStep,
       supportType: support.supportType,
       supportedBy: support.supportedBy.map((candidate) => candidate.id),
-      verticalSupportedBy: support.supportedBy.map((candidate) => candidate.id),
     }
     if (placementSource) {
       ;(placedBox as PlacedBox & { placementSource?: string }).placementSource = placementSource

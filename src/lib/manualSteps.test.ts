@@ -36,11 +36,9 @@ function makeBox(overrides: Partial<PlacedBox> & Pick<PlacedBox, 'id'>): PlacedB
     canRotate: overrides.canRotate ?? true,
     stackable: overrides.stackable ?? true,
     physicalLayer: overrides.physicalLayer ?? 1,
-    verticalLayer: overrides.verticalLayer,
     workStep: overrides.workStep ?? 1,
     supportType: overrides.supportType ?? 'floor',
     supportedBy: overrides.supportedBy ?? [],
-    verticalSupportedBy: overrides.verticalSupportedBy,
   }
 }
 

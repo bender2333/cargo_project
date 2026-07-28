@@ -845,10 +845,8 @@ export function toPlacedBoxes(
     maxStackLayers: box.maxStackLayers,
     groundOnly: box.groundOnly,
     physicalLayer: 1,
-    verticalLayer: 1,
     workStep: 1,
     supportType: 'floor',
     supportedBy: [],
-    verticalSupportedBy: [],
   }))
 }

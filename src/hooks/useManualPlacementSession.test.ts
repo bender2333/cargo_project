@@ -60,11 +60,9 @@ function placedBox(overrides: Partial<PlacedBox> = {}): PlacedBox {
     stackable: true,
     maxStackLayers: 8,
     physicalLayer: 1,
-    verticalLayer: 1,
     workStep: 1,
     supportType: 'floor',
     supportedBy: [],
-    verticalSupportedBy: [],
     ...overrides,
   }
 }
