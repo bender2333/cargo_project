@@ -453,7 +453,7 @@ export function PackingSidebar({
             <h2 className="text-lg font-bold">{t.unitParameters}</h2>
             <div className="grid grid-cols-[1fr_56px] gap-2">
               <label className="field-label">{t.name}<input className="field-input mt-1" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></label>
-              <label className="field-label">{t.label}<input className="field-input mt-1 text-center font-bold" maxLength={2} value={form.label ?? ''} onChange={(event) => setForm((current) => ({ ...current, label: event.target.value.toUpperCase() }))} /></label>
+              <label className="field-label">{t.label}<input className="field-input mt-1 text-center font-bold" maxLength={12} value={form.label ?? ''} onChange={(event) => setForm((current) => ({ ...current, label: event.target.value.toUpperCase() }))} /></label>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <label className="field-label">{t.length}<input className="field-input mt-1" type="number" value={form.length} onChange={(event) => updateNumber('length', event.target.value)} /></label>

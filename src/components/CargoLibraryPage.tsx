@@ -116,7 +116,7 @@ export function CargoLibraryPage({
     ...draft,
     id: editingId ?? createClientId(),
     name: draft.name.trim() || (locale === 'zh' ? '库货物' : 'Library cargo'),
-    label: (draft.label || excelStyleLabel(items.length)).toUpperCase().slice(0, 2),
+    label: (draft.label || excelStyleLabel(items.length)).toUpperCase(),
     quantity: 1,
     maxStackLayers: draft.stackable ? draft.maxStackLayers : undefined,
     groundOnly: draft.groundOnly ?? false,
@@ -171,7 +171,7 @@ export function CargoLibraryPage({
         </div>
         <form className="grid gap-2 text-sm md:grid-cols-6" onSubmit={(event) => void handleSubmit(event)}>
           <label>{labels.name}<input className="field-input mt-1" value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /></label>
-          <label>{labels.group}<input className="field-input mt-1" value={draft.label ?? ''} onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value.toUpperCase().slice(0, 2) }))} /></label>
+          <label>{labels.group}<input className="field-input mt-1" maxLength={12} value={draft.label ?? ''} onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value.toUpperCase() }))} /></label>
           <label>{labels.length}<input className="field-input mt-1" type="number" value={draft.length} onChange={(event) => updateNumber('length', event.target.value)} /></label>
           <label>{labels.width}<input className="field-input mt-1" type="number" value={draft.width} onChange={(event) => updateNumber('width', event.target.value)} /></label>
           <label>{labels.height}<input className="field-input mt-1" type="number" value={draft.height} onChange={(event) => updateNumber('height', event.target.value)} /></label>

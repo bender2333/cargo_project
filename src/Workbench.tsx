@@ -1653,7 +1653,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       ...form,
       id: createClientId(),
       name: form.name.trim() || `Cargo ${cargoItems.length + 1}`,
-      label: (form.label || nextLabel(cargoItems.length)).toUpperCase().slice(0, 2),
+      label: (form.label || nextLabel(cargoItems.length)).toUpperCase(),
       quantity: Math.max(1, Math.floor(form.quantity)),
       maxStackLayers: form.stackable ? form.maxStackLayers : undefined,
       groundOnly: form.groundOnly ?? false,
@@ -1693,7 +1693,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       ...editForm,
       id: editingCargo.id,
       name: editForm.name.trim() || editingCargo.name,
-      label: (editForm.label || editingCargo.label || nextLabel(cargoItems.length)).toUpperCase().slice(0, 2),
+      label: (editForm.label || editingCargo.label || nextLabel(cargoItems.length)).toUpperCase(),
       quantity: Math.max(1, Math.floor(editForm.quantity)),
       maxStackLayers: editForm.stackable ? editForm.maxStackLayers : undefined,
       groundOnly: editForm.groundOnly ?? false,
@@ -2388,7 +2388,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
               </div>
               <div className="grid grid-cols-[1fr_72px] gap-3">
                 <label className="field-label">{t.name}<input className="field-input mt-1" value={editForm.name} onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))} /></label>
-                <label className="field-label">{t.label}<input className="field-input mt-1 text-center font-bold" maxLength={2} value={editForm.label ?? ''} onChange={(event) => setEditForm((current) => ({ ...current, label: event.target.value.toUpperCase() }))} /></label>
+                <label className="field-label">{t.label}<input className="field-input mt-1 text-center font-bold" maxLength={12} value={editForm.label ?? ''} onChange={(event) => setEditForm((current) => ({ ...current, label: event.target.value.toUpperCase() }))} /></label>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-3">
                 <label className="field-label">{t.length}<input className="field-input mt-1" type="number" value={editForm.length} onChange={(event) => updateEditNumber('length', event.target.value)} /></label>
