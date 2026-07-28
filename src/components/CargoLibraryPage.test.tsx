@@ -77,13 +77,13 @@ afterEach(() => {
 })
 
 describe('CargoLibraryPage', () => {
-  it('creates one reusable cargo definition with a two-character uppercase label and no stale stack limit', async () => {
+  it('creates one reusable cargo definition with an uppercase label (no truncation) and no stale stack limit', async () => {
     const onCreate = vi.fn().mockResolvedValue(undefined)
     const view = render(<CargoLibraryPage {...pageProps({ onCreate })} />)
 
     fireEvent.change(view.getByLabelText('Name'), { target: { value: '  Priority carton  ' } })
     fireEvent.change(view.getByLabelText('Group'), { target: { value: 'abz' } })
-    expect((view.getByLabelText('Group') as HTMLInputElement).value).toBe('AB')
+    expect((view.getByLabelText('Group') as HTMLInputElement).value).toBe('ABZ')
     fireEvent.change(view.getByLabelText('Max stack layers'), { target: { value: '7' } })
     fireEvent.click(view.getByLabelText('Stackable'))
     expect(view.queryByLabelText('Max stack layers')).toBeNull()
@@ -95,7 +95,7 @@ describe('CargoLibraryPage', () => {
     expect(onCreate).toHaveBeenCalledWith({
       id: expect.any(String),
       name: 'Priority carton',
-      label: 'AB',
+      label: 'ABZ',
       length: 400,
       width: 500,
       height: 600,

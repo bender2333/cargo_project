@@ -190,3 +190,46 @@ describe('buildExportRowsFromTemplate', () => {
     expect(out).toEqual([{ Tag: 'A' }, { Tag: 'B' }])
   })
 })
+
+// P1-9 RED tests — actual orientation in export
+describe('buildExportPlanRows orientation accuracy', () => {
+  it('emits actual dimensions from placedBoxes[0] when all placed boxes share the same orientation', () => {
+    const items = [
+      cargo({ id: 'a', name: 'Uniform', label: 'A', length: 600, width: 400, height: 300, quantity: 2, weight: 10, canRotate: false }),
+    ]
+    const result = calculatePacking({ ...container, maxWeight: 1000 }, items)
+    const rows = buildExportPlanRows(items, result)
+
+    // Both boxes are LWH — actual dims should match original
+    expect(rows[0]!.actualLength).toBe(600)
+    expect(rows[0]!.actualWidth).toBe(400)
+    expect(rows[0]!.actualHeight).toBe(300)
+  })
+
+  it('emits empty actual dimensions when the same cargo is placed in multiple orientations', () => {
+    // Manually build a result with two boxes of same cargoId but different orientations
+    const item: CargoItem = cargo({ id: 'a', name: 'Mixed', label: 'A', length: 600, width: 400, height: 300, quantity: 2, weight: 10 })
+    const result = calculatePacking({ ...container, maxWeight: 1000 }, [item])
+
+    // Force two different orientations on the placed boxes for this test
+    if (result.placed.length >= 2) {
+      result.placed[0]!.orientationKey = 'LWH'
+      result.placed[0]!.length = 600
+      result.placed[0]!.width = 400
+      result.placed[0]!.height = 300
+      result.placed[1]!.orientationKey = 'WLH'
+      result.placed[1]!.length = 400
+      result.placed[1]!.width = 600
+      result.placed[1]!.height = 300
+    }
+
+    const rows = buildExportPlanRows([item], result)
+
+    // Mixed orientations → actual dims should be empty
+    if (result.placed.length >= 2) {
+      expect(rows[0]!.actualLength).toBe('')
+      expect(rows[0]!.actualWidth).toBe('')
+      expect(rows[0]!.actualHeight).toBe('')
+    }
+  })
+})

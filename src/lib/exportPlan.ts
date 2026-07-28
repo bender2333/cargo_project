@@ -32,15 +32,29 @@ export function buildExportPlanRows(cargoItems: CargoItem[], result: PackingResu
     const unplaced = result.unplaced.find((entry) => entry.cargoId === item.id)
     const stats = result.labelStats.find((entry) => entry.label === item.label && entry.name === item.name)
 
+    // Only report actual dimensions when all placed boxes share the same orientation;
+    // mixed orientations cannot be represented as a single row.
+    const firstOrientation = placedBoxes[0]?.orientationKey
+    const uniformOrientation = placedBoxes.length > 0 && placedBoxes.every((box) => box.orientationKey === firstOrientation)
+    const actualLength: number | '' = uniformOrientation ? (placedBoxes[0]?.length ?? '') : ''
+    const actualWidth: number | '' = uniformOrientation ? (placedBoxes[0]?.width ?? '') : ''
+    const actualHeight: number | '' = uniformOrientation ? (placedBoxes[0]?.height ?? '') : ''
+
+    const orientationSet = new Set(placedBoxes.map((box) => box.orientationKey))
+    const hasMixedOrientations = orientationSet.size > 1
+    const gapFillNote = placedBoxes.some(isGapFillBox) ? 'Mixed gap-fill' : ''
+    const orientationNote = hasMixedOrientations ? `Mixed orientations: ${[...orientationSet].join(', ')}` : ''
+    const placementNote = [gapFillNote, orientationNote].filter(Boolean).join('; ')
+
     return {
       label: item.label ?? '',
       name: item.name,
       originalLength: item.length,
       originalWidth: item.width,
       originalHeight: item.height,
-      actualLength: placedBoxes[0]?.length ?? '',
-      actualWidth: placedBoxes[0]?.width ?? '',
-      actualHeight: placedBoxes[0]?.height ?? '',
+      actualLength,
+      actualWidth,
+      actualHeight,
       weight: item.weight,
       maxStackLayers: item.maxStackLayers ?? options.defaultMaxStackLayers ?? '',
       plannedQuantity: item.quantity,
@@ -48,7 +62,7 @@ export function buildExportPlanRows(cargoItems: CargoItem[], result: PackingResu
       unplacedQuantity: stats?.unplaced ?? unplaced?.quantity ?? 0,
       layer: formatNumberList(stats?.layers ?? [...new Set(placedBoxes.map((box) => box.physicalLayer))].sort((a, b) => a - b)),
       workStep: formatNumberList(placedBoxes.map((box) => box.workStep).sort((a, b) => a - b)),
-      placementNote: placedBoxes.some(isGapFillBox) ? 'Mixed gap-fill' : '',
+      placementNote,
       failureReason: unplaced?.reason ?? '',
       failureReasonCode: unplaced?.reasonCode ?? '',
     }
