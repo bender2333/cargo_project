@@ -55,8 +55,16 @@ export type PlacedBox = {
   stackable: boolean
   maxStackLayers?: number
   groundOnly?: boolean
+  /** Vertical stacking depth. A box on the floor is layer 1 (PRD 9.3). */
   physicalLayer: number
   verticalLayer?: number
+  /**
+   * Loading wave along the container depth axis: boxes against the far wall are 1,
+   * boxes pushed against those are 2, and so on. A container only opens at one end,
+   * so loading proceeds from the far wall outward. Distinct from `physicalLayer`,
+   * which is vertical.
+   */
+  depthLayer: number
   workStep: number
   supportType: 'floor' | 'fully-supported' | 'partially-supported'
   supportedBy: string[]
