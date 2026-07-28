@@ -267,6 +267,81 @@ export function gateBenchmark(baseline, actual) {
   return { timingComparable, failures }
 }
 
+/**
+ * Message refusing to create a baseline implicitly, or null when creation is allowed.
+ *
+ * Deleting the baseline used to be an unguarded way around every hard gate, including
+ * the timing comparison. Creating one from scratch is a deliberate act and must be
+ * stated explicitly.
+ */
+export function newBaselineRefusal(baselinePath, allowNewBaseline) {
+  if (allowNewBaseline) return null
+  return `Missing benchmark baseline: ${baselinePath}\n`
+    + 'Refusing to create one implicitly — a missing baseline bypasses every hard gate '
+    + '(contract hashes, bundle non-growth, timing comparison).\n'
+    + 'If the baseline is genuinely absent and you intend to create it, re-run with '
+    + '--allow-new-baseline. If it exists upstream, restore it instead of recreating it.'
+}
+
+/**
+ * List timing metrics an update is about to widen past the 20% gate.
+ *
+ * `gateBenchmarkUpdate` intentionally does not compare timings — refreshing them is
+ * what an update is for. But that also means a run on a loaded machine can silently
+ * become the new tolerance. This does not block; it makes the widening auditable so
+ * the accepted numbers are stated in the log and can be reviewed.
+ */
+export function acceptedTimingRegressions(baseline, actual) {
+  const comparable = comparableEnvironmentFields.every(
+    (field) => baseline?.environment?.[field] === actual?.environment?.[field],
+  )
+  if (!comparable) return { comparable, entries: [] }
+
+  const entries = []
+  for (const section of ['algorithm', 'browser']) {
+    const baselineMetrics = section === 'algorithm' ? baseline?.algorithm?.cases : baseline?.browser?.metrics
+    const actualMetrics = section === 'algorithm' ? actual?.algorithm?.cases : actual?.browser?.metrics
+    if (!baselineMetrics || !actualMetrics) continue
+    for (const [name, expected] of Object.entries(baselineMetrics)) {
+      const observed = actualMetrics[name]
+      if (!observed) continue
+      for (const statistic of ['medianMs', 'p95Ms']) {
+        const before = expected?.[statistic]
+        const after = observed?.[statistic]
+        if (!Number.isFinite(before) || !Number.isFinite(after) || before <= 0) continue
+        if (after > before * 1.2) {
+          entries.push({
+            metric: `${section}.${name}.${statistic}`,
+            before,
+            after,
+            growthPercent: ((after - before) / before) * 100,
+          })
+        }
+      }
+    }
+  }
+  return { comparable, entries }
+}
+
+function reportAcceptedTimingRegressions(baseline, actual) {
+  const { comparable, entries } = acceptedTimingRegressions(baseline, actual)
+  if (!comparable || entries.length === 0) return
+  console.warn(
+    `\nWARNING: this baseline update widens ${entries.length} timing gate(s) beyond 20% `
+    + 'on a comparable environment:',
+  )
+  for (const entry of entries) {
+    console.warn(
+      `  ${entry.metric}: ${entry.before.toFixed(3)} ms -> ${entry.after.toFixed(3)} ms `
+      + `(+${entry.growthPercent.toFixed(1)}%)`,
+    )
+  }
+  console.warn(
+    'If the machine was under load, discard this baseline and re-run when idle.\n'
+    + 'If the slowdown is real, record the acceptance in decision.md.\n',
+  )
+}
+
 const scriptPath = fileURLToPath(import.meta.url)
 const root = resolve(dirname(scriptPath), '..')
 const resultDir = join(root, 'test-results/benchmark')
@@ -400,21 +475,19 @@ async function main() {
 
   if (update) {
     if (existsSync(baselinePath)) {
-      const hardGate = gateBenchmarkUpdate(JSON.parse(readFileSync(baselinePath, 'utf8')), actual)
+      const previous = JSON.parse(readFileSync(baselinePath, 'utf8'))
+      const hardGate = gateBenchmarkUpdate(previous, actual)
       if (hardGate.failures.length > 0) {
         throw new Error(`Frontend benchmark baseline update rejected by hard gates:\n- ${hardGate.failures.join('\n- ')}`)
       }
-    } else if (!allowNewBaseline) {
-      // Deleting the baseline used to be an unguarded way around every hard gate,
-      // including the timing comparison. Creating one from scratch is a deliberate
-      // act and must be stated explicitly.
-      throw new Error(
-        `Missing benchmark baseline: ${baselinePath}\n`
-        + 'Refusing to create one implicitly — a missing baseline bypasses every hard gate '
-        + '(contract hashes, bundle non-growth, timing comparison).\n'
-        + 'If the baseline is genuinely absent and you intend to create it, re-run with '
-        + '--allow-new-baseline. If it exists upstream, restore it instead of recreating it.',
-      )
+      // By design this path accepts new timing samples (that is what an update is
+      // for, including iterationsPerSample migrations), so a slow machine can widen
+      // the window without any gate firing. Print what is being accepted so the
+      // widening is visible in the log rather than silent.
+      reportAcceptedTimingRegressions(previous, actual)
+    } else {
+      const refusal = newBaselineRefusal(baselinePath, allowNewBaseline)
+      if (refusal) throw new Error(refusal)
     }
     writeFileSync(baselinePath, `${JSON.stringify(actual, null, 2)}\n`)
     console.log(`Updated ${baselinePath}`)

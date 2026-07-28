@@ -198,17 +198,22 @@ describe('CargoImportDialog template reconciliation', () => {
   })
 
   it('keeps the reference intact while the catalog load is failing', async () => {
-    const { rerender } = renderDialog({ importTemplates: [makeTemplate()] })
+    const onCreateTemplate = vi.fn().mockResolvedValue(makeTemplate())
+    const onUpdateTemplate = vi.fn().mockResolvedValue(makeTemplate())
+    const { rerender } = renderDialog({
+      importTemplates: [makeTemplate()],
+      onCreateTemplate,
+      onUpdateTemplate,
+    })
 
     selectTemplate('t1')
     await waitFor(() => expect(templateNameInput().value).toBe('Vietnam layout'))
 
-    // Load failure must not be mistaken for a deletion.
-    rerender(
+    const renderWith = (templates: ImportTemplate[], loadFailed: boolean) => rerender(
       <CargoImportDialog
         importRows={importRows}
-        importTemplates={[]}
-        importTemplateLoadFailed
+        importTemplates={templates}
+        importTemplateLoadFailed={loadFailed}
         locale="en"
         labels={labels}
         userId="u1"
@@ -216,14 +221,27 @@ describe('CargoImportDialog template reconciliation', () => {
         onConfirm={vi.fn()}
         onClose={vi.fn()}
         onRefreshTemplates={vi.fn()}
-        onCreateTemplate={vi.fn()}
-        onUpdateTemplate={vi.fn()}
+        onCreateTemplate={onCreateTemplate}
+        onUpdateTemplate={onUpdateTemplate}
       />,
     )
 
-    // The name is the observable proxy for "reference kept": a cleared reference
-    // also clears the name. (select.value would be '' either way once the option
-    // disappears from an empty list, so it cannot distinguish the two cases.)
+    // Load failure must not be mistaken for a deletion.
+    renderWith([], true)
     expect(templateNameInput().value).toBe('Vietnam layout')
+
+    // The name alone cannot distinguish "reference kept" from "name kept but ID
+    // cleared", because the option is absent from an empty list either way. Restore
+    // the catalog and assert the ID itself survived.
+    renderWith([makeTemplate()], false)
+    await waitFor(() => {
+      const select = document.querySelector('[data-testid="import-template-select"]') as HTMLSelectElement
+      expect(select.value).toBe('t1')
+    })
+
+    // Strongest proof the ID is intact: saving still routes to update, not create.
+    fireEvent.click(document.querySelector('[data-testid="save-import-template"]')!)
+    await waitFor(() => expect(onUpdateTemplate).toHaveBeenCalledWith('t1', expect.anything()))
+    expect(onCreateTemplate).not.toHaveBeenCalled()
   })
 })

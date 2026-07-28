@@ -3,6 +3,7 @@ import * as frontendBenchmark from './frontendBenchmark.mjs'
 import * as packingBenchmarkCases from './packing-benchmark-cases.mjs'
 
 const {
+  acceptedTimingRegressions,
   gateBenchmark,
   gateBenchmarkUpdate,
   REQUIRED_ALGORITHM_ITERATIONS,
@@ -208,6 +209,52 @@ describe('frontend architecture benchmark gates', () => {
 
     slower.bundle.initialJsGzipBytes += 1
     expect(gateBenchmarkUpdate(baseline, slower).failures).toContain('initial JS gzip increased')
+  })
+
+  // gateBenchmarkUpdate deliberately accepts new timing samples, which is how a
+  // loaded machine silently widened the gates in ca1fc1a. It still must not do so
+  // invisibly: every widening past 20% has to be reportable.
+  it('reports timing gates an update would widen past 20%', () => {
+    const baseline = benchmark()
+    const slower = setTiming(benchmark(), 500)
+
+    const { comparable, entries } = acceptedTimingRegressions(baseline, slower)
+    expect(comparable).toBe(true)
+    expect(entries.length).toBeGreaterThan(0)
+    for (const entry of entries) {
+      expect(entry.after).toBeGreaterThan(entry.before * 1.2)
+      expect(entry.growthPercent).toBeGreaterThan(20)
+    }
+    // The update itself still succeeds — this is visibility, not a new gate.
+    expect(gateBenchmarkUpdate(baseline, slower).failures).toEqual([])
+  })
+
+  it('refuses to create a baseline implicitly and names the escape hatch', () => {
+    const refusal = frontendBenchmark.newBaselineRefusal('/tmp/baseline.json', false)
+    expect(refusal).toContain('Refusing to create one implicitly')
+    expect(refusal).toContain('bypasses every hard gate')
+    expect(refusal).toContain('--allow-new-baseline')
+  })
+
+  it('allows baseline creation only when explicitly requested', () => {
+    expect(frontendBenchmark.newBaselineRefusal('/tmp/baseline.json', true)).toBeNull()
+  })
+
+  it('reports nothing when timings stay inside the 20% window', () => {
+    const baseline = benchmark()
+    const barelySlower = setTiming(benchmark(), 100 * 1.1)
+    expect(acceptedTimingRegressions(baseline, barelySlower).entries).toEqual([])
+  })
+
+  it('does not report timing widenings across incomparable environments', () => {
+    const baseline = benchmark()
+    const slower = setTiming(
+      benchmark({ environment: { ...baseline.environment, cpu: 'Other CPU' } }),
+      500,
+    )
+    const { comparable, entries } = acceptedTimingRegressions(baseline, slower)
+    expect(comparable).toBe(false)
+    expect(entries).toEqual([])
   })
 
   it('does not compare timings across browser targets or runtime modes', () => {
