@@ -1,5 +1,6 @@
-import type { CargoItem, ContainerSpec, LabelPackingStats, PackingResult, PlacedBox } from '../types'
+import type { CargoItem, ContainerSpec, LabelPackingStats, PackingDiagnostic, PackingResult, PlacedBox } from '../types'
 import { assignDepthLayers, buildPackingLayers } from './layers'
+import type { ValidationIssue } from './manualPlacement'
 
 export const MANUAL_UNPLACED_REASON_CODE = 'manual-not-placed'
 const MANUAL_UNPLACED_REASON = 'Not placed in manual plan'
@@ -61,10 +62,59 @@ function buildPlannedLabelStats(cargoItems: CargoItem[], boxes: PlacedBox[]): La
   })
 }
 
+function buildManualDiagnostics(
+  placed: PlacedBox[],
+  container: ContainerSpec,
+  validationIssues?: ValidationIssue[],
+): PackingDiagnostic[] {
+  const diagnostics: PackingDiagnostic[] = []
+
+  const usedWeight = placed.reduce((sum, box) => sum + box.weight, 0)
+  if (container.maxWeight && usedWeight > container.maxWeight) {
+    diagnostics.push({
+      id: 'weight-check',
+      severity: 'error',
+      message: `Total weight ${usedWeight} kg exceeds container max weight ${container.maxWeight} kg.`,
+    })
+  }
+
+  if (validationIssues) {
+    const seen = new Set<string>()
+    for (const issue of validationIssues) {
+      const key = issue.type
+      if (seen.has(key)) continue
+      seen.add(key)
+      const diagId = issueToDiagnosticId(issue.type)
+      if (!diagId) continue
+      diagnostics.push({
+        id: diagId,
+        severity: issue.severity === 'warning' ? 'warning' : 'error',
+        message: issue.message,
+      })
+    }
+  }
+
+  return diagnostics
+}
+
+function issueToDiagnosticId(type: ValidationIssue['type']): string | null {
+  switch (type) {
+    case 'boundary': return 'boundary-check'
+    case 'overlap': return 'overlap-check'
+    case 'floating': return 'support-check'
+    case 'stacking':
+    case 'max-stack-layers':
+    case 'ground-only': return 'stacking-check'
+    case 'overweight': return 'weight-check'
+    default: return null
+  }
+}
+
 export function buildManualPackingResult(
   boxes: PlacedBox[],
   container: ContainerSpec,
   cargoItems?: CargoItem[],
+  validationIssues?: ValidationIssue[],
 ): PackingResult {
   const inputBoxes = cargoItems
     ? enrichPlacedBoxes(boxes, cargoItems)
@@ -125,7 +175,7 @@ export function buildManualPackingResult(
     labelStats: cargoItems
       ? buildPlannedLabelStats(cargoItems, placed)
       : buildPlacedOnlyLabelStats(placed),
-    diagnostics: [],
+    diagnostics: buildManualDiagnostics(placed, container, validationIssues),
     totalCargoCount: cargoItems
       ? cargoItems.reduce((sum, cargo) => sum + cargo.quantity, 0)
       : placed.length,

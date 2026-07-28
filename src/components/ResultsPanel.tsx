@@ -16,6 +16,8 @@ import type { ContainerComparisonRow } from '../lib/containerCompare'
 import type { FillSuggestion } from '../lib/fillSuggestion'
 import type { ExportTemplate } from '../types'
 import type { VehicleProfileId } from '../data/vehicleProfiles'
+import type { ValidationIssue } from '../lib/manualPlacement'
+import { isBlockingManualIssue } from '../lib/manualPlacement'
 import { formatCubicMeters, getContainerVolume } from '../data/containers'
 import { isGapFillBox } from '../lib/placementSource'
 
@@ -219,6 +221,7 @@ export type ResultsPanelProps = {
   exportLoadingSheet: () => void
   displayCargoItemsCount: number
   placementMode: 'auto' | 'manual'
+  manualIssues: ValidationIssue[]
   selectManualBox: (id: string | null) => void
   setSelectedBoxId: (id: string | null) => void
 }
@@ -283,10 +286,12 @@ export function ResultsPanel({
   exportLoadingSheet,
   displayCargoItemsCount,
   placementMode,
+  manualIssues,
   selectManualBox,
   setSelectedBoxId,
 }: ResultsPanelProps) {
   const layerHasGapFill = (physicalLayer: number) => activeResult.placed.some((box) => box.physicalLayer === physicalLayer && isGapFillBox(box))
+  const hasBlockingManualIssues = placementMode === 'manual' && manualIssues.some(isBlockingManualIssue)
 
   return (
     <section className={`archive-card overflow-hidden ${workspaceMaximized ? 'hidden' : ''}`} ref={reportRef} data-testid="report-panel">
@@ -320,8 +325,8 @@ export function ResultsPanel({
                 <option key={template.id} value={template.id}>{template.name}</option>
               ))}
             </select>
-            <button className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold" data-testid="export-excel" type="button" onClick={exportExcel}>{t.exportExcel}</button>
-            <button className="border border-[#9b9b9b] bg-white px-3 py-2 font-semibold" type="button" onClick={saveCurrentPlan}>{t.savePlan}</button>
+            <button className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold" data-testid="export-excel" type="button" onClick={exportExcel} disabled={hasBlockingManualIssues}>{t.exportExcel}</button>
+            <button className="border border-[#9b9b9b] bg-white px-3 py-2 font-semibold" type="button" onClick={saveCurrentPlan} disabled={hasBlockingManualIssues}>{t.savePlan}</button>
           </div>
         </div>
         <div className="flex flex-wrap gap-2 text-sm font-bold">

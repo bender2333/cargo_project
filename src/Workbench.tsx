@@ -2342,6 +2342,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             exportLoadingSheet={exportLoadingSheet}
             displayCargoItemsCount={displayCargoItems.length}
             placementMode={placementMode}
+            manualIssues={manualIssues}
             selectManualBox={selectManualBox}
             setSelectedBoxId={setSelectedBoxId}
           />

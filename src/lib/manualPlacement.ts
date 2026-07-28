@@ -42,7 +42,7 @@ export type ManualDraft = {
 }
 
 export type ValidationIssue = {
-  type: 'boundary' | 'overlap' | 'floating' | 'rotation-disabled' | 'stacking' | 'max-stack-layers' | 'ground-only'
+  type: 'boundary' | 'overlap' | 'floating' | 'rotation-disabled' | 'stacking' | 'max-stack-layers' | 'ground-only' | 'overweight'
   severity?: 'warning' | 'error'
   message: string
   boxId: string
@@ -693,6 +693,19 @@ export function validateDraft(draft: ManualDraft, container: ContainerSpec, supp
           ? `Box ${box.label} is marked ground-only and cannot be placed above another cargo.`
           : `Box ${box.label} is on stack layer ${violation.stackLayer}, above stack capacity ${violation.maxStackLayers} allowed by cargo ${violation.limitedBox.label}.`,
       })
+    }
+  }
+
+  const totalWeight = draft.boxes.reduce((sum, box) => sum + (box.weight ?? 0), 0)
+  if (totalWeight > container.maxWeight) {
+    for (const box of draft.boxes) {
+      issues.push({
+        type: 'overweight',
+        severity: 'error',
+        boxId: box.id,
+        message: `Total weight ${totalWeight} kg exceeds container max weight ${container.maxWeight} kg.`,
+      })
+      break
     }
   }
 

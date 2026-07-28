@@ -193,8 +193,8 @@ export function useManualPlacementSession(options: UseManualPlacementSessionOpti
     [blockingInvalidBoxIds, draft],
   )
   const manualResult = useMemo(
-    () => buildManualPackingResult(rawPlacedBoxes, container, cargoItems),
-    [cargoItems, container, rawPlacedBoxes],
+    () => buildManualPackingResult(rawPlacedBoxes, container, cargoItems, issues),
+    [cargoItems, container, issues, rawPlacedBoxes],
   )
   const placedBoxes = manualResult.placed
   const activeResult = state.mode === 'manual' ? manualResult : automaticDisplayResult

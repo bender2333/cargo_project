@@ -961,7 +961,7 @@ describe('manualPlacement', () => {
       length: 300, width: 300, height: 300, x: 800, y: 0,
     }))
 
-    const placed = toPlacedBoxes(draft, new Set(['b1']))
+    const placed = toPlacedBoxes(draft, new Set())
 
     expect(placed).toHaveLength(2)
     expect(placed[0]).toMatchObject({
@@ -1163,3 +1163,78 @@ describe('validateBox equivalence', () => {
 function issueKey(issue: { type: string; boxId: string; severity?: string }) {
   return `${issue.boxId}:${issue.type}:${issue.severity ?? 'error'}`
 }
+
+// P1-3 RED tests — compliance loop gaps
+
+describe('validateDraft overweight check', () => {
+  it('returns an overweight issue when total box weights exceed container maxWeight', () => {
+    let draft = emptyDraft()
+    draft = addBox(draft, makeManualBox({
+      id: 'heavy-1', cargoId: 'cargo-a', label: 'A', color: '#f59e0b',
+      length: 400, width: 500, height: 600, weight: 8000, x: 0, y: 0,
+    }))
+    draft = addBox(draft, makeManualBox({
+      id: 'heavy-2', cargoId: 'cargo-a', label: 'A', color: '#f59e0b',
+      length: 400, width: 500, height: 600, weight: 8000, x: 500, y: 0,
+    }))
+
+    // container maxWeight is 20000, total weight is 16000 — within limit
+    const underLimit = validateDraft(draft, container({ maxWeight: 20000 }))
+    expect(underLimit.some((i) => i.type === 'overweight')).toBe(false)
+
+    // exceed by 1 kg
+    const overLimit = validateDraft(draft, container({ maxWeight: 15999 }))
+    expect(overLimit.some((i) => i.type === 'overweight')).toBe(true)
+    const issue = overLimit.find((i) => i.type === 'overweight')!
+    expect(issue.severity).toBe('error')
+  })
+
+  it('is blocking — isBlockingManualIssue returns true for overweight', () => {
+    const issue = {
+      type: 'overweight' as const,
+      severity: 'error' as const,
+      boxId: '',
+      message: 'over',
+    }
+    expect(isBlockingManualIssue(issue)).toBe(true)
+  })
+})
+
+describe('toPlacedBoxes invalidBoxIds filtering', () => {
+  it('includes invalid boxes in placed output so the 3D renderer can highlight them', () => {
+    // Architecture: invalidBoxIds are passed to ContainerScene for red-highlight rendering.
+    // toPlacedBoxes must include ALL boxes (valid and invalid) so the scene can show them.
+    // The invalid ids are a rendering hint, not a filter.
+    let draft = emptyDraft()
+    draft = addBox(draft, makeManualBox({
+      id: 'valid', cargoId: 'cargo-a', label: 'A', color: '#f59e0b',
+      length: 400, width: 500, height: 600, x: 0, y: 0,
+    }))
+    draft = addBox(draft, makeManualBox({
+      id: 'invalid', cargoId: 'cargo-b', label: 'B', color: '#0ea5e9',
+      length: 400, width: 500, height: 600, x: 1000, y: 0,
+    }))
+
+    const placed = toPlacedBoxes(draft, new Set(['invalid']))
+
+    expect(placed).toHaveLength(2)
+    expect(placed.map((b) => b.id)).toContain('valid')
+    expect(placed.map((b) => b.id)).toContain('invalid')
+  })
+
+  it('returns all boxes when invalidBoxIds is empty', () => {
+    let draft = emptyDraft()
+    draft = addBox(draft, makeManualBox({
+      id: 'b1', cargoId: 'cargo-a', label: 'A', color: '#f59e0b',
+      length: 400, width: 500, height: 600, x: 0, y: 0,
+    }))
+    draft = addBox(draft, makeManualBox({
+      id: 'b2', cargoId: 'cargo-b', label: 'B', color: '#0ea5e9',
+      length: 400, width: 500, height: 600, x: 1000, y: 0,
+    }))
+
+    const placed = toPlacedBoxes(draft, new Set())
+
+    expect(placed).toHaveLength(2)
+  })
+})

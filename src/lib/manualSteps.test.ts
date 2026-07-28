@@ -196,3 +196,42 @@ describe('buildManualPackingResult', () => {
     ])
   })
 })
+
+// P1-3 RED tests — diagnostics conversion
+
+describe('buildManualPackingResult diagnostics', () => {
+  it('surfaces overweight as an error diagnostic when total weight exceeds container maxWeight', () => {
+    const heavyContainer = {
+      id: 'manual',
+      label: 'Heavy test',
+      description: '',
+      length: 3000,
+      width: 1200,
+      height: 1200,
+      maxWeight: 100,
+      doorGap: 0,
+      topGap: 0,
+      sideGap: 0,
+    }
+    const boxes = [
+      makeBox({ id: 'h1', x: 0, weight: 60 }),
+      makeBox({ id: 'h2', x: 600, weight: 60 }),
+    ]
+
+    const result = buildManualPackingResult(boxes, heavyContainer, cargoForBoxes(boxes))
+
+    const overweightDiag = result.diagnostics.find((d) => d.id === 'weight-check')
+    expect(overweightDiag).toBeDefined()
+    expect(overweightDiag!.severity).toBe('error')
+  })
+
+  it('produces no weight-check error when total weight is within limit', () => {
+    const boxes = [makeBox({ id: 'light', x: 0, weight: 10 })]
+
+    const result = buildManualPackingResult(boxes, container, cargoForBoxes(boxes))
+
+    const weightDiag = result.diagnostics.find((d) => d.id === 'weight-check')
+    // Either absent or info/ok — never 'error' when within limit
+    expect(weightDiag?.severity ?? 'info').not.toBe('error')
+  })
+})
