@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-29 P2-1 / P2-3 修复
+
+- [x] **P2-1 effectiveContainer 幂等修正 + 重心坐标空间**：`effectiveContainer`（`src/data/containers.ts`）现在把 gap 字段归零，让它对已 effective 的容器变成 no-op。`Workbench.tsx` 的 `computeRemainingCapacity` 调用之前把已经 effective 的 `renderingContainer` 再次传入，因为 gap 字段保留，间隙被扣两次（200mm 门距丢 400mm 长度）。修后幂等，任意路径都只扣一次。同步把 `computeCenterOfGravity` 和 `buildCogOverlay` 从原始 `selectedContainer` 改为 `renderingContainer`（effective 空间），让重心的几何中心点与箱体坐标在同一空间。新增 RED→GREEN 测试（`remainingCapacity.test.ts`）。commit `c401775`。
+- [x] **P2-3 货物品类计数改用 distinct label 数**：`ResultsPanel` 的「货物品类」展示改为 `countDistinctLabels(labelStats)`（新增 `src/lib/labels.ts`），按大写去重，与 `normalizeCargoLabelColors` 的配色口径一致。同标签两种货物不再被数成两个品类，大小写变体视为同一品类，空标签不计。新增4项 RED→GREEN 测试。commit `748ec88`。
+- [x] 门禁：lint 通过、单测 82文件/639项（仅1条已知 capacity-1 RED）、构建通过。
+
 ## 2026-07-28 本轮收尾：归档、发布说明、E2E、推送
 
 - [x] **归档 P1-5 / P1-7**：两项延期决策写入 `decision.md`（含背景、选项、决策理由、影响与实施时的验收要点）。P1-5 历史方案只存输入——不选"顺手把 `PackingResult` 塞进 `HistoryPlanData`"，因为无 schema 版本号时下一次契约变更会让旧记录静默失真（正是本轮刚修完的缺陷类型）；P1-7 导入非事务——阻塞在产品口径（错误行是整批拒绝还是部分导入、替换还是追加、已有手动草稿如何处置），定下来之前实现都是猜。commit `a4a5232`。
