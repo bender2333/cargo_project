@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import * as XLSX from 'xlsx'
+import { releaseNotes } from '../src/data/releaseNotes'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
@@ -852,8 +853,12 @@ test('通知栏按钮显示未读红点，点击后已读', async ({ page }) => 
   await btn.click()
   await expect(page.getByTestId('release-notes-modal')).toBeVisible()
   const latestRelease = page.getByTestId('release-notes-list').locator('li').first()
-  await expect(latestRelease).toHaveAttribute('data-version', '2026-07-23-r57-template-manager-boundary')
-  await expect(latestRelease).toContainText('模板管理页面边界')
+  // Assert against the data source, not a pinned version string: the intent of this
+  // test is the unread → read lifecycle, and hard-coding a version made every new
+  // release note fail here.
+  await expect(latestRelease).toHaveAttribute('data-version', releaseNotes[0].version)
+  await expect(latestRelease).toContainText(releaseNotes[0].title.zh)
+  await expect(latestRelease).toHaveAttribute('data-unread', 'true')
   await page.getByTestId('release-notes-mark-read').click()
   await page.getByTestId('release-notes-close').click()
   await expect(btn).toHaveAttribute('data-release-notes-unread', 'false')
