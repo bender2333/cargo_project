@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-29 P2-2 修复
+
+- [x] **P2-2 手动模式入口语义统一**：直接点击「手动布置」按钮此前只切换 UI 模式并显示空草稿；PRD 11.1.1 要求切换时保留当前自动结果作为初始草稿，与「继续手动」按钮语义一致。`useManualPlacementSession.setMode('manual')` 改为：当草稿为空且有自动结果时，自动执行与 `continueFromAutomatic` 完全相同的复制逻辑；草稿已有箱体时不覆盖。更新对应测试，移除断言空 placed 的旧行为。新增2项 RED→GREEN 测试。commit `d11094a`。
+- [x] 门禁：lint 通过、单测 82文件/641项（仅已知 capacity-1 RED）通过。
+
 ## 2026-07-29 P2-4 修复
 
 - [x] **P2-4 补全 preSelectCol 别名缺口**：`importWorkflow.ts` 的 `preSelectCol` 之前没有 `color`/`canRotate`/`stackable` 三字段的候选列表，`label` 和 `name` 也缺繁体别名（`標籤`/`托盤`/`代號`/`名稱`/`貨物名稱`）。结果手动映射时这些字段不会被预选，`canRotate`/`stackable` 回落为 `true`，会改变装箱合法性。补全所有缺口后，`KNOWN_GAPS` 清空（测试保留结构）。commit `a88f12e`。
