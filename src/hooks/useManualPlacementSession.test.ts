@@ -145,7 +145,9 @@ describe('useManualPlacementSession', () => {
     ])
   })
 
-  it('uses the automatic display result only in auto mode, including for an empty manual draft', () => {
+  it('auto-seeds the manual draft from automatic result when switching to manual for the first time', () => {
+    // PRD 11.1.1: switching to manual should preserve the current automatic result
+    // as the initial draft — the previous behaviour (empty draft) was wrong.
     const automatic = automaticResult([placedBox()])
     const { result } = renderHook(() => useManualPlacementSession({
       cargoItems: [cargo()],
@@ -159,9 +161,12 @@ describe('useManualPlacementSession', () => {
       expect(result.current.setMode('manual')).toMatchObject({ ok: true, operation: 'set-mode' })
     })
 
+    // After switching, the draft is seeded with the automatic placed boxes.
+    expect(result.current.mode).toBe('manual')
     expect(result.current.activeResult).toBe(result.current.manualResult)
     expect(result.current.activeResult).not.toBe(automatic)
-    expect(result.current.activeResult.placed).toEqual([])
+    // The placed count should match automatic (one box was seeded)
+    expect(result.current.draft.boxes).toHaveLength(1)
     expect(result.current.activeResult.totalCargoCount).toBe(2)
   })
 
@@ -587,5 +592,53 @@ describe('useManualPlacementSession', () => {
     rerender({ cargoItems: [cargo({ quantity: 3 })] })
     expect(result.current.draft.boxes.map((box) => box.id)).toEqual(['pump-1'])
     expect(result.current.manualResult).toMatchObject({ placedCount: 1, totalCargoCount: 3 })
+  })
+})
+
+// P2-2 RED tests — setMode('manual') should copy auto result when draft is empty
+describe('setMode auto-copies automatic result on first entry', () => {
+  it('copies automatic placed boxes into draft when switching to manual with an empty draft', () => {
+    const { result } = renderHook(() => useManualPlacementSession({
+      cargoItems: [cargo()],
+      container,
+      automaticDisplayResult: automaticResult([placedBox({ id: 'auto-1', z: 0 })]),
+      createId: (sourceId) => `m-${sourceId}`,
+    }))
+
+    // Initially auto mode, empty draft
+    expect(result.current.mode).toBe('auto')
+    expect(result.current.draft.boxes).toHaveLength(0)
+
+    act(() => { result.current.setMode('manual') })
+
+    // After switching, draft should contain the automatic result's boxes
+    expect(result.current.mode).toBe('manual')
+    expect(result.current.draft.boxes).toHaveLength(1)
+    expect(result.current.draft.boxes[0].id).toBe('m-auto-1')
+  })
+
+  it('does NOT overwrite an existing draft when switching back to manual', () => {
+    const { result } = renderHook(() => useManualPlacementSession({
+      cargoItems: [cargo()],
+      container,
+      automaticDisplayResult: automaticResult([placedBox({ id: 'auto-1', z: 0 })]),
+      createId: (sourceId) => `m-${sourceId}`,
+    }))
+
+    // Switch to manual, add a box manually
+    act(() => { result.current.setMode('manual') })
+    act(() => { result.current.setMode('auto') })
+    // Manually commit a draft
+    const manualDraft = { boxes: [manualBox('my-box')] }
+    act(() => {
+      result.current.setMode('manual')
+      result.current.commit(manualDraft)
+    })
+    // Switch to auto and back — should not overwrite the existing manual draft
+    act(() => { result.current.setMode('auto') })
+    act(() => { result.current.setMode('manual') })
+
+    // existing draft is preserved
+    expect(result.current.draft.boxes.map(b => b.id)).toContain('my-box')
   })
 })
