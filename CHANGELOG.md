@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-28 本轮收尾：归档、发布说明、E2E、推送
+
+- [x] **归档 P1-5 / P1-7**：两项延期决策写入 `decision.md`（含背景、选项、决策理由、影响与实施时的验收要点）。P1-5 历史方案只存输入——不选"顺手把 `PackingResult` 塞进 `HistoryPlanData`"，因为无 schema 版本号时下一次契约变更会让旧记录静默失真（正是本轮刚修完的缺陷类型）；P1-7 导入非事务——阻塞在产品口径（错误行是整批拒绝还是部分导入、替换还是追加、已有手动草稿如何处置），定下来之前实现都是猜。commit `a4a5232`。
+- [x] **发布说明**：`src/data/releaseNotes.ts` 顶部新增 r58（分层/支撑/装柜顺序修正）和 r59（手动合规与数据保真）两条，中英双语，按面向用户的行为变化描述而非内部字段名。
+- [x] **E2E**：117 通过 / 2 失败 → 修复后重跑 2/2 通过。
+  - `通知栏按钮显示未读红点` 失败由本轮新增 release note 直接导致：断言硬编码了 `'2026-07-23-r57-...'`，把测试与某个特定发布绑死。改为从 `releaseNotes[0]` 读取版本与标题，并补断 `data-unread='true'`——该用例的业务意图是「未读→点开→已读→红点消失」生命周期，不是某个版本号。commit `a0f8e8a`。
+  - `keeps 3D labels on all exposed faces across camera views` 超时停在中文登录页（等 'English' 按钮），单独重跑 9.1s 通过，确认为并行 worker 争用登录态的环境竞态，非代码回归。
+- [x] **门禁与推送**：lint 通过；单测 82 文件/633 项通过（仅 1 条已知 capacity-1 RED）；build 通过（gzip 297.45 kB，含两条 release note 文案）；`c61da0a..a0f8e8a` 已推送 origin/main。
+
 ## 2026-07-28 P1-9 导出朝向修复（完成）
 
 - [x] **归因**：`buildExportPlanRows`（`exportPlan.ts:41`）对 `actualLength/Width/Height` 总取 `placedBoxes[0]` 尺寸，同货物多朝向时第2+个箱体的实际尺寸被静默丢弃。
