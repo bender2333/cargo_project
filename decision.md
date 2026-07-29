@@ -1,5 +1,20 @@
 # Decision Log
 
+## 2026-07-28 P1-5 历史方案只存输入（本轮不修，归档）
+
+- 背景：`HistoryPlanData`（`src/api/historyPlans.ts:4`）只持久化柜型、`CargoItem[]`、数量/层数/标签摘要、装载模式和 `defaultMaxStackLayers`。恢复时 `usePackingSession.restoreHistory`（`src/hooks/usePackingSession.ts:87`）用**当前**算法重算 `calculatePacking`，既不存 `PackingResult`，也不存自动/手动模式、手动草稿坐标、朝向、层级、支撑关系与诊断。PRD 要求历史页恢复的是"当时那个方案"，现状恢复的是"当时那批输入"。
+- 加剧因素（本轮新发现）：本轮 P1-1/P1-2 已证明算法输出会随版本变化——同一批输入在契约修复前后 `physicalLayer`/`supportedBy`/`workStep` 全变。因此"重算等价于恢复"这个隐含前提在跨版本时明确不成立，手动方案则完全无法恢复（草稿坐标从未持久化）。
+- 选项：A. 本轮顺带把 `PackingResult` 塞进 `HistoryPlanData`；B. 设计带 schema 版本号的方案快照契约（存 placed 坐标 + 朝向 + 模式 + 手动草稿），并处理旧记录向后兼容；C. 记录后延期，本轮不动。
+- 决策：选择 C。A 是错误的省事做法：`PackingResult` 含 2600+ 箱体的完整数组（40HQ 夹具 golden JSON 就有数 MB），直接塞进 SQLite `data` JSON 列会让每用户 5 条上限变成实际的存储与传输问题，且没有 schema 版本号时下一次契约变更会让旧记录静默失真——正是本轮刚修完的那类缺陷。B 是正确解，但涉及 API 契约、数据库迁移（`server/db.mjs`）、旧记录兼容、手动草稿序列化四块，且需要先定"方案快照存什么粒度"的产品口径，属独立一轮的工作量。
+- 影响：历史页当前语义是"输入模板库"而非"方案存档"，用户无法审计过去的装柜方案。P1-5 保持开放。实施 B 时的验收要点：跨算法版本恢复必须逐箱一致（用本轮 `01f39ab` 前后两版 golden 做交叉验证）、手动方案恢复后 `validateDraft` 结果与保存时一致、旧记录（无快照字段）必须走可见的降级路径而非静默重算。
+
+## 2026-07-28 P1-7 Excel 导入非事务式（本轮不修，归档）
+
+- 背景：自动映射路径（`src/Workbench.tsx:1776`）只要 `imported.items.length > 0` 就 `dispatchPackingSession({type:'cargoImported'})`，而 reducer（`src/lib/packingSession.ts:146`）是整体替换 `cargoItems`。同批次存在错误行时，用户既看不到"哪些行被丢弃"的确认界面，也没有回滚入口，当前货物列表已被覆盖。手动映射路径的 `confirmMappingImport`（`src/components/CargoImportDialog.tsx:249`）同样在 `imported.errors` 非空时照常调用 `onConfirm`。
+- 选项：A. 在自动路径加"存在错误行则强制进入映射弹窗预览"的分支；B. 引入统一的导入暂存区（parse → 预览确认 → 提交）并让两条路径共用，提交才 dispatch；C. 记录后延期。
+- 决策：选择 C，但**理由与 P1-5 不同**：这里的阻塞是产品口径未定，不是工程量。需要先定三件事：错误行存在时是"整批拒绝"还是"部分导入 + 明确告知"；替换语义是覆盖还是追加（当前是覆盖，用户可能预期追加）；已有手动草稿在导入后如何处置（现在会被 `cargoPlanChanged` 静默裁剪）。在这三点定下来之前实现 A 或 B 都是猜。
+- 影响：导入是数据入口，覆盖不可逆，风险高于 P1-8/P1-9 那类显示缺陷。缓解现状：`buildImportMessages` 已把每条错误写进导入日志页并自动跳转（`setActiveResultTab('importLog')`），失败可见而非静默——这是本项可延期的前提。P1-7 保持开放。实施时的验收要点：错误行存在时不得先替换后告知；提交前后 `cargoItems` 必须可回滚到原值（可断言 `inputRevision` 与内容）；导入不得静默丢弃已有手动草稿箱体。
+
 ## 2026-07-28 分层与支撑契约统一（Step 1-5 完成）
 
 - 背景：`assignDepthLayers` 把 X 轴推靠语义写进 `physicalLayer`/`supportedBy`/`supportType`，而 PRD 9.3 定义这三个字段为垂直堆叠语义。实测五组 golden 夹具：2618 箱中 589 个落地箱（`z=0`）不在第 1 层且被标为 `fully-supported`，2590 个箱的支撑关系与真实底面接触不符，1129 条支撑边的作业顺序颠倒（现场会被要求先装上层再装支撑物）。

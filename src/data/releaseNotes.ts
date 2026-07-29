@@ -14,6 +14,48 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-07-28-r59-manual-compliance-and-data-fidelity',
+    date: '2026-07-28',
+    title: { en: 'Manual plan compliance and data fidelity', zh: '手动方案合规与数据保真' },
+    items: {
+      en: [
+        'A manual plan that breaks a rule can no longer be saved or exported: total weight over the container payload is now checked alongside bounds, overlap, floating, and stack limits, and the save and export buttons stay disabled until every blocking issue is cleared.',
+        'The diagnostics tab now reflects manual placement instead of staying empty, so boundary, overlap, support, stacking, and overweight problems are visible in the same place as automatic ones.',
+        'Editing a cargo definition now updates boxes already placed by hand. Changing weight, stackability, stack limit, or floor-only no longer leaves old and new rules coexisting for the same cargo.',
+        'Business labels imported from Excel keep their full text when edited. A label such as TB-C10-EV_v1.1 is no longer silently cut to two characters, so labels stay consistent across entry, 3D, layers, details, export, and history.',
+        'A negative weight in an imported workbook is now treated as zero instead of cancelling out other cargo, so the payload limit can no longer be bypassed.',
+        'The plan export leaves actual dimensions blank and notes the orientations when one cargo is loaded in more than one orientation, instead of presenting the first box as if it represented all of them.',
+      ],
+      zh: [
+        '违规的手动方案不再能保存或导出：总重量超过货柜载重现已与越界、重叠、悬空和堆叠层数一并校验，存在阻塞性问题时保存与导出按钮保持禁用。',
+        '诊断页现在会反映手动排布状态，不再恒为空白；越界、重叠、支撑、堆叠和超重问题与自动模式在同一处可见。',
+        '编辑货物定义现在会同步已手动放置的箱体。修改重量、可堆叠、最大堆叠层数或仅限地面后，同一货物不再同时存在新旧两套规则。',
+        '从 Excel 导入的业务标签在编辑后保留完整文本。类似 TB-C10-EV_v1.1 的标签不再被静默截断为两个字符，标签在录入、3D、分层、明细、导出和历史之间保持一致。',
+        '导入表格中的负数重量现按 0 处理，不再抵消其他货物重量，载重上限无法再被绕过。',
+        '同一货物存在多种实际朝向时，导出的实际尺寸留空并注明朝向组合，不再用第一个箱体的尺寸代表全部箱体。',
+      ],
+    },
+  },
+  {
+    version: '2026-07-28-r58-layer-support-contract',
+    date: '2026-07-28',
+    title: { en: 'Correct layers, support, and loading order', zh: '分层、支撑与装柜顺序修正' },
+    items: {
+      en: [
+        'Layers now express vertical stacking as intended: a box on the floor is layer 1, and a box resting on another enters a higher layer. Loading depth (pushing cargo from the far wall outward) is tracked separately and no longer overwrites layer and support data.',
+        'Support relationships now match real base-face contact and are recomputed after placement, so a supporting box added later is no longer missing from the box it carries.',
+        'Loading steps now guarantee that every supporting box is loaded before the boxes resting on it, which was previously reversed for a large share of stacked cargo.',
+        'Loaded quantity and utilization are unchanged by this correction — only layer, support, and step order were wrong before.',
+      ],
+      zh: [
+        '分层现在按设计表达垂直堆叠：落地箱为第 1 层，压在其他箱体上的进入更高层。装柜推靠深度（自里向外推货）独立记录，不再覆盖分层与支撑数据。',
+        '支撑关系现与真实底面接触一致，并在放置完成后重算，后加入的支撑物不再从被支撑箱的支撑清单中缺失。',
+        '装柜步骤现保证支撑物一定先于压在其上的箱体装载；此前相当比例的堆叠货物顺序是颠倒的。',
+        '本次修正不改变装入数量与利用率——此前错误的只有分层、支撑和作业顺序。',
+      ],
+    },
+  },
+  {
     version: '2026-07-23-r57-template-manager-boundary',
     date: '2026-07-23',
     title: { en: 'Reliable template manager boundary', zh: '模板管理页面边界' },
