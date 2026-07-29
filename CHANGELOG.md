@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-29 P2-4 修复
+
+- [x] **P2-4 补全 preSelectCol 别名缺口**：`importWorkflow.ts` 的 `preSelectCol` 之前没有 `color`/`canRotate`/`stackable` 三字段的候选列表，`label` 和 `name` 也缺繁体别名（`標籤`/`托盤`/`代號`/`名稱`/`貨物名稱`）。结果手动映射时这些字段不会被预选，`canRotate`/`stackable` 回落为 `true`，会改变装箱合法性。补全所有缺口后，`KNOWN_GAPS` 清空（测试保留结构）。commit `a88f12e`。
+- [x] 门禁：全部 29 项 `importWorkflow` 测试通过，单测 82文件/639项（仅已知 capacity-1 RED）通过。
+
 ## 2026-07-29 P2-1 / P2-3 修复
 
 - [x] **P2-1 effectiveContainer 幂等修正 + 重心坐标空间**：`effectiveContainer`（`src/data/containers.ts`）现在把 gap 字段归零，让它对已 effective 的容器变成 no-op。`Workbench.tsx` 的 `computeRemainingCapacity` 调用之前把已经 effective 的 `renderingContainer` 再次传入，因为 gap 字段保留，间隙被扣两次（200mm 门距丢 400mm 长度）。修后幂等，任意路径都只扣一次。同步把 `computeCenterOfGravity` 和 `buildCogOverlay` 从原始 `selectedContainer` 改为 `renderingContainer`（effective 空间），让重心的几何中心点与箱体坐标在同一空间。新增 RED→GREEN 测试（`remainingCapacity.test.ts`）。commit `c401775`。
