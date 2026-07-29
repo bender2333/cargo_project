@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-29 重构第二轮复审（BLOCKED）
+
+- [x] 对固定范围 `5fa9856...6dfcc0b` 及当前整体架构、业务合同和 E2E 状态完成只读复审，报告写入 `issues/2026-07-29-refactor-review-architecture-business-round-2.md`。
+- [x] 确认已关闭：自动垂直层/支撑、自动支撑拓扑作业顺序、effective 柜空间与 CoG、映射别名、长标签编辑、真实 Excel 31 托流程；31 托定向 E2E 当前 1/1 通过。
+- [ ] 当前结论仍为 BLOCKED：普通装箱测试和 packing-performance 各有 1 条真实 capacity-one 堆叠硬约束失败；P2-2 新入口语义与 4 条手动 E2E 冲突；手动分层/支撑、合规命令守卫、历史快照和事务导入未闭环。
+- [ ] benchmark baseline 提交 `e0c1fc2` 相对前值包含 5 个 contract hash 变化及 initial JS/total 各 `+642 B`；按当前 `gateBenchmarkUpdate` 会产生 7 个硬门禁拒绝，不能作为可信 GREEN 基线。
+- 验证：`npm run lint` 通过；`npm test` 失败（641 通过/1 失败）；`npm run test:packing-performance` 失败（5 通过/1 失败）；`npm run build` 通过并保留大 chunk warning；手动入口冲突 E2E 0/4；31 托 E2E 1/1；`git diff --check 5fa9856...HEAD` 通过。本轮未修改运行时代码、测试、baseline 或业务夹具。
+
 ## 2026-07-29 P2-2 修复
 
 - [x] **P2-2 手动模式入口语义统一**：直接点击「手动布置」按钮此前只切换 UI 模式并显示空草稿；PRD 11.1.1 要求切换时保留当前自动结果作为初始草稿，与「继续手动」按钮语义一致。`useManualPlacementSession.setMode('manual')` 改为：当草稿为空且有自动结果时，自动执行与 `continueFromAutomatic` 完全相同的复制逻辑；草稿已有箱体时不覆盖。更新对应测试，移除断言空 placed 的旧行为。新增2项 RED→GREEN 测试。commit `d11094a`。
