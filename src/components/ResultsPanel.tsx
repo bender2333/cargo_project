@@ -19,6 +19,7 @@ import type { VehicleProfileId } from '../data/vehicleProfiles'
 import type { ValidationIssue } from '../lib/manualPlacement'
 import { isBlockingManualIssue } from '../lib/manualPlacement'
 import { formatCubicMeters, getContainerVolume } from '../data/containers'
+import { countDistinctLabels } from '../lib/labels'
 import { isGapFillBox } from '../lib/placementSource'
 
 type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback' | 'loadingSteps' | 'cog' | 'compare' | 'fill' | 'reviewChecklist'
@@ -610,7 +611,7 @@ export function ResultsPanel({
       <div className="m-3 border border-[#c9c9c9] bg-white p-3 text-sm">
         <h2 className="font-bold">{t.results}</h2>
         <p>{t.loaded}: {activeResult.placedCount} / {activeResult.totalCargoCount}</p>
-        <p>{t.cargoTypes}: {activeResult.labelStats.length}</p>
+        <p>{t.cargoTypes}: {countDistinctLabels(activeResult.labelStats)}</p>
         <p>{t.volumeUse}: {activeResult.volumeUtilization.toFixed(1)}%</p>
         <p>{t.weightUse}: {activeResult.weightUtilization.toFixed(1)}%</p>
         <p>{t.containerVolume}: {formatCubicMeters(getContainerVolume(selectedContainer))}</p>
