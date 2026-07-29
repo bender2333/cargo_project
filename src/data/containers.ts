@@ -51,6 +51,14 @@ export const containers: ContainerSpec[] = [
   },
 ]
 
+/**
+ * Shrink a container to its usable interior by consuming the reserved gaps.
+ *
+ * Idempotent: the returned spec reports zero gaps, so passing it through again is a
+ * no-op. Several callers (capacity, fill suggestion, packing) apply this internally
+ * while others already hold an effective container, and without the reset the gaps
+ * were subtracted twice — a 200mm door gap cost 400mm of length.
+ */
 export function effectiveContainer(container: ContainerSpec): ContainerSpec {
   return {
     ...container,
@@ -59,6 +67,9 @@ export function effectiveContainer(container: ContainerSpec): ContainerSpec {
     length: Math.max(0, container.length - container.doorGap),
     width: Math.max(0, container.width - container.sideGap * 2),
     height: Math.max(0, container.height - container.topGap),
+    doorGap: 0,
+    sideGap: 0,
+    topGap: 0,
   }
 }
 

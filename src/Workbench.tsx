@@ -1408,9 +1408,12 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }, [loadingStepsActive, loadingGroupsPlaying, activeLoadingGroupIndex, loadingTaskGroups.length])
 
   const visibleActiveBoxes = placementMode === 'manual' ? visibleManualBoxes : visibleAutoBoxes
+  // Box coordinates live in effective-container space (the packer places inside the
+  // reserved gaps), so the geometric centre must come from the same space or the
+  // offset is measured against the wrong midpoint.
   const cogResult = useMemo(
-    () => computeCenterOfGravity(visibleActiveBoxes.length > 0 ? visibleActiveBoxes : activeResult.placed, selectedContainer),
-    [activeResult.placed, selectedContainer, visibleActiveBoxes],
+    () => computeCenterOfGravity(visibleActiveBoxes.length > 0 ? visibleActiveBoxes : activeResult.placed, renderingContainer),
+    [activeResult.placed, renderingContainer, visibleActiveBoxes],
   )
   const cogViewState = useMemo(
     () => deriveCogOverlayState({
@@ -1422,9 +1425,9 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   )
   const cogOverlay = useMemo(
     () => (cogViewState.showOverlay && placementMode === 'auto'
-      ? buildCogOverlay(cogResult, selectedContainer, vehicleProfile)
+      ? buildCogOverlay(cogResult, renderingContainer, vehicleProfile)
       : null),
-    [cogViewState.showOverlay, placementMode, cogResult, selectedContainer, vehicleProfile],
+    [cogViewState.showOverlay, placementMode, cogResult, renderingContainer, vehicleProfile],
   )
   const toggleCogOverlay = (show: boolean) => {
     setShowCogOverlay(show)

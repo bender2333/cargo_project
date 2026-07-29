@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { computeRemainingCapacity } from './remainingCapacity'
+import { effectiveContainer } from '../data/containers'
 import type { ContainerSpec, PlacedBox } from '../types'
 
 function makeContainer(): ContainerSpec {
@@ -58,5 +59,33 @@ describe('computeRemainingCapacity', () => {
     const r = computeRemainingCapacity([makeBox({ id: 'a', weight: 100 })], c)
     expect(r.weightRatio).toBe(0)
     expect(r.remainingWeight).toBe(0)
+  })
+})
+
+// P2-1 RED tests — gaps must be applied exactly once
+describe('computeRemainingCapacity gap application', () => {
+  it('applies reserved gaps exactly once when given a raw container', () => {
+    const raw: ContainerSpec = { ...makeContainer(), doorGap: 200, sideGap: 100, topGap: 50 }
+    const r = computeRemainingCapacity([], raw)
+
+    // effective = length-doorGap, width-2*sideGap, height-topGap
+    const expectedLength = 12000 - 200
+    const expectedWidth = 2400 - 100 * 2
+    const expectedHeight = 2600 - 50
+    expect(r.totalVolume).toBe(expectedLength * expectedWidth * expectedHeight)
+    expect(r.floorArea).toBe(expectedLength * expectedWidth)
+  })
+
+  it('does not subtract gaps twice when handed the output of effectiveContainer', () => {
+    // Workbench renders in effective space and passed `renderingContainer`
+    // (= effectiveContainer(selected)) straight into this function. Because
+    // effectiveContainer keeps the original gap fields, a second pass subtracted
+    // them again — a 200mm door gap became 400mm of lost capacity.
+    const raw: ContainerSpec = { ...makeContainer(), doorGap: 200, sideGap: 100, topGap: 50 }
+    const fromRaw = computeRemainingCapacity([], raw)
+    const fromEffective = computeRemainingCapacity([], effectiveContainer(raw))
+
+    expect(fromEffective.totalVolume).toBe(fromRaw.totalVolume)
+    expect(fromEffective.floorArea).toBe(fromRaw.floorArea)
   })
 })
