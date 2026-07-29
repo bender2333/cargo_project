@@ -1541,3 +1541,47 @@ test('keeps history on an independent page with the latest five local plans', as
   await expect(page.getByLabel('Shipment name')).toHaveValue('History 6')
   await expect(page.getByTestId('history-page')).toHaveCount(0)
 })
+
+test('P2-6 full 31-pallet flow: import real workbook, custom container, all pallets placed', async ({ page }) => {
+  // P2-6: the unit test asserts 31/31 fit in a 13400×2450×2650 container; this
+  // test verifies the same result through the real UI path including custom
+  // container selection, mapping modal, load, and results panel.
+  await openEnglish(page)
+
+  // Delete the default Carton A so only the real workbook cargo counts
+  await page.getByRole('button', { name: /Delete cargo: Carton A/ }).click()
+
+  // Configure the same custom container dimensions used in the unit test
+  await page.getByLabel('Container type').selectOption('custom')
+  await page.getByLabel('Length mm').first().fill('13400')
+  await page.getByLabel('Width mm').first().fill('2450')
+  await page.getByLabel('Height mm').first().fill('2650')
+  await page.getByLabel('Max payload kg').fill('30000')
+
+  // Import the real 31-pallet workbook
+  await page.locator('input[accept*="xlsx"]').setInputFiles(realWorkbookPath())
+
+  // The workbook lacks a quantity column — mapping modal opens automatically
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await page.getByTestId('confirm-mapping').click()
+
+  await expect(page.getByTestId('import-log-panel').getByText('Import success: 31')).toBeVisible()
+
+  // The unit test uses loadingMode:'volume' to place all 31; match that here
+  await page.getByLabel('Loading rules').selectOption('volume')
+
+  // Run the packer
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
+
+  // All 31 pallets must be placed — no unplaced cargo
+  await expect(page.getByText(/Loaded: 31 \/ 31/)).toBeVisible({ timeout: 15000 })
+
+  // Volume utilization must be non-trivial (>50%) to confirm actual placement
+  const utilText = await page.getByText(/Volume utilization: \d+\.\d%/).textContent()
+  const utilPct = parseFloat((utilText ?? '0%').match(/[\d.]+/)?.[0] ?? '0')
+  expect(utilPct).toBeGreaterThan(50)
+
+  // Verify the details table shows real dimensions from the workbook
+  await page.getByRole('button', { name: 'Details' }).click()
+  await expect(page.locator('tr').filter({ hasText: '1250 x 830 x 2500' }).first()).toBeVisible()
+})
