@@ -66,8 +66,11 @@ export function preSelectCol(fieldKey: string, columns: string[]): string {
     height: ['height', '高', '高度', 'outer_height_mm'],
     weight: ['weight', '重量', '毛重', 'gross_weight_kg'],
     quantity: ['quantity', '数量', '數量', '箱数', '箱數', '托数', '托數', 'carton_count'],
-    name: ['name', '名称', '品名', '货物名称', 'description'],
-    label: ['label', '标签', '代码', '代号', '托盘'],
+    name: ['name', '名称', '名稱', '品名', '货物名称', '貨物名稱', 'description'],
+    label: ['label', '标签', '標籤', '代码', '代號', '代号', '托盘', '托盤'],
+    color: ['color', 'Color', '颜色', '顏色'],
+    canRotate: ['canrotate', 'rotate', 'rotation_allowed', '可旋转', '可旋轉', '允许旋转', '允許旋轉'],
+    stackable: ['stackable', '可堆叠', '可堆疊', '允许堆叠', '允許堆疊'],
     maxStackLayers: ['maxstacklayers', 'max stack layers', '最大堆叠层数', '最大堆疊層數', '堆叠层数', '堆疊層數'],
     groundOnly: ['groundonly', 'ground only', '必须落地', '落地', '不可上托', '不可堆叠在上'],
   }

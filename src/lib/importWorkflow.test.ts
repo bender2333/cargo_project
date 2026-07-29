@@ -78,14 +78,11 @@ describe('preSelectCol', () => {
   // gaps, not refactor regressions, so they are documented here rather than
   // silently widened. Closing them changes which column gets pre-selected for
   // existing users' workbooks and needs its own decision.
-  const KNOWN_GAPS: Record<string, string[]> = {
-    label: ['標籤', '托盤', '代號'],
-    name: ['名稱', '貨物名稱'],
-    // preSelectCol has no candidates at all for these three fields.
-    color: [...fields.color],
-    canRotate: [...fields.canRotate],
-    stackable: [...fields.stackable],
-  }
+  //
+  // P2-4 (2026-07-29): color/canRotate/stackable and the traditional-Chinese
+  // label/name aliases (標籤, 托盤, 代號, 名稱, 貨物名稱) are now recognised.
+  // KNOWN_GAPS is kept as an empty marker so the test structure is preserved.
+  const KNOWN_GAPS: Record<string, string[]> = {}
 
   it.each([
     ['label', 'label'],
