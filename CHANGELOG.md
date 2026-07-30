@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-30 第四轮复审与问题根因分析（BLOCKED）
+
+- 审查范围：固定点 `b13b9fd608cd3c3d58c2e0815fcbe7f2d4d482c1` 至当前目标 `2dbe5c535dc36b6e6017095083204f93280e1f24`；报告写入 `issues/2026-07-30-refactor-review-architecture-business-round-4.md`。
+- 本轮只读分析 51 个已提交变更文件；未修改运行时代码、测试、业务夹具或 benchmark baseline；未部署；工作区原有 `.codegraph/.serena/issues/0720` 改动未纳入。
+- 根因主线：自动/手动仍有双终结路径；历史恢复不是原子 session transaction；全局规则未进入手动计算上下文；合规与诊断在 UI 投影层重复拼装；导入成功路径仍绕过确认；历史快照以 TypeScript cast 代替运行时校验；React.lazy 重试只重置 ErrorBoundary。
+- Fresh 验证：`npm run lint` 通过；`npm test` 通过（84 个 unit 文件/653 项 + packing-performance 2 文件/6 项）；`npm run build` 通过；全量 E2E `120 passed / 0 failed`；`npm run benchmark` **失败**（5 个 contract hash mismatch，3D 首像素 median/P95 分别较基线回退 34.8%/20.9%）。
+- 结论：任务 2–7 和任务 9 仍有阻塞或部分完成项；不具备合并、发布或生产部署条件。不得以更新 baseline、放宽断言或增加兼容旁路关闭问题。
+
 ## 2026-07-30 第三轮复审修复闭环（任务1–9）
 
 - 范围：`plans/2026-07-30-refactor-review-round-3-remediation.md` 九项修复；固定点后代码从 `46f730d` 起，文档起点 `e5af26f`/`2f98e9d`，收口 HEAD `09f4991`（已 push `origin/main`，`6dfcc0b..09f4991`）。
