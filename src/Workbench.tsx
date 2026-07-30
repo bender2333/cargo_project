@@ -44,6 +44,11 @@ import {
 } from './lib/measurement'
 import { buildReviewChecklist } from './lib/reviewChecklist'
 import { assertPlanCompliant } from './lib/planCompliance'
+import {
+  assertHistorySnapshotSize,
+  buildHistorySnapshot,
+  classifyHistoryRestore,
+} from './lib/historySnapshot'
 import type { ReviewChecklist } from './lib/reviewChecklist'
 import { createManualOperationNotice } from './lib/manualFeedback'
 import type { ManualOperationNotice } from './lib/manualFeedback'
@@ -1115,6 +1120,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     undo: undoManualPlacement,
     redo: redoManualPlacement,
     continueFromAutomatic,
+    restoreHistoryDraft,
   } = useManualPlacementSession({
     cargoItems: displayCargoItems,
     container: renderingContainer,
@@ -1934,16 +1940,16 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const saveCurrentPlan = async () => {
     try {
       assertPlanCompliant(activeResult, manualIssues)
-      const planData = {
-        containerId: selectedContainer.id,
+      const planData = buildHistorySnapshot({
         container: selectedContainer,
         cargoItems: displayCargoItems,
-        placedCount: activeResult.placedCount,
-        totalCargoCount: activeResult.totalCargoCount,
-        layerCount: activeResult.layers.length,
-        labelSummary: activeResult.labelStats.map((item) => `${item.label}:${item.placed}/${item.planned}`).join(', '),
+        packingResult: activeResult,
+        placementMode,
         defaultMaxStackLayers,
-      }
+        manualDraft,
+        draftInitialized: true,
+      })
+      assertHistorySnapshotSize(planData)
 
       await saveHistory({
         projectName,
@@ -1962,19 +1968,49 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const restorePlan = (plan: HistoryPlan) => {
-    if (!containers.some((container) => container.id === plan.containerId)
-      && plan.containerId !== 'custom'
-      && !customContainers.some((container) => container.id === plan.containerId)) {
-      setCustomContainers((current) => [...current, plan.container])
+    const decision = classifyHistoryRestore(plan)
+    if (decision.kind === 'invalid') {
+      alert(decision.reason)
+      return
     }
+    if (decision.kind === 'legacy-recompute') {
+      const ok = confirm(locale === 'zh'
+        ? '该历史记录仅保存了输入模板，将按当前算法重新计算。是否继续？'
+        : 'This history record is an input template only and will recompute with the current algorithm. Continue?')
+      if (!ok) return
+    }
+
+    const data = decision.kind === 'snapshot' ? decision.data : decision.data
+    if (!containers.some((container) => container.id === data.containerId)
+      && data.containerId !== 'custom'
+      && !customContainers.some((container) => container.id === data.containerId)) {
+      setCustomContainers((current) => [...current, data.container])
+    }
+
     restoreHistory({
       projectName: plan.projectName || defaultProjectName(locale),
       shipmentName: plan.shipmentName,
-      container: plan.container,
-      cargoItems: plan.cargoItems,
+      container: data.container,
+      cargoItems: data.cargoItems,
       loadingMode: plan.loadingMode || 'quantity',
-      defaultMaxStackLayers: plan.defaultMaxStackLayers,
+      defaultMaxStackLayers: data.defaultMaxStackLayers,
+      result: decision.kind === 'snapshot' ? decision.data.packingResult : undefined,
     })
+
+    if (decision.kind === 'snapshot' && decision.data.placementMode === 'manual' && decision.data.manualDraft) {
+      restoreHistoryDraft({
+        draft: decision.data.manualDraft,
+        mode: 'manual',
+        draftInitialized: decision.data.draftInitialized ?? true,
+      })
+    } else {
+      restoreHistoryDraft({
+        draft: { boxes: [] },
+        mode: 'auto',
+        draftInitialized: false,
+      })
+    }
+
     setContainerChangeNotice('')
     setActiveLayerId('all')
     setActiveLabelId('all')
@@ -2116,6 +2152,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
               confirmDelete: locale === 'zh' ? '确认删除该历史方案吗？' : 'Are you sure you want to delete this plan?',
               saveFailed: locale === 'zh' ? '保存历史方案失败' : 'Failed to save plan',
               deleteFailed: locale === 'zh' ? '删除失败' : 'Failed to delete',
+              snapshotBadge: locale === 'zh' ? '结果快照' : 'Snapshot',
+              legacyTemplateBadge: locale === 'zh' ? '输入模板' : 'Input template',
             }}
             plans={historyPlans}
             loadFailed={historyLoadFailed}

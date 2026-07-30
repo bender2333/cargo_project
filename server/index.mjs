@@ -518,6 +518,12 @@ app.post('/api/history', authenticate, (req, res) => {
     return res.status(400).json({ error: 'Missing required parameters' })
   }
 
+  const serialized = JSON.stringify(data)
+  const HISTORY_SNAPSHOT_MAX_BYTES = 2_500_000
+  if (Buffer.byteLength(serialized, 'utf8') > HISTORY_SNAPSHOT_MAX_BYTES) {
+    return res.status(413).json({ error: `History snapshot exceeds ${HISTORY_SNAPSHOT_MAX_BYTES} bytes` })
+  }
+
   const id = randomUUID()
   
   try {
@@ -525,7 +531,7 @@ app.post('/api/history', authenticate, (req, res) => {
     db.prepare(`
       INSERT INTO history_plans (id, user_id, project_name, shipment_name, loading_mode, data, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, req.user.id, projectName, shipmentName || '', loadingMode || 'volume', JSON.stringify(data), new Date().toISOString())
+    `).run(id, req.user.id, projectName, shipmentName || '', loadingMode || 'volume', serialized, new Date().toISOString())
 
     // Enforce 5-item retention: select all plans for this user ordered by date DESC
     const all = db.prepare('SELECT id FROM history_plans WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id)

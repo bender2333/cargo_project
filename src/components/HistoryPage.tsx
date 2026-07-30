@@ -1,4 +1,5 @@
 import type { HistoryPlan } from '../hooks/useHistoryPlans'
+import { isHistorySnapshotV2 } from '../lib/historySnapshot'
 
 export type HistoryPageLabels = {
   title: string
@@ -14,6 +15,8 @@ export type HistoryPageLabels = {
   confirmDelete: string
   saveFailed: string
   deleteFailed: string
+  snapshotBadge?: string
+  legacyTemplateBadge?: string
 }
 
 export type HistoryPageProps = {
@@ -83,25 +86,39 @@ export function HistoryPage({
         <p className="border border-[#c6c6c6] bg-white p-3" data-testid="history-empty-state">{labels.noHistory}</p>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {plans.map((plan) => (
-            <article className="border border-[#c6c6c6] bg-white p-3 text-sm flex flex-col justify-between" key={plan.id}>
-              <div>
-                <strong>{plan.projectName}</strong>
-                <p>{labels.shipmentName}: {plan.shipmentName || '-'}</p>
-                <p>{new Date(plan.createdAt).toLocaleString()}</p>
-                <p>{plan.placedCount}/{plan.totalCargoCount} · {plan.layerCount} {labels.layers}</p>
-                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{plan.labelSummary}</p>
-              </div>
-              <div className="mt-3 flex gap-2">
-                <button className="border border-[#9b9b9b] bg-[#eeeeee] px-3 py-1.5 text-xs font-semibold hover:bg-slate-200 transition" type="button" onClick={() => onRestore(plan)}>
-                  {labels.restore}
-                </button>
-                <button className="border border-red-300 bg-red-50 text-red-700 px-3 py-1.5 text-xs font-semibold hover:bg-red-100 transition" type="button" onClick={() => void handleDelete(plan.id)}>
-                  {labels.delete}
-                </button>
-              </div>
-            </article>
-          ))}
+          {plans.map((plan) => {
+            const isSnapshot = isHistorySnapshotV2(plan)
+            return (
+              <article
+                className="border border-[#c6c6c6] bg-white p-3 text-sm flex flex-col justify-between"
+                key={plan.id}
+                data-testid={isSnapshot ? 'history-plan-snapshot' : 'history-plan-legacy'}
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <strong>{plan.projectName}</strong>
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${isSnapshot ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                      {isSnapshot
+                        ? (labels.snapshotBadge ?? 'Snapshot')
+                        : (labels.legacyTemplateBadge ?? 'Input template')}
+                    </span>
+                  </div>
+                  <p>{labels.shipmentName}: {plan.shipmentName || '-'}</p>
+                  <p>{new Date(plan.createdAt).toLocaleString()}</p>
+                  <p>{plan.placedCount}/{plan.totalCargoCount} · {plan.layerCount} {labels.layers}</p>
+                  <p className="text-xs text-slate-500 mt-1 line-clamp-2">{plan.labelSummary}</p>
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <button className="border border-[#9b9b9b] bg-[#eeeeee] px-3 py-1.5 text-xs font-semibold hover:bg-slate-200 transition" type="button" onClick={() => onRestore(plan)}>
+                    {labels.restore}
+                  </button>
+                  <button className="border border-red-300 bg-red-50 text-red-700 px-3 py-1.5 text-xs font-semibold hover:bg-red-100 transition" type="button" onClick={() => void handleDelete(plan.id)}>
+                    {labels.delete}
+                  </button>
+                </div>
+              </article>
+            )
+          })}
         </div>
       )}
     </section>

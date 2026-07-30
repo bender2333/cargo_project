@@ -38,6 +38,7 @@ export type ManualPlacementSessionAction =
   | { type: 'redo' }
   | { type: 'continuedFromAutomatic'; draft: ManualDraft; cargoPlan: ManualCargoPlanItem[] }
   | { type: 'cargoPlanChanged'; cargoPlan: ManualCargoPlanItem[] }
+  | { type: 'historyDraftRestored'; draft: ManualDraft; mode: ManualPlacementMode; draftInitialized: boolean; cargoPlan: ManualCargoPlanItem[] }
 
 function selectionInDraft(selectedId: string | null, draft: ManualDraft) {
   if (selectedId === null) return null
@@ -210,5 +211,18 @@ export function manualPlacementSessionReducer(
     }
     case 'cargoPlanChanged':
       return reconcileManualPlacementSessionState(state, action.cargoPlan)
+    case 'historyDraftRestored': {
+      const next: ManualPlacementSessionState = {
+        mode: action.mode,
+        history: {
+          past: [],
+          present: action.draft,
+          future: [],
+        },
+        selectedId: null,
+        draftInitialized: action.draftInitialized,
+      }
+      return reconcileManualPlacementSessionState(next, action.cargoPlan)
+    }
   }
 }

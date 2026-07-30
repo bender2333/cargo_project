@@ -1,16 +1,9 @@
-import type { CargoItem, ContainerSpec, LoadingMode } from '../types'
+import type { LoadingMode } from '../types'
+import type { HistoryPlanData } from '../lib/historySnapshot'
+import { assertHistorySnapshotSize } from '../lib/historySnapshot'
 import { fetchWithAuth } from './client'
 
-export type HistoryPlanData = {
-  containerId: string
-  container: ContainerSpec
-  cargoItems: CargoItem[]
-  placedCount: number
-  totalCargoCount: number
-  layerCount: number
-  labelSummary: string
-  defaultMaxStackLayers?: number
-}
+export type { HistoryPlanData } from '../lib/historySnapshot'
 
 export type HistoryPlan = HistoryPlanData & {
   id: string
@@ -51,11 +44,15 @@ export async function readHistoryPlans(): Promise<HistoryPlan[]> {
 }
 
 export async function saveHistoryPlan(input: SaveHistoryPlanInput): Promise<void> {
+  assertHistorySnapshotSize(input.data)
   const response = await fetchWithAuth('/api/history', {
     method: 'POST',
     body: JSON.stringify(input),
   })
-  if (!response.ok) throw new Error('保存历史方案失败')
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: string } | null
+    throw new Error(body?.error || '保存历史方案失败')
+  }
 }
 
 export async function deleteHistoryPlan(id: string): Promise<void> {

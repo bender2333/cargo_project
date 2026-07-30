@@ -26,6 +26,8 @@ export type PackingSessionRestoreInput = {
   cargoItems: CargoItem[]
   loadingMode: LoadingMode
   defaultMaxStackLayers?: number
+  /** When present, restore exact coordinates instead of recomputing. */
+  result?: PackingResult
 }
 
 export type PackingSessionDispatchAction =

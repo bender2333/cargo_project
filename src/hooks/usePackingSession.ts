@@ -84,7 +84,7 @@ export function usePackingSession(options: PackingSessionOptions): PackingSessio
       container: { ...snapshot.container },
       cargoItems: snapshot.cargoItems.map((item) => ({ ...item })),
     }
-    const result = calculatePacking(
+    const result = snapshot.result ?? calculatePacking(
       ownedSnapshot.container,
       normalizeCargoLabelColors(ownedSnapshot.cargoItems),
       {

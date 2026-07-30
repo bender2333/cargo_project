@@ -52,7 +52,7 @@ export type ManualPlacementOperation =
   | 'undo'
   | 'redo'
   | 'continue-from-automatic'
-
+  | 'restore-history-draft'
 export type ManualPlacementFailureReason =
   | 'missing-box'
   | 'missing-cargo'
@@ -455,6 +455,23 @@ export function useManualPlacementSession(options: UseManualPlacementSessionOpti
     return commandSuccess('continue-from-automatic', true)
   }, [automaticDisplayResult, cargoItems, cargoPlan, createId])
 
+  const restoreHistoryDraft = useCallback((input: {
+    draft: ManualDraft
+    mode: ManualPlacementMode
+    draftInitialized: boolean
+  }): ManualPlacementCommandResult => {
+    dispatch({
+      type: 'historyDraftRestored',
+      draft: {
+        boxes: input.draft.boxes.map((box) => ({ ...box })),
+      },
+      mode: input.mode,
+      draftInitialized: input.draftInitialized,
+      cargoPlan,
+    })
+    return commandSuccess('restore-history-draft', true)
+  }, [cargoPlan])
+
   return {
     state,
     mode: state.mode,
@@ -480,5 +497,6 @@ export function useManualPlacementSession(options: UseManualPlacementSessionOpti
     undo,
     redo,
     continueFromAutomatic,
+    restoreHistoryDraft,
   }
 }
