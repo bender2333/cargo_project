@@ -9,6 +9,7 @@ export const IMPORT_CODES = {
   CM_CONVERTED: 'cm-converted',
   INVALID_DIMENSIONS: 'invalid-dimensions',
   INVALID_QUANTITY: 'invalid-quantity',
+  INVALID_WEIGHT: 'invalid-weight',
   QUANTITY_DEFAULTED: 'quantity-defaulted',
 } as const
 
@@ -277,6 +278,27 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
     const colorPattern = /^#[0-9a-f]{3,8}$|^rgba?\([\d\s.,%/]+\)$|^[a-z]{3,30}$/i
     const color = colorPattern.test(rawColor.trim()) ? rawColor.trim() : colors[index % colors.length]
 
+    const rawWeight = valueFor(row, fields.weight)
+    if (rawWeight === undefined || rawWeight === null || String(rawWeight).trim() === '') {
+      errors.push({
+        row: rowNumber,
+        code: IMPORT_CODES.INVALID_WEIGHT,
+        params: { row: rowNumber },
+        message: 'Missing or invalid weight.',
+      })
+      return
+    }
+    const weight = Number(rawWeight)
+    if (!Number.isFinite(weight) || weight <= 0) {
+      errors.push({
+        row: rowNumber,
+        code: IMPORT_CODES.INVALID_WEIGHT,
+        params: { row: rowNumber },
+        message: 'Missing or invalid weight.',
+      })
+      return
+    }
+
     items.push({
       id: createId(),
       label,
@@ -284,7 +306,7 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
       length: length.value,
       width: width.value,
       height: height.value,
-      weight: Math.max(0, numberValue(valueFor(row, fields.weight))),
+      weight,
       quantity,
       color,
       canRotate: boolValue(valueFor(row, fields.canRotate), true),
@@ -402,6 +424,7 @@ export function parseCargoRowsWithTemplate(
     if (defaults.label) applyDefault('label', '__default_label', defaults.label)
     if (defaults.name) applyDefault('name', '__default_name', defaults.name)
     if (defaults.quantity !== undefined) applyDefault('quantity', '__default_quantity', defaults.quantity)
+    if (defaults.weight !== undefined) applyDefault('weight', '__default_weight', defaults.weight)
     if (defaults.color) applyDefault('color', '__default_color', defaults.color)
     if (defaults.canRotate !== undefined) applyDefault('canRotate', '__default_canRotate', defaults.canRotate)
     if (defaults.stackable !== undefined) applyDefault('stackable', '__default_stackable', defaults.stackable)
@@ -412,6 +435,7 @@ export function parseCargoRowsWithTemplate(
   if (defaults.label && !effectiveMapping.label) effectiveMapping.label = '__default_label'
   if (defaults.name && !effectiveMapping.name) effectiveMapping.name = '__default_name'
   if (defaults.quantity !== undefined && !effectiveMapping.quantity) effectiveMapping.quantity = '__default_quantity'
+  if (defaults.weight !== undefined && !effectiveMapping.weight) effectiveMapping.weight = '__default_weight'
   if (defaults.color && !effectiveMapping.color) effectiveMapping.color = '__default_color'
   if (defaults.canRotate !== undefined && !effectiveMapping.canRotate) effectiveMapping.canRotate = '__default_canRotate'
   if (defaults.stackable !== undefined && !effectiveMapping.stackable) effectiveMapping.stackable = '__default_stackable'

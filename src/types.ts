@@ -160,6 +160,7 @@ export type ImportTemplateDefaults = {
   label?: string
   name?: string
   quantity?: number
+  weight?: number
   color?: string
   canRotate?: boolean
   stackable?: boolean

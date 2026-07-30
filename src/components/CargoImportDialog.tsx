@@ -246,20 +246,33 @@ export function CargoImportDialog({
     }
   }
 
+  const pendingImport = useMemo(() => parseCargoRowsWithTemplate(importRows, {
+    mapping: customMapping,
+    units: customUnits,
+    headerRow: templateHeaderRow,
+    startRow: templateStartRow,
+    mergeRows: 'none',
+    dimensionMode: templateDimensionMode,
+    combinedColumn: templateCombinedColumn,
+    dimensionOrder: templateDimensionOrder,
+    defaultValues: templateDefaults,
+  }, { colors: colors as string[] }), [
+    colors,
+    customMapping,
+    customUnits,
+    importRows,
+    templateCombinedColumn,
+    templateDefaults,
+    templateDimensionMode,
+    templateDimensionOrder,
+    templateHeaderRow,
+    templateStartRow,
+  ])
+
   const confirmMappingImport = () => {
-    const imported = parseCargoRowsWithTemplate(importRows, {
-      mapping: customMapping,
-      units: customUnits,
-      headerRow: templateHeaderRow,
-      startRow: templateStartRow,
-      mergeRows: 'none',
-      dimensionMode: templateDimensionMode,
-      combinedColumn: templateCombinedColumn,
-      dimensionOrder: templateDimensionOrder,
-      defaultValues: templateDefaults,
-    }, { colors: colors as string[] })
-    const messages = buildImportMessages(imported, labels, locale)
-    onConfirm(imported.items, messages)
+    if (pendingImport.errors.length > 0) return
+    const messages = buildImportMessages(pendingImport, labels, locale)
+    onConfirm(pendingImport.items, messages)
     saveLastImportConfig(userId, {
       mapping: customMapping,
       units: customUnits,
@@ -270,7 +283,7 @@ export function CargoImportDialog({
       dimensionOrder: templateDimensionOrder,
       defaults: templateDefaults,
     })
-    if (imported.items.length > 0 && selectedImportTemplateId) {
+    if (pendingImport.items.length > 0 && selectedImportTemplateId) {
       try { localStorage.setItem('cargo_last_used_template_id', selectedImportTemplateId) } catch { /* ignore */ }
     }
   }
@@ -279,11 +292,11 @@ export function CargoImportDialog({
   const previewRows = importPreviewRows(importRows, templateHeaderRow, templateStartRow).slice(0, 5)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" data-testid="mapping-modal">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" data-testid="mapping-modal" role="dialog" aria-modal="true" aria-labelledby="mapping-modal-title">
       <div className="w-full max-w-5xl rounded-xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in duration-200 max-h-[92vh] overflow-y-auto">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-xl font-bold text-slate-800">{labels.mappingTitle}</h3>
+            <h3 id="mapping-modal-title" className="text-xl font-bold text-slate-800">{labels.mappingTitle}</h3>
             <p className="mt-1 text-sm text-slate-500">{labels.mappingSubtitle}</p>
           </div>
           <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600" data-testid="mapping-stats">
@@ -345,29 +358,44 @@ export function CargoImportDialog({
           labels={labels as never}
           missingColumns={missingImportColumns}
           previewSlot={(
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid="mapping-preview">
-              <div className="mb-2 text-sm font-semibold text-slate-700">{labels.mappingPreview}</div>
-              <div className="max-h-[420px] overflow-auto">
-                <table className="min-w-full border-collapse text-xs">
-                  <thead className="sticky top-0 bg-slate-100">
-                    <tr>
-                      {availableColumns.map(col => (
-                        <th key={col} className="border border-slate-200 px-2 py-1 text-left font-semibold text-slate-700 whitespace-nowrap">{col}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {previewRows.map((row, rowIndex) => (
-                      <tr key={rowIndex} className="odd:bg-white even:bg-slate-50">
+            <div className="space-y-3">
+              <div className="rounded-md border border-slate-200 bg-white p-3 text-xs" data-testid="mapping-parse-summary">
+                <div className="font-semibold text-slate-700">
+                  {locale === 'zh' ? '解析预览' : 'Parse preview'}: {pendingImport.summary.importedRows} ok / {pendingImport.errors.length} err / {pendingImport.warnings.length} warn
+                </div>
+                {pendingImport.errors.slice(0, 3).map((issue) => (
+                  <p className="mt-1 text-red-700" key={`err-${issue.row}-${issue.code}`}>R{issue.row}: {issue.message}</p>
+                ))}
+                {pendingImport.items.slice(0, 3).map((item) => (
+                  <p className="mt-1 text-slate-600" key={item.id}>
+                    {item.label} {item.name}: {item.length}×{item.width}×{item.height} mm, {item.weight} kg ×{item.quantity}
+                  </p>
+                ))}
+              </div>
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid="mapping-preview">
+                <div className="mb-2 text-sm font-semibold text-slate-700">{labels.mappingPreview}</div>
+                <div className="max-h-[420px] overflow-auto">
+                  <table className="min-w-full border-collapse text-xs">
+                    <thead className="sticky top-0 bg-slate-100">
+                      <tr>
                         {availableColumns.map(col => (
-                          <td key={col} className="border border-slate-200 px-2 py-1 text-slate-700 whitespace-nowrap">
-                            {row[col] === undefined || row[col] === null ? '' : String(row[col])}
-                          </td>
+                          <th key={col} className="border border-slate-200 px-2 py-1 text-left font-semibold text-slate-700 whitespace-nowrap">{col}</th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {previewRows.map((row, rowIndex) => (
+                        <tr key={rowIndex} className="odd:bg-white even:bg-slate-50">
+                          {availableColumns.map(col => (
+                            <td key={col} className="border border-slate-200 px-2 py-1 text-slate-700 whitespace-nowrap">
+                              {row[col] === undefined || row[col] === null ? '' : String(row[col])}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -390,11 +418,16 @@ export function CargoImportDialog({
               {missingFieldsHint}
             </span>
           )}
+          {pendingImport.errors.length > 0 && (
+            <span className="mr-auto text-xs font-semibold text-red-600" data-testid="mapping-error-hint">
+              {locale === 'zh' ? '存在错误行，无法确认导入' : 'Error rows present; confirm is blocked'}
+            </span>
+          )}
           <button
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             type="button"
             data-testid="confirm-mapping"
-            disabled={!canConfirmMapping}
+            disabled={!canConfirmMapping || pendingImport.errors.length > 0}
             onClick={confirmMappingImport}
           >
             {labels.mappingConfirm}

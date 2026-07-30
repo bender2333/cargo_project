@@ -14,12 +14,14 @@ const importCodeMessages: Record<Locale, Record<string, string>> = {
     'cm-converted': '第 {row} 行已从厘米换算为毫米。',
     'invalid-dimensions': '第 {row} 行缺少或非法的长宽高。',
     'invalid-quantity': '第 {row} 行缺少或非法的数量。',
+    'invalid-weight': '第 {row} 行缺少或非法的重量。',
     'quantity-defaulted': '第 {row} 行未填数量，已默认为 1。',
   },
   en: {
     'cm-converted': 'Row {row}: Centimeter dimensions were converted to millimeters.',
     'invalid-dimensions': 'Row {row}: Missing or invalid length, width, or height.',
     'invalid-quantity': 'Row {row}: Missing or invalid quantity.',
+    'invalid-weight': 'Row {row}: Missing or invalid weight.',
     'quantity-defaulted': 'Row {row}: Quantity was missing and defaulted to 1.',
   },
 }

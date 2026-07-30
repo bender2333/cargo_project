@@ -62,9 +62,9 @@ describe('parseCargoRows', () => {
   it('keeps valid rows and reports invalid required fields without silent failure', () => {
     const result = parseCargoRows(
       [
-        { Label: 'A', Name: 'Valid', Length: 1000, Width: 800, Height: 600, Quantity: 1 },
-        { Label: 'B', Name: 'Missing height', Length: 1000, Width: 800, Quantity: 1 },
-        { Label: 'C', Name: 'Missing quantity', Length: 1000, Width: 800, Height: 600 },
+        { Label: 'A', Name: 'Valid', Length: 1000, Width: 800, Height: 600, Weight: 10, Quantity: 1 },
+        { Label: 'B', Name: 'Missing height', Length: 1000, Width: 800, Weight: 10, Quantity: 1 },
+        { Label: 'C', Name: 'Missing quantity', Length: 1000, Width: 800, Height: 600, Weight: 10 },
       ],
       { createId: () => 'fixed-id' },
     )
@@ -102,8 +102,8 @@ describe('parseCargoRows', () => {
   it('emits structured codes with English fallback message for downstream localization', () => {
     const result = parseCargoRows(
       [
-        { Label: 'A', Length: 0, Width: 0, Height: 0, Quantity: 1 },
-        { Label: 'B', Length: 1000, Width: 1000, Height: 1000, Quantity: 0 },
+        { Label: 'A', Length: 0, Width: 0, Height: 0, Weight: 10, Quantity: 1 },
+        { Label: 'B', Length: 1000, Width: 1000, Height: 1000, Weight: 10, Quantity: 0 },
       ],
       { createId: () => 'codes-id' },
     )
@@ -187,6 +187,7 @@ describe('parseCargoRowsWithMapping', () => {
           quantity: 'Qty',
         },
         units: { length: 'cm', width: 'cm', height: 'cm' },
+        defaultValues: { weight: 12 },
       },
       { createId: () => 'template-1' },
     )
@@ -223,6 +224,7 @@ describe('parseCargoRowsWithMapping', () => {
         defaultValues: {
           label: 'TPL',
           quantity: 2,
+          weight: 12,
           color: '#123456',
           canRotate: false,
           stackable: false,
@@ -306,7 +308,7 @@ describe('parseCargoRowsWithMapping', () => {
       dimensionMode: 'combined',
       combinedColumn: '外箱尺寸（mm）',
       dimensionOrder: ['length', 'width', 'height'],
-      defaultValues: { quantity: 1, canRotate: true, stackable: true },
+      defaultValues: { quantity: 1, weight: 10, canRotate: true, stackable: true },
     }))
 
     expect(result.errors).toEqual([])
@@ -323,7 +325,7 @@ describe('parseCargoRowsWithMapping', () => {
 
   it('applies default quantity when no quantity column is mapped', () => {
     const result = parseCargoRowsWithTemplate(
-      [{ Item: 'Template crate', L: 80, W: 60, H: 40 }],
+      [{ Item: 'Template crate', L: 80, W: 60, H: 40, Wt: 12 }],
       {
         mapping: {
           name: 'Item',
@@ -332,7 +334,7 @@ describe('parseCargoRowsWithMapping', () => {
           height: 'H',
         },
         units: { length: 'cm', width: 'cm', height: 'cm' },
-        defaultValues: { label: 'TP', quantity: 3 },
+        defaultValues: { label: 'TP', quantity: 3, weight: 12 },
       },
       { createId: () => 'template-default-quantity' },
     )
@@ -406,6 +408,7 @@ describe('parseCargoRowsWithMapping', () => {
         quantity: 'Cartons',
         dimensions: 'Size',
       },
+      defaultValues: { weight: 10 },
       units: { length: 'cm', width: 'cm', height: 'cm' },
       dimensionMode: 'combined' as const,
       combinedColumn: 'Size',
@@ -440,6 +443,7 @@ describe('parseCargoRowsWithMapping', () => {
       Length: 530,
       Width: 305,
       Height: 310,
+      Weight: 12,
     }
 
     const inferred = parseCargoRows([row], { createId: () => 'carton-inferred' })
@@ -452,6 +456,7 @@ describe('parseCargoRowsWithMapping', () => {
         length: 'Length',
         width: 'Width',
         height: 'Height',
+        weight: 'Weight',
       },
       { createId: () => 'carton-explicit' },
     )
@@ -463,9 +468,9 @@ describe('parseCargoRowsWithMapping', () => {
   it('uses the mapped label column value as-is (no truncation or slice)', () => {
     const result = parseCargoRowsWithMapping(
       [
-        { '物料名称': 'TB-C10-EV_v1.1 Battery Module', '长mm': 530, '宽mm': 305, '高mm': 310, '箱数': 1 },
+        { '物料名称': 'TB-C10-EV_v1.1 Battery Module', '长mm': 530, '宽mm': 305, '高mm': 310, '重量kg': 12, '箱数': 1 },
       ],
-      { label: '物料名称', length: '长mm', width: '宽mm', height: '高mm', quantity: '箱数' },
+      { label: '物料名称', length: '长mm', width: '宽mm', height: '高mm', weight: '重量kg', quantity: '箱数' },
       { createId: () => 'label-mapped' },
     )
     expect(result.items).toHaveLength(1)
@@ -475,8 +480,8 @@ describe('parseCargoRowsWithMapping', () => {
 
   it('falls back to unique excel-style labels when no label column is mapped', () => {
     const result = parseCargoRowsWithMapping(
-      Array.from({ length: 30 }, () => ({ '长mm': 100, '宽mm': 100, '高mm': 100, '数量': 1 })),
-      { length: '长mm', width: '宽mm', height: '高mm', quantity: '数量' },
+      Array.from({ length: 30 }, () => ({ '长mm': 100, '宽mm': 100, '高mm': 100, '重量kg': 5, '数量': 1 })),
+      { length: '长mm', width: '宽mm', height: '高mm', weight: '重量kg', quantity: '数量' },
       { createId: () => `u-` },
     )
     const labels = result.items.map((item) => item.label)
@@ -489,18 +494,18 @@ describe('parseCargoRowsWithMapping', () => {
 
   it('name field preserves original text independent of label processing', () => {
     const result = parseCargoRowsWithMapping(
-      [{ 'SKU': 'ABC-123-XYZ', '品名': '散热器组件 Type-A 2026 款', '长mm': 100, '宽mm': 100, '高mm': 100, '数量': 1 }],
-      { label: 'SKU', name: '品名', length: '长mm', width: '宽mm', height: '高mm', quantity: '数量' },
+      [{ 'SKU': 'ABC-123-XYZ', '品名': '散热器组件 Type-A 2026 款', '长mm': 100, '宽mm': 100, '高mm': 100, '重量kg': 8, '数量': 1 }],
+      { label: 'SKU', name: '品名', length: '长mm', width: '宽mm', height: '高mm', weight: '重量kg', quantity: '数量' },
       { createId: () => 'name-test' },
     )
     expect(result.items[0]!.label).toBe('ABC-123-XYZ')
     expect(result.items[0]!.name).toBe('散热器组件 Type-A 2026 款')
   })
-})
 
   it('combined dimensions respect user-selected order (width,length,height)', () => {
     const template: ImportTemplateConfig = {
       mapping: { dimensions: '外箱尺寸（mm）' },
+      defaultValues: { weight: 10 },
       headerRow: 1,
       startRow: 2,
       dimensionMode: 'combined',
@@ -508,7 +513,7 @@ describe('parseCargoRowsWithMapping', () => {
       dimensionOrder: ['width', 'length', 'height'],
     }
     const result = parseCargoRowsWithTemplate(
-      [{ '外箱尺寸（mm）': '530*305*310' }],
+      [{ '外箱尺寸（mm）': '530*305*310', Weight: 10 }],
       template,
       { createId: () => 'order-test' },
     )
@@ -521,13 +526,14 @@ describe('parseCargoRowsWithMapping', () => {
   it('default dimension order is LWH when not set', () => {
     const template: ImportTemplateConfig = {
       mapping: { dimensions: '尺寸' },
+      defaultValues: { weight: 10 },
       headerRow: 1,
       startRow: 2,
       dimensionMode: 'combined',
       combinedColumn: '尺寸',
     }
     const result = parseCargoRowsWithTemplate(
-      [{ '尺寸': '580*365*435' }],
+      [{ '尺寸': '580*365*435', Weight: 10 }],
       template,
       { createId: () => 'lwh-default' },
     )
@@ -539,6 +545,7 @@ describe('parseCargoRowsWithMapping', () => {
   it('falls back to mapping.dimensions when saved combinedColumn is an empty string', () => {
     const template: ImportTemplateConfig = {
       mapping: { dimensions: '尺寸' },
+      defaultValues: { weight: 10 },
       headerRow: 1,
       startRow: 2,
       dimensionMode: 'combined',
@@ -547,32 +554,37 @@ describe('parseCargoRowsWithMapping', () => {
       combinedColumn: '',
     }
     const result = parseCargoRowsWithTemplate(
-      [{ '尺寸': '580*365*435' }],
+      [{ '尺寸': '580*365*435', Weight: 10 }],
       template,
       { createId: () => 'legacy-combined' },
     )
     expect(result.errors).toEqual([])
     expect(result.items[0]!).toMatchObject({ length: 580, width: 365, height: 435 })
   })
+})
 
 
 // P1-6 RED tests — invalid weight bypass
 describe('weight validation in parseCargoRows', () => {
-  it('clamps negative weight to zero on import', () => {
+  it('rejects negative weight as a row error', () => {
     const result = parseCargoRows([
       { Label: 'A', Length: 400, Width: 500, Height: 600, Weight: -10, Quantity: 1 },
     ], { createId: () => 'w-test' })
 
-    expect(result.errors).toEqual([])
-    expect(result.items[0]!.weight).toBe(0)
+    expect(result.items).toEqual([])
+    expect(result.errors).toEqual([
+      expect.objectContaining({ code: 'invalid-weight', row: 2 }),
+    ])
   })
 
-  it('treats missing weight as zero', () => {
+  it('rejects missing weight as a row error', () => {
     const result = parseCargoRows([
       { Label: 'A', Length: 400, Width: 500, Height: 600, Quantity: 1 },
     ], { createId: () => 'w-missing' })
 
-    expect(result.errors).toEqual([])
-    expect(result.items[0]!.weight).toBe(0)
+    expect(result.items).toEqual([])
+    expect(result.errors).toEqual([
+      expect.objectContaining({ code: 'invalid-weight', row: 2 }),
+    ])
   })
 })

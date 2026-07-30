@@ -1782,9 +1782,13 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     if (autoMappable) {
       const imported = parseCargoRows(autoRows, { colors })
       setImportMessages(buildImportMessages(imported, t, locale))
-      if (imported.items.length > 0) {
+      if (imported.errors.length === 0 && imported.items.length > 0) {
         dispatchPackingSession({ type: 'cargoImported', items: imported.items })
         setSelectedBoxId(null)
+      } else if (imported.errors.length > 0) {
+        setImportMessages((prev) => [...prev, locale === 'zh'
+          ? '导入含错误行，未覆盖当前货物。请修正后重新导入或使用手动映射预览。'
+          : 'Import has error rows; current cargo was not replaced. Fix the workbook or use manual mapping preview.'])
       } else if (imported.errors.length === 0) {
         setImportMessages((prev) => [...prev, locale === 'zh'
           ? '未识别到可导入的货物行，建议使用模板管理器手动映射列'
