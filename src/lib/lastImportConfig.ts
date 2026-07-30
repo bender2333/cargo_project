@@ -58,6 +58,7 @@ function normalizeDefaults(value: unknown): ImportTemplateDefaults {
   if (typeof source.name === 'string') out.name = source.name
   if (typeof source.color === 'string') out.color = source.color
   if (typeof source.quantity === 'number' && Number.isFinite(source.quantity)) out.quantity = source.quantity
+  if (typeof source.weight === 'number' && Number.isFinite(source.weight) && source.weight > 0) out.weight = source.weight
   if (typeof source.canRotate === 'boolean') out.canRotate = source.canRotate
   if (typeof source.stackable === 'boolean') out.stackable = source.stackable
   if (typeof source.maxStackLayers === 'number' && Number.isFinite(source.maxStackLayers)) {

@@ -87,7 +87,7 @@ function createBlankImportTemplate(): ImportTemplatePayload {
     dimensionMode: 'separate',
     combinedColumn: '',
     dimensionOrder: ['length', 'width', 'height'],
-    defaultValues: { quantity: 1, canRotate: true, stackable: true },
+    defaultValues: { quantity: 1, weight: 1, canRotate: true, stackable: true },
   }
 }
 

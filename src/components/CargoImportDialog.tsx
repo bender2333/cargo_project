@@ -102,7 +102,7 @@ export function CargoImportDialog({
   const [templateName, setTemplateName] = useState('')
   const [templateHeaderRow, setTemplateHeaderRow] = useState(1)
   const [templateStartRow, setTemplateStartRow] = useState(2)
-  const [templateDefaults, setTemplateDefaults] = useState<ImportTemplateDefaults>({ quantity: 1, canRotate: true, stackable: true })
+  const [templateDefaults, setTemplateDefaults] = useState<ImportTemplateDefaults>({ quantity: 1, weight: 1, canRotate: true, stackable: true })
   const [templateSaveNotice, setTemplateSaveNotice] = useState('')
   const [missingImportColumns, setMissingImportColumns] = useState<string[]>([])
 
@@ -176,7 +176,7 @@ export function CargoImportDialog({
     setTemplateDimensionMode(next.dimensionMode)
     setTemplateCombinedColumn(next.combinedColumn)
     setTemplateDimensionOrder(next.dimensionOrder)
-    setTemplateDefaults(next.defaults)
+    setTemplateDefaults({ quantity: 1, weight: 1, canRotate: true, stackable: true, ...next.defaults })
     setMissingImportColumns(selectedImportTemplateId
       ? missingMappedColumns(next, importColumnsForHeaderRow(importRows, next.headerRow))
       : [])
@@ -194,7 +194,7 @@ export function CargoImportDialog({
       setTemplateStartRow(2)
       setTemplateDimensionMode('separate')
       setTemplateCombinedColumn('')
-      setTemplateDefaults({ quantity: 1, canRotate: true, stackable: true })
+      setTemplateDefaults({ quantity: 1, weight: 1, canRotate: true, stackable: true })
       setTemplateName('')
       setTemplateDimensionOrder(['length', 'width', 'height'])
       return

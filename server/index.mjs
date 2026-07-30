@@ -285,6 +285,7 @@ function parseTemplatePayload(body) {
   if (defaults.label != null) cleanDefaults.label = String(defaults.label).trim().slice(0, 12)
   if (defaults.name != null) cleanDefaults.name = String(defaults.name).trim().slice(0, 120)
   if (defaults.quantity != null && Number.isFinite(Number(defaults.quantity))) cleanDefaults.quantity = Math.max(1, Math.floor(Number(defaults.quantity)))
+  if (defaults.weight != null && Number.isFinite(Number(defaults.weight)) && Number(defaults.weight) > 0) cleanDefaults.weight = Number(defaults.weight)
   if (defaults.color != null) cleanDefaults.color = String(defaults.color).trim().slice(0, 40)
   if (defaults.canRotate != null) cleanDefaults.canRotate = Boolean(defaults.canRotate)
   if (defaults.stackable != null) cleanDefaults.stackable = Boolean(defaults.stackable)
