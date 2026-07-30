@@ -2,12 +2,13 @@
 
 ## 2026-07-30 任务5-9：导入事务、标签朝向、历史快照、账号范围与架构收口
 
-- [x] 任务5：重量必须 >0；映射确认前 parser 预览；错误行阻断确认/自动覆盖。
+- [x] 任务5：重量必须 >0；映射确认前 parser 预览；错误行阻断确认/自动覆盖；模板默认 weight 在前后端 round-trip 保留。
 - [x] 任务6：`labelStats` 按规范化业务标签聚合；导出按 cargo×orientationKey 拆行并带 `orientationKey`。
 - [x] 任务7：`schemaVersion:2` 历史快照保存完整 `packingResult`/手动草稿；旧记录确认后才重算；2.5MB 大小限制。
 - [x] 任务8：管理员页改为只读登录审计；PRD/`decision.md`/E2E 同步去掉用户 CRUD 产品入口。
-- [x] 任务9（部分）：`App` 登录前懒加载 Workbench；`workbenchCopy` 抽出后 `Workbench.tsx` 1910 行（目标 ≤1500 未完全达成）；Results/Visualization props 与 ContainerScene 行数目标仍开放，记入 decision。
-- 验证：相关单测 112 项通过；`tsc -b` 通过；lint 修复 App unused 后待全量门禁。
+- [x] 任务9（部分）：`App` 登录前懒加载 Workbench（chunk 独立 `Workbench-*.js` + three）；`workbenchCopy` 抽出后 `Workbench.tsx` ~1910 行。Results/Visualization props 与 ContainerScene ≤600 仍开放（见 decision）。
+- 验证：`npm run lint` 通过；`npm test` 84+2 文件 / 659 项通过；`npm run build` 通过；全量 E2E `120 passed / 0 failed`。benchmark 未在本轮 rebaseline。
+
 
 ## 2026-07-30 任务4：手动会话生命周期与货物同步
 
