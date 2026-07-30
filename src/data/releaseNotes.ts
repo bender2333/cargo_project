@@ -14,6 +14,34 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-07-30-r60-plan-integrity-and-history-snapshots',
+    date: '2026-07-30',
+    title: {
+      en: 'Plan integrity, imports, and history snapshots',
+      zh: '方案完整性、导入事务与历史快照',
+    },
+    items: {
+      en: [
+        'Automatic packing now rejects stack-capacity violations when a new box is inserted under existing cargo, so capacity-one goods cannot silently carry riders.',
+        'Save and formal exports are blocked whenever the active plan has error diagnostics or blocking manual issues, including history save, XLSX, PDF, review, and current-view export.',
+        'Excel import requires positive finite weight, previews parse results before confirm, and never replaces current cargo while error rows remain.',
+        'Label statistics merge cargo rows under the same business label, and plan export splits mixed orientations into one row per orientation with exact counts and actual dimensions.',
+        'History now stores versioned result snapshots for exact restore; older input-only records are marked as templates and recompute only after explicit confirmation.',
+        'Admin account management is a read-only login audit. Create/disable/delete actions are no longer product UI.',
+        'The login shell loads the workbench on demand, with a recoverable state if the workbench chunk fails.',
+      ],
+      zh: [
+        '自动装箱在新箱插入已有货物下方时也会校验堆叠容量，capacity-one 货物不能再静默承载上层箱。',
+        '当前方案存在 error 诊断或阻塞性手动问题时，保存与正式导出一律阻断，覆盖历史保存、XLSX、PDF、复核和当前视图导出。',
+        'Excel 导入要求重量为正有限数，确认前可预览解析结果；存在错误行时不会覆盖当前货物。',
+        '标签统计按业务标签聚合；导出走 cargo×orientation 拆行，精确给出每种朝向数量与实际尺寸。',
+        '历史方案保存版本化结果快照，可精确恢复；旧的仅输入记录标为模板，需确认后才按当前算法重算。',
+        '管理员账号入口改为只读登录审计，产品界面不再提供创建/禁用/删除。',
+        '登录壳按需加载工作台；工作台 chunk 失败时有可恢复状态。',
+      ],
+    },
+  },
+  {
     version: '2026-07-28-r59-manual-compliance-and-data-fidelity',
     date: '2026-07-28',
     title: { en: 'Manual plan compliance and data fidelity', zh: '手动方案合规与数据保真' },

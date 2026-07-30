@@ -1,5 +1,13 @@
 # Decision Log
 
+## 2026-07-30 任务9架构收口未完全达标
+
+- 背景：计划要求 Workbench ≤1500、Results/Visualization props ≤25、ContainerScene ≤600、登录前不加载 Workbench/Three、benchmark 可信恢复。
+- 已做：`App` 改为 lazy/Suspense + 失败可恢复；`workbenchCopy` 抽出使 Workbench 从 2531→1910 行。
+- 未做完：Workbench 仍 1910>1500；ResultsPanel 62 props、VisualizationWorkspace 70 props；ContainerScene 1311>600；benchmark 未在本轮重跑/rebaseline。
+- 决策：不在本轮为压行数做高风险 props 大包或 ContainerScene 深拆；先交付业务闭环（任务1-8）与登录懒加载，剩余架构指标保持开放并继续小步下沉。
+- 影响：任务9部分完成；全量 lint/test/e2e/benchmark/deploy 在 release notes 收口阶段执行。
+
 ## 2026-07-30 账号能力分层：保留登录隔离与管理员审计，隐藏用户 CRUD
 
 - 背景：仓库规则写“本期不做账号/权限管理类产品功能”，PRD 又要求管理员登录审计查看；UI 仍暴露禁用/删除等用户 CRUD，文档与实现冲突。
