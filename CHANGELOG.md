@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-07-30 第三轮复审修复闭环（任务1–9）
+
+- 范围：`plans/2026-07-30-refactor-review-round-3-remediation.md` 九项修复；固定点后代码从 `46f730d` 起，文档起点 `e5af26f`/`2f98e9d`，收口 HEAD `09f4991`（已 push `origin/main`，`6dfcc0b..09f4991`）。
+- 业务闭环：
+  1. 自动 capacity-one 后插入校验（`canPlace` 向上乘员链）。
+  2. 自动/手动共享 `finalizePackingResult`（支撑 → depthLayer → 拓扑 workStep → layers）。
+  3. 保存/导出统一 `assertPlanCompliant`（含历史保存与多种导出）。
+  4. 手动 `draftInitialized` + cargo 几何/规则同步；空草稿与自动灌入语义分离。
+  5. Excel 事务导入：重量 >0、确认前预览、错误行不覆盖；模板 `defaultValues.weight` 前后端保留。
+  6. `labelStats` 按业务标签聚合；导出 cargo×orientationKey 拆行。
+  7. 历史 `schemaVersion:2` 结果快照；旧记录确认后才重算；2.5MB 限制。
+  8. 管理员改为只读登录审计；产品 UI 隐藏用户 CRUD；PRD/E2E 对齐。
+  9. 登录壳 lazy 加载 Workbench；抽出 `workbenchCopy`（Workbench ~1910 行）。架构行数/props/ContainerScene/benchmark 目标部分未达标，见 `decision.md`。
+- 用户可见：`src/data/releaseNotes.ts` 新增 `2026-07-30-r60-plan-integrity-and-history-snapshots`。
+- 验证（收口实测）：
+  - `npm run lint` 通过
+  - `npm test`：unit 84 文件 / 653 + packing-performance 2 文件 / 6 = **659 通过**
+  - `npm run build` 通过（Workbench/Three 独立 chunk）
+  - 全量 E2E **120 passed / 0 failed**
+  - benchmark **未**重跑/rebaseline（仍开放）
+- 未做/开放：Workbench ≤1500、Results/Visualization props ≤25、ContainerScene ≤600、可信 benchmark 基线、生产远程部署回归（本轮未 deploy）。
+- 关键提交（代码主线，新→旧）：
+  - `09f4991` docs: record tasks 5-9 verification results
+  - `df0ff3c` / `5b1cc01` import default weight round-trip
+  - `848733d` login-audit e2e
+  - `7b26578` lazy-load workbench + extract copy
+  - `79f17a8` read-only login audit
+  - `adaf462` history snapshots
+  - `6cf5e8b` label aggregate + orientation export
+  - `6fa907a` transactional import / weight validation
+  - `60c1fdf` manual draft init + cargo sync
+  - `a751149` compliance gate
+  - `0b6cfa9` shared packing finalizer
+  - `46f730d` capacity-one insertion check
+
 ## 2026-07-30 任务5-9：导入事务、标签朝向、历史快照、账号范围与架构收口
 
 - [x] 任务5：重量必须 >0；映射确认前 parser 预览；错误行阻断确认/自动覆盖；模板默认 weight 在前后端 round-trip 保留。
@@ -49,7 +84,7 @@
 - [x] 复核 `issues/2026-07-29-refactor-review-architecture-business-round-2.md` 全部 findings，并对 `5fa9856...b13b9fd` 完成新一轮 Standards、React 和 PRD 业务审查；报告写入 `issues/2026-07-30-refactor-review-architecture-business-round-3.md`。
 - [x] 确认 `6dfcc0b..b13b9fd` 只有第二轮审查文档提交，没有运行时代码、测试、baseline 或业务夹具变更；上一轮全部开放/部分开放 finding 仍开放。
 - [x] 新增 3 项 P2：自动模式/其他页面的全局撤销会修改隐藏手动草稿；Excel 映射弹窗缺少 dialog/focus/Escape 边界；自动 error diagnostics 不进入复核清单及 JSON/Excel 导出。
-- [ ] 当前结论继续 BLOCKED：自动 capacity-one 硬约束稳定 RED；手动支撑/分层、命令级合规守卫、历史快照、事务导入、朝向导出和 labelStats 未闭环；全量 E2E 的手动入口合同扩大为 8 条失败。
+  - ~~当前结论继续 BLOCKED~~ → **已被 2026-07-30 任务1–9 收口 supersede**（见本文件顶部「第三轮复审修复闭环」；E2E 120/0，业务 RED 项已关；架构/benchmark 仍开放）。
 - 验证：`npm run lint` 通过；`npm test` 失败（81 文件通过/1 文件失败）；`npm run test:packing-performance` 失败（1 文件通过/1 文件失败）；`npm run build` 通过，主 chunk `1,067.20 kB` / gzip `297.56 kB`；手动定向 E2E 0/4；全量 E2E `112 passed / 8 failed`；31 托完整定向 E2E 1/1；benchmark Playwright 1/1 和五个当前 hash 一致，但正式门禁因 initial JS/total 增长及 3D 首像素 median/P95 超 20% 失败；`git diff --check 5fa9856...HEAD` 通过。
 - 本轮只修改审查报告、`decision.md` 和本执行日志；未修改运行时代码、测试、baseline、阈值、样本数或业务夹具，不执行生产部署。
 

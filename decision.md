@@ -1,5 +1,30 @@
 # Decision Log
 
+## 2026-07-30 第三轮修复交付状态（任务1–9收口）
+
+- 背景：第三轮复审曾判定 BLOCKED（capacity-one RED、手动支撑/合规/历史/导入/朝向/labelStats 未闭环、E2E 8 fail）。本轮按 `plans/2026-07-30-refactor-review-round-3-remediation.md` 实施并 push 至 `09f4991`。
+- 已关闭（相对第三轮开放项）：
+  - 自动 capacity-one 后插入硬约束
+  - 自动/手动共享结果终结与真实垂直支撑/分层
+  - 命令级合规守卫（保存/多路导出）
+  - 手动草稿初始化与 cargo 同步
+  - 事务式 Excel 导入 + 重量合同
+  - labelStats 聚合 + 结构化朝向导出
+  - 版本化历史快照（关闭 2026-07-28 P1-5）
+  - 账号范围：只读登录审计（关闭文档/产品冲突）
+  - 登录前懒加载 Workbench
+- 实测门禁：lint / unit+packing-perf 659 / build / E2E 120·0 全绿；benchmark 未测。
+- 仍开放：Workbench≤1500、Results/Visualization props≤25、ContainerScene≤600、benchmark 可信基线、远程部署 E2E。
+- 决策：业务与数据合同以本轮 HEAD 为可继续验收基线；架构/性能指标不宣称完成，不更新 benchmark baseline。
+- 影响：第三轮报告中的 BLOCKED 业务结论已被本轮代码 supersede；审查报告文件本身不改写历史，以本条与 CHANGELOG 为准。
+
+## 2026-07-30 关闭 2026-07-28 P1-7 Excel 导入非事务
+
+- 背景：P1-7 曾因产品口径未定延期。
+- 决策：采用「错误行整批拒绝覆盖」——自动路径有 error 不替换当前货物；映射确认前 parser 预览，error>0 禁用确认；重量缺失/非法为行级 error。
+- 影响：导入不再先覆盖后告知；无重量列时可依赖模板 `defaultValues.weight`（默认 1）round-trip。
+- 关闭条件已满足；旧归档条保留作历史，以本条为现行口径。
+
 ## 2026-07-30 任务9架构收口未完全达标
 
 - 背景：计划要求 Workbench ≤1500、Results/Visualization props ≤25、ContainerScene ≤600、登录前不加载 Workbench/Three、benchmark 可信恢复。
@@ -23,22 +48,22 @@
 - 影响：新保存方案可精确恢复坐标/朝向/层级/步骤；旧记录不再静默重算。
 - 后续：如需压缩大方案，可在保持 schema 的前提下加 gzip payload，不必改恢复语义。
 
-## 2026-07-30 第三轮复审保持质量门禁 RED
+## 2026-07-30 第三轮复审保持质量门禁 RED（历史记录；已被任务1–9收口 supersede）
 
 - 背景：`6dfcc0b..b13b9fd` 只有第二轮审查文档提交，没有运行时代码修复。fresh 验证继续得到 capacity-one 自动堆叠硬约束失败、全量 E2E `112 passed / 8 failed`，以及 benchmark 的 initial JS/total 增长和 3D 首像素 median/P95 超 20%。31 托完整业务流程单独通过 `1/1`。
 - 选项：A. 修改既有断言、跳过冲突的手动用例或更新 benchmark baseline；B. 把失败描述为“已知 RED 下通过”；C. 保持所有门禁 RED，并在第三轮报告中区分实现缺陷、入口语义合同冲突和性能门禁失败。
-- 决策：选择 C。capacity-one 是 PRD 8 硬约束缺陷；8 条手动 E2E 证明实现与验收合同未统一；benchmark 的增长和 3D 首像素回退均由现有硬门禁明确拒绝。任何放宽断言、跳过或 rebaseline 都会隐藏当前交付状态。
-- 影响：当前 HEAD 继续 BLOCKED，不部署、不发布。报告只记录证据，不修改运行时代码、测试、baseline、阈值、采样数或业务夹具。首次 benchmark 与全量 E2E 并发造成端口 3010 冲突，端口释放后已独占重跑，以独占结果为正式证据。
+- 决策：当时选择 C（审查阶段不改代码、不放宽门禁）。
+- 影响：~~当时 HEAD BLOCKED~~。2026-07-30 任务1–9 已修复业务 RED 并 push `09f4991`（E2E 120/0）；架构/benchmark 仍见「任务9架构收口未完全达标」。本条不再代表当前交付状态。
 
-## 2026-07-28 P1-5 历史方案只存输入（本轮不修，归档）
+## 2026-07-28 P1-5 历史方案只存输入（已关闭 → 见 2026-07-30 历史方案快照契约）
 
 - 背景：`HistoryPlanData`（`src/api/historyPlans.ts:4`）只持久化柜型、`CargoItem[]`、数量/层数/标签摘要、装载模式和 `defaultMaxStackLayers`。恢复时 `usePackingSession.restoreHistory`（`src/hooks/usePackingSession.ts:87`）用**当前**算法重算 `calculatePacking`，既不存 `PackingResult`，也不存自动/手动模式、手动草稿坐标、朝向、层级、支撑关系与诊断。PRD 要求历史页恢复的是"当时那个方案"，现状恢复的是"当时那批输入"。
 - 加剧因素（本轮新发现）：本轮 P1-1/P1-2 已证明算法输出会随版本变化——同一批输入在契约修复前后 `physicalLayer`/`supportedBy`/`workStep` 全变。因此"重算等价于恢复"这个隐含前提在跨版本时明确不成立，手动方案则完全无法恢复（草稿坐标从未持久化）。
 - 选项：A. 本轮顺带把 `PackingResult` 塞进 `HistoryPlanData`；B. 设计带 schema 版本号的方案快照契约（存 placed 坐标 + 朝向 + 模式 + 手动草稿），并处理旧记录向后兼容；C. 记录后延期，本轮不动。
 - 决策：选择 C。A 是错误的省事做法：`PackingResult` 含 2600+ 箱体的完整数组（40HQ 夹具 golden JSON 就有数 MB），直接塞进 SQLite `data` JSON 列会让每用户 5 条上限变成实际的存储与传输问题，且没有 schema 版本号时下一次契约变更会让旧记录静默失真——正是本轮刚修完的那类缺陷。B 是正确解，但涉及 API 契约、数据库迁移（`server/db.mjs`）、旧记录兼容、手动草稿序列化四块，且需要先定"方案快照存什么粒度"的产品口径，属独立一轮的工作量。
-- 影响：历史页当前语义是"输入模板库"而非"方案存档"，用户无法审计过去的装柜方案。P1-5 保持开放。实施 B 时的验收要点：跨算法版本恢复必须逐箱一致（用本轮 `01f39ab` 前后两版 golden 做交叉验证）、手动方案恢复后 `validateDraft` 结果与保存时一致、旧记录（无快照字段）必须走可见的降级路径而非静默重算。
+  - 影响：~~历史页当时语义是输入模板库~~；已由 2026-07-30 快照契约关闭。旧影响描述保留备查。
 
-## 2026-07-28 P1-7 Excel 导入非事务式（本轮不修，归档）
+## 2026-07-28 P1-7 Excel 导入非事务式（已关闭 → 见 2026-07-30 关闭 P1-7）
 
 - 背景：自动映射路径（`src/Workbench.tsx:1776`）只要 `imported.items.length > 0` 就 `dispatchPackingSession({type:'cargoImported'})`，而 reducer（`src/lib/packingSession.ts:146`）是整体替换 `cargoItems`。同批次存在错误行时，用户既看不到"哪些行被丢弃"的确认界面，也没有回滚入口，当前货物列表已被覆盖。手动映射路径的 `confirmMappingImport`（`src/components/CargoImportDialog.tsx:249`）同样在 `imported.errors` 非空时照常调用 `onConfirm`。
 - 选项：A. 在自动路径加"存在错误行则强制进入映射弹窗预览"的分支；B. 引入统一的导入暂存区（parse → 预览确认 → 提交）并让两条路径共用，提交才 dispatch；C. 记录后延期。
