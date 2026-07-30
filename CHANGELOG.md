@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-30 重构第三轮复审与代码审查（BLOCKED）
+
+- [x] 复核 `issues/2026-07-29-refactor-review-architecture-business-round-2.md` 全部 findings，并对 `5fa9856...b13b9fd` 完成新一轮 Standards、React 和 PRD 业务审查；报告写入 `issues/2026-07-30-refactor-review-architecture-business-round-3.md`。
+- [x] 确认 `6dfcc0b..b13b9fd` 只有第二轮审查文档提交，没有运行时代码、测试、baseline 或业务夹具变更；上一轮全部开放/部分开放 finding 仍开放。
+- [x] 新增 3 项 P2：自动模式/其他页面的全局撤销会修改隐藏手动草稿；Excel 映射弹窗缺少 dialog/focus/Escape 边界；自动 error diagnostics 不进入复核清单及 JSON/Excel 导出。
+- [ ] 当前结论继续 BLOCKED：自动 capacity-one 硬约束稳定 RED；手动支撑/分层、命令级合规守卫、历史快照、事务导入、朝向导出和 labelStats 未闭环；全量 E2E 的手动入口合同扩大为 8 条失败。
+- 验证：`npm run lint` 通过；`npm test` 失败（81 文件通过/1 文件失败）；`npm run test:packing-performance` 失败（1 文件通过/1 文件失败）；`npm run build` 通过，主 chunk `1,067.20 kB` / gzip `297.56 kB`；手动定向 E2E 0/4；全量 E2E `112 passed / 8 failed`；31 托完整定向 E2E 1/1；benchmark Playwright 1/1 和五个当前 hash 一致，但正式门禁因 initial JS/total 增长及 3D 首像素 median/P95 超 20% 失败；`git diff --check 5fa9856...HEAD` 通过。
+- 本轮只修改审查报告、`decision.md` 和本执行日志；未修改运行时代码、测试、baseline、阈值、样本数或业务夹具，不执行生产部署。
+
 ## 2026-07-29 重构第二轮复审（BLOCKED）
 
 - [x] 对固定范围 `5fa9856...6dfcc0b` 及当前整体架构、业务合同和 E2E 状态完成只读复审，报告写入 `issues/2026-07-29-refactor-review-architecture-business-round-2.md`。

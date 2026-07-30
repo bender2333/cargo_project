@@ -1,5 +1,12 @@
 # Decision Log
 
+## 2026-07-30 第三轮复审保持质量门禁 RED
+
+- 背景：`6dfcc0b..b13b9fd` 只有第二轮审查文档提交，没有运行时代码修复。fresh 验证继续得到 capacity-one 自动堆叠硬约束失败、全量 E2E `112 passed / 8 failed`，以及 benchmark 的 initial JS/total 增长和 3D 首像素 median/P95 超 20%。31 托完整业务流程单独通过 `1/1`。
+- 选项：A. 修改既有断言、跳过冲突的手动用例或更新 benchmark baseline；B. 把失败描述为“已知 RED 下通过”；C. 保持所有门禁 RED，并在第三轮报告中区分实现缺陷、入口语义合同冲突和性能门禁失败。
+- 决策：选择 C。capacity-one 是 PRD 8 硬约束缺陷；8 条手动 E2E 证明实现与验收合同未统一；benchmark 的增长和 3D 首像素回退均由现有硬门禁明确拒绝。任何放宽断言、跳过或 rebaseline 都会隐藏当前交付状态。
+- 影响：当前 HEAD 继续 BLOCKED，不部署、不发布。报告只记录证据，不修改运行时代码、测试、baseline、阈值、采样数或业务夹具。首次 benchmark 与全量 E2E 并发造成端口 3010 冲突，端口释放后已独占重跑，以独占结果为正式证据。
+
 ## 2026-07-28 P1-5 历史方案只存输入（本轮不修，归档）
 
 - 背景：`HistoryPlanData`（`src/api/historyPlans.ts:4`）只持久化柜型、`CargoItem[]`、数量/层数/标签摘要、装载模式和 `defaultMaxStackLayers`。恢复时 `usePackingSession.restoreHistory`（`src/hooks/usePackingSession.ts:87`）用**当前**算法重算 `calculatePacking`，既不存 `PackingResult`，也不存自动/手动模式、手动草稿坐标、朝向、层级、支撑关系与诊断。PRD 要求历史页恢复的是"当时那个方案"，现状恢复的是"当时那批输入"。
