@@ -1,23 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  deleteManagedUser,
-  readManagedUsers,
-  toggleManagedUserStatus,
-} from '../api/users'
+import { readManagedUsers } from '../api/users'
 import type { ManagedUser } from '../api/users'
 
 interface UserManagementProps {
   onBack: () => void
 }
 
-// i18n copy. The admin panel does not yet receive a locale prop, so we keep the
-// existing Chinese strings as the runtime default and pre-stage English keys for
-// the next locale rollout. Keys are explicit so future wiring is a single
-// `t = copy[locale]` substitution.
+// Audit-only admin panel. Account CRUD (create/disable/delete) is intentionally
+// out of product scope for this milestone; backend isolation/login remains.
 const copy = {
   zh: {
-    title: '用户账号管理',
-    subtitle: '管理员控制面板 - 查看用户列表、禁用或删除普通用户账号',
+    title: '用户登录审计',
+    subtitle: '管理员只读面板 — 查看注册时间、最近登录时间和登录 IP',
     back: '← 返回工作台',
     refresh: '刷新',
     refreshing: '刷新中...',
@@ -31,28 +25,19 @@ const copy = {
       lastLogin: '最近登录',
       lastIp: '登录 IP',
       status: '账号状态',
-      actions: '操作',
     },
     roleAdmin: '管理员',
     roleUser: '普通用户',
     statusDisabled: '已禁用',
     statusActive: '正常',
-    actionEnable: '启用',
-    actionDisable: '禁用',
-    actionDelete: '删除',
     emptySearch: '没有匹配的用户，尝试调整搜索关键字',
     emptyAll: '暂无普通注册用户',
     loading: '加载用户列表中...',
     fetchFail: '获取用户列表失败',
-    actionFail: '操作失败',
-    cannotDisableAdmin: '不能禁用默认管理员账号',
-    cannotDeleteAdmin: '不能删除默认管理员账号',
-    confirmDelete: (name: string) =>
-      `确定要删除用户 "${name}" 吗？此操作将同时删除其所有历史方案和自定义柜型，且不可恢复！`,
   },
   en: {
-    title: 'User Account Management',
-    subtitle: 'Admin console — list users, disable or delete regular accounts',
+    title: 'User Login Audit',
+    subtitle: 'Admin read-only panel — registration time, last login, and IP',
     back: '← Back to workbench',
     refresh: 'Refresh',
     refreshing: 'Refreshing...',
@@ -66,24 +51,15 @@ const copy = {
       lastLogin: 'Last login',
       lastIp: 'Last IP',
       status: 'Status',
-      actions: 'Actions',
     },
     roleAdmin: 'Admin',
     roleUser: 'User',
     statusDisabled: 'Disabled',
     statusActive: 'Active',
-    actionEnable: 'Enable',
-    actionDisable: 'Disable',
-    actionDelete: 'Delete',
     emptySearch: 'No users match the current search',
     emptyAll: 'No regular users have registered yet',
     loading: 'Loading users...',
     fetchFail: 'Failed to fetch users',
-    actionFail: 'Operation failed',
-    cannotDisableAdmin: 'Cannot disable the default admin account',
-    cannotDeleteAdmin: 'Cannot delete the default admin account',
-    confirmDelete: (name: string) =>
-      `Delete user "${name}"? This also removes their history plans and custom containers. This cannot be undone.`,
   },
 } as const
 
@@ -115,7 +91,6 @@ export function UserManagement({ onBack }: UserManagementProps) {
   const [users, setUsers] = useState<ManagedUser[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const latestRequestId = useRef(0)
   const locale = resolveLocale()
@@ -123,7 +98,6 @@ export function UserManagement({ onBack }: UserManagementProps) {
 
   const errorMessage = (err: unknown) => {
     const message = err instanceof Error ? err.message : String(err)
-    if (message === copy.zh.actionFail) return t.actionFail
     if (message.startsWith(`${copy.zh.fetchFail} (HTTP `)) {
       return message.replace(copy.zh.fetchFail, t.fetchFail)
     }
@@ -137,7 +111,6 @@ export function UserManagement({ onBack }: UserManagementProps) {
     try {
       const data = await readManagedUsers()
       if (requestId !== latestRequestId.current) return
-      // Defensive: preserve newest-first ordering if the backend order changes.
       setUsers(sortByCreatedAtDesc(data))
     } catch (err) {
       if (requestId !== latestRequestId.current) return
@@ -148,48 +121,9 @@ export function UserManagement({ onBack }: UserManagementProps) {
   }
 
   useEffect(() => {
-    fetchUsers()
+    void fetchUsers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  const handleToggleStatus = async (user: ManagedUser) => {
-    if (user.username === 'admin') {
-      alert(t.cannotDisableAdmin)
-      return
-    }
-    setActionLoadingId(user.id)
-    try {
-      await toggleManagedUserStatus(user.id)
-      await fetchUsers()
-    } catch (err) {
-      const message = errorMessage(err)
-      setError(message)
-      alert(message)
-    } finally {
-      setActionLoadingId(null)
-    }
-  }
-
-  const handleDeleteUser = async (user: ManagedUser) => {
-    if (user.username === 'admin') {
-      alert(t.cannotDeleteAdmin)
-      return
-    }
-    if (!confirm(t.confirmDelete(user.username))) {
-      return
-    }
-    setActionLoadingId(user.id)
-    try {
-      await deleteManagedUser(user.id)
-      await fetchUsers()
-    } catch (err) {
-      const message = errorMessage(err)
-      setError(message)
-      alert(message)
-    } finally {
-      setActionLoadingId(null)
-    }
-  }
 
   const filteredUsers = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -206,32 +140,21 @@ export function UserManagement({ onBack }: UserManagementProps) {
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-200">
           <div>
-            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">{t.title}</h1>
+            <h1 className="text-2xl font-bold text-slate-900" data-testid="user-management-title">{t.title}</h1>
             <p className="mt-1 text-sm text-slate-500">{t.subtitle}</p>
           </div>
           <button
+            type="button"
             onClick={onBack}
-            className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition duration-150"
+            className="inline-flex items-center justify-center px-4 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50"
           >
             {t.back}
           </button>
         </div>
 
         {error && (
-          <div
-            className="mb-6 rounded-lg bg-red-50 p-4 border border-red-200 text-sm text-red-700 flex items-start justify-between gap-4"
-            role="alert"
-            data-testid="user-management-error"
-          >
-            <span className="flex-1">{error}</span>
-            <button
-              type="button"
-              onClick={() => setError('')}
-              className="text-red-500 hover:text-red-700 font-bold"
-              aria-label="dismiss"
-            >
-              ×
-            </button>
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" data-testid="user-management-error">
+            {error}
           </div>
         )}
 
@@ -240,9 +163,9 @@ export function UserManagement({ onBack }: UserManagementProps) {
             <input
               type="search"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(event) => setSearch(event.target.value)}
               placeholder={t.search}
-              className="block w-full sm:max-w-sm rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              className="w-full sm:max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm"
               data-testid="user-search-input"
             />
             <span className="text-xs text-slate-500" data-testid="user-count-summary">
@@ -251,7 +174,7 @@ export function UserManagement({ onBack }: UserManagementProps) {
           </div>
           <button
             type="button"
-            onClick={fetchUsers}
+            onClick={() => void fetchUsers()}
             disabled={loading}
             className="inline-flex items-center justify-center px-4 py-2 border border-purple-200 rounded-lg text-sm font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition duration-150 disabled:opacity-60"
             data-testid="user-refresh-button"
@@ -273,33 +196,18 @@ export function UserManagement({ onBack }: UserManagementProps) {
               <table className="min-w-full divide-y divide-slate-200">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      {t.columns.username}
-                    </th>
-                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      {t.columns.role}
-                    </th>
-                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      {t.columns.created}
-                    </th>
-                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      {t.columns.lastLogin}
-                    </th>
-                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      {t.columns.lastIp}
-                    </th>
-                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      {t.columns.status}
-                    </th>
-                    <th scope="col" className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      {t.columns.actions}
-                    </th>
+                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">{t.columns.username}</th>
+                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">{t.columns.role}</th>
+                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">{t.columns.created}</th>
+                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">{t.columns.lastLogin}</th>
+                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">{t.columns.lastIp}</th>
+                    <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">{t.columns.status}</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-200">
                   {filteredUsers.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-500">
+                      <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-500">
                         {hasSearch ? t.emptySearch : t.emptyAll}
                       </td>
                     </tr>
@@ -341,30 +249,6 @@ export function UserManagement({ onBack }: UserManagementProps) {
                           }`}>
                             {user.disabled ? t.statusDisabled : t.statusActive}
                           </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          {user.username !== 'admin' && (
-                            <div className="inline-flex space-x-2">
-                              <button
-                                onClick={() => handleToggleStatus(user)}
-                                disabled={actionLoadingId === user.id}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold focus:outline-none transition duration-150 ${
-                                  user.disabled
-                                    ? 'bg-green-50 text-green-700 hover:bg-green-100'
-                                    : 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
-                                }`}
-                              >
-                                {user.disabled ? t.actionEnable : t.actionDisable}
-                              </button>
-                              <button
-                                onClick={() => handleDeleteUser(user)}
-                                disabled={actionLoadingId === user.id}
-                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-700 hover:bg-red-100 focus:outline-none transition duration-150"
-                              >
-                                {t.actionDelete}
-                              </button>
-                            </div>
-                          )}
                         </td>
                       </tr>
                     ))

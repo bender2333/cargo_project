@@ -75,7 +75,7 @@ type WorksheetCell = string | number | boolean | null | undefined
 
 const copy = {
   en: {
-    nav: ['Workbench', 'History', 'Cargo library', 'Template manager', 'Users'],
+    nav: ['Workbench', 'History', 'Cargo library', 'Template manager', 'Login audit'],
     title: 'Cargo loading workspace',
     shipment: 'Enter shipment name',
     savedShipment: 'Shipment name is saved with history plans',
@@ -386,7 +386,7 @@ const copy = {
     modeManual3D: '3D Review',
   },
   zh: {
-    nav: ['工作台', '历史方案', '货物管理', '模板管理', '用户管理'],
+    nav: ['工作台', '历史方案', '货物管理', '模板管理', '登录审计'],
     title: '货柜排箱装柜工作台',
     shipment: '输入装运名称',
     savedShipment: '装运名称会随历史方案保存',

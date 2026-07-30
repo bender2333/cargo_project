@@ -1318,81 +1318,54 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await expect(addedCargo).not.toContainText('数量 9')
   })
 
-  test('allows administrator to manage user accounts', async ({ page }) => {
-    const adminUser1 = `u1_adm_${Math.random().toString(36).substring(7)}`
-    const adminUser2 = `u2_adm_${Math.random().toString(36).substring(7)}`
+  test('allows administrator to view login audit without account CRUD', async ({ page }) => {
+    const stamp = Date.now()
+    const adminUser1 = `admin_user_${stamp}_1`
+    const adminUser2 = `admin_user_${stamp}_2`
+    const testPassword = 'password123'
 
-    // Register two target users first so they exist in database
+    // Seed two regular users so the audit list has rows to show.
     await page.goto('/')
-    await page.click('text=没有账号？立即注册')
+    await page.click('text=注册')
     await page.fill('#username', adminUser1)
     await page.fill('#password', testPassword)
-    await page.fill('#confirmPassword', testPassword)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
     await page.click('text=退出')
 
-    await page.click('text=没有账号？立即注册')
+    await page.click('text=注册')
     await page.fill('#username', adminUser2)
     await page.fill('#password', testPassword)
-    await page.fill('#confirmPassword', testPassword)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
     await page.click('text=退出')
 
-    // 1. Log in as seeded default administrator
+    // Log in as seeded default administrator
     await page.fill('#username', 'admin')
     await page.fill('#password', 'admin123')
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
 
-    // Open User Management panel
+    // Open login-audit panel
     await page.getByTestId('user-management-shortcut').click()
     await expect(page.getByTestId('users-page')).toBeVisible()
-    await expect(page.getByText('用户账号管理')).toBeVisible()
-    await expect(page.getByText('管理员控制面板')).toBeVisible()
+    await expect(page.getByTestId('user-management-title')).toHaveText(/用户登录审计|User Login Audit/)
+    await expect(page.getByText(/只读面板|read-only panel/i)).toBeVisible()
 
-    // Verify adminUser1 and adminUser2 are listed
+    // Verify seeded users and audit columns are listed
     await expect(page.getByText(adminUser1)).toBeVisible()
     await expect(page.getByText(adminUser2)).toBeVisible()
+    await expect(page.getByText(/注册时间|Registered/)).toBeVisible()
+    await expect(page.getByText(/最近登录|Last login/)).toBeVisible()
+    await expect(page.getByText(/登录 IP|Last IP/)).toBeVisible()
 
-    // Verify we cannot toggle status or delete the master 'admin' account
-    const adminRow = page.locator('tr:has-text("admin")')
-    await expect(adminRow.locator('button:has-text("禁用")')).toHaveCount(0)
-    await expect(adminRow.locator('button:has-text("删除")')).toHaveCount(0)
+    // Product UI must not expose disable/delete account actions
+    await expect(page.locator('button:has-text("禁用")')).toHaveCount(0)
+    await expect(page.locator('button:has-text("删除")')).toHaveCount(0)
+    await expect(page.locator('button:has-text("Disable")')).toHaveCount(0)
+    await expect(page.locator('button:has-text("Delete")')).toHaveCount(0)
 
-    // Disable adminUser1's account
-    const user1Row = page.locator(`tr:has-text("${adminUser1}")`)
-    await user1Row.locator('button:has-text("禁用")').click()
-    await expect(user1Row.locator('text=已禁用')).toBeVisible()
-
-    // Log out Admin
     await page.click('text=返回工作台')
-    await page.click('text=退出')
-
-    // 2. Try logging in with disabled adminUser1
-    await page.fill('#username', adminUser1)
-    await page.fill('#password', testPassword)
-    await page.click('button[type="submit"]')
-    // Should show error notification
-    await expect(page.getByText(/账号已被禁用|Account has been disabled/)).toBeVisible()
-
-    // 3. Log back as admin and delete adminUser2
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
-    await page.click('button[type="submit"]')
-    await page.getByTestId('user-management-shortcut').click()
-    await expect(page.getByTestId('users-page')).toBeVisible()
-
-    page.on('dialog', async (dialog) => {
-      expect(dialog.message()).toContain(`确定要删除用户 "${adminUser2}" 吗？`)
-      await dialog.accept()
-    })
-
-    const user2Row = page.locator(`tr:has-text("${adminUser2}")`)
-    await user2Row.locator('button:has-text("删除")').click()
-    
-    // Verify User 2 is removed from table
-    await expect(page.getByText(adminUser2)).not.toBeVisible()
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
   })
 })
