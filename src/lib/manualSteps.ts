@@ -1,5 +1,5 @@
 import type { CargoItem, ContainerSpec, LabelPackingStats, PackingDiagnostic, PackingResult, PlacedBox } from '../types'
-import { assignDepthLayers, buildPackingLayers } from './layers'
+import { finalizePlacementGeometry } from './finalizePackingResult'
 import type { ValidationIssue } from './manualPlacement'
 
 export const MANUAL_UNPLACED_REASON_CODE = 'manual-not-placed'
@@ -119,25 +119,7 @@ export function buildManualPackingResult(
   const inputBoxes = cargoItems
     ? enrichPlacedBoxes(boxes, cargoItems)
     : boxes.map((box) => ({ ...box, supportedBy: [...box.supportedBy] }))
-  const placed = assignDepthLayers(inputBoxes)
-  // Manual loading order follows the depth wave (far wall outward), then bottom-up
-  // within a wave. `depthLayer` carries that; `physicalLayer` is vertical stacking.
-  const ordered = [...placed].sort((a, b) =>
-    (a.depthLayer ?? 1) - (b.depthLayer ?? 1) ||
-    a.z - b.z ||
-    a.y - b.y ||
-    a.x - b.x ||
-    a.id.localeCompare(b.id, undefined, { numeric: true }),
-  )
-
-  ordered.forEach((box, index) => {
-    box.workStep = index + 1
-  })
-
-  const byId = new Map(ordered.map((box) => [box.id, box.workStep]))
-  for (const box of placed) {
-    box.workStep = byId.get(box.id) ?? box.workStep
-  }
+  const { placed, layers, workSteps } = finalizePlacementGeometry(inputBoxes, container)
 
   const usedVolume = placed.reduce((sum, box) => sum + box.length * box.width * box.height, 0)
   const containerVolume = container.length * container.width * container.height
@@ -163,15 +145,8 @@ export function buildManualPackingResult(
   return {
     placed,
     unplaced,
-    layers: buildPackingLayers(placed),
-    workSteps: ordered.map((box) => ({
-      step: box.workStep,
-      boxId: box.id,
-      cargoId: box.cargoId,
-      label: box.label,
-      physicalLayer: box.physicalLayer,
-      supportType: box.supportType,
-    })),
+    layers,
+    workSteps,
     labelStats: cargoItems
       ? buildPlannedLabelStats(cargoItems, placed)
       : buildPlacedOnlyLabelStats(placed),

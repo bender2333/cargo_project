@@ -89,6 +89,7 @@ export function canonicalizePackingResult(result: PackingResult) {
         maxStackLayers: box.maxStackLayers ?? null,
         groundOnly: box.groundOnly ?? null,
         physicalLayer: box.physicalLayer,
+        depthLayer: box.depthLayer ?? null,
         workStep: box.workStep,
         supportType: box.supportType,
         supportedBy: sorted(box.supportedBy),

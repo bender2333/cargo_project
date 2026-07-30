@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-30 任务2：共享 PackingResult 终结流程
+
+- [x] 新增 `src/lib/finalizePackingResult.ts`：统一最终坐标 → 垂直支撑 → depthLayer → 支撑拓扑 workStep → layers。
+- [x] 自动路径与手动 `buildManualPackingResult` 共用终结流程；手动多层箱体现在有真实 `supportedBy/physicalLayer`，支撑物先于上层箱装载。
+- [x] `packingContract` 纳入 `depthLayer`；因合同字段扩展更新 golden（装入数量 31/463/462/839/823 未变）。
+- 验证：手动多层单测 + packing/invariants/contract/31pallet 通过。
+
 ## 2026-07-30 任务1：自动堆叠 capacity-one 后插入校验
 
 - [x] 在 `canPlace` 增加局部向上乘员链校验：候选箱若成为已有上层箱的支撑物，同时检查自身容量与下方支撑链是否仍合法。

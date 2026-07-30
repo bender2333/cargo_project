@@ -1,6 +1,7 @@
 import type { CargoItem, ContainerSpec, LoadingMode, PackingDiagnostic, PackingResult, PlacedBox, UnplacedCargo } from '../types'
 import { effectiveContainer, getContainerVolume } from '../data/containers'
 import { assignDepthLayers, buildPackingLayers } from './layers'
+import { assignWorkStepsBySupport, reconcileSupportRelations } from './finalizePackingResult'
 import { stackCapacity, violatesStackChain, type StackChainNode } from './stackCapacity'
 import { generateBlockCandidates, type BlockCandidate } from './blocks'
 import { initEMS, splitEMS, type EmptyMaximalSpace } from './emsSpace'
@@ -170,57 +171,6 @@ function supportOverlap(candidate: PlacedBox, point: PackingPoint, box: BoxSize)
   return overlapX * overlapY
 }
 
-/**
- * Recompute `supportedBy` / `supportType` / `physicalLayer` from final coordinates.
- *
- * `supportDetails` runs while a box is being placed and therefore cannot see supporters
- * that land afterwards, leaving an incomplete support graph (observed on the Vietnam
- * 40HQ fixture: a box resting on two boxes recorded only one, hiding 37% of its
- * supported area from capacity and support-chain validation).
- *
- * Layers are resolved in ascending z so a box's supporters always have their final
- * layer assigned before it is used.
- */
-function reconcileSupportRelations(placed: PlacedBox[]) {
-  const byId = new Map(placed.map((box) => [box.id, box]))
-
-  for (const box of [...placed].sort((a, b) => a.z - b.z)) {
-    if (box.z <= EPSILON) {
-      box.supportedBy = []
-      box.supportType = 'floor'
-      box.physicalLayer = 1
-      continue
-    }
-
-    const baseArea = box.length * box.width
-    let supportedArea = 0
-    const supporters: string[] = []
-    for (const candidate of placed) {
-      if (candidate.id === box.id) continue
-      const overlap = supportOverlap(candidate, { x: box.x, y: box.y, z: box.z }, box)
-      if (overlap > 0) {
-        supporters.push(candidate.id)
-        supportedArea += overlap
-      }
-    }
-
-    box.supportedBy = supporters
-    if (supporters.length === 0) {
-      // Airborne: keep it visible to the support diagnostics rather than silently
-      // reclassifying it as floor-supported.
-      box.supportType = 'partially-supported'
-      box.physicalLayer = 1
-      continue
-    }
-
-    const ratio = baseArea ? supportedArea / baseArea : 0
-    box.supportType = ratio >= 1 - EPSILON ? 'fully-supported' : 'partially-supported'
-    box.physicalLayer = Math.max(
-      ...supporters.map((id) => byId.get(id)?.physicalLayer ?? 0),
-      0,
-    ) + 1
-  }
-}
 
 function supportDetails(point: PackingPoint, box: BoxSize, placed: PlacedBox[]) {
   if (point.z <= EPSILON) {
@@ -705,80 +655,6 @@ function hasStackingViolation(placed: PlacedBox[]) {
   return placed.some((box) => violatesStackChain(box, placedById) !== null)
 }
 
-function loadingSequenceScore(box: PlacedBox, container: ContainerSpec) {
-  return (
-    box.x * container.width * container.height +
-    box.y * container.height +
-    box.z
-  )
-}
-
-/**
- * Assign loading order: supporters first, then as deep-to-shallow as that allows.
- *
- * Loading wants to run from the far wall outward (a container opens at one end), but
- * that cannot override physics: a box must be loaded after everything holding it up.
- * These two goals genuinely conflict — on the Vietnam fixtures 1,080 of 3,467 support
- * edges have the supporter sitting *further out* than the box it supports. Sorting by
- * position alone therefore produced 1,129 edges telling the crew to place a box before
- * its own support.
- *
- * So support edges are hard constraints (Kahn topological sort) and depth-first is the
- * tiebreaker among boxes that are currently loadable.
- */
-function assignWorkStepsByDepth(placed: PlacedBox[], container: ContainerSpec) {
-  const score = new Map(placed.map((box) => [box.id, loadingSequenceScore(box, container)]))
-  const byId = new Map(placed.map((box) => [box.id, box]))
-
-  const preferred = (a: PlacedBox, b: PlacedBox) =>
-    (score.get(a.id) ?? 0) - (score.get(b.id) ?? 0) ||
-    a.index - b.index ||
-    a.id.localeCompare(b.id)
-
-  // remaining[box] = supporters not yet loaded; dependents[supporter] = boxes waiting on it
-  const remaining = new Map<string, number>()
-  const dependents = new Map<string, string[]>()
-  for (const box of placed) {
-    const supporters = box.supportedBy.filter((id) => byId.has(id) && id !== box.id)
-    remaining.set(box.id, supporters.length)
-    for (const supporterId of supporters) {
-      dependents.set(supporterId, [...(dependents.get(supporterId) ?? []), box.id])
-    }
-  }
-
-  const ready = placed.filter((box) => (remaining.get(box.id) ?? 0) === 0).sort(preferred)
-  const ordered: PlacedBox[] = []
-
-  while (ready.length > 0) {
-    const next = ready.shift()
-    if (!next) break
-    ordered.push(next)
-    for (const dependentId of dependents.get(next.id) ?? []) {
-      const left = (remaining.get(dependentId) ?? 0) - 1
-      remaining.set(dependentId, left)
-      if (left === 0) {
-        const dependent = byId.get(dependentId)
-        if (!dependent) continue
-        // Keep `ready` sorted so the deepest loadable box always goes next.
-        const at = ready.findIndex((candidate) => preferred(dependent, candidate) < 0)
-        if (at === -1) ready.push(dependent)
-        else ready.splice(at, 0, dependent)
-      }
-    }
-  }
-
-  if (ordered.length < placed.length) {
-    // Vertical support cannot form a cycle, so this means the support graph is
-    // inconsistent. Fall back to positional order for the remainder rather than
-    // dropping boxes out of the loading plan entirely.
-    const seen = new Set(ordered.map((box) => box.id))
-    ordered.push(...placed.filter((box) => !seen.has(box.id)).sort(preferred))
-  }
-
-  ordered.forEach((box, index) => {
-    box.workStep = index + 1
-  })
-}
 
 function buildDiagnostics(
   placed: PlacedBox[],
@@ -1446,7 +1322,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
 
   // 2. Perform inward physical layer mapping and pusher updates (depth layers)
   assignDepthLayers(placed)
-  assignWorkStepsByDepth(placed, effective)
+  assignWorkStepsBySupport(placed, effective)
   const layers = buildPackingLayers(placed)
 
   const labelStats = cargoItems.map((item, itemIndex) => {

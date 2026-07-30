@@ -91,7 +91,23 @@ describe('buildManualPackingResult', () => {
     expect(result.placed.find((box) => box.id === 'door')?.supportedBy).toEqual([])
   })
 
-  it('orders manual work steps by layer, low height, then width position', () => {
+  it('derives real vertical support and physical layers for stacked manual boxes', () => {
+    const boxes = [
+      makeBox({ id: 'base', x: 0, y: 0, z: 0, height: 400 }),
+      makeBox({ id: 'top', x: 0, y: 0, z: 400, height: 400 }),
+    ]
+    const result = buildManualPackingResult(boxes, container, cargoForBoxes(boxes))
+
+    const base = result.placed.find((box) => box.id === 'base')
+    const top = result.placed.find((box) => box.id === 'top')
+    expect(base).toMatchObject({ physicalLayer: 1, supportType: 'floor', supportedBy: [] })
+    expect(top).toMatchObject({ physicalLayer: 2, supportType: 'fully-supported', supportedBy: ['base'] })
+    expect(result.workSteps.map((step) => step.boxId)).toEqual(['base', 'top'])
+    expect(base!.workStep).toBeLessThan(top!.workStep)
+    expect(result.placed.every((box) => box.depthLayer != null)).toBe(true)
+  })
+
+  it('orders manual work steps with supporters before supported boxes', () => {
     const boxes = [
       makeBox({ id: 'high', x: 0, y: 0, z: 400 }),
       makeBox({ id: 'low-right', x: 0, y: 500, z: 0 }),
@@ -100,13 +116,11 @@ describe('buildManualPackingResult', () => {
     ]
     const result = buildManualPackingResult(boxes, container, cargoForBoxes(boxes))
 
-    expect(result.workSteps.map((step) => step.boxId)).toEqual(['low-left', 'low-right', 'high', 'next-layer'])
-    expect(result.placed.map((box) => [box.id, box.workStep])).toEqual([
-      ['high', 3],
-      ['low-right', 2],
-      ['low-left', 1],
-      ['next-layer', 4],
-    ])
+    // Support is a hard constraint: high rests on low-left, so low-left loads first.
+    // Among currently loadable floor boxes, far-wall-outward depth is the tiebreaker.
+    expect(result.workSteps.map((step) => step.boxId)).toEqual(['low-left', 'high', 'low-right', 'next-layer'])
+    const byId = new Map(result.placed.map((box) => [box.id, box.workStep]))
+    expect(byId.get('low-left')).toBeLessThan(byId.get('high')!)
   })
 
   it('returns an empty result for empty manual input', () => {
