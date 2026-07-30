@@ -68,10 +68,17 @@ function buildManualDiagnostics(
   validationIssues?: ValidationIssue[],
 ): PackingDiagnostic[] {
   const diagnostics: PackingDiagnostic[] = []
+  const usedIds = new Set<string>()
+
+  const pushUnique = (diagnostic: PackingDiagnostic) => {
+    if (usedIds.has(diagnostic.id)) return
+    usedIds.add(diagnostic.id)
+    diagnostics.push(diagnostic)
+  }
 
   const usedWeight = placed.reduce((sum, box) => sum + box.weight, 0)
   if (container.maxWeight && usedWeight > container.maxWeight) {
-    diagnostics.push({
+    pushUnique({
       id: 'weight-check',
       severity: 'error',
       message: `Total weight ${usedWeight} kg exceeds container max weight ${container.maxWeight} kg.`,
@@ -79,14 +86,10 @@ function buildManualDiagnostics(
   }
 
   if (validationIssues) {
-    const seen = new Set<string>()
     for (const issue of validationIssues) {
-      const key = issue.type
-      if (seen.has(key)) continue
-      seen.add(key)
       const diagId = issueToDiagnosticId(issue.type)
       if (!diagId) continue
-      diagnostics.push({
+      pushUnique({
         id: diagId,
         severity: issue.severity === 'warning' ? 'warning' : 'error',
         message: issue.message,

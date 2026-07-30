@@ -43,6 +43,7 @@ import {
   measureBoxClearance,
 } from './lib/measurement'
 import { buildReviewChecklist } from './lib/reviewChecklist'
+import { assertPlanCompliant } from './lib/planCompliance'
 import type { ReviewChecklist } from './lib/reviewChecklist'
 import { createManualOperationNotice } from './lib/manualFeedback'
 import type { ManualOperationNotice } from './lib/manualFeedback'
@@ -1796,6 +1797,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const exportExcel = async () => {
+    assertPlanCompliant(activeResult, manualIssues)
     const XLSX = await import('xlsx')
     const exportTemplate = exportTemplates.find((item) => item.id === selectedExportTemplateId)
     const planRows = exportTemplate && exportTemplate.columns.length > 0
@@ -1819,6 +1821,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   const exportPlaybackInstructions = async () => {
     if (!playbackAvailable) return
+    assertPlanCompliant(activeResult, manualIssues)
     const XLSX = await import('xlsx')
     const rows = playbackSequence.steps.map((entry) => {
       const supportLabel = entry.box.supportType === 'floor'
@@ -1852,6 +1855,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   const exportLoadingSheet = async () => {
     if (!loadingStepsAvailable) return
+    assertPlanCompliant(activeResult, manualIssues)
     const { exportLoadingSheetPdf } = await import('./lib/exportLoadingSheet')
     const model = buildLoadingSheetModel(activeResult, renderingContainer)
     const prefix = filenameSlug(shipmentName)
@@ -1866,6 +1870,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const exportReviewChecklistJson = () => {
+    assertPlanCompliant(activeResult, manualIssues)
     const prefix = filenameSlug(shipmentName)
     downloadBlob(
       new Blob([JSON.stringify(reviewChecklist, null, 2)], { type: 'application/json;charset=utf-8' }),
@@ -1874,6 +1879,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const exportReviewChecklistExcel = async () => {
+    assertPlanCompliant(activeResult, manualIssues)
     const XLSX = await import('xlsx')
     const rows = reviewChecklist.items.map((item) => ({
       source: item.source,
@@ -1891,6 +1897,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const exportCurrentView = () => {
+    assertPlanCompliant(activeResult, manualIssues)
     if (workspaceView === '2d') {
       const selector = placementMode === 'manual'
         ? '[data-testid="manual-placement-2d"]'
@@ -1919,18 +1926,19 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const saveCurrentPlan = async () => {
-    const planData = {
-      containerId: selectedContainer.id,
-      container: selectedContainer,
-      cargoItems: displayCargoItems,
-      placedCount: activeResult.placedCount,
-      totalCargoCount: activeResult.totalCargoCount,
-      layerCount: activeResult.layers.length,
-      labelSummary: activeResult.labelStats.map((item) => `${item.label}:${item.placed}/${item.planned}`).join(', '),
-      defaultMaxStackLayers,
-    }
-
     try {
+      assertPlanCompliant(activeResult, manualIssues)
+      const planData = {
+        containerId: selectedContainer.id,
+        container: selectedContainer,
+        cargoItems: displayCargoItems,
+        placedCount: activeResult.placedCount,
+        totalCargoCount: activeResult.totalCargoCount,
+        layerCount: activeResult.layers.length,
+        labelSummary: activeResult.labelStats.map((item) => `${item.label}:${item.placed}/${item.planned}`).join(', '),
+        defaultMaxStackLayers,
+      }
+
       await saveHistory({
         projectName,
         shipmentName,
@@ -1940,7 +1948,10 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       setActiveNav('history')
     } catch (err) {
       console.error(err)
-      alert(locale === 'zh' ? '保存历史方案失败' : 'Failed to save plan')
+      const message = err instanceof Error && err.message
+        ? err.message
+        : (locale === 'zh' ? '保存历史方案失败' : 'Failed to save plan')
+      alert(message)
     }
   }
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-30 任务3：统一合规命令与诊断出口
+
+- [x] 新增 `evaluatePlanCompliance/assertPlanCompliant`：自动 error diagnostics 与 blocking manual issues 统一阻断保存/导出。
+- [x] Workbench 的保存、XLSX、回放、PDF、复核、当前视图全部走命令边界守卫；ResultsPanel 按钮禁用同步同一判定。
+- [x] 复核清单纳入 diagnostics 自身；手动超重 diagnostic ID 唯一去重。
+- 验证：`planCompliance`/`reviewChecklist`/`manualSteps` 单测与 `tsc -b` 通过。
+
 ## 2026-07-30 任务2：共享 PackingResult 终结流程
 
 - [x] 新增 `src/lib/finalizePackingResult.ts`：统一最终坐标 → 垂直支撑 → depthLayer → 支撑拓扑 workStep → layers。

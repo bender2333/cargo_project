@@ -19,7 +19,7 @@ const baseResult: PackingResult = {
 }
 
 describe('buildReviewChecklist', () => {
-  it('collects field review action items without duplicating compliance diagnostics', () => {
+  it('includes non-info diagnostics as first-class review items', () => {
     const checklist = buildReviewChecklist({
       result: {
         ...baseResult,
@@ -37,23 +37,30 @@ describe('buildReviewChecklist', () => {
         hidden: false,
       }],
       cog: { totalWeight: 100, balanced: false, warning: true },
-      manualIssues: [{ type: 'overlap', boxId: 'b1', message: 'overlap' }],
+      manualIssues: [{ type: 'overlap', boxId: 'b1', severity: 'error', message: 'overlap' }],
       locale: 'en',
     })
 
     expect(checklist.items.map((item) => item.source)).toEqual([
       'measurement',
       'cog',
+      'diagnostic',
       'manual',
       'unplaced',
     ])
-    expect(checklist.items.some((item) => item.source === 'diagnostic')).toBe(false)
+    expect(checklist.items.find((item) => item.source === 'diagnostic')).toEqual(
+      expect.objectContaining({
+        severity: 'error',
+        detail: 'Over weight',
+        linkedDiagnosticIds: ['weight-check'],
+      }),
+    )
     expect(checklist.items.find((item) => item.source === 'unplaced')).toEqual(
       expect.objectContaining({
         action: expect.stringContaining('Review'),
         linkedDiagnosticIds: ['weight-check'],
       }),
     )
-    expect(checklist.summary.errorCount).toBe(3)
+    expect(checklist.summary.errorCount).toBe(4)
   })
 })
