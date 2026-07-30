@@ -1497,7 +1497,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             ) : userManagementLoadFailed ? (
               <div className="py-10 text-center text-sm text-slate-500">
                 <p className="font-semibold text-red-700" data-testid="user-management-load-error">
-                  {locale === 'zh' ? '用户管理加载失败' : 'Failed to load user management'}
+                  {locale === 'zh' ? '登录审计加载失败' : 'Failed to load login audit'}
                 </p>
                 <div className="mt-4 flex justify-center gap-2">
                   <button className="archive-button" type="button" onClick={() => window.location.reload()}>
@@ -1510,7 +1510,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
               </div>
             ) : (
               <div className="py-12 text-center text-sm text-slate-500" role="status">
-                {locale === 'zh' ? '用户管理加载中...' : 'Loading user management...'}
+                {locale === 'zh' ? '登录审计加载中...' : 'Loading login audit...'}
               </div>
             )}
           </section>

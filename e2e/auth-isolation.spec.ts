@@ -1096,7 +1096,7 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     // A rejected chunk must surface an in-page failure state; before the fix it
     // rejected into the root and blanked the entire workbench.
     await page.getByTestId('nav-users').click()
-    await expect(page.getByTestId('user-management-load-error')).toHaveText('用户管理加载失败')
+    await expect(page.getByTestId('user-management-load-error')).toHaveText('登录审计加载失败')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
 
     await page.getByRole('button', { name: '关闭', exact: true }).click()
@@ -1322,29 +1322,30 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     const stamp = Date.now()
     const adminUser1 = `admin_user_${stamp}_1`
     const adminUser2 = `admin_user_${stamp}_2`
-    const testPassword = 'password123'
 
     // Seed two regular users so the audit list has rows to show.
     await page.goto('/')
-    await page.click('text=注册')
+    await page.click('text=没有账号？立即注册')
     await page.fill('#username', adminUser1)
     await page.fill('#password', testPassword)
+    await page.fill('#confirmPassword', testPassword)
     await page.click('button[type="submit"]')
-    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible({ timeout: 15_000 })
     await page.click('text=退出')
 
-    await page.click('text=注册')
+    await page.click('text=没有账号？立即注册')
     await page.fill('#username', adminUser2)
     await page.fill('#password', testPassword)
+    await page.fill('#confirmPassword', testPassword)
     await page.click('button[type="submit"]')
-    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible({ timeout: 15_000 })
     await page.click('text=退出')
 
     // Log in as seeded default administrator
     await page.fill('#username', 'admin')
     await page.fill('#password', 'admin123')
     await page.click('button[type="submit"]')
-    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
+    await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible({ timeout: 15_000 })
 
     // Open login-audit panel
     await page.getByTestId('user-management-shortcut').click()
@@ -1355,9 +1356,9 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     // Verify seeded users and audit columns are listed
     await expect(page.getByText(adminUser1)).toBeVisible()
     await expect(page.getByText(adminUser2)).toBeVisible()
-    await expect(page.getByText(/注册时间|Registered/)).toBeVisible()
-    await expect(page.getByText(/最近登录|Last login/)).toBeVisible()
-    await expect(page.getByText(/登录 IP|Last IP/)).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: /注册时间|Registered/ })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: /最近登录|Last login/ })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: /登录 IP|Last IP/ })).toBeVisible()
 
     // Product UI must not expose disable/delete account actions
     await expect(page.locator('button:has-text("禁用")')).toHaveCount(0)
@@ -1365,7 +1366,7 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await expect(page.locator('button:has-text("Disable")')).toHaveCount(0)
     await expect(page.locator('button:has-text("Delete")')).toHaveCount(0)
 
-    await page.click('text=返回工作台')
+    await page.getByRole('button', { name: /返回工作台|Back to workbench/ }).click()
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
   })
 })

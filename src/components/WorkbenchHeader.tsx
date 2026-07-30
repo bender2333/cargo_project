@@ -65,7 +65,7 @@ export function WorkbenchHeader({
                   className="rounded-[6px] bg-indigo-600 hover:bg-indigo-700 px-2 py-1 text-[11px] font-bold text-white transition-colors cursor-pointer animate-pulse"
                   type="button"
                 >
-                  {locale === 'zh' ? '用户管理' : 'Users'}
+                  {locale === 'zh' ? '登录审计' : 'Login audit'}
                 </button>
               )}
               <button
