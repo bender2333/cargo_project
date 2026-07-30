@@ -148,6 +148,48 @@ function rotateDraft(draft: ManualDraft, boxId: string, direction: ManualRotatio
   return rotateBoxRight90(draft, boxId)
 }
 
+function draftFromAutomaticResult(
+  automaticDisplayResult: PackingResult,
+  cargoItems: CargoItem[],
+  createId: CreateManualPlacementId,
+): ManualDraft {
+  const cargoById = new Map(cargoItems.map((cargo) => [cargo.id, cargo]))
+  return {
+    boxes: automaticDisplayResult.placed.map((box) => {
+      const cargo = cargoById.get(box.cargoId)
+      const base = baseDimensionsFromPlaced(box)
+      return {
+        ...makeManualBox({
+          id: createId(box.id),
+          cargoId: box.cargoId,
+          label: box.label,
+          color: box.color,
+          length: base.length,
+          width: base.width,
+          height: base.height,
+          weight: box.weight,
+          canRotate: cargo?.canRotate ?? box.canRotate,
+          stackable: cargo?.stackable ?? box.stackable,
+          maxStackLayers: cargo?.maxStackLayers ?? box.maxStackLayers,
+          groundOnly: cargo?.groundOnly ?? box.groundOnly,
+          x: box.x,
+          y: box.y,
+          z: box.z,
+        }),
+        length: box.length,
+        width: box.width,
+        height: box.height,
+        orientationKey: box.orientationKey,
+        labelRotationDeg: box.labelRotationDeg,
+        yawQuarterTurn: box.yawQuarterTurn,
+        pitchQuarterTurn: box.pitchQuarterTurn,
+        orientationAxes: box.orientationAxes ? { ...box.orientationAxes } : undefined,
+        orientationLabel: box.orientationLabel,
+      }
+    }),
+  }
+}
+
 export function useManualPlacementSession(options: UseManualPlacementSessionOptions) {
   const {
     cargoItems,
@@ -157,10 +199,14 @@ export function useManualPlacementSession(options: UseManualPlacementSessionOpti
     createId = defaultCreateId,
   } = options
   const cargoPlan = useMemo(
-    () => cargoItems.map(({ id, quantity, weight, stackable, maxStackLayers, groundOnly }) => ({
+    () => cargoItems.map(({ id, quantity, weight, length, width, height, canRotate, stackable, maxStackLayers, groundOnly }) => ({
       id,
       quantity,
       weight,
+      length,
+      width,
+      height,
+      canRotate,
       stackable,
       maxStackLayers,
       groundOnly,
@@ -208,51 +254,21 @@ export function useManualPlacementSession(options: UseManualPlacementSessionOpti
 
   const setMode = useCallback((mode: ManualPlacementMode): ManualPlacementCommandResult => {
     const changed = mode !== state.mode
-    // PRD 11.1.1: switching to manual mode should seed the draft with the current
-    // automatic result when the draft is empty — same as "continue manually".
-    // If the user has already placed boxes manually, keep their work intact.
-    if (mode === 'manual' && state.mode !== 'manual' && draft.boxes.length === 0 && automaticDisplayResult.placed.length > 0) {
-      const cargoById = new Map(cargoItems.map((cargo) => [cargo.id, cargo]))
-      const nextDraft: ManualDraft = {
-        boxes: automaticDisplayResult.placed.map((box) => {
-          const cargo = cargoById.get(box.cargoId)
-          const base = baseDimensionsFromPlaced(box)
-          return {
-            ...makeManualBox({
-              id: createId(box.id),
-              cargoId: box.cargoId,
-              label: box.label,
-              color: box.color,
-              length: base.length,
-              width: base.width,
-              height: base.height,
-              weight: box.weight,
-              canRotate: cargo?.canRotate ?? box.canRotate,
-              stackable: cargo?.stackable ?? box.stackable,
-              maxStackLayers: cargo?.maxStackLayers ?? box.maxStackLayers,
-              groundOnly: cargo?.groundOnly ?? box.groundOnly,
-              x: box.x,
-              y: box.y,
-              z: box.z,
-            }),
-            length: box.length,
-            width: box.width,
-            height: box.height,
-            orientationKey: box.orientationKey,
-            labelRotationDeg: box.labelRotationDeg,
-            yawQuarterTurn: box.yawQuarterTurn,
-            pitchQuarterTurn: box.pitchQuarterTurn,
-            orientationAxes: box.orientationAxes ? { ...box.orientationAxes } : undefined,
-            orientationLabel: box.orientationLabel,
-          }
-        }),
-      }
+    // First entry into manual seeds from automatic only when the draft has never been
+    // initialized. An intentionally emptied draft keeps draftInitialized=true.
+    if (
+      mode === 'manual'
+      && state.mode !== 'manual'
+      && !state.draftInitialized
+      && automaticDisplayResult.placed.length > 0
+    ) {
+      const nextDraft = draftFromAutomaticResult(automaticDisplayResult, cargoItems, createId)
       dispatch({ type: 'continuedFromAutomatic', draft: nextDraft, cargoPlan })
       return commandSuccess('set-mode', changed)
     }
     dispatch({ type: 'modeSet', mode })
     return commandSuccess('set-mode', changed)
-  }, [automaticDisplayResult, cargoItems, cargoPlan, createId, draft.boxes.length, state.mode])
+  }, [automaticDisplayResult, cargoItems, cargoPlan, createId, state.draftInitialized, state.mode])
 
   const select = useCallback((boxId: string | null): ManualPlacementCommandResult => {
     if (boxId !== null && !draft.boxes.some((box) => box.id === boxId)) {
@@ -434,41 +450,7 @@ export function useManualPlacementSession(options: UseManualPlacementSessionOpti
   }, [state.history.future.length])
 
   const continueFromAutomatic = useCallback((): ManualPlacementCommandResult => {
-    const cargoById = new Map(cargoItems.map((cargo) => [cargo.id, cargo]))
-    const nextDraft: ManualDraft = {
-      boxes: automaticDisplayResult.placed.map((box) => {
-        const cargo = cargoById.get(box.cargoId)
-        const base = baseDimensionsFromPlaced(box)
-        return {
-          ...makeManualBox({
-            id: createId(box.id),
-            cargoId: box.cargoId,
-            label: box.label,
-            color: box.color,
-            length: base.length,
-            width: base.width,
-            height: base.height,
-            weight: box.weight,
-            canRotate: cargo?.canRotate ?? box.canRotate,
-            stackable: cargo?.stackable ?? box.stackable,
-            maxStackLayers: cargo?.maxStackLayers ?? box.maxStackLayers,
-            groundOnly: cargo?.groundOnly ?? box.groundOnly,
-            x: box.x,
-            y: box.y,
-            z: box.z,
-          }),
-          length: box.length,
-          width: box.width,
-          height: box.height,
-          orientationKey: box.orientationKey,
-          labelRotationDeg: box.labelRotationDeg,
-          yawQuarterTurn: box.yawQuarterTurn,
-          pitchQuarterTurn: box.pitchQuarterTurn,
-          orientationAxes: box.orientationAxes ? { ...box.orientationAxes } : undefined,
-          orientationLabel: box.orientationLabel,
-        }
-      }),
-    }
+    const nextDraft = draftFromAutomaticResult(automaticDisplayResult, cargoItems, createId)
     dispatch({ type: 'continuedFromAutomatic', draft: nextDraft, cargoPlan })
     return commandSuccess('continue-from-automatic', true)
   }, [automaticDisplayResult, cargoItems, cargoPlan, createId])

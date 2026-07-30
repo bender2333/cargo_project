@@ -256,7 +256,7 @@ describe('useManualPlacementSession', () => {
 
   it('commits a valid rotation and reports the rotated box', () => {
     const { result } = renderHook(() => useManualPlacementSession({
-      cargoItems: [cargo()],
+      cargoItems: [cargo({ length: 400, width: 300, height: 200 })],
       container,
       automaticDisplayResult: automaticResult(),
     }))
@@ -291,7 +291,7 @@ describe('useManualPlacementSession', () => {
 
   it('rejects rotation-disabled cargo without changing history and exposes the candidate geometry', () => {
     const { result } = renderHook(() => useManualPlacementSession({
-      cargoItems: [cargo({ canRotate: false })],
+      cargoItems: [cargo({ length: 400, width: 300, height: 200, canRotate: false })],
       container,
       automaticDisplayResult: automaticResult(),
     }))
@@ -326,7 +326,7 @@ describe('useManualPlacementSession', () => {
 
   it('rejects an out-of-bounds rotation without changing history and returns exact candidate dimensions', () => {
     const { result } = renderHook(() => useManualPlacementSession({
-      cargoItems: [cargo()],
+      cargoItems: [cargo({ length: 700, width: 300, height: 200 })],
       container,
       automaticDisplayResult: automaticResult(),
     }))
@@ -469,10 +469,10 @@ describe('useManualPlacementSession', () => {
         y: 250,
         z: 375,
         baseLength: 300,
-        baseWidth: 700,
-        baseHeight: 500,
-        length: 700,
-        width: 500,
+        baseWidth: 500,
+        baseHeight: 700,
+        length: 500,
+        width: 700,
         height: 300,
         orientationKey: 'WHL',
         labelRotationDeg: 270,
@@ -487,8 +487,8 @@ describe('useManualPlacementSession', () => {
       }),
     ])
     expect(renderedFootprint(result.current.draft.boxes[0])).toEqual({
-      xExtent: 700,
-      yExtent: 500,
+      xExtent: 500,
+      yExtent: 700,
       zExtent: 300,
     })
     expect(result.current.activeResult.placed[0]).toMatchObject({
@@ -640,5 +640,25 @@ describe('setMode auto-copies automatic result on first entry', () => {
 
     // existing draft is preserved
     expect(result.current.draft.boxes.map(b => b.id)).toContain('my-box')
+  })
+
+  it('keeps an intentionally emptied draft empty when re-entering manual mode', () => {
+    const { result } = renderHook(() => useManualPlacementSession({
+      cargoItems: [cargo()],
+      container,
+      automaticDisplayResult: automaticResult([placedBox({ id: 'auto-1', z: 0 })]),
+      createId: (sourceId) => `m-${sourceId}`,
+    }))
+
+    act(() => { result.current.setMode('manual') })
+    expect(result.current.draft.boxes).toHaveLength(1)
+
+    act(() => { result.current.undo() })
+    expect(result.current.draft.boxes).toHaveLength(0)
+    expect(result.current.state.draftInitialized).toBe(true)
+
+    act(() => { result.current.setMode('auto') })
+    act(() => { result.current.setMode('manual') })
+    expect(result.current.draft.boxes).toHaveLength(0)
   })
 })

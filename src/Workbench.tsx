@@ -1305,6 +1305,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       const isMeta = event.ctrlKey || event.metaKey
 
       if (isMeta && (event.key === 'z' || event.key === 'Z')) {
+        if (placementMode !== 'manual') return
         event.preventDefault()
         if (event.shiftKey) {
           redoManualPlacement()
@@ -1314,6 +1315,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         return
       }
       if (isMeta && (event.key === 'y' || event.key === 'Y')) {
+        if (placementMode !== 'manual') return
         event.preventDefault()
         redoManualPlacement()
         return

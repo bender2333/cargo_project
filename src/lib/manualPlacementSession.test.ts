@@ -230,4 +230,47 @@ describe('cargo attribute sync on reconcile', () => {
     expect(reconciled.history.present.boxes[0].weight).toBe(42)
     expect(reconciled.history.future[0].boxes[0].weight).toBe(42)
   })
+
+  it('syncs base dimensions and canRotate, resetting only newly forbidden rotations', () => {
+    const draft = addBox(emptyDraft(), {
+      ...box('b1'),
+      baseLength: 400,
+      baseWidth: 400,
+      baseHeight: 400,
+      length: 400,
+      width: 400,
+      height: 400,
+      orientationKey: 'WLH',
+      canRotate: true,
+    })
+    const state = createManualPlacementSessionState({
+      mode: 'manual',
+      history: { past: [], present: draft, future: [] },
+      draftInitialized: true,
+    })
+
+    const reconciled = reconcileManualPlacementSessionState(state, [
+      {
+        id: 'cargo-a',
+        quantity: 2,
+        length: 500,
+        width: 300,
+        height: 200,
+        canRotate: false,
+        weight: 10,
+        stackable: true,
+      },
+    ])
+
+    expect(reconciled.history.present.boxes[0]).toMatchObject({
+      baseLength: 500,
+      baseWidth: 300,
+      baseHeight: 200,
+      length: 500,
+      width: 300,
+      height: 200,
+      orientationKey: 'LWH',
+      canRotate: false,
+    })
+  })
 })

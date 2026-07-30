@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-30 任务4：手动会话生命周期与货物同步
+
+- [x] session 增加显式 `draftInitialized`；首次进入手动才自动灌入，用户主动清空后保持空。
+- [x] 抽出统一 `draftFromAutomaticResult`；cargo 对账同步尺寸/`canRotate`/堆叠规则，并按朝向重算世界尺寸。
+- [x] 撤销/重做快捷键仅在手动模式生效；冲突 E2E 通过 `enterManualModeEmpty` 对齐新入口语义。
+- 验证：手动 session/hook 单测 31/31，`tsc -b` 通过。
+
 ## 2026-07-30 任务3：统一合规命令与诊断出口
 
 - [x] 新增 `evaluatePlanCompliance/assertPlanCompliant`：自动 error diagnostics 与 blocking manual issues 统一阻断保存/导出。

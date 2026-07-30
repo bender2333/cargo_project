@@ -31,8 +31,15 @@ async function enterManualMode(page: Page) {
   await expect(page.getByTestId('manual-workspace')).toBeVisible()
 }
 
-async function placeSingleManualBoxForRotation(page: Page) {
+/** Undo auto-seed so tests that need an empty draft keep their original contract. */
+async function enterManualModeEmpty(page: Page) {
   await enterManualMode(page)
+  await page.keyboard.press('Control+z')
+  await expect(page.getByTestId('container-scene')).toHaveAttribute('data-box-count', '0')
+}
+
+async function placeSingleManualBoxForRotation(page: Page) {
+  await enterManualModeEmpty(page)
   await page.getByRole('button', { name: '2D', exact: true }).click()
   const poolItem = page.getByTestId('manual-pool-item').first()
   await expect(poolItem).toHaveAttribute('draggable', 'true')
@@ -138,7 +145,7 @@ test('手动模式 2D 视角切换前/侧视图，SVG viewBox 随之变化', asy
 
 test('手动模式 3D 暴露 manualEditable canvas，pool 项目可拖拽', async ({ page }) => {
   await ensureChinese(page)
-  await enterManualMode(page)
+  await enterManualModeEmpty(page)
   const scene = page.getByTestId('container-scene')
   await expect(scene).toBeVisible()
   await expect(scene).toHaveAttribute('data-interaction-mode', 'manual')
@@ -152,7 +159,7 @@ test('手动模式 3D 暴露 manualEditable canvas，pool 项目可拖拽', asyn
 
 test('手动模式一键放置从 pool 添加货物并减少剩余数量', async ({ page }) => {
   await ensureChinese(page)
-  await enterManualMode(page)
+  await enterManualModeEmpty(page)
   const scene = page.getByTestId('container-scene')
   await expect(scene).toHaveAttribute('data-box-count', '0')
   const firstPoolItem = page.getByTestId('manual-pool-item').first()
@@ -315,7 +322,7 @@ test('手动模式更换货柜保留草稿且返回自动模式不会恢复旧�
   const scene = page.getByTestId('container-scene')
   await expect(scene).toHaveAttribute('data-box-count', /^[1-9]\d*$/)
 
-  await page.getByTestId('placement-mode-manual').click()
+  await enterManualModeEmpty(page)
   const firstPoolItem = page.getByTestId('manual-pool-item').first()
   const cargoId = await firstPoolItem.getAttribute('data-cargo-id')
   expect(cargoId).toBeTruthy()
@@ -401,7 +408,7 @@ test('?debug=1 显示调试面板并展示当前状态', async ({ page }) => {
 test('调试面板可下载手动排布复现场景快照', async ({ page }) => {
   await ensureChinese(page)
   await page.goto('/?debug=1')
-  await enterManualMode(page)
+  await enterManualModeEmpty(page)
   const downloadPromise = page.waitForEvent('download')
   await page.getByTestId('debug-download-snapshot').click()
   const download = await downloadPromise
@@ -532,7 +539,7 @@ test('手动活动结果统一驱动汇总、明细、导出和撤销历史', as
   const automaticCount = Number(await scene.getAttribute('data-box-count'))
   expect(automaticCount).toBe(18)
 
-  await enterManualMode(page)
+  await enterManualModeEmpty(page)
   await expect(scene).toHaveAttribute('data-box-count', '0')
   await expect(page.getByTestId('report-panel')).toContainText('已装载: 0 / 18')
   await expect(page.getByTestId('report-panel').getByRole('option', { name: /^第1层:/ })).toHaveCount(0)
@@ -576,7 +583,7 @@ test('手动活动结果统一驱动汇总、明细、导出和撤销历史', as
 
 test('货物减量和删除会裁剪全部手动历史且撤销不会复活超额箱体', async ({ page }) => {
   await ensureChinese(page)
-  await enterManualMode(page)
+  await enterManualModeEmpty(page)
   const scene = page.getByTestId('container-scene')
   const quickPlace = page.getByTestId('pool-quick-place-sample-1')
 
