@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-30 第三轮复审修复任务分解
+
+- [x] 将第三轮复审的开放问题归并为 9 个相对独立任务，计划写入 `plans/2026-07-30-refactor-review-round-3-remediation.md`。
+- [x] 每个任务均明确问题、根因、解决方案和验收标准，并记录串行依赖、可并行任务、全局门禁与非目标。
+- 本次只新增计划文档和执行记录，不修改运行时代码、测试、baseline 或业务夹具，不重复运行第三轮复审已完成的质量门禁。
+
 ## 2026-07-30 重构第三轮复审与代码审查（BLOCKED）
 
 - [x] 复核 `issues/2026-07-29-refactor-review-architecture-business-round-2.md` 全部 findings，并对 `5fa9856...b13b9fd` 完成新一轮 Standards、React 和 PRD 业务审查；报告写入 `issues/2026-07-30-refactor-review-architecture-business-round-3.md`。
