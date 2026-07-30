@@ -274,6 +274,83 @@ function respectsMaxStackLayers(
   return true
 }
 
+/**
+ * Reject placements that would make the new box an illegal supporter of boxes
+ * already sitting above the candidate slot. Downward-only checks miss this case:
+ * a capacity-one box inserted under an existing stack only becomes illegal after
+ * the final support graph is reconciled.
+ *
+ * Only the local geometric column above the candidate is inspected — rebuilding the
+ * full support graph on every canPlace call is O(n²) and too expensive for dense loads.
+ */
+function respectsStackCapacityWithUpwardRiders(
+  point: PackingPoint,
+  box: BoxSize,
+  item: StackLimitCarrier,
+  support: ReturnType<typeof supportDetails>,
+  placed: PlacedBox[],
+  placedById: Map<string, StackChainNode>,
+) {
+  const candidateTop = point.z + box.height
+  const directRiders = placed.filter((candidate) => {
+    if (Math.abs(candidate.z - candidateTop) > EPSILON) return false
+    const overlapX = Math.max(
+      0,
+      Math.min(point.x + box.length, candidate.x + candidate.length) - Math.max(point.x, candidate.x),
+    )
+    const overlapY = Math.max(
+      0,
+      Math.min(point.y + box.width, candidate.y + candidate.width) - Math.max(point.y, candidate.y),
+    )
+    return overlapX * overlapY > 0
+  })
+  if (directRiders.length === 0) return true
+
+  // Invert existing support edges so we can walk the stacks already above each rider.
+  const dependents = new Map<string, PlacedBox[]>()
+  for (const existing of placed) {
+    for (const supportId of existing.supportedBy) {
+      const list = dependents.get(supportId)
+      if (list) list.push(existing)
+      else dependents.set(supportId, [existing])
+    }
+  }
+
+  const maxDepthAbove = (start: PlacedBox, seen = new Set<string>()): number => {
+    if (seen.has(start.id)) return 0
+    seen.add(start.id)
+    const children = dependents.get(start.id) ?? []
+    if (children.length === 0) return 1
+    let best = 1
+    for (const child of children) {
+      best = Math.max(best, 1 + maxDepthAbove(child, new Set(seen)))
+    }
+    return best
+  }
+
+  const riderDepth = Math.max(...directRiders.map((rider) => maxDepthAbove(rider)))
+  // Stack layers counting the candidate itself through the tallest rider chain.
+  if (riderDepth + 1 > stackCapacity(item)) return false
+
+  // Existing supporters below the candidate must still tolerate the taller chain.
+  const stack: StackChainNode[] = [...support.supportedBy]
+  const visited = new Set<string>()
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (!current || visited.has(current.id)) continue
+    visited.add(current.id)
+    const topLayer = support.physicalLayer + riderDepth
+    if (topLayer - current.physicalLayer + 1 > stackCapacity(current)) return false
+    stack.push(
+      ...current.supportedBy
+        .map((supportId) => placedById.get(supportId))
+        .filter((supportBox): supportBox is StackChainNode => Boolean(supportBox)),
+    )
+  }
+
+  return true
+}
+
 function preservesReservedTopPassengerStackSlot(
   support: ReturnType<typeof supportDetails>,
   placedById: Map<string, StackChainNode>,
@@ -315,8 +392,10 @@ function canPlace(
   if (!placed.every((candidate) => !overlaps(candidate, point, box))) return false
 
   const support = supportDetails(point, box, placed)
+  if (support.supportRatio < 0.5) return false
   if (reserveTopPassengerStackSlot && !preservesReservedTopPassengerStackSlot(support, placedById)) return false
-  return support.supportRatio >= 0.5 && respectsMaxStackLayers(support, placedById, item)
+  if (!respectsMaxStackLayers(support, placedById, item)) return false
+  return respectsStackCapacityWithUpwardRiders(point, box, item, support, placed, placedById)
 }
 
 function pointKey(point: PackingPoint) {

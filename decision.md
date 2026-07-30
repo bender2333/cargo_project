@@ -32,14 +32,12 @@
 - 影响：装入数量与利用率五组逐位未变（31/463/462/839/823，体积利用率完全一致），证明几何未动；仅层级、支撑、作业顺序改变。`stacking-check` 诊断现在跑在正确的图上，能报出真实违约。装柜阶段分组改用 `depthLayer` 并移除按 `supportType` 切分（旧语义下该条件与深度切分冗余，恢复真实语义后会把每垛碎成单箱阶段）。
 - 验证：新增 `packingInvariants.test.ts` 11 项业务不变量（先立 RED 基线再改算法，最后才重新生成 golden）；589→0、2590→0、1129→0；464 处深度回退全部由支撑约束或 x 单调性解释；`lint`、单测 624 项、`build`、E2E 119/119 通过。
 
-## 2026-07-28 capacity-one 货物承载上层箱（已知缺陷，未修）
+## 2026-07-28 capacity-one 货物承载上层箱（已关闭，2026-07-30）
 
-- 背景：移除 `verticalSupportedBy` 影子图后，两条既有测试转 RED：`packing.stackfill.test.ts` 的 capacity-one 场景与 `packing.test.ts` 的 snapshot-11 场景。独立核实确认 7 个箱子压在 `maxStackLayers: 1` 的货物上（如 z=1200 的 capacity-1 箱承载 z=1800 的箱子）。
-- 根因：`respectsMaxStackLayers` 只**向下**遍历被放置箱的支撑链。当箱子被插入到已有箱子**下方**时，没有任何检查回头验证它上方的箱子。7 处全部是「支撑物后插入」，与 `reconcileSupportRelations` 修的漏记支撑同一根因（放置时快照无法预见后续插入）。
-- 为何长期隐藏：这两条测试原先读 `verticalSupportedBy`，该字段在构造时写入一次、从不刷新，因此断言**结构上无法**看到后插入的支撑物。
-- 选项：A. 放宽断言；B. 在放置时增加向上校验（拒绝会使自己成为非法支撑物的位置）；C. 保持 RED 如实交付。
-- 决策：选择 C。A 违反「不为变绿改断言」；B 需改动放置合法性判定，会改变装入数量与利用率，与本轮「几何不变」的验收前提冲突，且会让 golden 差异无法归因。两条测试已加注释说明 KNOWN RED 与根因。
-- 影响：真实业务夹具（五组 golden）上零违约，缺陷只在构造的 capacity-1 密集场景出现。`stacking-check` 现在报 `error`，缺陷对用户可见而非静默。修复需单独一轮，建议与 review 的 P1-3（手动合规闭环）合并处理，因两者都涉及「非法方案不得产出」。
+- 背景：移除 `verticalSupportedBy` 影子图后，两条既有测试转 RED：`packing.stackfill.test.ts` 的 capacity-one 场景与 `packing.test.ts` 的 snapshot-11 场景。独立核实确认 7 个箱子压在 `maxStackLayers: 1` 的货物上。
+- 根因：`respectsMaxStackLayers` 只**向下**遍历被放置箱的支撑链。当箱子被插入到已有箱子**下方**时，没有任何检查回头验证它上方的箱子。
+- 决策（原）：保持 RED 如实交付。
+- 关闭：2026-07-30 在 `canPlace` 中增加 `respectsStackCapacityWithUpwardRiders`，对候选位上方几何乘员做局部容量校验，并同步检查下方支撑链对加高后堆叠深度的承受能力。两条原断言直接转绿；业务合同 hash 未变。
 
 ## 2026-07-27 Phase 5 事件处理器保留在闭包内、ContainerScene 未达 ≤600 行
 

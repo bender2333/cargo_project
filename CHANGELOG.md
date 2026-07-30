@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-30 任务1：自动堆叠 capacity-one 后插入校验
+
+- [x] 在 `canPlace` 增加局部向上乘员链校验：候选箱若成为已有上层箱的支撑物，同时检查自身容量与下方支撑链是否仍合法。
+- [x] snapshot-11 / snapshot-12 两条原 RED 断言直接转绿；31 托、invariants、blockEngine、packingContract 均通过；五个业务合同 hash 未变。
+- [x] 移除测试中的 KNOWN RED 注释，并关闭 `decision.md` 中对应延期项。
+- 验证：`npx vitest run src/lib/packing.test.ts src/lib/packing.stackfill.test.ts src/lib/packing.31pallet.test.ts src/lib/packingInvariants.test.ts src/lib/packing.blockEngine.test.ts src/lib/packingContract.test.ts` 全部通过。
+
 ## 2026-07-30 第三轮复审修复任务分解
 
 - [x] 将第三轮复审的开放问题归并为 9 个相对独立任务，计划写入 `plans/2026-07-30-refactor-review-round-3-remediation.md`。

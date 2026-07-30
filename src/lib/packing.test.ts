@@ -532,10 +532,6 @@ describe('calculatePacking', () => {
     expect(result.unplaced[0]).toMatchObject({ quantity: 1, reasonCode: UNPLACED_REASON_CODES.NO_SPACE })
   })
 
-  // KNOWN RED — same engine defect as the capacity-one case in packing.stackfill.test.ts:
-  // a box inserted beneath an existing stack is never re-validated as a supporter, so
-  // capacity-one cargo ends up carrying riders. Previously hidden by the
-  // `verticalSupportedBy` shadow graph. Do not relax; see decision.md 2026-07-28.
   it('treats non-stackable cargo as capacity-one top cargo in a snapshot-11 style mixed stack-capacity load', () => {
     const container = containers[0]
     const result = calculatePacking(container, [
