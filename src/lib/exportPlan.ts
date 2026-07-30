@@ -10,6 +10,7 @@ export type ExportPlanRow = {
   actualLength: number | ''
   actualWidth: number | ''
   actualHeight: number | ''
+  orientationKey: string
   weight: number
   maxStackLayers: number | ''
   plannedQuantity: number
@@ -27,45 +28,71 @@ function formatNumberList(values: number[]) {
 }
 
 export function buildExportPlanRows(cargoItems: CargoItem[], result: PackingResult, options: { defaultMaxStackLayers?: number } = {}): ExportPlanRow[] {
-  return cargoItems.map((item): ExportPlanRow => {
+  return cargoItems.flatMap((item): ExportPlanRow[] => {
     const placedBoxes = result.placed.filter((box) => box.cargoId === item.id)
     const unplaced = result.unplaced.find((entry) => entry.cargoId === item.id)
-    const stats = result.labelStats.find((entry) => entry.label === item.label && entry.name === item.name)
-
-    // Only report actual dimensions when all placed boxes share the same orientation;
-    // mixed orientations cannot be represented as a single row.
-    const firstOrientation = placedBoxes[0]?.orientationKey
-    const uniformOrientation = placedBoxes.length > 0 && placedBoxes.every((box) => box.orientationKey === firstOrientation)
-    const actualLength: number | '' = uniformOrientation ? (placedBoxes[0]?.length ?? '') : ''
-    const actualWidth: number | '' = uniformOrientation ? (placedBoxes[0]?.width ?? '') : ''
-    const actualHeight: number | '' = uniformOrientation ? (placedBoxes[0]?.height ?? '') : ''
-
-    const orientationSet = new Set(placedBoxes.map((box) => box.orientationKey))
-    const hasMixedOrientations = orientationSet.size > 1
+    const maxStackLayers = item.maxStackLayers ?? options.defaultMaxStackLayers ?? ''
     const gapFillNote = placedBoxes.some(isGapFillBox) ? 'Mixed gap-fill' : ''
-    const orientationNote = hasMixedOrientations ? `Mixed orientations: ${[...orientationSet].join(', ')}` : ''
-    const placementNote = [gapFillNote, orientationNote].filter(Boolean).join('; ')
 
-    return {
-      label: item.label ?? '',
-      name: item.name,
-      originalLength: item.length,
-      originalWidth: item.width,
-      originalHeight: item.height,
-      actualLength,
-      actualWidth,
-      actualHeight,
-      weight: item.weight,
-      maxStackLayers: item.maxStackLayers ?? options.defaultMaxStackLayers ?? '',
-      plannedQuantity: item.quantity,
-      placedQuantity: stats?.placed ?? placedBoxes.length,
-      unplacedQuantity: stats?.unplaced ?? unplaced?.quantity ?? 0,
-      layer: formatNumberList(stats?.layers ?? [...new Set(placedBoxes.map((box) => box.physicalLayer))].sort((a, b) => a - b)),
-      workStep: formatNumberList(placedBoxes.map((box) => box.workStep).sort((a, b) => a - b)),
-      placementNote,
-      failureReason: unplaced?.reason ?? '',
-      failureReasonCode: unplaced?.reasonCode ?? '',
+    const byOrientation = new Map<string, typeof placedBoxes>()
+    for (const box of placedBoxes) {
+      const key = box.orientationKey || 'LWH'
+      const list = byOrientation.get(key) ?? []
+      list.push(box)
+      byOrientation.set(key, list)
     }
+
+    const orientationKeys = [...byOrientation.keys()].sort()
+    if (orientationKeys.length === 0) {
+      return [{
+        label: item.label ?? '',
+        name: item.name,
+        originalLength: item.length,
+        originalWidth: item.width,
+        originalHeight: item.height,
+        actualLength: '',
+        actualWidth: '',
+        actualHeight: '',
+        orientationKey: '',
+        weight: item.weight,
+        maxStackLayers,
+        plannedQuantity: item.quantity,
+        placedQuantity: 0,
+        unplacedQuantity: unplaced?.quantity ?? item.quantity,
+        layer: '',
+        workStep: '',
+        placementNote: gapFillNote,
+        failureReason: unplaced?.reason ?? '',
+        failureReasonCode: unplaced?.reasonCode ?? '',
+      }]
+    }
+
+    return orientationKeys.map((orientationKey, index) => {
+      const boxes = byOrientation.get(orientationKey) ?? []
+      const first = boxes[0]!
+      const isPrimary = index === 0
+      return {
+        label: item.label ?? '',
+        name: item.name,
+        originalLength: item.length,
+        originalWidth: item.width,
+        originalHeight: item.height,
+        actualLength: first.length,
+        actualWidth: first.width,
+        actualHeight: first.height,
+        orientationKey,
+        weight: item.weight,
+        maxStackLayers,
+        plannedQuantity: isPrimary ? item.quantity : 0,
+        placedQuantity: boxes.length,
+        unplacedQuantity: isPrimary ? (unplaced?.quantity ?? 0) : 0,
+        layer: formatNumberList([...new Set(boxes.map((box) => box.physicalLayer))].sort((a, b) => a - b)),
+        workStep: formatNumberList(boxes.map((box) => box.workStep).sort((a, b) => a - b)),
+        placementNote: gapFillNote,
+        failureReason: isPrimary ? (unplaced?.reason ?? '') : '',
+        failureReasonCode: isPrimary ? (unplaced?.reasonCode ?? '') : '',
+      }
+    })
   })
 }
 
@@ -80,6 +107,7 @@ export const EXPORT_FIELD_KEYS: (keyof ExportPlanRow)[] = [
   'actualLength',
   'actualWidth',
   'actualHeight',
+  'orientationKey',
   'weight',
   'maxStackLayers',
   'plannedQuantity',

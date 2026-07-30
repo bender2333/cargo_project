@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { buildLabelStats, countDistinctLabels, normalizeCargoLabelColors } from './labels'
 import type { CargoItem, LabelPackingStats } from '../types'
-import { countDistinctLabels, normalizeCargoLabelColors } from './labels'
 
 function cargo(overrides: Partial<CargoItem>): CargoItem {
   return {
@@ -86,5 +86,33 @@ describe('countDistinctLabels', () => {
 
   it('returns zero for an empty result', () => {
     expect(countDistinctLabels([])).toBe(0)
+  })
+})
+
+describe('buildLabelStats', () => {
+  it('aggregates multiple cargo rows that share one business label', () => {
+    const stats = buildLabelStats([
+      cargo({ id: 'a1', label: 'P', name: 'Pump A', quantity: 2, color: '#111' }),
+      cargo({ id: 'a2', label: 'p', name: 'Pump B', quantity: 3, color: '#222' }),
+      cargo({ id: 'b1', label: 'V', name: 'Valve', quantity: 1, color: '#333' }),
+    ], [
+      {
+        id: 'box-1', cargoId: 'a1', label: 'P', name: 'Pump A', color: '#111',
+        length: 1, width: 1, height: 1, weight: 1, x: 0, y: 0, z: 0,
+        orientationKey: 'LWH', labelRotationDeg: 0, index: 1, physicalLayer: 1, depthLayer: 1,
+        workStep: 1, supportType: 'floor', supportedBy: [],
+      },
+      {
+        id: 'box-2', cargoId: 'a2', label: 'p', name: 'Pump B', color: '#222',
+        length: 1, width: 1, height: 1, weight: 1, x: 0, y: 0, z: 1,
+        orientationKey: 'LWH', labelRotationDeg: 0, index: 1, physicalLayer: 2, depthLayer: 1,
+        workStep: 2, supportType: 'box', supportedBy: ['box-1'],
+      },
+    ] as never)
+
+    expect(stats).toEqual([
+      expect.objectContaining({ label: 'P', planned: 5, placed: 2, unplaced: 3, layers: [1, 2] }),
+      expect.objectContaining({ label: 'V', planned: 1, placed: 0, unplaced: 1, layers: [] }),
+    ])
   })
 })

@@ -6,6 +6,7 @@ import { stackCapacity, violatesStackChain, type StackChainNode } from './stackC
 import { generateBlockCandidates, type BlockCandidate } from './blocks'
 import { initEMS, splitEMS, type EmptyMaximalSpace } from './emsSpace'
 import { GAP_FILL_SOURCE } from './placementSource'
+import { buildLabelStats } from './labels'
 
 export const UNPLACED_REASON_CODES = {
   EXCEEDS_DIMENSIONS: 'exceeds-dimensions',
@@ -1325,20 +1326,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   assignWorkStepsBySupport(placed, effective)
   const layers = buildPackingLayers(placed)
 
-  const labelStats = cargoItems.map((item, itemIndex) => {
-    const label = labelForCargoItem(item, itemIndex)
-    const placedBoxes = placed.filter((box) => box.cargoId === item.id)
-    const unplacedQuantity = unplaced.find((entry) => entry.cargoId === item.id)?.quantity ?? 0
-    return {
-      label,
-      name: item.name,
-      color: item.color,
-      planned: item.quantity,
-      placed: placedBoxes.length,
-      unplaced: unplacedQuantity,
-      layers: [...new Set(placedBoxes.map((box) => box.physicalLayer))].sort((a, b) => a - b),
-    }
-  })
+  const labelStats = buildLabelStats(cargoItems, placed)
 
   return {
     placed,

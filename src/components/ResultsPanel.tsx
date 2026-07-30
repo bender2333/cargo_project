@@ -430,12 +430,12 @@ export function ResultsPanel({
                 </tr>
               </thead>
               <tbody>
-                {detailRows.map((item) => (
-                  <tr className="border-t border-[#dddddd]" key={`${item.label}-${item.name}`}>
+                {detailRows.map((item, index) => (
+                  <tr className="border-t border-[#dddddd]" key={`${item.label}-${item.name}-${item.orientationKey}-${index}`}>
                     <td className="p-2 font-bold">{item.label}</td>
                     <td className="p-2">{item.name}</td>
                     <td className="p-2">{formatDimensions(item.originalLength, item.originalWidth, item.originalHeight)}</td>
-                    <td className="p-2">{formatDimensions(item.actualLength, item.actualWidth, item.actualHeight)}</td>
+                    <td className="p-2">{formatDimensions(item.actualLength, item.actualWidth, item.actualHeight)}{item.orientationKey ? ` (${item.orientationKey})` : ''}</td>
                     <td className="p-2">{item.weight}</td>
                     <td className="p-2">{item.plannedQuantity}</td>
                     <td className="p-2">{item.placedQuantity}</td>

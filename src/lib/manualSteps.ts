@@ -1,33 +1,10 @@
-import type { CargoItem, ContainerSpec, LabelPackingStats, PackingDiagnostic, PackingResult, PlacedBox } from '../types'
+import type { CargoItem, ContainerSpec, PackingDiagnostic, PackingResult, PlacedBox } from '../types'
 import { finalizePlacementGeometry } from './finalizePackingResult'
+import { buildLabelStats } from './labels'
 import type { ValidationIssue } from './manualPlacement'
 
 export const MANUAL_UNPLACED_REASON_CODE = 'manual-not-placed'
 const MANUAL_UNPLACED_REASON = 'Not placed in manual plan'
-
-function buildPlacedOnlyLabelStats(boxes: PlacedBox[]): LabelPackingStats[] {
-  const stats = new Map<string, LabelPackingStats>()
-  for (const box of boxes) {
-    const key = `${box.cargoId}\u0000${box.label}`
-    const current = stats.get(key)
-    if (current) {
-      current.planned += 1
-      current.placed += 1
-      current.layers = [...new Set([...current.layers, box.physicalLayer])].sort((a, b) => a - b)
-    } else {
-      stats.set(key, {
-        label: box.label,
-        name: box.name,
-        color: box.color,
-        planned: 1,
-        placed: 1,
-        unplaced: 0,
-        layers: [box.physicalLayer],
-      })
-    }
-  }
-  return [...stats.values()].sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }))
-}
 
 function enrichPlacedBoxes(boxes: PlacedBox[], cargoItems: CargoItem[]) {
   const cargoById = new Map(cargoItems.map((cargo) => [cargo.id, cargo]))
@@ -43,21 +20,6 @@ function enrichPlacedBoxes(boxes: PlacedBox[], cargoItems: CargoItem[]) {
       color: cargo?.color ?? box.color,
       index,
       supportedBy: [...box.supportedBy],
-    }
-  })
-}
-
-function buildPlannedLabelStats(cargoItems: CargoItem[], boxes: PlacedBox[]): LabelPackingStats[] {
-  return cargoItems.map((cargo) => {
-    const placed = boxes.filter((box) => box.cargoId === cargo.id)
-    return {
-      label: cargo.label || cargo.name,
-      name: cargo.name,
-      color: cargo.color,
-      planned: cargo.quantity,
-      placed: placed.length,
-      unplaced: Math.max(0, cargo.quantity - placed.length),
-      layers: [...new Set(placed.map((box) => box.physicalLayer))].sort((a, b) => a - b),
     }
   })
 }
@@ -150,9 +112,7 @@ export function buildManualPackingResult(
     unplaced,
     layers,
     workSteps,
-    labelStats: cargoItems
-      ? buildPlannedLabelStats(cargoItems, placed)
-      : buildPlacedOnlyLabelStats(placed),
+    labelStats: buildLabelStats(cargoItems ?? [], placed),
     diagnostics: buildManualDiagnostics(placed, container, validationIssues),
     totalCargoCount: cargoItems
       ? cargoItems.reduce((sum, cargo) => sum + cargo.quantity, 0)

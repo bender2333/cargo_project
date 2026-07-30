@@ -54,6 +54,7 @@ describe('buildExportPlanRows', () => {
         actualLength: 1000,
         actualWidth: 1000,
         actualHeight: 500,
+        orientationKey: 'LWH',
         weight: 100,
         maxStackLayers: '',
         plannedQuantity: 2,
@@ -74,6 +75,7 @@ describe('buildExportPlanRows', () => {
         actualLength: 500,
         actualWidth: 500,
         actualHeight: 500,
+        orientationKey: 'LWH',
         weight: 25,
         maxStackLayers: 4,
         plannedQuantity: 1,
@@ -128,6 +130,7 @@ const sampleRow: ExportPlanRow = {
   actualLength: 800,
   actualWidth: 600,
   actualHeight: '',
+  orientationKey: 'LWH',
   weight: 33,
   maxStackLayers: 2,
   plannedQuantity: 5,
@@ -191,7 +194,7 @@ describe('buildExportRowsFromTemplate', () => {
   })
 })
 
-// P1-9 RED tests — actual orientation in export
+// Structured orientation export: one row per cargo × orientationKey.
 describe('buildExportPlanRows orientation accuracy', () => {
   it('emits actual dimensions from placedBoxes[0] when all placed boxes share the same orientation', () => {
     const items = [
@@ -200,36 +203,48 @@ describe('buildExportPlanRows orientation accuracy', () => {
     const result = calculatePacking({ ...container, maxWeight: 1000 }, items)
     const rows = buildExportPlanRows(items, result)
 
-    // Both boxes are LWH — actual dims should match original
-    expect(rows[0]!.actualLength).toBe(600)
-    expect(rows[0]!.actualWidth).toBe(400)
-    expect(rows[0]!.actualHeight).toBe(300)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      orientationKey: 'LWH',
+      actualLength: 600,
+      actualWidth: 400,
+      actualHeight: 300,
+      placedQuantity: result.placed.length,
+    })
   })
 
-  it('emits empty actual dimensions when the same cargo is placed in multiple orientations', () => {
-    // Manually build a result with two boxes of same cargoId but different orientations
+  it('splits mixed orientations into one row per orientationKey with exact counts', () => {
     const item: CargoItem = cargo({ id: 'a', name: 'Mixed', label: 'A', length: 600, width: 400, height: 300, quantity: 2, weight: 10 })
     const result = calculatePacking({ ...container, maxWeight: 1000 }, [item])
 
-    // Force two different orientations on the placed boxes for this test
-    if (result.placed.length >= 2) {
-      result.placed[0]!.orientationKey = 'LWH'
-      result.placed[0]!.length = 600
-      result.placed[0]!.width = 400
-      result.placed[0]!.height = 300
-      result.placed[1]!.orientationKey = 'WLH'
-      result.placed[1]!.length = 400
-      result.placed[1]!.width = 600
-      result.placed[1]!.height = 300
-    }
+    if (result.placed.length < 2) return
+
+    result.placed[0]!.orientationKey = 'LWH'
+    result.placed[0]!.length = 600
+    result.placed[0]!.width = 400
+    result.placed[0]!.height = 300
+    result.placed[1]!.orientationKey = 'WLH'
+    result.placed[1]!.length = 400
+    result.placed[1]!.width = 600
+    result.placed[1]!.height = 300
 
     const rows = buildExportPlanRows([item], result)
-
-    // Mixed orientations → actual dims should be empty
-    if (result.placed.length >= 2) {
-      expect(rows[0]!.actualLength).toBe('')
-      expect(rows[0]!.actualWidth).toBe('')
-      expect(rows[0]!.actualHeight).toBe('')
-    }
+    expect(rows).toHaveLength(2)
+    expect(rows.map((row) => row.orientationKey).sort()).toEqual(['LWH', 'WLH'])
+    expect(rows.reduce((sum, row) => sum + row.placedQuantity, 0)).toBe(2)
+    expect(rows.find((row) => row.orientationKey === 'LWH')).toMatchObject({
+      actualLength: 600,
+      actualWidth: 400,
+      actualHeight: 300,
+      placedQuantity: 1,
+      plannedQuantity: 2,
+    })
+    expect(rows.find((row) => row.orientationKey === 'WLH')).toMatchObject({
+      actualLength: 400,
+      actualWidth: 600,
+      actualHeight: 300,
+      placedQuantity: 1,
+      plannedQuantity: 0,
+    })
   })
 })
