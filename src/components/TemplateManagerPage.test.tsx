@@ -98,7 +98,7 @@ const importA: ImportTemplate = {
   dimensionMode: 'combined',
   combinedColumn: '',
   dimensionOrder: ['length', 'width', 'height'],
-  defaultValues: { quantity: 1, canRotate: true, stackable: true },
+  defaultValues: { quantity: 1, weight: 1, canRotate: true, stackable: true },
   createdAt: '2026-07-23T00:00:00.000Z',
   updatedAt: '2026-07-23T01:00:00.000Z',
 }
@@ -328,6 +328,7 @@ describe('TemplateManagerPage', () => {
       dimensionOrder: ['width', 'length', 'height'],
       defaultValues: {
         quantity: 4,
+        weight: 1,
         canRotate: false,
         stackable: true,
         label: 'BX',
