@@ -88,10 +88,19 @@
 - [x] Automatic 3D scene now survives 2D/3D toggles without cold WebGL context recreation; hidden rendering fully pauses its animation frame and resumes on 3D activation. The maximize control is shared rather than duplicated in hidden wrappers.
 - GREEN：final `npm run benchmark` passed with all five packing contract hashes matching, `totalJsGzipBytes=694,300`, `canvasFirstNonEmptyPixelsMs` median/P95=`81.875/96.150 ms`, initial HTML gzip=`289 B`, timings comparable. Focused scene/UI tests = **2 files / 28 tests passed**, focused 2D/3D E2E = **1 passed**, and TypeScript passed. Performance code review APPROVED with no findings.
 
-- Sequential release-gate rerun reached the benchmark with only `algorithm.russia-volume.p95Ms` RED: samples `3.241, 3.025, 3.117, 4.242, 9.761 ms` vs 20% limit `3.7872 ms`; browser/bundle gates were otherwise clear. This run is recorded as RED, with no baseline or threshold changes; single-case idle confirmation remains pending.
+- Sequential release-gate rerun reached the benchmark with only `algorithm.russia-volume.p95Ms` RED: samples `3.241, 3.025, 3.117, 4.242, 9.761 ms` vs 20% limit `3.7872 ms`; browser/bundle gates were otherwise clear. This transient run remains recorded as RED; targeted idle confirmation and the final full GREEN run are recorded below without baseline or threshold changes.
+
+### 2026-07-31 final local release gate
+
+- [x] `npm run lint` passed.
+- [x] `npm test` passed: **91 unit files / 789 tests**, plus **2 packing-performance files / 6 tests**.
+- [x] `npm run build` passed: **320 modules transformed**.
+- [x] `npm run test:e2e` passed: **123 passed / 0 failed** with the no-skipped reporter active; expected negative-path console errors remained visible in the log.
+- [x] Final `npm run benchmark` passed with timings comparable: all five packing hashes matched; `totalJsGzipBytes=694,388`; `canvasFirstNonEmptyPixelsMs` median/P95=`37.250/45.350 ms`; Russia algorithm P95=`3.401 ms`; initial HTML gzip=`289 B`.
+- Local release gate is GREEN. Deployment and remote E2E remain pending.
 
 ### 发布 gate (本地/部署/E2E)
-- [ ] 本地 release checks (Lint/Tests/Build/Benchmark) 全量通过。
+- [x] 本地 release checks (Lint/Tests/Build/Benchmark) 全量通过。
 - [ ] 生产环境部署门禁验证。
 - [ ] 生产环境全量 E2E 回归验证。
 

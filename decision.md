@@ -24,6 +24,7 @@
 
 - 末次按 lint → unit/performance → build → E2E → benchmark 顺序执行时，只有 `algorithm.russia-volume.p95Ms` RED：样本 `3.241, 3.025, 3.117, 4.242, 9.761 ms`，median `3.241`，基线 P95 `3.156 ms` 的 20% 上限为 `3.7872 ms`；其余算法、bundle、首像素和浏览器 timing 门禁均未报错。报告仍保留在 `test-results/benchmark/frontend-architecture.json`。
 - 这不是已证明的源代码回归：同一代码的上一轮完整 benchmark GREEN，当前五次中单个 `9.761 ms` 样本远离其余四次，且无实现改动发生。未修改 benchmark、baseline、阈值或断言；发布门禁暂不宣称 GREEN，先做单 case 空载复测并保留本次 RED 证据。
+- 单 case 空载复测 `node --expose-gc scripts/frontendBenchmark.mjs --algorithm-case russia-volume` = `2.970, 2.777, 2.916, 3.034, 3.031 ms`（P95 `3.034`），随后完整 `npm run benchmark` GREEN；最终报告算法 Russia P95 `3.401`、total JS gzip `694,388`、首像素 median/P95 `37.250/45.350 ms`。
 
 
 
