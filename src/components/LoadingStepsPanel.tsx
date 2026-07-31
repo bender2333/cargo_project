@@ -64,6 +64,7 @@ type Props = {
   onSelectGroup: (index: number) => void
   onTogglePlay: () => void
   onExportPdf?: () => void
+  exportDisabledReason?: string | null
 }
 
 function rangeLabel(start: number, end: number) {
@@ -81,7 +82,7 @@ function supportLabel(type: LoadingTaskGroup['supportTypes'][number], locale: Lo
   return t.partiallySupported
 }
 
-export function LoadingStepsPanel({ groups, activeIndex, playing, locale, available, exportDisabled = false, onSelectGroup, onTogglePlay, onExportPdf }: Props) {
+export function LoadingStepsPanel({ groups, activeIndex, playing, locale, available, exportDisabled = false, exportDisabledReason = null, onSelectGroup, onTogglePlay, onExportPdf }: Props) {
   const t = T[locale]
 
   if (!available || groups.length === 0) {
@@ -121,15 +122,21 @@ export function LoadingStepsPanel({ groups, activeIndex, playing, locale, availa
           {t.next}
         </button>
         {onExportPdf && (
-          <button
-            className="archive-button success ml-auto"
-            type="button"
-            data-testid="export-loading-sheet-pdf"
-            disabled={exportDisabled}
-            onClick={onExportPdf}
-          >
-            {t.exportPdf}
-          </button>
+          <>
+            {exportDisabled && exportDisabledReason && (
+              <p id="loading-export-disabled-reason" data-testid="loading-export-disabled-reason" className="basis-full text-xs text-red-700">{exportDisabledReason}</p>
+            )}
+            <button
+              className="archive-button success ml-auto"
+              type="button"
+              data-testid="export-loading-sheet-pdf"
+              aria-describedby={exportDisabled && exportDisabledReason ? 'loading-export-disabled-reason' : undefined}
+              disabled={exportDisabled}
+              onClick={onExportPdf}
+            >
+              {t.exportPdf}
+            </button>
+          </>
         )}
       </div>
 

@@ -119,7 +119,7 @@ export type LabelPackingStats = {
   layers: number[]
 }
 
-export type PackingDiagnostic = {
+type PackingDiagnosticDetails = {
   id: string
   severity: 'info' | 'warning' | 'error'
   message: string
@@ -128,6 +128,11 @@ export type PackingDiagnostic = {
   /** Optional parameters that vary the rendered message (e.g., label, name, quantity). */
   params?: Record<string, string | number>
 }
+
+export type PackingDiagnostic = PackingDiagnosticDetails & (
+  | { source: 'manual'; sourceIssueId: string }
+  | { source?: never; sourceIssueId?: never }
+)
 
 export type LoadingMode = 'volume' | 'weight' | 'quantity' | 'input'
 

@@ -43,7 +43,7 @@ import {
   measureBoxClearance,
 } from './lib/measurement'
 import { buildReviewChecklist } from './lib/reviewChecklist'
-import { assertPlanCompliant } from './lib/planCompliance'
+import { assertPlanCompliant, formatPlanComplianceMessage, getActivePlanCompliance } from './lib/planCompliance'
 import {
   assertHistorySnapshotSize,
   buildHistorySnapshot,
@@ -854,15 +854,19 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       : [],
     [clearanceBoxes, clearanceEnabled, clearanceSelectedBox, locale, renderingContainer],
   )
+  const activePlanCompliance = useMemo(
+    () => getActivePlanCompliance({ mode: placementMode, result: activeResult, manualIssues, locale }),
+    [activeResult, locale, manualIssues, placementMode],
+  )
+  const planComplianceMessage = formatPlanComplianceMessage(activePlanCompliance, locale)
   const reviewChecklist: ReviewChecklist = useMemo(
     () => buildReviewChecklist({
       result: activeResult,
       measurements: [],
       cog: cogResult,
-      manualIssues: placementMode === 'manual' ? manualIssues : [],
       locale,
     }),
-    [activeResult, cogResult, locale, manualIssues, placementMode],
+    [activeResult, cogResult, locale],
   )
   const debugSnapshot = useMemo(
     () => buildCargoDebugSnapshot({
@@ -1193,8 +1197,17 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     }
   }
 
-  const exportExcel = async () => {
-    assertPlanCompliant(activeResult, manualIssues)
+  const runPlanExport = async (operation: () => void | Promise<void>): Promise<void> => {
+    try {
+      assertPlanCompliant(activePlanCompliance)
+      await operation()
+    } catch (error) {
+      console.error('[plan-export]', error)
+      const message = error instanceof Error ? error.message : ''
+      alert(message || (locale === 'zh' ? '导出失败' : 'Export failed'))
+    }
+  }
+  const exportExcel = () => runPlanExport(async () => {
     const XLSX = await import('xlsx')
     const exportTemplate = exportTemplates.find((item) => item.id === selectedExportTemplateId)
     const planRows = exportTemplate && exportTemplate.columns.length > 0
@@ -1214,11 +1227,10 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     XLSX.utils.book_append_sheet(workbook, sheet, 'Packing Plan')
     const prefix = filenameSlug(shipmentName)
     XLSX.writeFile(workbook, `${prefix ? `${prefix}-` : ''}packing-plan.xlsx`)
-  }
+  })
 
-  const exportPlaybackInstructions = async () => {
+  const exportPlaybackInstructions = () => runPlanExport(async () => {
     if (!playbackAvailable) return
-    assertPlanCompliant(activeResult, manualIssues)
     const XLSX = await import('xlsx')
     const rows = playbackSequence.steps.map((entry) => {
       const supportLabel = entry.box.supportType === 'floor'
@@ -1248,11 +1260,10 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     XLSX.utils.book_append_sheet(workbook, sheet, 'Loading Steps')
     const prefix = filenameSlug(shipmentName)
     XLSX.writeFile(workbook, `${prefix ? `${prefix}-` : ''}loading-instructions.xlsx`)
-  }
+  })
 
-  const exportLoadingSheet = async () => {
+  const exportLoadingSheet = () => runPlanExport(async () => {
     if (!loadingStepsAvailable) return
-    assertPlanCompliant(activeResult, manualIssues)
     const { exportLoadingSheetPdf } = await import('./lib/exportLoadingSheet')
     const model = buildLoadingSheetModel(activeResult, renderingContainer)
     const prefix = filenameSlug(shipmentName)
@@ -1264,19 +1275,17 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       title: shipmentName || projectName,
     })
     downloadBlob(blob, `${prefix ? `${prefix}-` : ''}loading-sheet.pdf`)
-  }
+  })
 
-  const exportReviewChecklistJson = () => {
-    assertPlanCompliant(activeResult, manualIssues)
+  const exportReviewChecklistJson = () => runPlanExport(() => {
     const prefix = filenameSlug(shipmentName)
     downloadBlob(
       new Blob([JSON.stringify(reviewChecklist, null, 2)], { type: 'application/json;charset=utf-8' }),
       `${prefix ? `${prefix}-` : ''}review-checklist.json`,
     )
-  }
+  })
 
-  const exportReviewChecklistExcel = async () => {
-    assertPlanCompliant(activeResult, manualIssues)
+  const exportReviewChecklistExcel = () => runPlanExport(async () => {
     const XLSX = await import('xlsx')
     const rows = reviewChecklist.items.map((item) => ({
       source: item.source,
@@ -1291,10 +1300,9 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     XLSX.utils.book_append_sheet(workbook, sheet, 'Review Checklist')
     const prefix = filenameSlug(shipmentName)
     XLSX.writeFile(workbook, `${prefix ? `${prefix}-` : ''}review-checklist.xlsx`)
-  }
+  })
 
-  const exportCurrentView = () => {
-    assertPlanCompliant(activeResult, manualIssues)
+  const exportCurrentView = () => runPlanExport(async () => {
     if (workspaceView === '2d') {
       const selector = placementMode === 'manual'
         ? '[data-testid="manual-placement-2d"]'
@@ -1313,18 +1321,26 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     if (!(canvas instanceof HTMLCanvasElement)) {
       throw new Error('3D canvas is not available for export')
     }
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        throw new Error('3D canvas export failed')
-      }
-      const prefix = filenameSlug(shipmentName)
-      downloadBlob(blob, `${prefix ? `${prefix}-` : ''}packing-plan-${sceneViewMode}.png`)
-    }, 'image/png')
-  }
+    await new Promise<void>((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('3D canvas export failed'))
+          return
+        }
+        try {
+          const prefix = filenameSlug(shipmentName)
+          downloadBlob(blob, `${prefix ? `${prefix}-` : ''}packing-plan-${sceneViewMode}.png`)
+          resolve()
+        } catch (error) {
+          reject(error)
+        }
+      }, 'image/png')
+    })
+  })
 
   const saveCurrentPlan = async () => {
     try {
-      assertPlanCompliant(activeResult, manualIssues)
+      assertPlanCompliant(activePlanCompliance)
       const planData = buildHistorySnapshot({
         container: selectedContainer,
         cargoItems: displayCargoItems,
@@ -1548,6 +1564,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             loadFailed={historyLoadFailed}
             onRetry={refreshHistory}
             onSave={saveCurrentPlan}
+            saveDisabled={!activePlanCompliance.ok}
+            saveDisabledReason={planComplianceMessage}
             onRestore={restorePlan}
             onDelete={removeHistory}
             onBack={() => activateNav('overview')}
@@ -1683,6 +1701,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             clearanceEnabled={clearanceEnabled}
             setClearanceEnabled={setClearanceEnabled}
             exportCurrentView={exportCurrentView}
+            exportCurrentViewDisabled={!activePlanCompliance.ok}
+            exportCurrentViewDisabledReason={planComplianceMessage}
             containerChangeNotice={containerChangeNotice}
             customContainerLoadFailed={customContainerLoadFailed}
             locale={locale}
@@ -1792,7 +1812,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             exportLoadingSheet={exportLoadingSheet}
             displayCargoItemsCount={displayCargoItems.length}
             placementMode={placementMode}
-            manualIssues={manualIssues}
+            planCompliance={activePlanCompliance}
             selectManualBox={selectManualBox}
             setSelectedBoxId={setSelectedBoxId}
           />

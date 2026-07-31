@@ -1,105 +1,60 @@
-import type { CargoItem, ContainerSpec, LoadingMode, PackingResult } from '../types'
-import type { ManualDraft } from './manualPlacement'
-
-export const HISTORY_SNAPSHOT_VERSION = 2 as const
-/** Soft guard so oversized plans fail visibly instead of blowing the API. */
 export const HISTORY_SNAPSHOT_MAX_BYTES = 2_500_000
 
-export type HistorySnapshotV2 = {
-  schemaVersion: typeof HISTORY_SNAPSHOT_VERSION
-  containerId: string
-  container: ContainerSpec
-  cargoItems: CargoItem[]
-  placedCount: number
-  totalCargoCount: number
-  layerCount: number
-  labelSummary: string
-  defaultMaxStackLayers?: number
-  placementMode: 'auto' | 'manual'
-  packingResult: PackingResult
-  manualDraft?: ManualDraft
-  draftInitialized?: boolean
-}
+const ORIENTATION_KEYS = ['LWH', 'WLH', 'LHW', 'HLW', 'WHL', 'HWL']
+const LABEL_ROTATIONS = [0, 90, 180, 270]
+const SUPPORT_TYPES = ['floor', 'fully-supported', 'partially-supported']
+const DIAGNOSTIC_SEVERITIES = ['info', 'warning', 'error']
+const SIGNED_AXES = ['L+', 'L-', 'W+', 'W-', 'H+', 'H-']
 
-export type LegacyHistoryPlanData = {
-  schemaVersion?: undefined
-  containerId: string
-  container: ContainerSpec
-  cargoItems: CargoItem[]
-  placedCount: number
-  totalCargoCount: number
-  layerCount: number
-  labelSummary: string
-  defaultMaxStackLayers?: number
-}
-
-export type HistoryPlanData = HistorySnapshotV2 | LegacyHistoryPlanData
-
-export type BuildHistorySnapshotInput = {
-  container: ContainerSpec
-  cargoItems: CargoItem[]
-  packingResult: PackingResult
-  placementMode: 'auto' | 'manual'
-  defaultMaxStackLayers?: number
-  manualDraft?: ManualDraft
-  draftInitialized?: boolean
-}
-
-const ORIENTATION_KEYS = ['LWH', 'WLH', 'LHW', 'HLW', 'WHL', 'HWL'] as const
-const LABEL_ROTATIONS = [0, 90, 180, 270] as const
-const SUPPORT_TYPES = ['floor', 'fully-supported', 'partially-supported'] as const
-const DIAGNOSTIC_SEVERITIES = ['info', 'warning', 'error'] as const
-const SIGNED_AXES = ['L+', 'L-', 'W+', 'W-', 'H+', 'H-'] as const
-
-function record(value: unknown, path: string): Record<string, unknown> {
+function record(value, path) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${path} must be an object`)
-  return value as Record<string, unknown>
+  return value
 }
 
-function array(value: unknown, path: string): unknown[] {
+function array(value, path) {
   if (!Array.isArray(value)) throw new Error(`${path} must be an array`)
   return value
 }
 
-function string(value: unknown, path: string): string {
+function string(value, path) {
   if (typeof value !== 'string') throw new Error(`${path} must be a string`)
   return value
 }
 
-function boolean(value: unknown, path: string): boolean {
+function boolean(value, path) {
   if (typeof value !== 'boolean') throw new Error(`${path} must be a boolean`)
   return value
 }
 
-function finite(value: unknown, path: string): number {
+function finite(value, path) {
   if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${path} must be a finite number`)
   return value
 }
 
-function nonNegative(value: unknown, path: string): number {
+function nonNegative(value, path) {
   const parsed = finite(value, path)
   if (parsed < 0) throw new Error(`${path} must be non-negative`)
   return parsed
 }
 
-function positive(value: unknown, path: string): number {
+function positive(value, path) {
   const parsed = finite(value, path)
   if (parsed <= 0) throw new Error(`${path} must be positive`)
   return parsed
 }
 
-function integer(value: unknown, path: string, minimum = 0): number {
+function integer(value, path, minimum = 0) {
   const parsed = finite(value, path)
   if (!Number.isInteger(parsed) || parsed < minimum) throw new Error(`${path} must be an integer >= ${minimum}`)
   return parsed
 }
 
-function enumeration<T extends readonly unknown[]>(value: unknown, allowed: T, path: string): T[number] {
+function enumeration(value, allowed, path) {
   if (!allowed.includes(value)) throw new Error(`${path} has an illegal value`)
-  return value as T[number]
+  return value
 }
 
-function validateContainer(value: unknown, path: string) {
+function validateContainer(value, path) {
   const item = record(value, path)
   string(item.id, `${path}.id`)
   string(item.label, `${path}.label`)
@@ -113,9 +68,9 @@ function validateContainer(value: unknown, path: string) {
   nonNegative(item.sideGap, `${path}.sideGap`)
 }
 
-function validateCargoItems(value: unknown, path: string) {
+function validateCargoItems(value, path) {
   const items = array(value, path)
-  const ids = new Set<string>()
+  const ids = new Set()
   items.forEach((value, index) => {
     const itemPath = `${path}[${index}]`
     const item = record(value, itemPath)
@@ -138,9 +93,9 @@ function validateCargoItems(value: unknown, path: string) {
   return ids
 }
 
-function validateManualDraft(value: unknown, cargoIds: Set<string>, path: string) {
+function validateManualDraft(value, cargoIds, path) {
   const draft = record(value, path)
-  const boxes = new Map<string, Record<string, unknown>>()
+  const boxes = new Map()
   array(draft.boxes, `${path}.boxes`).forEach((value, index) => {
     const boxPath = `${path}.boxes[${index}]`
     const box = record(value, boxPath)
@@ -150,7 +105,7 @@ function validateManualDraft(value: unknown, cargoIds: Set<string>, path: string
     if (!cargoIds.has(cargoId)) throw new Error(`${boxPath}.cargoId references missing cargo`)
     string(box.label, `${boxPath}.label`)
     string(box.color, `${boxPath}.color`)
-    for (const field of ['baseLength', 'baseWidth', 'baseHeight'] as const) {
+    for (const field of ['baseLength', 'baseWidth', 'baseHeight']) {
       if (box[field] !== undefined) positive(box[field], `${boxPath}.${field}`)
     }
     nonNegative(box.x, `${boxPath}.x`)
@@ -161,8 +116,8 @@ function validateManualDraft(value: unknown, cargoIds: Set<string>, path: string
     positive(box.height, `${boxPath}.height`)
     enumeration(box.orientationKey, ORIENTATION_KEYS, `${boxPath}.orientationKey`)
     enumeration(box.labelRotationDeg, LABEL_ROTATIONS, `${boxPath}.labelRotationDeg`)
-    if (box.yawQuarterTurn !== undefined) enumeration(box.yawQuarterTurn, [0, 1, 2, 3] as const, `${boxPath}.yawQuarterTurn`)
-    if (box.pitchQuarterTurn !== undefined) enumeration(box.pitchQuarterTurn, [0, 1, 2, 3] as const, `${boxPath}.pitchQuarterTurn`)
+    if (box.yawQuarterTurn !== undefined) enumeration(box.yawQuarterTurn, [0, 1, 2, 3], `${boxPath}.yawQuarterTurn`)
+    if (box.pitchQuarterTurn !== undefined) enumeration(box.pitchQuarterTurn, [0, 1, 2, 3], `${boxPath}.pitchQuarterTurn`)
     if (box.orientationAxes !== undefined) {
       const axes = record(box.orientationAxes, `${boxPath}.orientationAxes`)
       enumeration(axes.x, SIGNED_AXES, `${boxPath}.orientationAxes.x`)
@@ -180,13 +135,10 @@ function validateManualDraft(value: unknown, cargoIds: Set<string>, path: string
   return boxes
 }
 
-function validateManualPlanConsistency(
-  manualBoxes: Map<string, Record<string, unknown>>,
-  placedBoxes: Map<string, { value: Record<string, unknown> }>,
-) {
+function validateManualPlanConsistency(manualBoxes, placedBoxes) {
   if (manualBoxes.size !== placedBoxes.size) throw new Error('history.manualDraft and packingResult.placed must have the same box IDs/count')
-  const fields = ['cargoId', 'label', 'color', 'x', 'y', 'z', 'length', 'width', 'height', 'orientationKey', 'labelRotationDeg'] as const
-  const poseFields = ['yawQuarterTurn', 'pitchQuarterTurn', 'orientationLabel'] as const
+  const fields = ['cargoId', 'label', 'color', 'x', 'y', 'z', 'length', 'width', 'height', 'orientationKey', 'labelRotationDeg']
+  const poseFields = ['yawQuarterTurn', 'pitchQuarterTurn', 'orientationLabel']
   for (const [id, manual] of manualBoxes) {
     const placed = placedBoxes.get(id)?.value
     if (!placed) throw new Error('history.manualDraft and packingResult.placed must have the same box IDs/count')
@@ -199,16 +151,15 @@ function validateManualPlanConsistency(
       }
     }
     if (manual.orientationAxes !== undefined) {
-      const manualAxes = manual.orientationAxes as Record<string, unknown>
-      const placedAxes = placed.orientationAxes as Record<string, unknown> | undefined
-      if (!placedAxes || ['x', 'y', 'z'].some((axis) => manualAxes[axis] !== placedAxes[axis])) {
+      const placedAxes = placed.orientationAxes
+      if (!placedAxes || ['x', 'y', 'z'].some((axis) => manual.orientationAxes[axis] !== placedAxes[axis])) {
         throw new Error(`history.manualDraft ${id}.orientationAxes must match packingResult.placed`)
       }
     }
   }
 }
 
-function validatePackingResult(value: unknown, cargoIds: Set<string>, path: string, container: Record<string, unknown>, placementMode: 'auto' | 'manual') {
+function validatePackingResult(value, cargoIds, path, container, placementMode) {
   const result = record(value, path)
   const placed = array(result.placed, `${path}.placed`)
   const unplaced = array(result.unplaced, `${path}.unplaced`)
@@ -216,13 +167,13 @@ function validatePackingResult(value: unknown, cargoIds: Set<string>, path: stri
   const workSteps = array(result.workSteps, `${path}.workSteps`)
   const labelStats = array(result.labelStats, `${path}.labelStats`)
   const diagnostics = array(result.diagnostics, `${path}.diagnostics`)
-  const boxes = new Map<string, { cargoId: string; workStep: number; physicalLayer: number; supportType: typeof SUPPORT_TYPES[number]; supportedBy: string[]; value: Record<string, unknown> }>()
-  const diagnosticIds = new Set<string>()
-  const placedLayerCounts = new Map<number, number>()
-  const layerPhysicalLayers = new Set<number>()
-  const effectiveLength = Math.max(0, (container.length as number) - (container.doorGap as number))
-  const effectiveWidth = Math.max(0, (container.width as number) - (container.sideGap as number) * 2)
-  const effectiveHeight = Math.max(0, (container.height as number) - (container.topGap as number))
+  const boxes = new Map()
+  const diagnosticIds = new Set()
+  const placedLayerCounts = new Map()
+  const layerPhysicalLayers = new Set()
+  const effectiveLength = Math.max(0, container.length - container.doorGap)
+  const effectiveWidth = Math.max(0, container.width - container.sideGap * 2)
+  const effectiveHeight = Math.max(0, container.height - container.topGap)
 
   placed.forEach((value, index) => {
     const boxPath = `${path}.placed[${index}]`
@@ -245,8 +196,8 @@ function validatePackingResult(value: unknown, cargoIds: Set<string>, path: stri
     }
     enumeration(box.orientationKey, ORIENTATION_KEYS, `${boxPath}.orientationKey`)
     enumeration(box.labelRotationDeg, LABEL_ROTATIONS, `${boxPath}.labelRotationDeg`)
-    if (box.yawQuarterTurn !== undefined) enumeration(box.yawQuarterTurn, [0, 1, 2, 3] as const, `${boxPath}.yawQuarterTurn`)
-    if (box.pitchQuarterTurn !== undefined) enumeration(box.pitchQuarterTurn, [0, 1, 2, 3] as const, `${boxPath}.pitchQuarterTurn`)
+    if (box.yawQuarterTurn !== undefined) enumeration(box.yawQuarterTurn, [0, 1, 2, 3], `${boxPath}.yawQuarterTurn`)
+    if (box.pitchQuarterTurn !== undefined) enumeration(box.pitchQuarterTurn, [0, 1, 2, 3], `${boxPath}.pitchQuarterTurn`)
     if (box.orientationAxes !== undefined) {
       const axes = record(box.orientationAxes, `${boxPath}.orientationAxes`)
       enumeration(axes.x, SIGNED_AXES, `${boxPath}.orientationAxes.x`)
@@ -284,6 +235,7 @@ function validatePackingResult(value: unknown, cargoIds: Set<string>, path: stri
   layers.forEach((value, index) => {
     const layerPath = `${path}.layers[${index}]`
     const layer = record(value, layerPath)
+    string(layer.id, `${layerPath}.id`)
     const physicalLayer = integer(layer.physicalLayer, `${layerPath}.physicalLayer`, 1)
     if (layerPhysicalLayers.has(physicalLayer)) throw new Error(`${layerPath}.physicalLayer must be unique`)
     layerPhysicalLayers.add(physicalLayer)
@@ -316,7 +268,7 @@ function validatePackingResult(value: unknown, cargoIds: Set<string>, path: stri
     }
   }
   if (workSteps.length !== placed.length) throw new Error(`${path}.workSteps must contain one step per placed box`)
-  const stepBoxes = new Set<string>()
+  const stepBoxes = new Set()
   workSteps.forEach((value, index) => {
     const stepPath = `${path}.workSteps[${index}]`
     const step = record(value, stepPath)
@@ -368,7 +320,7 @@ function validatePackingResult(value: unknown, cargoIds: Set<string>, path: stri
     const hasSourceIssueId = diagnostic.sourceIssueId !== undefined
     if (hasSource !== hasSourceIssueId) throw new Error(`${diagnosticPath}.source and sourceIssueId must be provided together`)
     if (hasSource) {
-      enumeration(diagnostic.source, ['manual'] as const, `${diagnosticPath}.source`)
+      enumeration(diagnostic.source, ['manual'], `${diagnosticPath}.source`)
       string(diagnostic.sourceIssueId, `${diagnosticPath}.sourceIssueId`)
       if (placementMode === 'auto') throw new Error(`${diagnosticPath} manual provenance is not allowed in auto mode`)
     }
@@ -391,7 +343,7 @@ function validatePackingResult(value: unknown, cargoIds: Set<string>, path: stri
   return { totalCargoCount, placedCount, layerCount: layers.length, boxes }
 }
 
-export function assertValidHistoryPlanData(data: unknown): asserts data is HistoryPlanData {
+export function assertValidHistoryPlanData(data) {
   const snapshot = record(data, 'history')
   validateContainer(snapshot.container, 'history.container')
   const cargoIds = validateCargoItems(snapshot.cargoItems, 'history.cargoItems')
@@ -402,7 +354,8 @@ export function assertValidHistoryPlanData(data: unknown): asserts data is Histo
   const layerCount = integer(snapshot.layerCount, 'history.layerCount')
   string(snapshot.labelSummary, 'history.labelSummary')
   if (snapshot.defaultMaxStackLayers !== undefined) integer(snapshot.defaultMaxStackLayers, 'history.defaultMaxStackLayers', 1)
-  const plannedCargoCount = (snapshot.cargoItems as CargoItem[]).reduce((total, item) => total + item.quantity, 0)
+  const plannedCargoCount = snapshot.cargoItems.reduce((total, item) => total + item.quantity, 0)
+
   if (snapshot.schemaVersion === undefined) {
     for (const field of ['packingResult', 'manualDraft', 'placementMode', 'draftInitialized']) {
       if (field in snapshot) throw new Error(`Legacy history cannot contain v2-only field ${field}`)
@@ -411,15 +364,14 @@ export function assertValidHistoryPlanData(data: unknown): asserts data is Histo
     if (placedCount > totalCargoCount) throw new Error('Legacy history placedCount cannot exceed totalCargoCount')
     return
   }
-
-  if (snapshot.schemaVersion !== HISTORY_SNAPSHOT_VERSION) throw new Error(`Unsupported history snapshot version: ${String(snapshot.schemaVersion)}`)
-  const placementMode = enumeration(snapshot.placementMode, ['auto', 'manual'] as const, 'history.placementMode')
+  if (snapshot.schemaVersion !== 2) throw new Error(`Unsupported history snapshot version: ${String(snapshot.schemaVersion)}`)
+  const placementMode = enumeration(snapshot.placementMode, ['auto', 'manual'], 'history.placementMode')
   const result = validatePackingResult(snapshot.packingResult, cargoIds, 'history.packingResult', container, placementMode)
   if (placedCount !== result.placedCount) throw new Error('history.placedCount must match packingResult.placedCount')
   if (totalCargoCount !== result.totalCargoCount) throw new Error('history.totalCargoCount must match packingResult.totalCargoCount')
-  if (layerCount !== result.layerCount) throw new Error('history.layerCount must match packingResult.layers.length')
   if (totalCargoCount !== plannedCargoCount) throw new Error('history.totalCargoCount must match planned cargo quantities')
   if (result.placedCount > totalCargoCount) throw new Error('history.placedCount cannot exceed totalCargoCount')
+  if (layerCount !== result.layerCount) throw new Error('history.layerCount must match packingResult.layers.length')
   if (placementMode === 'manual' && snapshot.manualDraft === undefined) throw new Error('history.manualDraft is required in manual mode')
   if (snapshot.manualDraft !== undefined) {
     const manualBoxes = validateManualDraft(snapshot.manualDraft, cargoIds, 'history.manualDraft')
@@ -428,84 +380,11 @@ export function assertValidHistoryPlanData(data: unknown): asserts data is Histo
   if (snapshot.draftInitialized !== undefined) boolean(snapshot.draftInitialized, 'history.draftInitialized')
 }
 
-export function historyPlanDataValidationError(data: unknown): string | null {
+export function historyPlanDataValidationError(data) {
   try {
     assertValidHistoryPlanData(data)
     return null
   } catch (error) {
     return error instanceof Error ? error.message : String(error)
   }
-}
-
-export function isHistorySnapshotV2(data: HistoryPlanData | null | undefined): data is HistorySnapshotV2 {
-  return Boolean(data && (data as HistorySnapshotV2).schemaVersion === HISTORY_SNAPSHOT_VERSION && !historyPlanDataValidationError(data))
-}
-
-export function buildHistorySnapshot(input: BuildHistorySnapshotInput): HistorySnapshotV2 {
-  const container = structuredClone(input.container)
-  const cargoItems = structuredClone(input.cargoItems)
-  const packingResult = structuredClone(input.packingResult)
-  const manualDraft = input.placementMode === 'manual' && input.manualDraft
-    ? structuredClone(input.manualDraft)
-    : undefined
-  const snapshot: HistorySnapshotV2 = {
-    schemaVersion: HISTORY_SNAPSHOT_VERSION,
-    containerId: container.id,
-    container,
-    cargoItems,
-    placedCount: packingResult.placedCount,
-    totalCargoCount: packingResult.totalCargoCount,
-    layerCount: packingResult.layers.length,
-    labelSummary: packingResult.labelStats.map((item) => `${item.label}:${item.placed}/${item.planned}`).join(', '),
-    defaultMaxStackLayers: input.defaultMaxStackLayers,
-    placementMode: input.placementMode,
-    packingResult,
-    manualDraft,
-    draftInitialized: input.placementMode === 'manual' ? input.draftInitialized : undefined,
-  }
-  assertValidHistoryPlanData(snapshot)
-  return snapshot
-}
-
-export function measureHistorySnapshotBytes(data: HistoryPlanData): number {
-  return new TextEncoder().encode(JSON.stringify(data)).length
-}
-
-export function assertHistorySnapshotSize(data: HistoryPlanData): void {
-  const bytes = measureHistorySnapshotBytes(data)
-  if (bytes > HISTORY_SNAPSHOT_MAX_BYTES) {
-    throw new Error(`History snapshot exceeds ${HISTORY_SNAPSHOT_MAX_BYTES} bytes (${bytes})`)
-  }
-}
-
-export type RestoreHistoryDecision =
-  | { kind: 'snapshot'; data: HistorySnapshotV2 }
-  | { kind: 'legacy-recompute'; data: LegacyHistoryPlanData }
-  | { kind: 'invalid'; reason: string }
-
-export function classifyHistoryRestore(data: unknown): RestoreHistoryDecision {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    return { kind: 'invalid', reason: 'Missing history plan data' }
-  }
-  const snapshot = data as Record<string, unknown>
-  const reason = historyPlanDataValidationError(data)
-  if (reason) return { kind: 'invalid', reason }
-  if (snapshot.schemaVersion === undefined) {
-    return { kind: 'legacy-recompute', data: data as LegacyHistoryPlanData }
-  }
-  return { kind: 'snapshot', data: data as HistorySnapshotV2 }
-}
-
-export type RestoredHistorySession = {
-  projectName: string
-  shipmentName: string
-  container: ContainerSpec
-  cargoItems: CargoItem[]
-  loadingMode: LoadingMode
-  defaultMaxStackLayers?: number
-  placementMode: 'auto' | 'manual'
-  packingResult: PackingResult
-  manualDraft?: ManualDraft
-  draftInitialized?: boolean
-  source: 'snapshot' | 'legacy-recompute'
 }

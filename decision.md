@@ -1,5 +1,17 @@
 # Decision Log
 
+## 2026-07-31 P2-7 benchmark single-authority and first-pixel investigation
+
+- 根因（合同哈希）：当前 `npm run benchmark` 的算法 worker 在每个 warmup/sample 中先以 `canonicalizePackingResult` 计算 SHA-256，并与 `test-data/baselines/packing-results.json` 比较；该 packing golden 是唯一业务合同权威。`test-results/benchmark/frontend-architecture.json` 的五个实际哈希（例如 `russia-volume=313549443068a...`）与 packing golden 完全一致，而 `test-data/baselines/frontend-architecture.json` 仍保留旧值（例如 `6b224f768904...`）。历史对比确认旧 frontend 哈希正是 `e0c1fc2` 时的 packing golden；随后 `0b6cfa9` 把 `depthLayer` 加入 canonical box 并重生 packing golden，几何/数量/密度不变，拓扑 `workStep` 算法在该提交只是等价抽取。第四轮 finalizer 又让运行时 `workSteps` 直接保持连续拓扑顺序、canonical 不再代排序；若旧 canonical 排序恰好等于新运行时顺序，当前 packing hash 可保持不变。因此五项 mismatch 的直接原因是 frontend baseline 未跟随 canonical `depthLayer` 合同演进的重复字段漂移，而非当前算法未通过 canonical contract；不得编辑 frontend baseline 掩盖。
+- 修复：frontend benchmark gate 不再把冗余 baseline `contractHashes` 当作比较权威或必需字段；仍严格校验实际报告 hashes 必须存在且为 SHA-256，且算法 worker 对 canonical packing golden 的逐样本校验保持不变。bundle、timing、环境和实际报告结构门禁不变。历史 RED 分别证明旧逻辑对五个有效但过时的 baseline hash 报 mismatch、对缺失重复 baseline 字段报五项错误；最终测试以“baseline 与 actual 均为有效但完全不同的 hash”断言完整 gate 为 `{ timingComparable: true, failures: [] }`，并分别覆盖 actual hash 缺失与格式非法仍失败。GREEN：`npx vitest run scripts/frontendBenchmark.test.mjs`（22/22）。
+- 首像素证据（同一 Win11 x64 / Intel(R) Core(TM) Ultra 5 228V / 8 logical CPUs / Node v24.14.0 / Chromium 148.0.7778.96 / production-preview / 1280×760）：基线样本 `216.375, 205.100, 206.625, 238.125, 195.025 ms`，median `206.625`、P95 `238.125`；2026-07-31 当前样本 `248.450, 278.500, 280.275, 253.900, 267.250 ms`，median `267.250`、P95 `280.275`；随后一次样本 `325.700, 283.875, 288.525, 296.000, 345.075 ms`，median `296.000`、P95 `345.075`。两次复跑均在多代理并发测试/构建负载下，不能作为受控空载性能回归证据；因此不修改 `ContainerScene`、采样次数、阈值或 baseline，P2-7 timing gate 继续 BLOCKED，待工作区空闲后由主代理执行最终受控 benchmark。
+
+## 2026-07-31 导入确认、重量来源与展开上限
+
+- 决策：所有工作簿（包括可完美自动映射者）只生成同一个 pending 预览，只有弹窗显式确认才提交；取消不改变货物或输入 revision。重量默认值不再属于无模板 UI 初值：未选择模板时不注入重量；已映射重量列的空值始终为 `invalid-weight`；只有用户明确选择或保存的模板，其 `defaultValues.weight` 才能填充**未映射**的重量列。本条取代 2026-07-30「模板重量默认值普遍为 1」的旧口径。
+- 展开边界：`MAX_IMPORT_ROWS=10,000`、`MAX_IMPORT_COLUMNS=256`、`MAX_IMPORT_CELLS=200,000`。当前越南夹具为 27×11（297 cells），俄罗斯夹具为 32×5（160 cells）；256 列已远高于当前逐字段 datalist 映射 UI 的业务宽度，同时阻止极宽表头放大 DOM。5MB 文件先在主线程检查，之后仅把 buffer 转交可终止的 module Worker；Worker 以 `sheets: 0`、`sheetRows: MAX_IMPORT_ROWS + 1` 只解析首表和一行溢出哨兵，优先校验原始 `!fullref`，无 `!fullref` 时用截断后 `!ref`/实际 rows 拒绝溢出，并在 10 秒超时或解析错误时 terminate。主线程没有无界 XLSX fallback。超限整批拒绝并写入本地化导入日志，不截断、不进入 pending，也不在映射变化时反复解析无界数据。
+
+
 ## 2026-07-30 第三轮修复交付状态（任务1–9收口）
 
 - 背景：第三轮复审曾判定 BLOCKED（capacity-one RED、手动支撑/合规/历史/导入/朝向/labelStats 未闭环、E2E 8 fail）。本轮按 `plans/2026-07-30-refactor-review-round-3-remediation.md` 实施并 push 至 `09f4991`。
@@ -2003,3 +2015,22 @@
 - 模板决策（用户已批准实施）：用户原文“端口”按上下文解释为“入口”。在“导入 XLSX”旁下载包含当前标准字段的通用空白 `.xlsx`；不按已保存映射动态生成客户格式，不增加独立示例下载，也不增加后端接口。
 - 测试缺口：相关单测 5 文件 / 78 项全部通过，但 `quickPlace.test.ts` 只断言存储尺寸和 `validateDraft()`，`renderedFootprint.test.ts` 只测试普通 `makeManualBox()`，没有“快捷放置结果的渲染 AABB必须等于校验 AABB”跨模块不变量；也没有非贴地箱高度变化翻转测试。现有一键放置 E2E 只看数量和朝向属性，没有几何像素/包围盒断言。
 - E2E 阻塞：聚焦运行“一键放置”和 `R/Shift+R` 两项时，Playwright 只启动 Vite，登录请求代理到 `127.0.0.1:3010`，因后端未运行而 `ECONNREFUSED`；2 项均在登录阶段失败，不能作为功能通过或失败证据。未修改测试规避该问题。
+## 2026-07-31 Current remediation focused TypeScript RED
+
+- 验证：`npm exec tsc -- -b --pretty false` 在集成工作区失败，具体为 `ResultsPanel.compliance.test.tsx` 未使用 `fireEvent` 与错误 `VehicleProfileId` fixture、`useManualPlacementSession.test.ts` 全局堆叠/pose 类型夹具、`fillSuggestion.test.ts` 缺少必需 `depthLayer`、`importWorkbookWorkerClient.test.ts` Worker 泛型夹具、`importWorkbookWorkerClient.ts` 的 `erasableSyntaxOnly` 不兼容枚举、`manualPlacement.ts` 未使用 `PlacedBox`，以及 `Workbench.tsx` workspace ref 的 `HTMLElement`/`HTMLDivElement` 类型不一致。
+- 决策：保留该 RED 作为当前混合工作区的真实证据；先按第四轮计划在各生产根因处修复或补齐夹具，再重跑同一 `tsc`，不削弱类型检查或删除断言。
+- 影响：在该命令重新通过前不得进入 release gate、部署或交付声明。
+## 2026-07-31 Compliance DOM regression fixture RED
+
+- 验证：`npx vitest run src/lib/manualSteps.test.ts src/lib/planCompliance.test.ts src/lib/reviewChecklist.test.ts src/lib/historySnapshot.test.ts scripts/historySnapshot.server.test.mjs src/components/ResultsPanel.compliance.test.tsx src/components/HistoryPage.test.tsx src/components/VisualizationWorkspace.test.tsx` 中 7 个文件通过、`ResultsPanel.compliance.test.tsx` 2 项失败；失败来自测试构造了 `layers: []` 但提供了 work step，生产组件按真实 `PackingResult` 访问对应层级时收到 `undefined`。
+- 决策：保留失败作为 fixture 合同证据；补齐真实 finalizer 结果所必需的 layer、有效车辆 profile 与无用导入后重跑，不给生产渲染增加不必要的空结果旁路。
+- 影响：合规 DOM 行为尚未 GREEN；必须在该测试重新通过后再进入合规审查与提交。
+## 2026-07-31 Fourth-round re-audit findings
+
+- 重新核对当前混合工作区与第四轮验收规格后，代码主线已部分收口但仍有明确开放项：P1-1/P2-6 缺 `orientationAxes` 所有权、自动→手动直接等价证据和 loading-group depth fallback；P1-2/P1-3/P2-1/P2-2 缺真实 Workbench 手动 A→B 恢复 E2E、全局堆叠 rerender 证据和新鲜浏览器验证；P1-4/P1-5 保护控件、导出统一边界、诊断 union/provenance 与 delimiter-safe identity 未闭环；P1-6/P1-7/P2-3/P2-4 缺 revision、Template Manager weight、worker malformed/post failure、serialized product overflow 与 sample-worker 证据；P1-8/P1-9 缺 validator parity 边界及 StrictMode logout-login 证据。
+- 证据：六个只读审计分别核对生产符号与行为测试；当前 packing/manual/import/history focused suites 可通过，但 `tsc` 与新增 ResultsPanel DOM fixture 仍按前述记录 RED。以上状态取代 CHANGELOG 中未经本轮 fresh proof 的 `[x]` 标记。
+## 2026-07-31 Compliance validator integration TypeScript RED
+
+- 验证：在加入自动快照 manual provenance 回归后，`npm exec tsc -- -b --pretty false` 仍失败：`planCompliance.ts` 的 `encodeURIComponent` 输入因 `Pick<ValidationIssue>` 丢失 discriminated-union narrowing；ResultsPanel 合规 fixture 使用非法 `VehicleProfileId`；manual session 的 global-default/pose fixture 未处理可选值；worker client 测试错误使用泛型 matcher，client 使用 `enum` 触发 `erasableSyntaxOnly`；Workbench workspace ref 为 `HTMLElement` 而目标 div 要求 `HTMLDivElement`。
+- 决策：保留 RED；先在各自根因处修复类型与夹具，不放宽 `tsc`、删除断言或改用类型逃逸，再以同一命令复核。
+- 影响：合规提交及后续 release gate 暂不宣称类型检查通过；本条与混合工作区已有 RED 记录并存，均需在最终门禁前收口。

@@ -2,6 +2,7 @@ import type { CargoItem, ContainerSpec, PackingDiagnostic, PackingResult, Placem
 import { finalizePlacementGeometry } from './finalizePackingResult'
 import { buildLabelStats } from './labels'
 import type { ValidationIssue } from './manualPlacement'
+import { manualIssueIdentity } from './planCompliance'
 
 export const MANUAL_UNPLACED_REASON_CODE = 'manual-not-placed'
 const MANUAL_UNPLACED_REASON = 'Not placed in manual plan'
@@ -38,7 +39,8 @@ function buildManualDiagnostics(
   }
 
   const usedWeight = placed.reduce((sum, box) => sum + box.weight, 0)
-  if (container.maxWeight && usedWeight > container.maxWeight) {
+  const hasProjectedOverweight = validationIssues?.some((issue) => issue.type === 'overweight') ?? false
+  if (!hasProjectedOverweight && container.maxWeight && usedWeight > container.maxWeight) {
     pushUnique({
       id: 'weight-check',
       severity: 'error',
@@ -48,10 +50,14 @@ function buildManualDiagnostics(
 
   if (validationIssues) {
     for (const issue of validationIssues) {
-      const diagId = issueToDiagnosticId(issue.type)
-      if (!diagId) continue
+      const code = issueToDiagnosticCode(issue.type)
+      if (!code) continue
+      const sourceIssueId = manualIssueIdentity(issue)
       pushUnique({
-        id: diagId,
+        id: `${code}:${sourceIssueId}`,
+        code,
+        source: 'manual',
+        sourceIssueId,
         severity: issue.severity === 'warning' ? 'warning' : 'error',
         message: issue.message,
       })
@@ -61,7 +67,7 @@ function buildManualDiagnostics(
   return diagnostics
 }
 
-function issueToDiagnosticId(type: ValidationIssue['type']): string | null {
+function issueToDiagnosticCode(type: ValidationIssue['type']): string | null {
   switch (type) {
     case 'boundary': return 'boundary-check'
     case 'overlap': return 'overlap-check'

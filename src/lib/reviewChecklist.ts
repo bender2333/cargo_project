@@ -1,8 +1,7 @@
 import type { CogResult } from './centerOfGravity'
 import type { MeasurementAnnotation } from './measurement'
-import type { ValidationIssue } from './manualPlacement'
 import type { Locale, PackingResult } from '../types'
-
+import { formatDiagnosticMessage, formatUnplacedCargoMessage } from './diagnosticMessages'
 export type ReviewChecklistSource = 'measurement' | 'cog' | 'manual' | 'unplaced' | 'diagnostic'
 export type ReviewChecklistSeverity = 'info' | 'warning' | 'error'
 
@@ -33,7 +32,6 @@ export function buildReviewChecklist(input: {
   result: PackingResult
   measurements: MeasurementAnnotation[]
   cog: Pick<CogResult, 'totalWeight' | 'balanced' | 'warning'>
-  manualIssues: ValidationIssue[]
   locale: Locale
 }): ReviewChecklist {
   const items: ReviewChecklistItem[] = []
@@ -72,25 +70,15 @@ export function buildReviewChecklist(input: {
     .forEach((diagnostic) => {
       items.push({
         id: `diagnostic-${diagnostic.id}`,
-        source: 'diagnostic',
+        source: diagnostic.source === 'manual' ? 'manual' : 'diagnostic',
         severity: diagnostic.severity === 'error' ? 'error' : 'warning',
         title: text(input.locale, '方案诊断', 'Plan diagnostic'),
-        detail: diagnostic.message,
+        detail: formatDiagnosticMessage(diagnostic, input.locale),
         action: text(input.locale, '按诊断结论修正方案后再保存或导出。', 'Resolve the diagnostic before saving or exporting the plan.'),
         linkedDiagnosticIds: [diagnostic.id],
       })
     })
 
-  input.manualIssues.forEach((issue, index) => {
-    items.push({
-      id: `manual-${issue.boxId}-${issue.type}-${index}`,
-      source: 'manual',
-      severity: issue.severity === 'warning' ? 'warning' : 'error',
-      title: text(input.locale, '手动排布问题', 'Manual placement issue'),
-      detail: issue.message,
-      action: text(input.locale, '调整该箱体位置或确认现场允许。', 'Adjust this box or confirm the field exception.'),
-    })
-  })
 
   input.result.unplaced.forEach((entry) => {
     items.push({
@@ -98,7 +86,7 @@ export function buildReviewChecklist(input: {
       source: 'unplaced',
       severity: 'error',
       title: text(input.locale, `未装货物 ${entry.label}`, `Unplaced cargo ${entry.label}`),
-      detail: `${entry.name} x ${entry.quantity}: ${entry.reason}`,
+      detail: formatUnplacedCargoMessage(entry, input.locale),
       action: text(input.locale, '复核是否换柜、拆分装运或调整优先级。', 'Review whether to change container, split shipment, or adjust priority.'),
       linkedDiagnosticIds: nonInfoDiagnosticIds,
     })

@@ -99,6 +99,8 @@ export type VisualizationWorkspaceProps = {
   clearanceEnabled: boolean
   setClearanceEnabled: (fn: (enabled: boolean) => boolean) => void
   exportCurrentView: () => void
+  exportCurrentViewDisabled: boolean
+  exportCurrentViewDisabledReason?: string | null
   containerChangeNotice: string
   customContainerLoadFailed: boolean
   locale: Locale
@@ -173,6 +175,8 @@ export function VisualizationWorkspace({
   clearanceEnabled,
   setClearanceEnabled,
   exportCurrentView,
+  exportCurrentViewDisabled,
+  exportCurrentViewDisabledReason,
   containerChangeNotice,
   customContainerLoadFailed,
   locale,
@@ -325,7 +329,10 @@ export function VisualizationWorkspace({
             </svg>
             {t.clearanceTitle}
           </button>
-          <button className="archive-button success" type="button" onClick={exportCurrentView}>
+          {exportCurrentViewDisabled && exportCurrentViewDisabledReason && (
+            <span id="visual-export-disabled-reason" className="self-center text-xs text-red-700">{exportCurrentViewDisabledReason}</span>
+          )}
+          <button className="archive-button success" type="button" onClick={exportCurrentView} aria-describedby={exportCurrentViewDisabled && exportCurrentViewDisabledReason ? 'visual-export-disabled-reason' : undefined} disabled={exportCurrentViewDisabled}>
             {t.exportView}
           </button>
         </div>

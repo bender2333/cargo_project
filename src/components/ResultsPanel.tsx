@@ -16,8 +16,7 @@ import type { ContainerComparisonRow } from '../lib/containerCompare'
 import type { FillSuggestion } from '../lib/fillSuggestion'
 import type { ExportTemplate } from '../types'
 import type { VehicleProfileId } from '../data/vehicleProfiles'
-import type { ValidationIssue } from '../lib/manualPlacement'
-import { evaluatePlanCompliance } from '../lib/planCompliance'
+import { formatPlanComplianceMessage, localizePlanComplianceBlocker, type ActivePlanCompliance } from '../lib/planCompliance'
 import { formatCubicMeters, getContainerVolume } from '../data/containers'
 import { countDistinctLabels } from '../lib/labels'
 import { isGapFillBox } from '../lib/placementSource'
@@ -78,7 +77,7 @@ function diagnosticMessage(diagnostic: PackingDiagnostic, locale: Locale) {
       ? '优化建议：检查未装入货物、柜型、预留间隙、载重限制或堆叠规则。'
       : '优化建议：当前方案没有明显合规阻塞。',
   }
-  return zhMessages[diagnostic.id] ?? diagnostic.message
+  return zhMessages[diagnostic.source === 'manual' ? diagnostic.code ?? diagnostic.id : diagnostic.id] ?? diagnostic.message
 }
 
 function failureReason(reason: string, locale: Locale, reasonCode?: string) {
@@ -158,6 +157,8 @@ type ResultsPanelTranslations = {
   showLayer: string
   unloaded: string
   reviewChecklistEmpty: string
+  reviewChecklistErrors: string
+  reviewChecklistWarnings: string
   reviewChecklistExportJson: string
   reviewChecklistExportExcel: string
 }
@@ -222,7 +223,7 @@ export type ResultsPanelProps = {
   exportLoadingSheet: () => void
   displayCargoItemsCount: number
   placementMode: 'auto' | 'manual'
-  manualIssues: ValidationIssue[]
+  planCompliance: ActivePlanCompliance
   selectManualBox: (id: string | null) => void
   setSelectedBoxId: (id: string | null) => void
 }
@@ -287,15 +288,24 @@ export function ResultsPanel({
   exportLoadingSheet,
   displayCargoItemsCount,
   placementMode,
-  manualIssues,
+  planCompliance,
   selectManualBox,
   setSelectedBoxId,
 }: ResultsPanelProps) {
   const layerHasGapFill = (physicalLayer: number) => activeResult.placed.some((box) => box.physicalLayer === physicalLayer && isGapFillBox(box))
-  const hasBlockingComplianceIssues = !evaluatePlanCompliance(activeResult, manualIssues).ok
+  const hasBlockingComplianceIssues = !planCompliance.ok
+  const planComplianceMessage = formatPlanComplianceMessage(planCompliance, locale) ?? ''
 
   return (
     <section className={`archive-card overflow-hidden ${workspaceMaximized ? 'hidden' : ''}`} ref={reportRef} data-testid="report-panel">
+      {!planCompliance.ok && (
+        <div id="plan-compliance-blockers" data-testid="plan-compliance-blockers" role="alert" className="border-b border-red-300 bg-red-50 p-3 text-sm text-red-800">
+          <strong>{locale === 'zh' ? '方案存在阻塞问题' : 'Plan blockers'}</strong>
+          <ul className="mt-1 list-disc pl-5">
+            {planCompliance.blockers.map((blocker) => <li key={blocker.id}>{localizePlanComplianceBlocker(blocker, locale)}</li>)}
+          </ul>
+        </div>
+      )}
       <div className="border-b border-[#e5e7eb] p-[18px]">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3" data-testid="import-export-toolbar">
           <h2 className="text-lg font-bold">{t.results}</h2>
@@ -326,8 +336,8 @@ export function ResultsPanel({
                 <option key={template.id} value={template.id}>{template.name}</option>
               ))}
             </select>
-            <button className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold" data-testid="export-excel" type="button" onClick={exportExcel} disabled={hasBlockingComplianceIssues}>{t.exportExcel}</button>
-            <button className="border border-[#9b9b9b] bg-white px-3 py-2 font-semibold" type="button" onClick={saveCurrentPlan} disabled={hasBlockingComplianceIssues}>{t.savePlan}</button>
+            <button className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold" data-testid="export-excel" type="button" onClick={exportExcel} aria-describedby={hasBlockingComplianceIssues ? 'plan-compliance-blockers' : undefined} disabled={hasBlockingComplianceIssues}>{t.exportExcel}</button>
+            <button className="border border-[#9b9b9b] bg-white px-3 py-2 font-semibold" type="button" onClick={saveCurrentPlan} aria-describedby={hasBlockingComplianceIssues ? 'plan-compliance-blockers' : undefined} disabled={hasBlockingComplianceIssues}>{t.savePlan}</button>
           </div>
         </div>
         <div className="flex flex-wrap gap-2 text-sm font-bold">
@@ -493,6 +503,8 @@ export function ResultsPanel({
               onSpeedChange={(next: PlaybackSpeed) => playback.setSpeed(next)}
               onTogglePlay={playback.togglePlay}
               onExport={exportPlaybackInstructions}
+              exportDisabled={hasBlockingComplianceIssues}
+              exportDisabledReason={planComplianceMessage}
             />
           </div>
         )}
@@ -502,7 +514,8 @@ export function ResultsPanel({
             <LoadingStepsPanel
               activeIndex={activeLoadingGroupIndex}
               available={loadingStepsAvailable}
-              exportDisabled={!loadingStepsAvailable}
+              exportDisabled={!loadingStepsAvailable || hasBlockingComplianceIssues}
+              exportDisabledReason={planComplianceMessage}
               groups={loadingTaskGroups}
               locale={locale}
               playing={loadingGroupsPlaying}
@@ -579,12 +592,12 @@ export function ResultsPanel({
           <div className="mt-3 space-y-3 text-xs" data-testid="review-checklist-panel">
             <div className="flex flex-wrap items-center gap-2">
               <strong>{t.reviewChecklistTab}: {reviewChecklist.summary.total}</strong>
-              <span className="text-[#991b1b]">errors {reviewChecklist.summary.errorCount}</span>
-              <span className="text-[#92400e]">warnings {reviewChecklist.summary.warningCount}</span>
-              <button className="archive-button ml-auto" type="button" data-testid="export-review-json" onClick={exportReviewChecklistJson}>
+              <span className="text-[#991b1b]">{t.reviewChecklistErrors} {reviewChecklist.summary.errorCount}</span>
+              <span className="text-[#92400e]">{t.reviewChecklistWarnings} {reviewChecklist.summary.warningCount}</span>
+              <button className="archive-button ml-auto" type="button" data-testid="export-review-json" onClick={exportReviewChecklistJson} aria-describedby={hasBlockingComplianceIssues ? 'plan-compliance-blockers' : undefined} disabled={hasBlockingComplianceIssues}>
                 {t.reviewChecklistExportJson}
               </button>
-              <button className="archive-button" type="button" data-testid="export-review-excel" onClick={exportReviewChecklistExcel}>
+              <button className="archive-button" type="button" data-testid="export-review-excel" onClick={exportReviewChecklistExcel} aria-describedby={hasBlockingComplianceIssues ? 'plan-compliance-blockers' : undefined} disabled={hasBlockingComplianceIssues}>
                 {t.reviewChecklistExportExcel}
               </button>
             </div>

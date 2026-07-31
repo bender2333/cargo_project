@@ -1,4 +1,4 @@
-import type { CargoItem, ContainerSpec, PlacementBox, PlacedBox } from '../types'
+import type { CargoItem, ContainerSpec, PlacementBox } from '../types'
 import { stackCapacity, violatesStackChain, type StackChainNode } from './stackCapacity'
 import { DEFAULT_PLACEMENT_SETTINGS, type SupportPolicy } from './placementSettings'
 
@@ -41,8 +41,7 @@ export type ManualDraft = {
   boxes: ManualPlacedBox[]
 }
 
-export type ValidationIssue = {
-  type: 'boundary' | 'overlap' | 'floating' | 'rotation-disabled' | 'stacking' | 'max-stack-layers' | 'ground-only' | 'overweight'
+type ValidationIssueBase = {
   severity?: 'warning' | 'error'
   message: string
   boxId: string
@@ -50,6 +49,13 @@ export type ValidationIssue = {
   stackLayer?: number
   maxStackLayers?: number
 }
+
+type NonOverlapValidationIssueType = 'boundary' | 'floating' | 'rotation-disabled' | 'stacking' | 'max-stack-layers' | 'ground-only' | 'overweight'
+
+export type ValidationIssue =
+  | (ValidationIssueBase & { type: 'overlap'; relatedBoxId: string })
+  | (ValidationIssueBase & { type: NonOverlapValidationIssueType; relatedBoxId?: never })
+
 
 export type PoolEntry = {
   cargoId: string
@@ -575,6 +581,7 @@ export function validateBox(
         type: 'overlap',
         severity: 'error',
         boxId,
+        relatedBoxId: other.id,
         message: `Box ${target.label} overlaps with ${other.label}.`,
       })
     }
@@ -644,12 +651,14 @@ export function validateDraft(draft: ManualDraft, container: ContainerSpec, supp
           type: 'overlap',
           severity: 'error',
           boxId: a.id,
+          relatedBoxId: b.id,
           message: `Box ${a.label} overlaps with ${b.label}.`,
         })
         issues.push({
           type: 'overlap',
           severity: 'error',
           boxId: b.id,
+          relatedBoxId: a.id,
           message: `Box ${b.label} overlaps with ${a.label}.`,
         })
       }
@@ -831,7 +840,7 @@ export function makeManualBox(params: {
 export function toPlacedBoxes(
   draft: ManualDraft,
   invalidBoxIds: Set<string>,
-): PlacedBox[] {
+): PlacementBox[] {
   void invalidBoxIds
   return draft.boxes.map((box) => ({
     id: box.id,

@@ -124,6 +124,39 @@ describe('Workbench packing-session boundary', () => {
     expect(source).not.toMatch(/\bonExport(?:Created|Deleted)=/)
   })
 
+  it('uses one active compliance context for every command and result button', () => {
+    const workbenchSource = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+    const resultsSource = readFileSync(path.resolve(process.cwd(), 'src/components/ResultsPanel.tsx'), 'utf8')
+
+    expect(workbenchSource).toContain('getActivePlanCompliance')
+    expect(workbenchSource).toContain('const activePlanCompliance')
+    expect(workbenchSource).toContain('planCompliance={activePlanCompliance}')
+    expect(workbenchSource).not.toMatch(/assertPlanCompliant\(activeResult, manualIssues\)/)
+    expect(resultsSource).toContain('planCompliance: ActivePlanCompliance')
+    expect(resultsSource).toContain('planCompliance.ok')
+    expect(resultsSource).not.toContain('evaluatePlanCompliance')
+  })
+  it('routes every plan export through one visible error boundary', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+
+    expect(source).toContain('const runPlanExport = async')
+    expect(source).toContain('await operation()')
+    expect(source).toContain("console.error('[plan-export]'")
+    expect(source).toContain("alert(message || (locale === 'zh' ? '导出失败' : 'Export failed'))")
+    expect(source).toContain("reject(new Error('3D canvas export failed'))")
+    expect(source).toContain('try {')
+    expect(source).toContain('catch (error)')
+    for (const handler of [
+      'exportExcel = () => runPlanExport',
+      'exportPlaybackInstructions = () => runPlanExport',
+      'exportLoadingSheet = () => runPlanExport',
+      'exportReviewChecklistJson = () => runPlanExport',
+      'exportReviewChecklistExcel = () => runPlanExport',
+      'exportCurrentView = () => runPlanExport',
+    ]) {
+      expect(source).toContain(handler)
+    }
+  })
 
   it('scopes manual keyboard commands to the focused overview workspace', () => {
     const workbenchSource = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')

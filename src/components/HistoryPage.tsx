@@ -25,6 +25,8 @@ export type HistoryPageProps = {
   loadFailed: boolean
   onRetry: () => void | Promise<void>
   onSave: () => void | Promise<void>
+  saveDisabled: boolean
+  saveDisabledReason?: string | null
   onRestore: (plan: HistoryPlan) => void
   onDelete: (id: string) => void | Promise<void>
   onBack: () => void
@@ -36,6 +38,8 @@ export function HistoryPage({
   loadFailed,
   onRetry,
   onSave,
+  saveDisabled,
+  saveDisabledReason,
   onRestore,
   onDelete,
   onBack,
@@ -69,7 +73,10 @@ export function HistoryPage({
           </p>
         </div>
         <div className="flex gap-2">
-          <button className="archive-button success" type="button" onClick={() => void handleSave()}>
+          {saveDisabled && saveDisabledReason && (
+            <p id="history-save-disabled-reason" className="text-xs text-red-700">{saveDisabledReason}</p>
+          )}
+          <button className="archive-button success" type="button" onClick={() => void handleSave()} aria-describedby={saveDisabled && saveDisabledReason ? 'history-save-disabled-reason' : undefined} disabled={saveDisabled}>
             {labels.savePlan}
           </button>
           <button className="archive-button secondary" type="button" onClick={onBack}>{labels.backToWorkbench}</button>
