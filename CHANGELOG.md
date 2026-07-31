@@ -76,6 +76,12 @@
 - RED：定向 E2E 在 `fill stack 4 → History → Save` 处先复现 Save 错误可用；GREEN：`npx playwright test e2e/container-calc.spec.ts --grep "restores a plan stack rule without replacing the persistent user default"` = **1 passed**，覆盖禁用态、`Load → Save → Restore`，并确认恢复值 4 不覆盖持久默认值 2。补充聚焦单测 `npx vitest run src/Workbench.sessionBoundary.test.ts src/components/HistoryPage.test.tsx --pool=threads --maxWorkers=1` = **2 files / 15 tests passed**；`npm exec tsc -- -b --pretty false` 通过。
 - 决策记录：`decision.md`「历史保存前的自动结果有效性」。
 
+### 2026-07-31 controlled benchmark RED
+
+- `npm run benchmark` completed the required build, algorithm contract checks, and one browser benchmark test, then failed the unchanged gates: total JS gzip **806,152 B** vs baseline **678,236 B** (+18.9%, limit +5%); `canvasFirstNonEmptyPixelsMs` median **260.600 ms** vs **206.625 ms** (+26.1%, limit +20%). P95 **272.050 ms** remained within its limit; all five packing contract hashes matched the authoritative packing golden.
+- Release/deployment remain **BLOCKED**. Report: `test-results/benchmark/frontend-architecture.json`. No baseline, threshold, sample, or assertion changes were made.
+- Decision record: `decision.md`「受控空载 benchmark 仍为 RED」。
+
 ### 发布 gate (本地/部署/E2E)
 - [ ] 本地 release checks (Lint/Tests/Build/Benchmark) 全量通过。
 - [ ] 生产环境部署门禁验证。

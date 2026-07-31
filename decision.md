@@ -6,6 +6,14 @@
 - 修复：frontend benchmark gate 不再把冗余 baseline `contractHashes` 当作比较权威或必需字段；仍严格校验实际报告 hashes 必须存在且为 SHA-256，且算法 worker 对 canonical packing golden 的逐样本校验保持不变。bundle、timing、环境和实际报告结构门禁不变。历史 RED 分别证明旧逻辑对五个有效但过时的 baseline hash 报 mismatch、对缺失重复 baseline 字段报五项错误；最终测试以“baseline 与 actual 均为有效但完全不同的 hash”断言完整 gate 为 `{ timingComparable: true, failures: [] }`，并分别覆盖 actual hash 缺失与格式非法仍失败。GREEN：`npx vitest run scripts/frontendBenchmark.test.mjs`（22/22）。
 - 首像素证据（同一 Win11 x64 / Intel(R) Core(TM) Ultra 5 228V / 8 logical CPUs / Node v24.14.0 / Chromium 148.0.7778.96 / production-preview / 1280×760）：基线样本 `216.375, 205.100, 206.625, 238.125, 195.025 ms`，median `206.625`、P95 `238.125`；2026-07-31 当前样本 `248.450, 278.500, 280.275, 253.900, 267.250 ms`，median `267.250`、P95 `280.275`；随后一次样本 `325.700, 283.875, 288.525, 296.000, 345.075 ms`，median `296.000`、P95 `345.075`。两次复跑均在多代理并发测试/构建负载下，不能作为受控空载性能回归证据；因此不修改 `ContainerScene`、采样次数、阈值或 baseline，P2-7 timing gate 继续 BLOCKED，待工作区空闲后由主代理执行最终受控 benchmark。
 
+## 2026-07-31 受控空载 benchmark 仍为 RED
+
+- 背景：完成本轮代码与 E2E 后，在无运行中的代理/项目服务、同一 Win11 x64 / Intel(R) Core(TM) Ultra 5 228V / 8 logical CPUs / Node v24.14.0 / Chromium 148.0.7778.96 / 1280×760 环境执行唯一权威 `npm run benchmark`。
+- 证据：算法五项 contract hash 均与 `test-data/baselines/packing-results.json` 一致；bundle `totalJsGzipBytes` 为 806,152，基线 678,236，增长约 18.9%，超过 5% 硬门禁；`canvasFirstNonEmptyPixelsMs` median 为 260.600 ms，基线 206.625 ms，增长约 26.1%，超过 20% timing 门禁（P95 272.050 ms 未超门禁）。完整报告：`test-results/benchmark/frontend-architecture.json`。
+- 决策：发布与部署继续 BLOCKED。不得更新 baseline、降低阈值、减少样本或跳过指标；先按 bundle 组成与首像素真实路径定位产生回归的源代码，只修复已证实瓶颈后重复完整本地门禁。
+- 后续：性能诊断需分别解释新增 JS gzip 组成（当前包含 worker/client 与动态组件）和首像素时序；若两者无共同根因，分别保留独立回归证据。
+
+
 ## 2026-07-31 导入确认、重量来源与展开上限
 
 - 决策：所有工作簿（包括可完美自动映射者）只生成同一个 pending 预览，只有弹窗显式确认才提交；取消不改变货物或输入 revision。重量默认值不再属于无模板 UI 初值：未选择模板时不注入重量；已映射重量列的空值始终为 `invalid-weight`；只有用户明确选择或保存的模板，其 `defaultValues.weight` 才能填充**未映射**的重量列。本条取代 2026-07-30「模板重量默认值普遍为 1」的旧口径。
