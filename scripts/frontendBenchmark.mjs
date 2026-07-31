@@ -123,10 +123,10 @@ function finiteNonNegative(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0
 }
 
-export function validateBenchmarkReport(report) {
+export function validateBenchmarkReport(report, { requireContractHashes = true } = {}) {
   const failures = []
   if (report?.schemaVersion !== 1) failures.push('schemaVersion must be 1')
-  failures.push(...exactKeyFailures('contractHashes', report?.contractHashes, REQUIRED_ALGORITHM_CASES))
+  if (requireContractHashes) failures.push(...exactKeyFailures('contractHashes', report?.contractHashes, REQUIRED_ALGORITHM_CASES))
   failures.push(...exactKeyFailures('algorithm.cases', report?.algorithm?.cases, REQUIRED_ALGORITHM_CASES))
   failures.push(...exactKeyFailures('browser.metrics', report?.browser?.metrics, REQUIRED_BROWSER_METRICS))
 
@@ -143,8 +143,10 @@ export function validateBenchmarkReport(report) {
   }
 
   for (const name of REQUIRED_ALGORITHM_CASES) {
-    const digest = report?.contractHashes?.[name]
-    if (typeof digest !== 'string' || !/^[a-f0-9]{64}$/.test(digest)) failures.push(`contractHashes.${name} must be SHA-256`)
+    if (requireContractHashes) {
+      const digest = report?.contractHashes?.[name]
+      if (typeof digest !== 'string' || !/^[a-f0-9]{64}$/.test(digest)) failures.push(`contractHashes.${name} must be SHA-256`)
+    }
     const metric = report?.algorithm?.cases?.[name]
     if (!Array.isArray(metric?.samples) || metric.samples.length !== 5 || !metric.samples.every(finiteNonNegative)) {
       failures.push(`algorithm.${name}.samples must contain five finite non-negative values`)
@@ -188,11 +190,6 @@ export function validateBenchmarkReport(report) {
 function validateHardGateBaseline(report) {
   const failures = []
   if (report?.schemaVersion !== 1) failures.push('schemaVersion must be 1')
-  failures.push(...exactKeyFailures('contractHashes', report?.contractHashes, REQUIRED_ALGORITHM_CASES))
-  for (const name of REQUIRED_ALGORITHM_CASES) {
-    const digest = report?.contractHashes?.[name]
-    if (typeof digest !== 'string' || !/^[a-f0-9]{64}$/.test(digest)) failures.push(`contractHashes.${name} must be SHA-256`)
-  }
   for (const field of requiredBundleFields) {
     if (!finiteNonNegative(report?.bundle?.[field])) failures.push(`bundle.${field} must be finite and non-negative`)
   }
@@ -210,9 +207,6 @@ function validateHardGateBaseline(report) {
 
 function hardGateComparisonFailures(baseline, actual) {
   const failures = []
-  for (const [name, hash] of Object.entries(baseline.contractHashes)) {
-    if (actual.contractHashes[name] !== hash) failures.push(`${name} contract hash mismatch`)
-  }
   for (const [field, label] of [
     ['initialHtmlGzipBytes', 'initial HTML gzip'],
     ['initialCssGzipBytes', 'initial CSS gzip'],
@@ -239,7 +233,7 @@ export function gateBenchmarkUpdate(baseline, actual) {
 
 export function gateBenchmark(baseline, actual) {
   const failures = [
-    ...validateBenchmarkReport(baseline).map((failure) => `baseline ${failure}`),
+    ...validateBenchmarkReport(baseline, { requireContractHashes: false }).map((failure) => `baseline ${failure}`),
     ...validateBenchmarkReport(actual).map((failure) => `actual ${failure}`),
   ]
   const timingComparable = failures.length === 0 && comparableEnvironmentFields.every(

@@ -177,20 +177,42 @@ describe('frontend architecture benchmark gates', () => {
     ]))
   })
 
-  it('always checks contracts and bundle gates when timings are not comparable', () => {
+  it('checks bundle gates even when timings are not comparable', () => {
     const baseline = benchmark()
     const actual = benchmark({
       environment: { ...baseline.environment, cpu: 'Different CPU' },
-      contractHashes: { [REQUIRED_ALGORITHM_CASES[0]]: 'b'.repeat(64) },
       bundle: { initialHtmlGzipBytes: 101, initialGzipBytes: 1_001 },
     })
 
     const result = gateBenchmark(baseline, actual)
     expect(result.timingComparable).toBe(false)
     expect(result.failures).toEqual(expect.arrayContaining([
-      expect.stringContaining('contract hash'),
       expect.stringContaining('initial HTML gzip'),
     ]))
+  })
+
+  it('keeps canonical hash validation on actual reports', () => {
+    const actual = benchmark({ contractHashes: { [REQUIRED_ALGORITHM_CASES[0]]: 'not-a-sha256' } })
+    expect(gateBenchmark(benchmark(), actual).failures).toContain(`actual contractHashes.${REQUIRED_ALGORITHM_CASES[0]} must be SHA-256`)
+  })
+
+  it('requires contract hashes in actual reports', () => {
+    const actual = benchmark()
+    delete actual.contractHashes
+
+    expect(gateBenchmark(benchmark(), actual).failures).toEqual(expect.arrayContaining([
+      'actual contractHashes must be an object',
+      'actual contractHashes.russia-volume must be SHA-256',
+    ]))
+  })
+
+  it('does not compare valid frontend baseline hashes with actual canonical hashes', () => {
+    const baseline = benchmark()
+    const actual = benchmark({
+      contractHashes: Object.fromEntries(REQUIRED_ALGORITHM_CASES.map((name) => [name, 'b'.repeat(64)])),
+    })
+
+    expect(gateBenchmark(baseline, actual)).toEqual({ timingComparable: true, failures: [] })
   })
 
   it('does not let a shrinking CSS asset hide initial JavaScript growth', () => {
