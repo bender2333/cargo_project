@@ -61,6 +61,7 @@ type ContainerSceneProps = {
   onSelectBox?: (boxId: string) => void
   invalidBoxIds?: Set<string>
   manualEditable?: boolean
+  manualKeyboardEnabled?: boolean
   onManualMove?: (boxId: string, x: number, y: number, z?: number) => void
   onManualDropFromPool?: (cargoId: string, x: number, y: number, z?: number) => void
   onManualRotate?: (boxId: string, direction?: ManualRotationDirection) => void
@@ -119,6 +120,7 @@ export function ContainerScene({
   onSelectBox,
   invalidBoxIds,
   manualEditable,
+  manualKeyboardEnabled = false,
   onManualMove,
   onManualDropFromPool,
   onManualRotate,
@@ -137,6 +139,7 @@ export function ContainerScene({
   const sceneStateRef = useRef<SceneState | null>(null)
   const invalidBoxIdsRef = useRef<Set<string>>(invalidBoxIds ?? new Set())
   const manualEditableRef = useRef<boolean>(manualEditable ?? false)
+  const manualKeyboardEnabledRef = useRef(manualKeyboardEnabled)
   const gridSnapRef = useRef<boolean>(gridSnap ?? true)
   const edgeSnapRef = useRef<boolean>(edgeSnap ?? true)
   const placementSettingsRef = useRef<PlacementSettings>(placementSettings ?? {
@@ -171,6 +174,13 @@ export function ContainerScene({
   useEffect(() => {
     manualEditableRef.current = manualEditable ?? false
   }, [manualEditable])
+
+  useEffect(() => {
+    manualKeyboardEnabledRef.current = manualKeyboardEnabled
+    if (sceneStateRef.current) {
+      sceneStateRef.current.renderer.domElement.tabIndex = manualKeyboardEnabled ? 0 : -1
+    }
+  }, [manualKeyboardEnabled])
 
   useEffect(() => {
     gridSnapRef.current = gridSnap ?? true
@@ -284,6 +294,7 @@ export function ContainerScene({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(mount.clientWidth, mount.clientHeight)
     renderer.shadowMap.enabled = true
+    renderer.domElement.tabIndex = manualKeyboardEnabled ? 0 : -1
     mount.appendChild(renderer.domElement)
 
     const controls = new OrbitControls(camera, renderer.domElement)
@@ -809,9 +820,10 @@ export function ContainerScene({
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!manualEditableRef.current) return
+      if (!manualEditableRef.current || !manualKeyboardEnabledRef.current) return
       const target = event.target as HTMLElement | null
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+      if (!mount.contains(target)) return
       const boxId = selectedManualBoxIdRef.current
       if (!boxId) return
       const entry = sceneState.meshEntries.get(boxId)

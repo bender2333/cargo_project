@@ -200,6 +200,45 @@ test('手动模式键盘帮助展示 Z 轴与快捷键说明', async ({ page }) 
   await expect(popover).toContainText('尺规')
 })
 
+test('手动快捷键只在概览聚焦工作区时修改草稿', async ({ page }) => {
+  await ensureChinese(page)
+  await enterManualMode(page)
+
+  const scene = page.getByTestId('container-scene')
+  await page.getByTestId('placement-mode-manual').focus()
+  await page.keyboard.press('Control+z')
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+
+  await page.locator('[data-testid^="pool-quick-place-"]').first().click()
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+  const initialOrientation = await scene.getAttribute('data-selected-orientation')
+  expect(initialOrientation).toBeTruthy()
+
+  const historyNav = page.getByTestId('nav-history')
+  await historyNav.focus()
+  await page.keyboard.press('Control+z')
+  await page.keyboard.press('R')
+  await page.keyboard.press('Delete')
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+  await expect(scene).toHaveAttribute('data-selected-orientation', initialOrientation ?? '')
+
+  await historyNav.click()
+  await page.keyboard.press('Control+z')
+  await page.keyboard.press('Delete')
+  await page.getByTestId('nav-overview').click()
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+
+  const canvas = scene.locator('canvas')
+  await expect(canvas).toHaveAttribute('tabindex', '0')
+  await canvas.focus()
+  await page.keyboard.press('Delete')
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+  await page.keyboard.press('Control+z')
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+  await page.keyboard.press('Control+y')
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+})
+
 test('手动模式阻止键盘把箱体移动到悬空位置', async ({ page }) => {
   await ensureChinese(page)
   await page.getByRole('button', { name: '继续手动微调' }).click()

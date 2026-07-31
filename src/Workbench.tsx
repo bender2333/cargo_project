@@ -686,6 +686,12 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           return
         }
       }
+      const isManualWorkspaceTarget = activeNav === 'overview'
+        && placementMode === 'manual'
+        && target !== null
+        && workspaceRef.current?.contains(target)
+      if (!isManualWorkspaceTarget) return
+
 
       const isMeta = event.ctrlKey || event.metaKey
 
@@ -743,7 +749,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [locale, manualSelectedId, placementMode, redoManualPlacement, renderingContainer, rotateManualBox, selectManualBox, undoManualPlacement])
+  }, [activeNav, locale, manualSelectedId, placementMode, redoManualPlacement, renderingContainer, rotateManualBox, selectManualBox, undoManualPlacement])
 
   useEffect(() => {
     if (!manualNotice) return
@@ -1654,7 +1660,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             t={t}
           />
 
-        <section className="flex-1 min-w-0 space-y-4" ref={workspaceRef}>
+        <section className="flex-1 min-w-0 space-y-4">
+        <div ref={workspaceRef} tabIndex={activeNav === 'overview' && placementMode === 'manual' ? 0 : undefined}>
         <VisualizationWorkspace
             workspaceMaximized={workspaceMaximized}
             setWorkspaceMaximized={setWorkspaceMaximized}
@@ -1662,6 +1669,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             formatCubicMeters={formatCubicMeters}
             t={t}
             placementMode={placementMode}
+            manualKeyboardEnabled={activeNav === 'overview' && placementMode === 'manual'}
             setPlacementMode={setPlacementMode}
             hasCalculated={hasCalculated}
             handleContinueManually={handleContinueManually}
@@ -1722,6 +1730,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             calculateAndShowPlacement={calculateAndShowPlacement}
             hoverInfo={hoverInfo}
           />
+        </div>
 
           <ResultsPanel
             reportRef={reportRef}

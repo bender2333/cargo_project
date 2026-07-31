@@ -123,4 +123,21 @@ describe('Workbench packing-session boundary', () => {
     expect(source).not.toMatch(/\bonImport(?:Created|Updated|Deleted)=/)
     expect(source).not.toMatch(/\bonExport(?:Created|Deleted)=/)
   })
+
+
+  it('scopes manual keyboard commands to the focused overview workspace', () => {
+    const workbenchSource = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+    const workspaceSource = readFileSync(path.resolve(process.cwd(), 'src/components/VisualizationWorkspace.tsx'), 'utf8')
+    const sceneSource = readFileSync(path.resolve(process.cwd(), 'src/components/ContainerScene.tsx'), 'utf8')
+
+    expect(workbenchSource).toMatch(/const isManualWorkspaceTarget =\s*activeNav === 'overview'\s*&& placementMode === 'manual'\s*&& target !== null\s*&& workspaceRef\.current\?\.contains\(target\)/)
+    expect(workbenchSource).toMatch(/if \(!isManualWorkspaceTarget\) return\s*\n\s*const isMeta/)
+    expect(workbenchSource).toContain("tabIndex={activeNav === 'overview' && placementMode === 'manual' ? 0 : undefined}")
+    expect(workbenchSource).toContain("manualKeyboardEnabled={activeNav === 'overview' && placementMode === 'manual'}")
+    expect(workspaceSource).toContain('manualKeyboardEnabled={manualKeyboardEnabled}')
+    expect(sceneSource).toContain('if (!manualEditableRef.current || !manualKeyboardEnabledRef.current) return')
+    expect(sceneSource).toContain('if (!mount.contains(target)) return')
+    expect(sceneSource).toContain('renderer.domElement.tabIndex = manualKeyboardEnabled ? 0 : -1')
+    expect(sceneSource).toContain('onManualDeleteRef.current?.(boxId)')
+  })
 })

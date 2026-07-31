@@ -85,6 +85,7 @@ export type VisualizationWorkspaceProps = {
   formatCubicMeters: (volume: number) => string
   t: TranslationKeys
   placementMode: PlacementMode
+  manualKeyboardEnabled: boolean
   setPlacementMode: (mode: PlacementMode) => void
   hasCalculated: boolean
   handleContinueManually: () => void
@@ -158,6 +159,7 @@ export function VisualizationWorkspace({
   formatCubicMeters,
   t,
   placementMode,
+  manualKeyboardEnabled,
   setPlacementMode,
   hasCalculated,
   handleContinueManually,
@@ -479,6 +481,7 @@ export function VisualizationWorkspace({
                       placementSettings={placementSettings}
                       invalidBoxIds={manualInvalidBoxIds}
                       manualEditable
+                      manualKeyboardEnabled={manualKeyboardEnabled}
                       poolDragInfo={poolDragInfo}
                       highlightBoxIds={loadingStepsActive ? activeLoadingGroupBoxIds : undefined}
                       resetViewTick={resetViewTick}
