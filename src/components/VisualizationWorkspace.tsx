@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import type { DragEvent as ReactDragEvent } from 'react'
 import { ContainerScene } from './ContainerScene'
 import type { SceneViewMode } from './ContainerScene'
@@ -224,6 +225,10 @@ export function VisualizationWorkspace({
   calculateAndShowPlacement,
   hoverInfo,
 }: VisualizationWorkspaceProps) {
+  const [hasMounted3d, setHasMounted3d] = useState(workspaceView === '3d')
+  useEffect(() => {
+    if (workspaceView === '3d') setHasMounted3d(true)
+  }, [workspaceView])
   return (
     <>
       <div className={`grid grid-cols-5 gap-3 max-xl:grid-cols-2 ${workspaceMaximized ? 'hidden' : ''}`} data-testid="archive-stat-grid">
@@ -522,59 +527,49 @@ export function VisualizationWorkspace({
                 </div>
               </div>
             </div>
-          ) : workspaceView === '3d' ? (
-            <>
-              <div className="relative h-full w-full" data-testid="auto-view-container">
-                <div className="absolute left-3 top-3 z-30">
-                  <button
-                    className="archive-tab bg-white/95 shadow-lg"
-                    type="button"
-                    aria-expanded={autoHelpOpen}
-                    data-testid="auto-keyboard-help"
-                    onClick={() => setAutoHelpOpen((current) => !current)}
-                  >
-                    {t.autoKeyboardHelp}
-                  </button>
-                  {autoHelpOpen && (
-                    <div
-                      className="mt-2 w-64 rounded-lg border border-[#cbd5e1] bg-white p-3 text-xs text-[#334155] shadow-xl"
-                      data-testid="auto-keyboard-help-popover"
-                    >
-                      <ul className="list-inside list-disc space-y-1">
-                        {t.autoKeyboardHelpItems.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-                <button
-                  className={`archive-tab absolute right-3 top-3 z-30 inline-flex items-center gap-2 bg-white/95 shadow-lg ${workspaceMaximized ? 'active' : ''}`}
-                  type="button"
-                  data-testid="maximize-workspace"
-                  aria-pressed={workspaceMaximized}
-                  onClick={() => setWorkspaceMaximized((current) => !current)}
-                >
-                  {workspaceMaximized ? t.restoreManual : t.maximizeManual}
-                </button>
-                <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} boxOpacityOverride={cogViewState.boxOpacity} clearanceAnnotations={clearanceAnnotations} clearanceEnabled={clearanceEnabled} cogOverlay={cogOverlay} container={renderingContainer} edgeSnap={edgeSnap} gridSnap={gridSnap} highlightBoxIds={loadingStepsActive ? activeLoadingGroupBoxIds : undefined} placementSettings={placementSettings} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
-              </div>
-            </>
           ) : (
-            <>
-              <div className="relative h-full w-full" data-testid="auto-view-container">
-                <button
-                  className={`archive-tab absolute right-3 top-3 z-30 inline-flex items-center gap-2 bg-white/95 shadow-lg ${workspaceMaximized ? 'active' : ''}`}
-                  type="button"
-                  data-testid="maximize-workspace"
-                  aria-pressed={workspaceMaximized}
-                  onClick={() => setWorkspaceMaximized((current) => !current)}
-                >
-                  {workspaceMaximized ? t.restoreManual : t.maximizeManual}
-                </button>
+            <div className="relative h-full w-full" data-testid="auto-view-container">
+              <button
+                className={`archive-tab absolute right-3 top-3 z-30 inline-flex items-center gap-2 bg-white/95 shadow-lg ${workspaceMaximized ? 'active' : ''}`}
+                type="button"
+                data-testid="maximize-workspace"
+                aria-pressed={workspaceMaximized}
+                onClick={() => setWorkspaceMaximized((current) => !current)}
+              >
+                {workspaceMaximized ? t.restoreManual : t.maximizeManual}
+              </button>
+              {hasMounted3d && (
+                <div className={workspaceView === '3d' ? 'relative h-full w-full' : 'hidden'}>
+                  <div className="absolute left-3 top-3 z-30">
+                    <button
+                      className="archive-tab bg-white/95 shadow-lg"
+                      type="button"
+                      aria-expanded={autoHelpOpen}
+                      data-testid="auto-keyboard-help"
+                      onClick={() => setAutoHelpOpen((current) => !current)}
+                    >
+                      {t.autoKeyboardHelp}
+                    </button>
+                    {autoHelpOpen && (
+                      <div
+                        className="mt-2 w-64 rounded-lg border border-[#cbd5e1] bg-white p-3 text-xs text-[#334155] shadow-xl"
+                        data-testid="auto-keyboard-help-popover"
+                      >
+                        <ul className="list-inside list-disc space-y-1">
+                          {t.autoKeyboardHelpItems.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} boxOpacityOverride={cogViewState.boxOpacity} clearanceAnnotations={clearanceAnnotations} clearanceEnabled={clearanceEnabled} cogOverlay={cogOverlay} container={renderingContainer} edgeSnap={edgeSnap} gridSnap={gridSnap} highlightBoxIds={loadingStepsActive ? activeLoadingGroupBoxIds : undefined} placementSettings={placementSettings} renderEnabled={workspaceView === '3d'} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
+                </div>
+              )}
+              <div className={workspaceView === '2d' ? 'relative h-full w-full' : 'hidden'}>
                 <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} container={renderingContainer} highlightBoxIds={loadingStepsActive ? activeLoadingGroupBoxIds : undefined} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
               </div>
-            </>
+            </div>
           )}
           <button
             className="archive-button success absolute bottom-6 right-6"

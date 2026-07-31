@@ -13,6 +13,14 @@
 - 决策：发布与部署继续 BLOCKED。不得更新 baseline、降低阈值、减少样本或跳过指标；先按 bundle 组成与首像素真实路径定位产生回归的源代码，只修复已证实瓶颈后重复完整本地门禁。
 - 后续：性能诊断需分别解释新增 JS gzip 组成（当前包含 worker/client 与动态组件）和首像素时序；若两者无共同根因，分别保留独立回归证据。
 
+## 2026-07-31 benchmark 瓶颈修复与 GREEN 证据
+
+- 根因：导入 module worker 与主线程各自打包 SheetJS，worker 重复产生 112,158 B gzip；2D/3D 自动视图切换会卸载并重新创建 WebGL context，权威 benchmark 每个样本包含 24 次冷 3D remount。
+- 修复：Vite 将主线程与 worker 共享同一稳定 `/assets/xlsx.js` chunk，worker 保持 native module worker、ArrayBuffer transfer、超时和边界协议；关闭新增 runtime modulepreload 以保持原始 initial HTML 资产合同。自动 3D 场景首次挂载后跨 2D/3D 切换保留 context，隐藏时暂停渲染循环，显示时恢复；共享 maximize 控件避免隐藏 DOM 重复。
+- 证据：未改 baseline、阈值、样本、benchmark detector 或 packing golden。最终 `npm run benchmark` GREEN：五项 contract hash 全匹配，`totalJsGzipBytes=694,300`，`canvasFirstNonEmptyPixelsMs` median/P95=`81.875/96.150 ms`，initial HTML gzip=`289 B`，timing comparable。
+- 影响：首次 3D 视图保持现有导出画布与交互；2D 模式不再持续执行隐藏场景的 WebGL render/animation；worker 生产路径依赖部署到根站点的 `/assets/xlsx.js`，本地 dev 与 production preview 均已覆盖导入路径。
+
+
 
 ## 2026-07-31 导入确认、重量来源与展开上限
 

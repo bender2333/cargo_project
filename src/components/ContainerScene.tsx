@@ -62,6 +62,7 @@ type ContainerSceneProps = {
   invalidBoxIds?: Set<string>
   manualEditable?: boolean
   manualKeyboardEnabled?: boolean
+  renderEnabled?: boolean
   onManualMove?: (boxId: string, x: number, y: number, z?: number) => void
   onManualDropFromPool?: (cargoId: string, x: number, y: number, z?: number) => void
   onManualRotate?: (boxId: string, direction?: ManualRotationDirection) => void
@@ -121,6 +122,7 @@ export function ContainerScene({
   invalidBoxIds,
   manualEditable,
   manualKeyboardEnabled = false,
+  renderEnabled = true,
   onManualMove,
   onManualDropFromPool,
   onManualRotate,
@@ -140,6 +142,9 @@ export function ContainerScene({
   const invalidBoxIdsRef = useRef<Set<string>>(invalidBoxIds ?? new Set())
   const manualEditableRef = useRef<boolean>(manualEditable ?? false)
   const manualKeyboardEnabledRef = useRef(manualKeyboardEnabled)
+  const renderEnabledRef = useRef(renderEnabled)
+  const animationFrameRef = useRef<number | null>(null)
+  const startAnimationRef = useRef<(() => void) | null>(null)
   const gridSnapRef = useRef<boolean>(gridSnap ?? true)
   const edgeSnapRef = useRef<boolean>(edgeSnap ?? true)
   const placementSettingsRef = useRef<PlacementSettings>(placementSettings ?? {
@@ -181,6 +186,17 @@ export function ContainerScene({
       sceneStateRef.current.renderer.domElement.tabIndex = manualKeyboardEnabled ? 0 : -1
     }
   }, [manualKeyboardEnabled])
+  useEffect(() => {
+    renderEnabledRef.current = renderEnabled
+    if (renderEnabled) {
+      startAnimationRef.current?.()
+      return
+    }
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
+    }
+  }, [renderEnabled])
 
   useEffect(() => {
     gridSnapRef.current = gridSnap ?? true
@@ -882,20 +898,32 @@ export function ContainerScene({
     mount.addEventListener('test-camera-command', onTestCameraCommand)
     window.addEventListener('keydown', onKeyDown)
 
-    let frame = 0
     const animate = () => {
-      frame = requestAnimationFrame(animate)
+      animationFrameRef.current = null
+      if (!renderEnabledRef.current) return
       if (controls.enabled) {
         controls.update()
       }
       advanceBoxAnimations(sceneState, performance.now())
       syncRotationGizmo(sceneState, selectedManualBoxIdRef.current)
       renderer.render(scene, camera)
+      animationFrameRef.current = requestAnimationFrame(animate)
     }
-    animate()
+    const startAnimation = () => {
+      if (!renderEnabledRef.current || animationFrameRef.current !== null) return
+      animate()
+    }
+    startAnimationRef.current = startAnimation
+    startAnimation()
 
     return () => {
-      cancelAnimationFrame(frame)
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
+      }
+      if (startAnimationRef.current === startAnimation) {
+        startAnimationRef.current = null
+      }
       observer.disconnect()
       controls.dispose()
       if (sceneState.ghost) {

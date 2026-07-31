@@ -15,6 +15,22 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    modulePreload: false,
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => id.includes('node_modules/xlsx') ? 'xlsx' : undefined,
+        chunkFileNames: (chunk) => chunk.name === 'xlsx' ? 'assets/xlsx.js' : 'assets/[name]-[hash].js',
+      },
+    },
+  },
+  worker: {
+    format: 'es',
+    rollupOptions: {
+      external: ['xlsx'],
+      output: { paths: { xlsx: '/assets/xlsx.js' } },
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,

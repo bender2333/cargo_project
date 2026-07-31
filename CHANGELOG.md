@@ -82,6 +82,12 @@
 - Release/deployment remain **BLOCKED**. Report: `test-results/benchmark/frontend-architecture.json`. No baseline, threshold, sample, or assertion changes were made.
 - Decision record: `decision.md`「受控空载 benchmark 仍为 RED」。
 
+### 2026-07-31 benchmark performance remediation
+
+- [x] Removed duplicate SheetJS bytes by emitting one shared `/assets/xlsx.js` chunk consumed by the main app and native module worker; kept bounded parsing, transfer, timeout, and production import behavior unchanged. Initial HTML asset shape remains stable with modulepreload disabled.
+- [x] Automatic 3D scene now survives 2D/3D toggles without cold WebGL context recreation; hidden rendering fully pauses its animation frame and resumes on 3D activation. The maximize control is shared rather than duplicated in hidden wrappers.
+- GREEN：final `npm run benchmark` passed with all five packing contract hashes matching, `totalJsGzipBytes=694,300`, `canvasFirstNonEmptyPixelsMs` median/P95=`81.875/96.150 ms`, initial HTML gzip=`289 B`, timings comparable. Focused scene/UI tests = **2 files / 28 tests passed**, focused 2D/3D E2E = **1 passed**, and TypeScript passed. Performance code review APPROVED with no findings.
+
 ### 发布 gate (本地/部署/E2E)
 - [ ] 本地 release checks (Lint/Tests/Build/Benchmark) 全量通过。
 - [ ] 生产环境部署门禁验证。
