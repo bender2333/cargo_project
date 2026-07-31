@@ -99,6 +99,11 @@
 - [x] Final `npm run benchmark` passed with timings comparable: all five packing hashes matched; `totalJsGzipBytes=694,388`; `canvasFirstNonEmptyPixelsMs` median/P95=`37.250/45.350 ms`; Russia algorithm P95=`3.401 ms`; initial HTML gzip=`289 B`.
 - Local release gate is GREEN. Deployment and remote E2E remain pending.
 
+### 2026-07-31 residual remediation integration
+
+- [x] Committed the remaining previously verified fixture and type hunks: positive import weights/mappings, focused manual canvas keyboard setup, actual workspace ref typing, required depth-layer/pose test fixtures, symmetric overlap identity assertions, and projected overweight diagnostics.
+- These changes were included in the final local gate above; protected user paths remain unstaged and excluded.
+
 ### 发布 gate (本地/部署/E2E)
 - [x] 本地 release checks (Lint/Tests/Build/Benchmark) 全量通过。
 - [ ] 生产环境部署门禁验证。

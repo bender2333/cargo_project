@@ -391,7 +391,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     }
   }, [exportTemplateLoadFailed, exportTemplates, selectedExportTemplateId])
 
-  const workspaceRef = useRef<HTMLElement | null>(null)
+  const workspaceRef = useRef<HTMLDivElement | null>(null)
   const reportRef = useRef<HTMLElement | null>(null)
   const cargoRef = useRef<HTMLFormElement | null>(null)
   const containerRef = useRef<HTMLElement | null>(null)

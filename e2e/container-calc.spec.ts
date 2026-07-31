@@ -106,6 +106,7 @@ async function createTemplateWorkbookFile() {
       L: 80,
       W: 60,
       H: 40,
+      Weight: 20,
     },
   ])
   const workbook = XLSX.utils.book_new()
@@ -1060,6 +1061,7 @@ test('keeps manually mapped import as an explicit confirmation path', async ({ p
   await page.getByTestId('map-select-length').fill('L')
   await page.getByTestId('map-select-width').fill('W')
   await page.getByTestId('map-select-height').fill('H')
+  await page.getByTestId('map-select-weight').fill('Weight')
   await page.getByTestId('map-unit-length').selectOption('cm')
   await page.getByTestId('map-unit-width').selectOption('cm')
   await page.getByTestId('map-unit-height').selectOption('cm')
@@ -1077,6 +1079,7 @@ test('keeps manually mapped import as an explicit confirmation path', async ({ p
   await page.getByTestId('map-select-length').fill('L')
   await page.getByTestId('map-select-width').fill('W')
   await page.getByTestId('map-select-height').fill('H')
+  await page.getByTestId('map-select-weight').fill('Weight')
   await page.getByTestId('map-unit-length').selectOption('cm')
   await page.getByTestId('map-unit-width').selectOption('cm')
   await page.getByTestId('map-unit-height').selectOption('cm')
@@ -1197,6 +1200,7 @@ test('creates an import template from top-level template manager and reuses it f
   await page.getByTestId('tm-new-map-select-length').fill('L')
   await page.getByTestId('tm-new-map-select-width').fill('W')
   await page.getByTestId('tm-new-map-select-height').fill('H')
+  await page.getByTestId('tm-new-map-select-weight').fill('Weight')
   await page.getByTestId('template-manager-new-save').click()
 
   const savedRow = page.locator('[data-testid^="template-manager-row-"]:has-text("' + templateName + '")')

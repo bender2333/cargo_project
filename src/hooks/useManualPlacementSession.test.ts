@@ -644,6 +644,10 @@ describe('useManualPlacementSession', () => {
       orientationLabel: box.orientationLabel,
       maxStackLayers: box.maxStackLayers,
     })
+    const initialProps: { cargoItems: CargoItem[]; defaultMaxStackLayers?: number } = {
+      cargoItems: currentCargo,
+      defaultMaxStackLayers: 5,
+    }
     const { result, rerender } = renderHook(
       ({ cargoItems, defaultMaxStackLayers }: { cargoItems: CargoItem[]; defaultMaxStackLayers?: number }) => useManualPlacementSession({
         cargoItems,
@@ -651,7 +655,7 @@ describe('useManualPlacementSession', () => {
         defaultMaxStackLayers,
         automaticDisplayResult: automaticResult(),
       }),
-      { initialProps: { cargoItems: currentCargo, defaultMaxStackLayers: 5 } },
+      { initialProps },
     )
 
     act(() => {
@@ -693,7 +697,7 @@ describe('useManualPlacementSession', () => {
         cargoItems: [cargo({ quantity: 1 })],
       })
     })
-    restoredDraft.boxes[0].orientationAxes.x = 'L+'
+    restoredDraft.boxes[0].orientationAxes!.x = 'L+'
 
     expect(result.current.draft.boxes[0].orientationAxes).toEqual({ x: 'W+', y: 'L-', z: 'H+' })
   })

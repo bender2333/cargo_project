@@ -253,6 +253,7 @@ test('手动模式阻止键盘把箱体移动到悬空位置', async ({ page }) 
 
   const scene = page.getByTestId('container-scene')
   await expect(scene).toHaveAttribute('data-box-count', '18')
+  await scene.locator('canvas').focus()
   await page.keyboard.press('PageUp')
   await expect(page.getByTestId('manual-operation-notice')).toBeVisible()
   await expect(page.getByTestId('manual-issues')).toHaveCount(0)
@@ -658,6 +659,7 @@ test('手动活动结果统一驱动汇总、明细、导出和撤销历史', as
     unplacedQuantity: 17,
   })
 
+  await scene.locator('canvas').focus()
   await page.keyboard.press('Delete')
   await expect(scene).toHaveAttribute('data-box-count', '0')
   await expect(page.getByTestId('report-panel')).toContainText('已装载: 0 / 18')

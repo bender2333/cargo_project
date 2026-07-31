@@ -271,6 +271,27 @@ describe('buildManualPackingResult diagnostics', () => {
     expect(overweightDiag!.severity).toBe('error')
   })
 
+  it('uses projected overweight validation instead of duplicating the computed fallback', () => {
+    const heavyContainer = { ...container, maxWeight: 100 }
+    const boxes = [
+      makeBox({ id: 'h1', x: 0, weight: 60 }),
+      makeBox({ id: 'h2', x: 600, weight: 60 }),
+    ]
+    const result = buildManualPackingResult(boxes, heavyContainer, cargoForBoxes(boxes), [{
+      type: 'overweight',
+      boxId: 'h1',
+      severity: 'error',
+      message: 'overweight',
+    }])
+
+    expect(result.diagnostics).toEqual([expect.objectContaining({
+      id: 'weight-check:overweight:h1',
+      code: 'weight-check',
+      source: 'manual',
+      sourceIssueId: 'overweight:h1',
+    })])
+  })
+
   it('produces no weight-check error when total weight is within limit', () => {
     const boxes = [makeBox({ id: 'light', x: 0, weight: 10 })]
 

@@ -728,7 +728,10 @@ describe('manualPlacement', () => {
 
     const overlapIssues = issues.filter((issue) => issue.type === 'overlap')
     expect(overlapIssues).toHaveLength(2)
-    expect(overlapIssues.map((issue) => issue.boxId).sort()).toEqual(['b1', 'b2'])
+    expect(overlapIssues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ boxId: 'b1', relatedBoxId: 'b2' }),
+      expect.objectContaining({ boxId: 'b2', relatedBoxId: 'b1' }),
+    ]))
   })
 
   it('validateDraft allows xy overlap when boxes are stacked with enough support', () => {
