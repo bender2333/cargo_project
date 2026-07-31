@@ -33,6 +33,7 @@ const box: PlacedBox = {
   weight: 10,
   index: 1,
   physicalLayer: 1,
+  depthLayer: 1,
   workStep: 1,
   supportType: 'floor',
   supportedBy: [],

@@ -1,4 +1,4 @@
-import type { CargoItem, ContainerSpec, PackingDiagnostic, PackingResult, PlacedBox } from '../types'
+import type { CargoItem, ContainerSpec, PackingDiagnostic, PackingResult, PlacementBox, PlacedBox } from '../types'
 import { finalizePlacementGeometry } from './finalizePackingResult'
 import { buildLabelStats } from './labels'
 import type { ValidationIssue } from './manualPlacement'
@@ -6,7 +6,7 @@ import type { ValidationIssue } from './manualPlacement'
 export const MANUAL_UNPLACED_REASON_CODE = 'manual-not-placed'
 const MANUAL_UNPLACED_REASON = 'Not placed in manual plan'
 
-function enrichPlacedBoxes(boxes: PlacedBox[], cargoItems: CargoItem[]) {
+function enrichPlacedBoxes(boxes: PlacementBox[], cargoItems: CargoItem[]) {
   const cargoById = new Map(cargoItems.map((cargo) => [cargo.id, cargo]))
   const indexes = new Map<string, number>()
   return boxes.map((box) => {
@@ -19,7 +19,6 @@ function enrichPlacedBoxes(boxes: PlacedBox[], cargoItems: CargoItem[]) {
       label: cargo?.label || box.label,
       color: cargo?.color ?? box.color,
       index,
-      supportedBy: [...box.supportedBy],
     }
   })
 }
@@ -76,14 +75,12 @@ function issueToDiagnosticId(type: ValidationIssue['type']): string | null {
 }
 
 export function buildManualPackingResult(
-  boxes: PlacedBox[],
+  boxes: PlacementBox[],
   container: ContainerSpec,
   cargoItems?: CargoItem[],
   validationIssues?: ValidationIssue[],
 ): PackingResult {
-  const inputBoxes = cargoItems
-    ? enrichPlacedBoxes(boxes, cargoItems)
-    : boxes.map((box) => ({ ...box, supportedBy: [...box.supportedBy] }))
+  const inputBoxes = cargoItems ? enrichPlacedBoxes(boxes, cargoItems) : boxes
   const { placed, layers, workSteps } = finalizePlacementGeometry(inputBoxes, container)
 
   const usedVolume = placed.reduce((sum, box) => sum + box.length * box.width * box.height, 0)

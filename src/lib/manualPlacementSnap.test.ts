@@ -33,6 +33,7 @@ function placedBox(overrides: Partial<PlacedBox>): PlacedBox {
     canRotate: true,
     stackable: true,
     physicalLayer: 1,
+    depthLayer: 1,
     workStep: 1,
     supportType: 'floor',
     supportedBy: [],

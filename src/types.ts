@@ -27,7 +27,8 @@ export type CargoItem = {
   groundOnly?: boolean
 }
 
-export type PlacedBox = {
+/** Placement geometry while it is being built; final loading depth is derived later. */
+export type PlacementBox = {
   id: string
   cargoId: string
   name: string
@@ -57,19 +58,17 @@ export type PlacedBox = {
   groundOnly?: boolean
   /** Vertical stacking depth. A box on the floor is layer 1 (PRD 9.3). */
   physicalLayer: number
-  /**
-   * Loading wave along the container depth axis: boxes against the far wall are 1,
-   * boxes pushed against those are 2, and so on. A container only opens at one end,
-   * so loading proceeds from the far wall outward. Distinct from `physicalLayer`,
-   * which is vertical.
-   *
-   * Always derived by `assignDepthLayers` from final coordinates, never supplied by a
-   * caller, so it is optional on input and populated on any result.
-   */
+  /** Loading wave along the container depth axis, once finalization assigns it. */
   depthLayer?: number
   workStep: number
   supportType: 'floor' | 'fully-supported' | 'partially-supported'
   supportedBy: string[]
+}
+
+/** Completed placement returned in a PackingResult. */
+export type PlacedBox = PlacementBox & {
+  /** Finite positive loading wave derived from final coordinates. */
+  depthLayer: number
 }
 
 export type UnplacedCargo = {

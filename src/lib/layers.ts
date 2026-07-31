@@ -1,4 +1,4 @@
-import type { PackingLayer, PlacedBox } from '../types'
+import type { PackingLayer, PlacementBox, PlacedBox } from '../types'
 
 /**
  * Assign the loading wave along the container depth axis.
@@ -12,7 +12,7 @@ import type { PackingLayer, PlacedBox } from '../types'
  * used to) made 589 floor boxes report a layer above 1 while claiming to be
  * fully supported by a horizontal neighbour standing beside them, not beneath them.
  */
-export function assignDepthLayers(placed: PlacedBox[]): PlacedBox[] {
+export function assignDepthLayers(placed: PlacementBox[]): PlacementBox[] {
   const EPSILON = 0.001
   // 按照 x 坐标升序排序（从里到外）
   const sorted = [...placed].sort((a, b) => a.x - b.x)

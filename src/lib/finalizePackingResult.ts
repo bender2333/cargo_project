@@ -1,9 +1,9 @@
-import type { ContainerSpec, LoadingStep, PackingLayer, PlacedBox } from '../types'
+import type { ContainerSpec, LoadingStep, PackingLayer, PlacementBox, PlacedBox } from '../types'
 import { assignDepthLayers, buildPackingLayers } from './layers'
 
 const EPSILON = 0.001
 
-function supportOverlapArea(candidate: PlacedBox, box: PlacedBox) {
+function supportOverlapArea(candidate: PlacementBox, box: PlacementBox) {
   if (Math.abs(candidate.z + candidate.height - box.z) > EPSILON) return 0
   const overlapX = Math.max(
     0,
@@ -20,7 +20,7 @@ function supportOverlapArea(candidate: PlacedBox, box: PlacedBox) {
  * Recompute vertical support fields from final coordinates.
  * Must run before depth waves and loading-order assignment.
  */
-export function reconcileSupportRelations(placed: PlacedBox[]) {
+export function reconcileSupportRelations(placed: PlacementBox[]) {
   const byId = new Map(placed.map((box) => [box.id, box]))
 
   for (const box of [...placed].sort((a, b) => a.z - b.z)) {
@@ -59,6 +59,14 @@ export function reconcileSupportRelations(placed: PlacedBox[]) {
   }
 }
 
+function assertFinalizedDepthLayers(boxes: PlacementBox[]): asserts boxes is PlacedBox[] {
+  for (const box of boxes) {
+    if (!Number.isFinite(box.depthLayer) || (box.depthLayer ?? 0) <= 0) {
+      throw new Error(`Placed box ${box.id} has invalid depthLayer`)
+    }
+  }
+}
+
 function loadingSequenceScore(box: PlacedBox, container: ContainerSpec) {
   return (
     box.x * container.width * container.height +
@@ -67,22 +75,31 @@ function loadingSequenceScore(box: PlacedBox, container: ContainerSpec) {
   )
 }
 
+function compareCodeUnits(a: string, b: string) {
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
 /**
  * Supporters first; among currently loadable boxes prefer far-wall-outward depth.
  */
 export function assignWorkStepsBySupport(placed: PlacedBox[], container: ContainerSpec) {
+  const ids = new Set<string>()
+  for (const box of placed) {
+    if (ids.has(box.id)) throw new Error(`Duplicate placed box id: ${box.id}`)
+    ids.add(box.id)
+  }
   const score = new Map(placed.map((box) => [box.id, loadingSequenceScore(box, container)]))
   const byId = new Map(placed.map((box) => [box.id, box]))
 
   const preferred = (a: PlacedBox, b: PlacedBox) =>
     (score.get(a.id) ?? 0) - (score.get(b.id) ?? 0) ||
     a.index - b.index ||
-    a.id.localeCompare(b.id)
+    compareCodeUnits(a.id, b.id)
 
   const remaining = new Map<string, number>()
   const dependents = new Map<string, string[]>()
   for (const box of placed) {
-    const supporters = box.supportedBy.filter((id) => byId.has(id) && id !== box.id)
+    const supporters = box.supportedBy.filter((id) => byId.has(id))
     remaining.set(box.id, supporters.length)
     for (const supporterId of supporters) {
       dependents.set(supporterId, [...(dependents.get(supporterId) ?? []), box.id])
@@ -110,8 +127,12 @@ export function assignWorkStepsBySupport(placed: PlacedBox[], container: Contain
   }
 
   if (ordered.length < placed.length) {
-    const seen = new Set(ordered.map((box) => box.id))
-    ordered.push(...placed.filter((box) => !seen.has(box.id)).sort(preferred))
+    const orderedIds = new Set(ordered.map((box) => box.id))
+    const cyclicIds = placed
+      .filter((box) => !orderedIds.has(box.id))
+      .map((box) => box.id)
+      .sort(compareCodeUnits)
+    throw new Error(`Cyclic support graph: ${cyclicIds.join(', ')}`)
   }
 
   ordered.forEach((box, index) => {
@@ -131,16 +152,18 @@ export type FinalizedPlacementGeometry = {
  * Shared auto/manual finalizer: final coordinates -> support -> depth -> work order -> layers.
  */
 export function finalizePlacementGeometry(
-  boxes: PlacedBox[],
+  boxes: PlacementBox[],
   container: ContainerSpec,
 ): FinalizedPlacementGeometry {
   const placed = boxes.map((box) => ({
     ...box,
     supportedBy: [...box.supportedBy],
+    ...(box.orientationAxes ? { orientationAxes: { ...box.orientationAxes } } : {}),
   }))
 
   reconcileSupportRelations(placed)
   assignDepthLayers(placed)
+  assertFinalizedDepthLayers(placed)
   const ordered = assignWorkStepsBySupport(placed, container)
   const layers = buildPackingLayers(placed)
 

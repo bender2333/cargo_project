@@ -20,12 +20,13 @@ import * as XLSX from 'xlsx'
 import type { ContainerSpec, CargoItem, LoadingMode, PackingResult, PlacedBox } from '../types'
 import { containers } from '../data/containers'
 import { parseCargoRows } from './importCargo'
+import { finalizePlacementGeometry } from './finalizePackingResult'
 import { calculatePacking } from './packing'
 
 const moduleDir = dirname(fileURLToPath(import.meta.url))
 const dataDir = resolve(moduleDir, '../../test-data')
 
-type Case = { name: string; result: PackingResult }
+type Case = { name: string; container: ContainerSpec; result: PackingResult }
 
 const cases: Case[] = []
 
@@ -76,6 +77,7 @@ beforeAll(() => {
 
   for (const spec of specs) {
     cases.push({
+      container: spec.container,
       name: spec.name,
       result: calculatePacking(spec.container, spec.items, { loadingMode: spec.loadingMode }),
     })
@@ -118,15 +120,15 @@ describe('PackingResult layering invariants (PRD 9.3)', () => {
     }
   })
 
-  it('marks a box as floor-supported exactly when it has no supporters', () => {
+  it('marks a box as floor-supported exactly when its base rests on the floor', () => {
     for (const { name, result } of cases) {
       const offenders = result.placed.filter(
-        (box) => (box.supportType === 'floor') !== (box.supportedBy.length === 0),
+        (box) => (box.supportType === 'floor') !== (box.z <= 0.001),
       )
       expect(
         offenders.length,
-        `${name}: supportType and supportedBy disagree — `
-        + describeFew(offenders, (b) => `${b.id}(type=${b.supportType}, supporters=${b.supportedBy.length})`),
+        `${name}: supportType does not match floor contact — `
+        + describeFew(offenders, (b) => `${b.id}(z=${b.z}, type=${b.supportType}, supporters=${b.supportedBy.length})`),
       ).toBe(0)
     }
   })
@@ -194,6 +196,37 @@ describe('PackingResult loading-order invariants', () => {
     }
   })
 
+  it('publishes consecutive work steps in runtime array order', () => {
+    for (const { name, result } of cases) {
+      expect(
+        result.workSteps.map((workStep) => workStep.step),
+        `${name}: runtime workSteps are not consecutive in array order`,
+      ).toEqual(result.workSteps.map((_, index) => index + 1))
+
+      const arrayIndexByBoxId = new Map(result.workSteps.map((workStep, index) => [workStep.boxId, index]))
+      const reversed = result.placed.flatMap((box) => box.supportedBy
+        .filter((supporterId) => (arrayIndexByBoxId.get(supporterId) ?? Infinity) >= (arrayIndexByBoxId.get(box.id) ?? -1))
+        .map((supporterId) => `${supporterId} after ${box.id}`))
+      expect(reversed, `${name}: runtime workSteps publish dependents before supporters`).toEqual([])
+    }
+  })
+
+  it('matches the shared finalizer for identical automatic coordinates', () => {
+    for (const { name, container, result } of cases) {
+      const finalized = finalizePlacementGeometry(result.placed, container)
+      expect(result.placed, `${name}: automatic placed output differs from shared finalizer`).toEqual(finalized.placed)
+      expect(result.layers, `${name}: automatic layers differ from shared finalizer`).toEqual(finalized.layers)
+      expect(result.workSteps, `${name}: automatic workSteps differ from shared finalizer`).toEqual(finalized.workSteps)
+    }
+  })
+
+  it('assigns every completed placement a finite positive depth layer', () => {
+    for (const { name, result } of cases) {
+      const invalid = result.placed.filter((box) => !Number.isFinite(box.depthLayer) || (box.depthLayer ?? 0) <= 0)
+      expect(invalid, `${name}: completed placements must have finite positive depthLayer`).toEqual([])
+    }
+  })
+
   it('only steps back to a shallower depth when support order or x position requires it', () => {
     // Loading runs far-wall-outward, but support edges outrank depth, and `depthLayer`
     // is not monotonic in x (a box further out can be in an earlier push-against wave
@@ -203,18 +236,13 @@ describe('PackingResult loading-order invariants', () => {
       const byId = new Map(result.placed.map((box) => [box.id, box]))
       const sequence = [...result.placed].sort((a, b) => a.workStep - b.workStep)
       const unjustified: string[] = []
-      // depthLayer is optional on input but must be populated on every result box.
-      const depthOf = (box: PlacedBox) => {
-        expect(box.depthLayer, `${name}: ${box.id} has no depthLayer`).toBeDefined()
-        return box.depthLayer as number
-      }
       for (let i = 1; i < sequence.length; i++) {
         const previous = sequence[i - 1]
         const current = sequence[i]
-        if (depthOf(previous) <= depthOf(current)) continue
+        if (previous.depthLayer <= current.depthLayer) continue
         const waitedOnOutwardSupporter = current.supportedBy.some((id) => {
           const supporter = byId.get(id)
-          return supporter !== undefined && depthOf(supporter) >= depthOf(current)
+          return supporter !== undefined && supporter.depthLayer >= current.depthLayer
         })
         const previousWasSupporter = result.placed.some((box) => box.supportedBy.includes(previous.id))
         const xStillAdvances = current.x >= previous.x

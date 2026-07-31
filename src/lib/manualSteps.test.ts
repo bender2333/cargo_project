@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { CargoItem, ContainerSpec, PlacedBox } from '../types'
+import type { CargoItem, ContainerSpec, PlacementBox } from '../types'
 import { buildLoadingTaskGroups } from './loadingTaskGroups'
+import { calculatePacking } from './packing'
 import { buildManualPackingResult } from './manualSteps'
 
 const container: ContainerSpec = {
@@ -16,7 +17,7 @@ const container: ContainerSpec = {
   sideGap: 0,
 }
 
-function makeBox(overrides: Partial<PlacedBox> & Pick<PlacedBox, 'id'>): PlacedBox {
+function makeBox(overrides: Partial<PlacementBox> & Pick<PlacementBox, 'id'>): PlacementBox {
   return {
     id: overrides.id,
     cargoId: overrides.cargoId ?? `cargo-${overrides.id}`,
@@ -42,7 +43,7 @@ function makeBox(overrides: Partial<PlacedBox> & Pick<PlacedBox, 'id'>): PlacedB
   }
 }
 
-function cargoForBoxes(boxes: PlacedBox[]): CargoItem[] {
+function cargoForBoxes(boxes: PlacementBox[]): CargoItem[] {
   const byCargo = new Map<string, CargoItem>()
   for (const box of boxes) {
     const existing = byCargo.get(box.cargoId)
@@ -208,6 +209,37 @@ describe('buildManualPackingResult', () => {
       expect.objectContaining({ label: 'P', name: 'Medical pump', planned: 3, placed: 2, unplaced: 1 }),
       expect.objectContaining({ label: 'V', name: 'Control valve', planned: 2, placed: 0, unplaced: 2 }),
     ])
+  })
+  it('matches automatic finalization when the same placed coordinates become a manual result', () => {
+    const cargoItems: CargoItem[] = [{
+      id: 'cargo-a',
+      name: 'Crate',
+      label: 'A',
+      length: 600,
+      width: 500,
+      height: 400,
+      weight: 10,
+      quantity: 2,
+      color: '#f59e0b',
+      canRotate: true,
+      stackable: true,
+    }]
+    const automatic = calculatePacking(container, cargoItems, { loadingMode: 'quantity' })
+    expect(automatic.placed).toHaveLength(2)
+
+    const manual = buildManualPackingResult(automatic.placed, container, cargoItems)
+    const projection = (result: typeof automatic) => result.placed.map((box) => ({
+      id: box.id,
+      supportedBy: box.supportedBy,
+      physicalLayer: box.physicalLayer,
+      depthLayer: box.depthLayer,
+      workStep: box.workStep,
+      supportType: box.supportType,
+    }))
+
+    expect(projection(manual)).toEqual(projection(automatic))
+    expect(manual.layers).toEqual(automatic.layers)
+    expect(manual.workSteps).toEqual(automatic.workSteps)
   })
 })
 

@@ -1,7 +1,6 @@
-import type { CargoItem, ContainerSpec, LoadingMode, PackingDiagnostic, PackingResult, PlacedBox, UnplacedCargo } from '../types'
+import type { CargoItem, ContainerSpec, LoadingMode, PackingDiagnostic, PackingResult, PlacementBox, PlacedBox, UnplacedCargo } from '../types'
 import { effectiveContainer, getContainerVolume } from '../data/containers'
-import { assignDepthLayers, buildPackingLayers } from './layers'
-import { assignWorkStepsBySupport, reconcileSupportRelations } from './finalizePackingResult'
+import { finalizePlacementGeometry } from './finalizePackingResult'
 import { stackCapacity, violatesStackChain, type StackChainNode } from './stackCapacity'
 import { generateBlockCandidates, type BlockCandidate } from './blocks'
 import { initEMS, splitEMS, type EmptyMaximalSpace } from './emsSpace'
@@ -145,7 +144,7 @@ function fitsInsideContainer(point: PackingPoint, box: BoxSize, container: Conta
   )
 }
 
-function overlaps(a: PlacedBox, point: PackingPoint, box: BoxSize) {
+function overlaps(a: PlacementBox, point: PackingPoint, box: BoxSize) {
   return !(
     point.x + box.length <= a.x + EPSILON ||
     a.x + a.length <= point.x + EPSILON ||
@@ -156,7 +155,7 @@ function overlaps(a: PlacedBox, point: PackingPoint, box: BoxSize) {
   )
 }
 
-function supportOverlap(candidate: PlacedBox, point: PackingPoint, box: BoxSize) {
+function supportOverlap(candidate: PlacementBox, point: PackingPoint, box: BoxSize) {
   if (Math.abs(candidate.z + candidate.height - point.z) > EPSILON) {
     return 0
   }
@@ -173,12 +172,12 @@ function supportOverlap(candidate: PlacedBox, point: PackingPoint, box: BoxSize)
 }
 
 
-function supportDetails(point: PackingPoint, box: BoxSize, placed: PlacedBox[]) {
+function supportDetails(point: PackingPoint, box: BoxSize, placed: PlacementBox[]) {
   if (point.z <= EPSILON) {
     return {
       supportedArea: box.length * box.width,
       supportRatio: 1,
-      supportedBy: [] as PlacedBox[],
+      supportedBy: [] as PlacementBox[],
       supportType: 'floor' as const,
       physicalLayer: 1,
     }
@@ -239,7 +238,7 @@ function respectsStackCapacityWithUpwardRiders(
   box: BoxSize,
   item: StackLimitCarrier,
   support: ReturnType<typeof supportDetails>,
-  placed: PlacedBox[],
+  placed: PlacementBox[],
   placedById: Map<string, StackChainNode>,
 ) {
   const candidateTop = point.z + box.height
@@ -258,7 +257,7 @@ function respectsStackCapacityWithUpwardRiders(
   if (directRiders.length === 0) return true
 
   // Invert existing support edges so we can walk the stacks already above each rider.
-  const dependents = new Map<string, PlacedBox[]>()
+  const dependents = new Map<string, PlacementBox[]>()
   for (const existing of placed) {
     for (const supportId of existing.supportedBy) {
       const list = dependents.get(supportId)
@@ -267,7 +266,7 @@ function respectsStackCapacityWithUpwardRiders(
     }
   }
 
-  const maxDepthAbove = (start: PlacedBox, seen = new Set<string>()): number => {
+  const maxDepthAbove = (start: PlacementBox, seen = new Set<string>()): number => {
     if (seen.has(start.id)) return 0
     seen.add(start.id)
     const children = dependents.get(start.id) ?? []
@@ -332,7 +331,7 @@ function canPlace(
   point: PackingPoint,
   box: BoxSize,
   container: ContainerSpec,
-  placed: PlacedBox[],
+  placed: PlacementBox[],
   placedById: Map<string, StackChainNode>,
   item: StackLimitCarrier,
   reservedTopPassengerHeight = 0,
@@ -379,7 +378,7 @@ export function placementScore(
   item: CargoItem,
   box: BoxOrientation,
   point: PackingPoint,
-  placed: PlacedBox[],
+  placed: PlacementBox[],
   container: ContainerSpec,
   committedOrientation?: OrientationKey,
 ) {
@@ -505,7 +504,7 @@ export function placementScore(
 function bestPlacement(
   item: CargoItem,
   container: ContainerSpec,
-  placed: PlacedBox[],
+  placed: PlacementBox[],
   points: PackingPoint[],
   reservedTopPassengerHeight = 0,
   preferCapacityOneTopPassenger = false,
@@ -550,7 +549,7 @@ function bestPlacement(
   return bestFromPoints(points)
 }
 
-function topSurfacePoints(placed: PlacedBox[], item?: CargoItem, minZ = 0) {
+function topSurfacePoints(placed: PlacementBox[], item?: CargoItem, minZ = 0) {
   const levels = new Map<number, { x: Set<number>; y: Set<number> }>()
   const itemOrientations = item ? orientations(item) : []
   const points = new Map<string, PackingPoint>()
@@ -624,7 +623,7 @@ function minimumFittingHeight(item: CargoItem, container: ContainerSpec) {
   return fittingHeights.length > 0 ? Math.min(...fittingHeights) : 0
 }
 
-function placedBoxesOverlap(a: PlacedBox, b: PlacedBox) {
+function placedBoxesOverlap(a: PlacementBox, b: PlacementBox) {
   return !(
     a.x + a.length <= b.x + EPSILON ||
     b.x + b.length <= a.x + EPSILON ||
@@ -635,11 +634,11 @@ function placedBoxesOverlap(a: PlacedBox, b: PlacedBox) {
   )
 }
 
-function hasOverlapViolation(placed: PlacedBox[]) {
+function hasOverlapViolation(placed: PlacementBox[]) {
   return placed.some((box, index) => placed.slice(index + 1).some((other) => placedBoxesOverlap(box, other)))
 }
 
-function hasBoundaryViolation(placed: PlacedBox[], container: ContainerSpec) {
+function hasBoundaryViolation(placed: PlacementBox[], container: ContainerSpec) {
   return placed.some(
     (box) =>
       box.x < -EPSILON ||
@@ -651,7 +650,7 @@ function hasBoundaryViolation(placed: PlacedBox[], container: ContainerSpec) {
   )
 }
 
-function hasStackingViolation(placed: PlacedBox[]) {
+function hasStackingViolation(placed: PlacementBox[]) {
   const placedById = new Map(placed.map((box) => [box.id, box]))
   return placed.some((box) => violatesStackChain(box, placedById) !== null)
 }
@@ -872,7 +871,7 @@ export function shouldUseBlockEngine(cargoItems: CargoItem[], loadingMode: Loadi
 
 export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[], options: CalculatePackingOptions = {}): PackingResult {
   const effective = effectiveContainer(container)
-  const placed: PlacedBox[] = []
+  const placed: PlacementBox[] = []
   // Each cargo commits to the orientation of its first upright placement; later boxes of the
   // same cargo reuse it so rows share a pitch and stop leaving alternating side gaps.
   const committedOrientations = new Map<string, OrientationKey>()
@@ -953,10 +952,10 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   const buildPlacedBox = (
     entry: { item: CargoItem; itemIndex: number; label: string; index: number },
     placement: { box: BoxOrientation; point: PackingPoint },
-    supportPlaced: PlacedBox[],
+    supportPlaced: PlacementBox[],
     workStep: number,
     placementSource?: string,
-  ): PlacedBox => {
+  ): PlacementBox => {
     const { box, point } = placement
     const support = supportDetails(point, box, supportPlaced)
     const placedBox = {
@@ -980,14 +979,12 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       maxStackLayers: entry.item.maxStackLayers,
       groundOnly: entry.item.groundOnly,
       physicalLayer: support.physicalLayer,
-      // Overwritten by assignDepthLayers once all boxes are placed.
-      depthLayer: 1,
       workStep,
       supportType: support.supportType,
       supportedBy: support.supportedBy.map((candidate) => candidate.id),
     }
     if (placementSource) {
-      ;(placedBox as PlacedBox & { placementSource?: string }).placementSource = placementSource
+      ;(placedBox as PlacementBox & { placementSource?: string }).placementSource = placementSource
     }
     return placedBox
   }
@@ -1302,15 +1299,11 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   const volumeUtilization = containerVolume ? (usedVolume / containerVolume) * 100 : 0
   const weightUtilization = effective.maxWeight ? (usedWeight / effective.maxWeight) * 100 : 0
 
-  // Support relations are first recorded while a box is being placed, so a supporter
-  // that lands later is missing from the earlier box's `supportedBy`. Recompute them
-  // from the final coordinates so layering, capacity checks and loading order all see
-  // the complete support graph.
-  reconcileSupportRelations(placed)
+  const finalized = finalizePlacementGeometry(placed, effective)
 
-  // Generate compliance diagnostics under the reconciled Z-gravity support relations
+  // Generate compliance diagnostics under the finalized Z-gravity support relations.
   const diagnostics = buildDiagnostics(
-    placed,
+    finalized.placed,
     unplaced,
     effective,
     usedWeight,
@@ -1321,29 +1314,17 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     }])),
   )
 
-  // 2. Perform inward physical layer mapping and pusher updates (depth layers)
-  assignDepthLayers(placed)
-  assignWorkStepsBySupport(placed, effective)
-  const layers = buildPackingLayers(placed)
-
-  const labelStats = buildLabelStats(cargoItems, placed)
+  const labelStats = buildLabelStats(cargoItems, finalized.placed)
 
   return {
-    placed,
+    placed: finalized.placed,
     unplaced,
-    layers,
-    workSteps: placed.map((box) => ({
-      step: box.workStep,
-      boxId: box.id,
-      cargoId: box.cargoId,
-      label: box.label,
-      physicalLayer: box.physicalLayer,
-      supportType: box.supportType,
-    })),
+    layers: finalized.layers,
+    workSteps: finalized.workSteps,
     labelStats,
     diagnostics,
     totalCargoCount,
-    placedCount: placed.length,
+    placedCount: finalized.placed.length,
     usedVolume,
     containerVolume,
     volumeUtilization,

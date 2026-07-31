@@ -1,4 +1,4 @@
-import type { CargoItem, ContainerSpec, PlacedBox } from '../types'
+import type { CargoItem, ContainerSpec, PlacementBox, PlacedBox } from '../types'
 import { stackCapacity, violatesStackChain, type StackChainNode } from './stackCapacity'
 import { DEFAULT_PLACEMENT_SETTINGS, type SupportPolicy } from './placementSettings'
 

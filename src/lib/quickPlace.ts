@@ -1,4 +1,4 @@
-import type { CargoItem, ContainerSpec, PlacedBox } from '../types'
+import type { CargoItem, ContainerSpec, PlacementBox } from '../types'
 import {
   addBox,
   isBlockingManualIssue,
@@ -59,7 +59,7 @@ function quickPlaceCandidates(draft: ManualDraft, container: ContainerSpec): Pac
     })
 }
 
-function manualBoxAsPlacedBox(box: ManualPlacedBox): PlacedBox {
+function manualBoxAsPlacedBox(box: ManualPlacedBox): PlacementBox {
   return {
     id: box.id,
     cargoId: box.cargoId,

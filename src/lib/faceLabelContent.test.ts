@@ -23,6 +23,7 @@ const box = (overrides: Partial<PlacedBox> = {}): PlacedBox => ({
   stackable: true,
   maxStackLayers: 3,
   physicalLayer: 1,
+  depthLayer: 1,
   workStep: 1,
   supportType: 'floor',
   supportedBy: [],

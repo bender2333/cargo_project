@@ -22,6 +22,7 @@ function makeBox(id: string, step: number): PlacedBox {
     canRotate: true,
     stackable: true,
     physicalLayer: 1,
+    depthLayer: 1,
     workStep: step,
     supportedBy: [],
     supportType: 'floor',

@@ -36,6 +36,7 @@ const box = (overrides: Partial<PlacedBox>): PlacedBox => ({
   canRotate: false,
   stackable: true,
   physicalLayer: 1,
+  depthLayer: 1,
   workStep: 1,
   supportType: 'floor',
   supportedBy: [],
