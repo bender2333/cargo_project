@@ -1,13 +1,38 @@
 import { StrictMode, type ComponentProps } from 'react'
 import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as XLSX from 'xlsx'
 import { EXPORT_FIELD_KEYS } from '../lib/exportPlan'
+import { parseWorkbookBuffer } from '../lib/importWorkbookBoundary'
 import type { ExportTemplate, ImportTemplate } from '../types'
 import {
   TemplateManagerPage,
   type TemplateManagerLabels,
 } from './TemplateManagerPage'
+
+class SampleWorker {
+  static nextResponse: 'limit' | 'parse' | null = null
+  onmessage: ((event: MessageEvent<unknown>) => void) | null = null
+  onerror: ((event: ErrorEvent) => void) | null = null
+
+  postMessage(buffer: ArrayBuffer) {
+    const response = SampleWorker.nextResponse
+    SampleWorker.nextResponse = null
+    void Promise.resolve().then(() => {
+      if (response) {
+        this.onmessage?.(new MessageEvent('message', { data: { ok: false, code: response } }))
+        return
+      }
+      try {
+        this.onmessage?.(new MessageEvent('message', { data: { ok: true, rows: parseWorkbookBuffer(buffer) } }))
+      } catch {
+        this.onerror?.(new ErrorEvent('error', { message: 'sample parse failed' }))
+      }
+    })
+  }
+
+  terminate() {}
+}
 
 type PageProps = ComponentProps<typeof TemplateManagerPage>
 
@@ -17,6 +42,7 @@ const labels: TemplateManagerLabels = {
   templateLoadSample: 'Load sample headers',
   templateNew: 'New template',
   templateSampleLoaded: 'Sample columns',
+  templateSampleLoadFailed: 'Failed to load sample workbook',
   templateName: 'Template name',
   templateCreate: 'Create template',
   templateUpdate: 'Update template',
@@ -39,6 +65,7 @@ const labels: TemplateManagerLabels = {
   templateHelpStartRow: 'Start row help',
   templateDefaultLabel: 'Default label',
   templateDefaultQuantity: 'Default quantity',
+  templateDefaultWeight: 'Default weight',
   templateDefaultColor: 'Default color',
   templateDefaultRotate: 'Default rotate',
   templateDefaultStackable: 'Default stackable',
@@ -184,6 +211,10 @@ function fileWithArrayBuffer(name: string, read: () => Promise<ArrayBuffer>): Fi
   Object.defineProperty(file, 'arrayBuffer', { value: read })
   return file
 }
+beforeEach(() => {
+  vi.stubGlobal('Worker', SampleWorker)
+  SampleWorker.nextResponse = null
+})
 
 afterEach(() => {
   cleanup()
@@ -258,6 +289,39 @@ describe('TemplateManagerPage', () => {
     expect(consoleError).toHaveBeenCalledWith('[template-sample]', expect.any(Error))
   })
 
+  it('clears sample rows and exposes a visible error when the worker rejects the workbook', async () => {
+    SampleWorker.nextResponse = 'limit'
+    const view = render(<TemplateManagerPage {...props()} />)
+    fireEvent.click(view.getByTestId('template-manager-new'))
+    const sampleInput = view.getByTestId('template-manager-sample-input')
+    const file = fileWithArrayBuffer('limited.xlsx', async () => workbookBuffer(['SKU']))
+
+    fireEvent.change(sampleInput, { target: { files: [file] } })
+
+    await waitFor(() => expect(view.getByTestId('template-manager-sample-error').textContent).toContain('Failed to load sample workbook'))
+    expect(view.queryByTestId('template-manager-sample-status')).toBeNull()
+  })
+
+  it('uses the latest locale when an in-flight sample request fails', async () => {
+    const sampleRead = deferred<ArrayBuffer>()
+    const file = fileWithArrayBuffer('locale.xlsx', () => sampleRead.promise)
+    const view = render(<TemplateManagerPage {...props()} />)
+    fireEvent.click(view.getByTestId('template-manager-new'))
+    fireEvent.change(view.getByTestId('template-manager-sample-input'), { target: { files: [file] } })
+
+    const localizedLabels = { ...labels, templateSampleLoadFailed: '样本加载失败' }
+    view.rerender(<TemplateManagerPage {...props({ labels: localizedLabels })} />)
+    await act(async () => {
+      sampleRead.reject(new Error('late sample failure'))
+      await sampleRead.promise.catch(() => undefined)
+    })
+
+    await waitFor(() => {
+      expect(view.getByTestId('template-manager-sample-error').textContent).toBe('样本加载失败')
+      expect(view.getByTestId('template-manager-sample-error').getAttribute('role')).toBe('alert')
+    })
+  })
+
   it('creates a trimmed import template with complete mapping metadata and combined-column fallback', async () => {
     const saved: ImportTemplate = {
       ...importA,
@@ -274,6 +338,7 @@ describe('TemplateManagerPage', () => {
     expect((view.getByTestId('tm-new-template-header-row') as HTMLInputElement).value).toBe('1')
     expect((view.getByTestId('tm-new-template-start-row') as HTMLInputElement).value).toBe('2')
     expect((view.getByTestId('tm-new-template-default-quantity') as HTMLInputElement).value).toBe('1')
+    expect((view.getByTestId('tm-new-template-default-weight') as HTMLInputElement).value).toBe('')
     expect((view.getByTestId('tm-new-template-default-rotate') as HTMLInputElement).checked).toBe(true)
     expect((view.getByTestId('tm-new-template-default-stackable') as HTMLInputElement).checked).toBe(true)
     expect((view.getByTestId('tm-new-template-dimension-mode') as HTMLSelectElement).value).toBe('separate')
@@ -303,6 +368,7 @@ describe('TemplateManagerPage', () => {
     fireEvent.change(view.getByTestId('tm-new-template-start-row'), { target: { value: '4' } })
     fireEvent.change(view.getByTestId('tm-new-template-default-label'), { target: { value: 'BX' } })
     fireEvent.change(view.getByTestId('tm-new-template-default-quantity'), { target: { value: '4' } })
+    fireEvent.change(view.getByTestId('tm-new-template-default-weight'), { target: { value: '7' } })
     fireEvent.change(view.getByTestId('tm-new-template-default-color'), { target: { value: '#ef4444' } })
     fireEvent.click(view.getByTestId('tm-new-template-default-rotate'))
     fireEvent.change(view.getByTestId('tm-new-template-default-max-stack-layers'), { target: { value: '3' } })
@@ -328,7 +394,7 @@ describe('TemplateManagerPage', () => {
       dimensionOrder: ['width', 'length', 'height'],
       defaultValues: {
         quantity: 4,
-        weight: 1,
+        weight: 7,
         canRotate: false,
         stackable: true,
         label: 'BX',

@@ -50,6 +50,13 @@
 - RED/GREEN: provenance and localization regressions were observed failing before their fixes; final `npx vitest run src/lib/manualSteps.test.ts src/lib/planCompliance.test.ts src/lib/reviewChecklist.test.ts src/lib/historySnapshot.test.ts scripts/historySnapshot.server.test.mjs src/components/ResultsPanel.compliance.test.tsx src/components/HistoryPage.test.tsx src/components/VisualizationWorkspace.test.tsx --pool=threads --maxWorkers=1` = **8 files / 71 tests passed**. Final focused ESLint across changed TypeScript/TSX files and `npm exec tsc -- -b --pretty false` both passed.
 - Review gates: fresh spec review found no remaining P1/P2 implementation gap; fresh code-quality review approved with two nonblocking follow-ups: runtime behavioral coverage for the local plan-export error boundary and long-term client/server validator deduplication. Source-text boundary assertions remain structural evidence only.
 
+### 2026-07-31 bounded import confirmation and provenance slice
+
+- [x] Workbench now sends every workbook, including auto-mappable files, through one bounded module-worker parse and pending `CargoImportDialog`; only explicit confirmation dispatches `cargoImported`. Cancel/Escape leaves current cargo unchanged. Template Manager sample parsing uses the same worker and shared 5 MiB limit; stale async sample requests cannot overwrite newer rows, and size/limit/parse/timeout failures clear rows with a visible localized error.
+- [x] Removed synthetic `weight: 1` from blank template drafts. Added an explicit positive finite default-weight control; unsaved drafts retain the value for save payloads but do not apply it during parsing. Selected saved defaults apply only to unmapped weight; mapped blank weight remains `invalid-weight`.
+- [x] Worker responses are runtime-validated as homogeneous array rows within `10,000` rows / `256` columns / `200,000` cells, malformed and synchronous-post failures normalize to parse errors, and every terminal path terminates once. Serialized first-sheet parsing validates full and truncated absolute-row boundaries before `sheet_to_json`; product overflow is rejected.
+- RED/GREEN: Added dialog-created template weight, worker malformed/mixed/oversized response, serialized product overflow, leading-row sentinel, valid row-two sentinel, matrix-row confirmation, sample failure/locale/alert, and trigger-focus regressions. Focused import command = **9 files / 118 tests passed**; focused ESLint and `npm exec tsc -- -b --pretty false` passed. Fresh spec and code-quality reviews both approved with zero P1/P2 findings.
+
 ### 发布 gate (本地/部署/E2E)
 - [ ] 本地 release checks (Lint/Tests/Build/Benchmark) 全量通过。
 - [ ] 生产环境部署门禁验证。

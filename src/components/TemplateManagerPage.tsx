@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import * as XLSX from 'xlsx'
 import { ExportColumnsEditor } from './ExportColumnsEditor'
 import type { ExportColumnsEditorLabels } from './ExportColumnsEditor'
 import { ImportMappingForm } from './ImportMappingForm'
 import type { ImportMappingFormLabels, ImportMappingValue } from './ImportMappingForm'
 import type { ExportTemplatePayload, ImportTemplatePayload } from '../hooks/useTemplateCatalogs'
-import type { ImportCargoRow } from '../lib/importCargo'
+import { MAX_IMPORT_FILE_BYTES, type ImportCargoRow } from '../lib/importCargo'
 import { importColumnsForHeaderRow } from '../lib/importTable'
+import { parseWorkbookFileInWorker } from '../lib/importWorkbookWorkerClient'
 import { EXPORT_FIELD_KEYS } from '../lib/exportPlan'
 import type { ExportTemplate, ImportTemplate, Locale } from '../types'
 
@@ -16,6 +16,7 @@ export type TemplateManagerLabels = ImportMappingFormLabels & ExportColumnsEdito
   templateLoadSample: string
   templateNew: string
   templateSampleLoaded: string
+  templateSampleLoadFailed: string
   templateName: string
   templateCreate: string
   templateUpdate: string
@@ -62,8 +63,6 @@ type ExportEditState = {
   draft: ExportTemplatePayload
 }
 
-type WorksheetCell = string | number | boolean | null | undefined
-
 function createBlankImportTemplate(): ImportTemplatePayload {
   return {
     name: '',
@@ -87,7 +86,7 @@ function createBlankImportTemplate(): ImportTemplatePayload {
     dimensionMode: 'separate',
     combinedColumn: '',
     dimensionOrder: ['length', 'width', 'height'],
-    defaultValues: { quantity: 1, weight: 1, canRotate: true, stackable: true },
+    defaultValues: { quantity: 1, canRotate: true, stackable: true },
   }
 }
 
@@ -177,6 +176,7 @@ export function TemplateManagerPage({
 }: Props) {
   const [notice, setNotice] = useState('')
   const [sampleRows, setSampleRows] = useState<ImportCargoRow[]>([])
+  const [sampleLoadError, setSampleLoadError] = useState('')
   const [newImportDraft, setNewImportDraft] = useState<ImportTemplatePayload | null>(null)
   const [editingImport, setEditingImport] = useState<ImportEditState | null>(null)
   const [newExportDraft, setNewExportDraft] = useState<ExportTemplatePayload | null>(null)
@@ -186,6 +186,11 @@ export function TemplateManagerPage({
   const sampleRequestIdRef = useRef(0)
   const pendingActionsRef = useRef(new Set<string>())
   const operationEpochRef = useRef(0)
+  const labelsRef = useRef(labels)
+
+  useEffect(() => {
+    labelsRef.current = labels
+  }, [labels])
 
   useEffect(() => {
     mountedRef.current = true
@@ -209,15 +214,25 @@ export function TemplateManagerPage({
   const loadSampleHeaders = async (file: File | null) => {
     if (!file) return
     const requestId = ++sampleRequestIdRef.current
-    try {
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
-      const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      if (!mountedRef.current || requestId !== sampleRequestIdRef.current) return
-      setSampleRows(sheet ? XLSX.utils.sheet_to_json<WorksheetCell[]>(sheet, { header: 1, raw: true }) : [])
-    } catch (error) {
+    setSampleRows([])
+    setSampleLoadError('')
+    const publishFailure = (error: unknown) => {
       if (!mountedRef.current || requestId !== sampleRequestIdRef.current) return
       console.error('[template-sample]', error)
       setSampleRows([])
+      setSampleLoadError(labelsRef.current.templateSampleLoadFailed)
+    }
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+      publishFailure(new Error('Sample workbook exceeds the file-size limit'))
+      return
+    }
+    try {
+      const rows = await parseWorkbookFileInWorker(file)
+      if (!mountedRef.current || requestId !== sampleRequestIdRef.current) return
+      setSampleRows(rows)
+      setSampleLoadError('')
+    } catch (error) {
+      publishFailure(error)
     }
   }
 
@@ -402,6 +417,11 @@ export function TemplateManagerPage({
         {sampleRows.length > 0 && (
           <p className="mb-3 text-xs font-semibold text-[#047857]" data-testid="template-manager-sample-status">
             {labels.templateSampleLoaded}: {importColumnsForHeaderRow(sampleRows, 1).length}
+          </p>
+        )}
+        {sampleLoadError && (
+          <p className="mb-3 text-xs font-semibold text-red-700" data-testid="template-manager-sample-error" role="alert">
+            {sampleLoadError}
           </p>
         )}
         {newImportDraft && (

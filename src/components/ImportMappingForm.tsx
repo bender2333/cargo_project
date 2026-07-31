@@ -25,6 +25,7 @@ export type ImportMappingFormLabels = {
   templateHelpStartRow: string
   templateDefaultLabel: string
   templateDefaultQuantity: string
+  templateDefaultWeight: string
   templateDefaultColor: string
   templateDefaultRotate: string
   templateDefaultStackable: string
@@ -233,6 +234,21 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
             value={value.defaults.quantity ?? 1}
             data-testid={tid('template-default-quantity')}
             onChange={(event) => patchDefaults({ quantity: Math.max(1, Number(event.target.value) || 1) })}
+          />
+        </label>
+        <label className="font-semibold text-slate-700">
+          {labels.templateDefaultWeight}
+          <input
+            className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+            type="number"
+            min={0}
+            step="any"
+            value={value.defaults.weight ?? ''}
+            data-testid={tid('template-default-weight')}
+            onChange={(event) => {
+              const parsed = Number(event.target.value)
+              patchDefaults({ weight: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined })
+            }}
           />
         </label>
         <label className="font-semibold text-slate-700">

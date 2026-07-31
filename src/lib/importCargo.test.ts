@@ -1,7 +1,17 @@
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import * as XLSX from 'xlsx'
-import { buildTemplateImportConfig, IMPORT_CODES, parseCargoRows, parseCargoRowsWithMapping, parseCargoRowsWithTemplate } from './importCargo'
+import {
+  buildTemplateImportConfig,
+  IMPORT_CODES,
+  MAX_IMPORT_CELLS,
+  MAX_IMPORT_COLUMNS,
+  MAX_IMPORT_ROWS,
+  importWorksheetSizeWithinLimits,
+  parseCargoRows,
+  parseCargoRowsWithMapping,
+  parseCargoRowsWithTemplate,
+} from './importCargo'
 import type { ImportCargoRow, ImportTemplateConfig } from './importCargo'
 
 describe('parseCargoRows', () => {
@@ -291,6 +301,8 @@ describe('parseCargoRowsWithMapping', () => {
     const workbook = XLSX.readFile(workbookPath)
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
     const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true }) as ImportCargoRow[]
+    const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1:A1')
+    expect(importWorksheetSizeWithinLimits(range.e.r - range.s.r + 1, range.e.c - range.s.c + 1)).toBe(true)
 
     const result = parseCargoRowsWithTemplate(rows, buildTemplateImportConfig({
       name: 'Vietnam combined dimensions',
@@ -540,6 +552,58 @@ describe('parseCargoRowsWithMapping', () => {
     expect(result.items[0]!.length).toBe(580)
     expect(result.items[0]!.width).toBe(365)
     expect(result.items[0]!.height).toBe(435)
+  })
+
+  it('keeps the Russian pallet fixture within the import boundary and parses all rows', () => {
+    const workbookPath = path.join(process.cwd(), 'test-data', 'excel', '俄罗斯整托装柜尺寸.xlsx')
+    const workbook = XLSX.readFile(workbookPath)
+    const sheet = workbook.Sheets[workbook.SheetNames[0]]
+    const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1:A1')
+    const rows = XLSX.utils.sheet_to_json<Record<string, string | number | null>>(sheet) as ImportCargoRow[]
+
+    expect(importWorksheetSizeWithinLimits(range.e.r - range.s.r + 1, range.e.c - range.s.c + 1)).toBe(true)
+    const result = parseCargoRows(rows, { createId: () => 'russian-fixture' })
+    expect(result.errors).toEqual([])
+    expect(result.items).toHaveLength(31)
+  })
+
+  it('does not replace a blank mapped weight with a template default', () => {
+    const result = parseCargoRowsWithTemplate(
+      [{ L: 400, W: 500, H: 600, Weight: '' }],
+      {
+        mapping: { length: 'L', width: 'W', height: 'H', weight: 'Weight' },
+        defaultValues: { quantity: 1, weight: 12 },
+      },
+      { createId: () => 'mapped-blank-weight' },
+    )
+
+    expect(result.items).toEqual([])
+    expect(result.errors).toEqual([
+      expect.objectContaining({ code: IMPORT_CODES.INVALID_WEIGHT, row: 2 }),
+    ])
+  })
+
+  it('uses a template weight default only when no weight column is mapped', () => {
+    const result = parseCargoRowsWithTemplate(
+      [{ L: 400, W: 500, H: 600 }],
+      {
+        mapping: { length: 'L', width: 'W', height: 'H' },
+        defaultValues: { quantity: 1, weight: 12 },
+      },
+      { createId: () => 'unmapped-default-weight' },
+    )
+
+    expect(result.errors).toEqual([])
+    expect(result.items).toEqual([expect.objectContaining({ weight: 12 })])
+  })
+
+  it('enforces deterministic expanded worksheet row and cell limits', () => {
+    expect(importWorksheetSizeWithinLimits(MAX_IMPORT_ROWS, Math.floor(MAX_IMPORT_CELLS / MAX_IMPORT_ROWS))).toBe(true)
+    expect(importWorksheetSizeWithinLimits(MAX_IMPORT_ROWS + 1, 1)).toBe(false)
+    expect(importWorksheetSizeWithinLimits(1, MAX_IMPORT_CELLS + 1)).toBe(false)
+    expect(importWorksheetSizeWithinLimits(1, MAX_IMPORT_COLUMNS)).toBe(true)
+    expect(importWorksheetSizeWithinLimits(1, MAX_IMPORT_COLUMNS + 1)).toBe(false)
+    expect(importWorksheetSizeWithinLimits(1_001, 200)).toBe(false)
   })
 
   it('falls back to mapping.dimensions when saved combinedColumn is an empty string', () => {

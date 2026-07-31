@@ -9,6 +9,7 @@ const labels: ImportMappingFormLabels = {
   templateHelpStartRow: 'Start row help',
   templateDefaultLabel: 'Default label',
   templateDefaultQuantity: 'Default quantity',
+  templateDefaultWeight: 'Default weight',
   templateDefaultColor: 'Default color',
   templateDefaultRotate: 'Default rotate',
   templateDefaultStackable: 'Default stackable',
@@ -130,6 +131,29 @@ describe('ImportMappingForm missing column feedback', () => {
     fireEvent.click(getByTestId('template-default-ground-only'))
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
       defaults: expect.objectContaining({ groundOnly: true }),
+    }))
+  })
+
+  it('stores only a finite positive default weight', () => {
+    const onChange = vi.fn()
+    const { getByTestId } = render(
+      <ImportMappingForm
+        value={baseValue}
+        onChange={onChange}
+        availableColumns={['Code', 'Goods', 'W', 'H', 'Qty']}
+        labels={labels}
+      />,
+    )
+
+    const input = getByTestId('template-default-weight')
+    fireEvent.change(input, { target: { value: '7' } })
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      defaults: expect.objectContaining({ weight: 7 }),
+    }))
+
+    fireEvent.change(input, { target: { value: '0' } })
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      defaults: expect.objectContaining({ weight: undefined }),
     }))
   })
 })

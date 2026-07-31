@@ -85,6 +85,17 @@ async function createEmptyWorkbookFile() {
   return filePath
 }
 
+async function createOversizedWorkbookFile() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cargo-calc-oversized-'))
+  const filePath = path.join(dir, 'cargo-import-oversized.xlsx')
+  const sheet = XLSX.utils.aoa_to_sheet([['label'], ['A']])
+  sheet['!ref'] = 'A1:Z10001'
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Oversized')
+  XLSX.writeFile(workbook, filePath)
+  return filePath
+}
+
 async function createTemplateWorkbookFile() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cargo-calc-template-'))
   const filePath = path.join(dir, 'cargo-template.xlsx')
@@ -876,6 +887,15 @@ test('supports Excel import/export affordance and Chinese mode', async ({ page }
   await expect(page.getByTestId('import-export-toolbar').getByRole('button', { name: 'Export XLSX' })).toBeVisible()
   const filePath = await createWorkbookFile()
   await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Imported crate/ })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByTestId('mapping-modal')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Imported crate/ })).toHaveCount(0)
+
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await page.getByTestId('confirm-mapping').click()
   await expect(page.getByRole('button', { name: 'Import log' })).toHaveClass(/active/)
   await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
   await expect(page.getByTestId('import-log-panel').getByText(/Mapped fields: .*label/)).toBeVisible()
@@ -964,6 +984,8 @@ test('downloads a standard Chinese XLSX template that imports without mapping', 
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     buffer: importBuffer,
   })
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await page.getByTestId('confirm-mapping').click()
   await expect(page.getByTestId('import-log-panel').getByText('导入成功: 1')).toBeVisible()
   await expect(page.getByTestId('mapping-modal')).toHaveCount(0)
   const cargoItem = page.getByTestId('cargo-list-item').filter({ hasText: '模板回导货物' })
@@ -1394,6 +1416,8 @@ test('imports Chinese centimeter Excel fields with visible conversion warning', 
   await openEnglish(page)
   const filePath = await createChineseWorkbookFile()
   await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await page.getByTestId('confirm-mapping').click()
 
   await expect(page.getByTestId('cargo-panel')).not.toContainText('Import warning row 2')
   await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
@@ -1443,6 +1467,8 @@ test('imports CSV cargo rows into the same packing flow', async ({ page }) => {
   await openEnglish(page)
   const filePath = await createCsvFile()
   await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await page.getByTestId('confirm-mapping').click()
 
   await expect(page.getByTestId('import-log-panel').getByText('Import success: 1')).toBeVisible()
   await expect(page.getByRole('button', { name: /CSV crate/ }).first()).toBeVisible()
@@ -1460,6 +1486,16 @@ test('shows a clear import issue for workbooks without usable rows', async ({ pa
   await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
 
   await expect(page.getByTestId('import-log-panel').getByText('Import issue: No usable data found')).toBeVisible()
+})
+
+test('rejects an oversized expanded worksheet before opening a pending preview', async ({ page }) => {
+  await openEnglish(page)
+  const filePath = await createOversizedWorkbookFile()
+
+  await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+
+  await expect(page.getByTestId('mapping-modal')).toHaveCount(0)
+  await expect(page.getByTestId('import-log-panel').getByText(/Expanded worksheet exceeds the import limit/)).toBeVisible()
 })
 
 test('saves and restores history plans with labels and layers intact', async ({ page }) => {
@@ -1482,6 +1518,8 @@ test('saves and restores history plans with labels and layers intact', async ({ 
   await page.getByRole('button', { name: 'Back to workbench' }).click()
   const filePath = await createWorkbookFile()
   await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await page.getByTestId('confirm-mapping').click()
   await expect(page.getByTestId('cargo-list-item').filter({ hasText: 'Imported crate' })).toBeVisible()
 
   await page.getByRole('button', { name: 'History', exact: true }).click()

@@ -33,10 +33,10 @@ import type { SceneViewMode } from './components/ContainerScene'
 import type { PlanViewMode } from './components/ContainerPlan2D'
 import { buildExportPlanRows, buildExportRowsFromTemplate } from './lib/exportPlan'
 import { createClientId } from './lib/clientId'
-import { parseCargoRows } from './lib/importCargo'
+import { MAX_IMPORT_CELLS, MAX_IMPORT_COLUMNS, MAX_IMPORT_FILE_BYTES, MAX_IMPORT_ROWS } from './lib/importCargo'
 import type { ImportCargoRow } from './lib/importCargo'
 import { importPreviewRows } from './lib/importTable'
-import { canAutoMap, buildImportMessages } from './lib/importWorkflow'
+import { ImportWorkbookWorkerError, parseWorkbookFileInWorker } from './lib/importWorkbookWorkerClient'
 import { normalizeCargoLabelColors } from './lib/labels'
 import {
   deriveClearanceAnnotations,
@@ -72,7 +72,6 @@ type CustomContainerDialogComponent = typeof import('./components/CustomContaine
 type TemplateManagerPageComponent = typeof import('./components/TemplateManagerPage')['TemplateManagerPage']
 type UserManagementComponent = typeof import('./components/UserManagement')['UserManagement']
 const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
-type WorksheetCell = string | number | boolean | null | undefined
 
 
 
@@ -1134,8 +1133,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   const importExcel = async (file: File | null) => {
     if (!file) return
-    const MAX_BYTES = 5 * 1024 * 1024
-    if (file.size > MAX_BYTES) {
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
       setImportMessages([`${t.importIssue}: ${t.importFileTooLarge}`])
       setActiveResultTab('importLog')
       setActiveNav('report')
@@ -1143,15 +1141,18 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     }
     let rows: ImportCargoRow[]
     try {
-      const XLSX = await import('xlsx')
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
-      const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      rows = sheet ? XLSX.utils.sheet_to_json<WorksheetCell[]>(sheet, { header: 1, raw: true }) : []
+      rows = await parseWorkbookFileInWorker(file)
     } catch (error) {
-      // xlsx@0.18.5 has known prototype-pollution / ReDoS issues; keep the catch tight and
-      // do not surface the raw error message to the user.
-      console.error('[import-excel]', error)
-      setImportMessages([`${t.importParseFailed}: ${t.importFileUnreadable}`])
+      const workerError = error instanceof ImportWorkbookWorkerError ? error : null
+      if (workerError?.code !== 'limit') console.error('[import-excel]', error)
+      const detail = workerError?.code === 'limit'
+        ? (locale === 'zh'
+            ? `工作表展开后超过导入上限（最多 ${MAX_IMPORT_ROWS} 行、${MAX_IMPORT_COLUMNS} 列且 ${MAX_IMPORT_CELLS} 个单元格）`
+            : `Expanded worksheet exceeds the import limit (${MAX_IMPORT_ROWS} rows, ${MAX_IMPORT_COLUMNS} columns, and ${MAX_IMPORT_CELLS} cells maximum)`)
+        : workerError?.code === 'timeout'
+          ? (locale === 'zh' ? '工作簿解析超时，已安全终止' : 'Workbook parsing timed out and was safely stopped')
+          : t.importFileUnreadable
+      setImportMessages([`${workerError?.code === 'limit' ? t.importIssue : t.importParseFailed}: ${detail}`])
       setActiveResultTab('importLog')
       setActiveNav('report')
       return
@@ -1164,37 +1165,15 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       return
     }
 
-    const autoRows = importPreviewRows(rows, 1, 2)
-    const autoMappable = canAutoMap(autoRows[0] ?? {})
-
-    if (autoRows.length === 0) {
+    if (importPreviewRows(rows, 1, 2).length === 0) {
       setImportMessages([`${t.importIssue}: ${t.importNoData}`])
       setActiveResultTab('importLog')
       setActiveNav('report')
       return
     }
 
-    if (autoMappable) {
-      const imported = parseCargoRows(autoRows, { colors })
-      setImportMessages(buildImportMessages(imported, t, locale))
-      if (imported.errors.length === 0 && imported.items.length > 0) {
-        dispatchPackingSession({ type: 'cargoImported', items: imported.items })
-        setSelectedBoxId(null)
-      } else if (imported.errors.length > 0) {
-        setImportMessages((prev) => [...prev, locale === 'zh'
-          ? '导入含错误行，未覆盖当前货物。请修正后重新导入或使用手动映射预览。'
-          : 'Import has error rows; current cargo was not replaced. Fix the workbook or use manual mapping preview.'])
-      } else if (imported.errors.length === 0) {
-        setImportMessages((prev) => [...prev, locale === 'zh'
-          ? '未识别到可导入的货物行，建议使用模板管理器手动映射列'
-          : 'No cargo rows were recognized. Try mapping columns manually with the template manager.'])
-      }
-      setActiveResultTab('importLog')
-      setActiveNav('report')
-    } else {
-      setImportRows(rows)
-      setShowMappingModal(true)
-    }
+    setImportRows(rows)
+    setShowMappingModal(true)
   }
 
   const runPlanExport = async (operation: () => void | Promise<void>): Promise<void> => {

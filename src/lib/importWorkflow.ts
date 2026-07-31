@@ -93,7 +93,7 @@ export function importMappingValueFromTemplate(template: ImportTemplate): Import
     dimensionMode: template.dimensionMode ?? 'separate',
     combinedColumn: template.combinedColumn || template.mapping.dimensions || '',
     dimensionOrder: template.dimensionOrder ?? ['length', 'width', 'height'],
-    defaults: { quantity: 1, weight: 1, canRotate: true, stackable: true, ...(template.defaultValues ?? {}) },
+    defaults: { quantity: 1, canRotate: true, stackable: true, ...(template.defaultValues ?? {}) },
   }
 }
 

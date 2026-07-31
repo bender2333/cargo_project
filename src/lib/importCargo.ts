@@ -5,6 +5,21 @@ import { excelStyleLabel } from './excelStyleLabel'
 type RowValue = string | number | boolean | null | undefined
 export type ImportCargoRow = Record<string, RowValue> | RowValue[]
 
+export const MAX_IMPORT_ROWS = 10_000
+export const MAX_IMPORT_COLUMNS = 256
+export const MAX_IMPORT_CELLS = 200_000
+export const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024
+
+export function importWorksheetSizeWithinLimits(rowCount: number, columnCount: number): boolean {
+  return Number.isInteger(rowCount)
+    && Number.isInteger(columnCount)
+    && rowCount >= 0
+    && columnCount >= 0
+    && rowCount <= MAX_IMPORT_ROWS
+    && columnCount <= MAX_IMPORT_COLUMNS
+    && rowCount * columnCount <= MAX_IMPORT_CELLS
+}
+
 export const IMPORT_CODES = {
   CM_CONVERTED: 'cm-converted',
   INVALID_DIMENSIONS: 'invalid-dimensions',
@@ -413,12 +428,10 @@ export function parseCargoRowsWithTemplate(
     const next: Record<string, RowValue> = { ...row }
     const applyDefault = (field: keyof ImportTemplateDefaults, key: string, value: RowValue) => {
       const mapped = template.mapping[field]
-      if (mapped) {
-        if (next[mapped] === undefined || next[mapped] === null || String(next[mapped]).trim() === '') {
-          next[mapped] = value
-        }
-      } else {
+      if (!mapped) {
         next[key] = value
+      } else if (field !== 'weight' && (next[mapped] === undefined || next[mapped] === null || String(next[mapped]).trim() === '')) {
+        next[mapped] = value
       }
     }
     if (defaults.label) applyDefault('label', '__default_label', defaults.label)

@@ -42,7 +42,7 @@ function renderDialog(props: Partial<Parameters<typeof CargoImportDialog>[0]> = 
   const onUpdateTemplate = props.onUpdateTemplate ?? vi.fn().mockResolvedValue(makeTemplate())
   const utils = render(
     <CargoImportDialog
-      importRows={importRows}
+      importRows={props.importRows ?? importRows}
       importTemplates={props.importTemplates ?? [makeTemplate()]}
       importTemplateLoadFailed={props.importTemplateLoadFailed ?? false}
       locale="en"
@@ -243,5 +243,155 @@ describe('CargoImportDialog template reconciliation', () => {
     fireEvent.click(document.querySelector('[data-testid="save-import-template"]')!)
     await waitFor(() => expect(onUpdateTemplate).toHaveBeenCalledWith('t1', expect.anything()))
     expect(onCreateTemplate).not.toHaveBeenCalled()
+  })
+})
+
+describe('CargoImportDialog pending import transaction', () => {
+  const autoMappedRows: ImportCargoRow[] = [
+    { Label: 'A', Name: 'Auto mapped crate', Length: 1000, Width: 800, Height: 600, Weight: 25, Quantity: 2 },
+  ]
+  const missingWeightRows: ImportCargoRow[] = [
+    { Label: 'A', Name: 'Missing weight', Length: 1000, Width: 800, Height: 600, Quantity: 4 },
+  ]
+  const templateRows: ImportCargoRow[] = [
+    { Label: 'A', Name: 'Template weight', L: 1000, W: 800, H: 600, Qty: 4 },
+  ]
+  it('keeps a valid auto-mapped workbook pending until explicit confirmation', () => {
+    const onConfirm = vi.fn()
+    const view = renderDialog({ importRows: autoMappedRows, onConfirm })
+
+    expect(view.getByTestId('mapping-modal')).toBeTruthy()
+    expect(onConfirm).not.toHaveBeenCalled()
+
+    fireEvent.click(view.getByTestId('confirm-mapping'))
+
+    expect(onConfirm).toHaveBeenCalledWith([
+      expect.objectContaining({ name: 'Auto mapped crate', weight: 25, quantity: 2 }),
+    ], expect.any(Array))
+  })
+
+  it('maps worker matrix rows through the same confirmation path', () => {
+    const onConfirm = vi.fn()
+    const matrixRows: ImportCargoRow[] = [
+      ['Label', 'Name', 'Length', 'Width', 'Height', 'Weight', 'Quantity'],
+      ['A', 'Matrix crate', 1000, 800, 600, 25, 2],
+    ]
+    const view = renderDialog({ importRows: matrixRows, onConfirm })
+
+    fireEvent.click(view.getByTestId('confirm-mapping'))
+
+    expect(onConfirm).toHaveBeenCalledWith([
+      expect.objectContaining({ name: 'Matrix crate', weight: 25, quantity: 2 }),
+    ], expect.any(Array))
+  })
+
+  it('cancels a pending import without confirming cargo', () => {
+    const onConfirm = vi.fn()
+    const onClose = vi.fn()
+    const view = renderDialog({ importRows: autoMappedRows, onConfirm, onClose })
+
+    fireEvent.click(view.getByRole('button', { name: 'mappingCancel' }))
+
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  it('blocks untemplated rows with missing or blank weight', () => {
+    const missingWeight = renderDialog({ importRows: missingWeightRows })
+    expect((missingWeight.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(true)
+    expect(missingWeight.getByTestId('mapping-parse-summary').textContent).toContain('Missing or invalid weight.')
+    missingWeight.unmount()
+
+    const blankWeightRows: ImportCargoRow[] = [
+      { Label: 'A', Name: 'Blank weight', Length: 1000, Width: 800, Height: 600, Weight: '', Quantity: 1 },
+    ]
+    const blankWeight = renderDialog({ importRows: blankWeightRows })
+    expect((blankWeight.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(true)
+    expect(blankWeight.getByTestId('mapping-parse-summary').textContent).toContain('Missing or invalid weight.')
+  })
+
+  it('does not invent a weight default for a selected template that omits one', () => {
+    const template = makeTemplate()
+    const view = renderDialog({ importRows: templateRows, importTemplates: [template] })
+
+    selectTemplate(template.id)
+
+    expect((view.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(true)
+    expect(view.queryByTestId('weight-default-source')).toBeNull()
+    expect(view.getByTestId('mapping-parse-summary').textContent).toContain('Missing or invalid weight.')
+  })
+
+  it('uses an explicitly selected template default only for an unmapped weight', () => {
+    const onConfirm = vi.fn()
+    const template = makeTemplate({ defaultValues: { quantity: 1, weight: 7, canRotate: true, stackable: true } })
+    const view = renderDialog({ importRows: templateRows, importTemplates: [template], onConfirm })
+
+    selectTemplate(template.id)
+
+    expect(view.getByTestId('weight-default-source').textContent).toContain('7')
+    fireEvent.click(view.getByTestId('confirm-mapping'))
+    expect(onConfirm).toHaveBeenCalledWith([
+      expect.objectContaining({ weight: 7 }),
+    ], expect.any(Array))
+  })
+
+  it('persists an explicit default weight when creating a template from the dialog', async () => {
+    const onCreateTemplate = vi.fn().mockResolvedValue(makeTemplate({
+      defaultValues: { quantity: 1, weight: 7, canRotate: true, stackable: true },
+    }))
+    const view = renderDialog({ importRows: templateRows, onCreateTemplate })
+
+    fireEvent.change(view.getByTestId('import-template-name'), { target: { value: 'Template with weight' } })
+    fireEvent.change(view.getByTestId('template-default-weight'), { target: { value: '7' } })
+    fireEvent.click(view.getByTestId('save-import-template'))
+
+    await waitFor(() => expect(onCreateTemplate).toHaveBeenCalledWith(expect.objectContaining({
+      defaultValues: expect.objectContaining({ weight: 7 }),
+    })))
+  })
+
+  it('keeps a blank mapped weight invalid even when the selected template has a default', () => {
+    const blankWeightRows: ImportCargoRow[] = [
+      { Label: 'A', Name: 'Blank weight', L: 1000, W: 800, H: 600, Weight: '', Qty: 1 },
+    ]
+    const template = makeTemplate({
+      mapping: { ...makeTemplate().mapping, weight: 'Weight' },
+      defaultValues: { quantity: 1, weight: 7, canRotate: true, stackable: true },
+    })
+    const view = renderDialog({ importRows: blankWeightRows, importTemplates: [template] })
+
+    selectTemplate(template.id)
+
+    expect((view.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(true)
+    expect(view.getByTestId('mapping-parse-summary').textContent).toContain('Missing or invalid weight.')
+  })
+})
+
+describe('CargoImportDialog keyboard focus management', () => {
+  it('focuses the dialog, traps Tab in both directions, closes on Escape, and restores prior focus', () => {
+    const prior = document.createElement('button')
+    document.body.appendChild(prior)
+    prior.focus()
+    const onClose = vi.fn()
+    const view = renderDialog({ onClose })
+    const dialog = view.getByTestId('mapping-modal')
+
+    expect(document.activeElement).toBe(dialog)
+
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+    const first = focusable[0]!
+    const last = focusable[focusable.length - 1]!
+    first.focus()
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(last)
+    last.focus()
+    fireEvent.keyDown(dialog, { key: 'Tab' })
+    expect(document.activeElement).toBe(first)
+
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledOnce()
+    view.unmount()
+    expect(document.activeElement).toBe(prior)
+    prior.remove()
   })
 })

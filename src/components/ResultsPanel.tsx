@@ -310,7 +310,7 @@ export function ResultsPanel({
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3" data-testid="import-export-toolbar">
           <h2 className="text-lg font-bold">{t.results}</h2>
           <div className="flex flex-wrap gap-2 text-xs">
-            <label className="cursor-pointer border border-[#b8b8b8] bg-white px-3 py-2 font-semibold">{t.importExcel}<input className="hidden" accept=".xlsx,.xls,.csv" type="file" onChange={(event) => {
+            <label className="cursor-pointer border border-[#b8b8b8] bg-white px-3 py-2 font-semibold">{t.importExcel}<input className="sr-only" accept=".xlsx,.xls,.csv" type="file" onChange={(event) => {
               const file = event.target.files?.[0] ?? null
               event.currentTarget.value = ''
               void importExcel(file)

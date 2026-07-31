@@ -119,4 +119,12 @@ describe('ResultsPanel compliance controls', () => {
     expect((view.getByTestId('export-review-json') as HTMLButtonElement).disabled).toBe(false)
     expect((view.getByTestId('export-review-excel') as HTMLButtonElement).disabled).toBe(false)
   })
+
+  it('keeps the import file trigger focusable for dialog focus restoration', () => {
+    const view = render(<ResultsPanel {...props(okCompliance)} />)
+    const input = view.container.querySelector('input[type="file"]')
+
+    expect(input?.className).toContain('sr-only')
+    expect(input?.className).not.toContain('hidden')
+  })
 })

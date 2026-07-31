@@ -103,6 +103,19 @@ describe('Workbench packing-session boundary', () => {
     expect(dialogSource).toContain('importMappingValueFromTemplate')
   })
 
+  it('keeps workbook reads pending and commits cargo only from the confirmation callback', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+    const importBlock = source.slice(source.indexOf('const importExcel'), source.indexOf('const exportExcel'))
+
+    expect(importBlock).toContain('setImportRows(rows)')
+    expect(importBlock).toContain('setShowMappingModal(true)')
+    expect(importBlock).not.toContain('cargoImported')
+    expect(importBlock).toContain('parseWorkbookFileInWorker(file)')
+    expect(importBlock).not.toContain("import('xlsx')")
+    expect(source.match(/type: 'cargoImported'/g)).toHaveLength(1)
+    expect(source.indexOf("type: 'cargoImported'")).toBeGreaterThan(source.indexOf('onConfirm={(items, messages) =>'))
+  })
+
   it('delegates template manager drafts and rendering to the page boundary', () => {
     const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
 

@@ -71,6 +71,8 @@ const EMPTY_UNITS: Record<'length' | 'width' | 'height', DimensionUnit> = {
   length: 'auto', width: 'auto', height: 'auto',
 }
 
+const BASE_IMPORT_DEFAULTS: ImportTemplateDefaults = { quantity: 1, canRotate: true, stackable: true }
+
 export function CargoImportDialog({
   importRows,
   importTemplates,
@@ -102,9 +104,43 @@ export function CargoImportDialog({
   const [templateName, setTemplateName] = useState('')
   const [templateHeaderRow, setTemplateHeaderRow] = useState(1)
   const [templateStartRow, setTemplateStartRow] = useState(2)
-  const [templateDefaults, setTemplateDefaults] = useState<ImportTemplateDefaults>({ quantity: 1, weight: 1, canRotate: true, stackable: true })
+  const [templateDefaults, setTemplateDefaults] = useState<ImportTemplateDefaults>(BASE_IMPORT_DEFAULTS)
   const [templateSaveNotice, setTemplateSaveNotice] = useState('')
   const [missingImportColumns, setMissingImportColumns] = useState<string[]>([])
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    dialogRef.current?.focus()
+    return () => previousFocus?.focus()
+  }, [])
+
+  const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      onClose()
+      return
+    }
+    if (event.key !== 'Tab' || !dialogRef.current) return
+    event.stopPropagation()
+    const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+    ))
+    if (focusable.length === 0) {
+      event.preventDefault()
+      return
+    }
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
 
   // Reconcile the selected template against the shared catalog: an authoritative
   // rename syncs the canonical name (unless the user has typed their own "save
@@ -176,7 +212,7 @@ export function CargoImportDialog({
     setTemplateDimensionMode(next.dimensionMode)
     setTemplateCombinedColumn(next.combinedColumn)
     setTemplateDimensionOrder(next.dimensionOrder)
-    setTemplateDefaults({ quantity: 1, weight: 1, canRotate: true, stackable: true, ...next.defaults })
+    setTemplateDefaults({ ...BASE_IMPORT_DEFAULTS, ...next.defaults })
     setMissingImportColumns(selectedImportTemplateId
       ? missingMappedColumns(next, importColumnsForHeaderRow(importRows, next.headerRow))
       : [])
@@ -194,7 +230,7 @@ export function CargoImportDialog({
       setTemplateStartRow(2)
       setTemplateDimensionMode('separate')
       setTemplateCombinedColumn('')
-      setTemplateDefaults({ quantity: 1, weight: 1, canRotate: true, stackable: true })
+      setTemplateDefaults(BASE_IMPORT_DEFAULTS)
       setTemplateName('')
       setTemplateDimensionOrder(['length', 'width', 'height'])
       return
@@ -246,6 +282,10 @@ export function CargoImportDialog({
     }
   }
 
+  const effectiveTemplateDefaults = useMemo<ImportTemplateDefaults>(() => (
+    selectedImportTemplateId ? templateDefaults : { ...templateDefaults, weight: undefined }
+  ), [selectedImportTemplateId, templateDefaults])
+
   const pendingImport = useMemo(() => parseCargoRowsWithTemplate(importRows, {
     mapping: customMapping,
     units: customUnits,
@@ -255,14 +295,14 @@ export function CargoImportDialog({
     dimensionMode: templateDimensionMode,
     combinedColumn: templateCombinedColumn,
     dimensionOrder: templateDimensionOrder,
-    defaultValues: templateDefaults,
+    defaultValues: effectiveTemplateDefaults,
   }, { colors: colors as string[] }), [
     colors,
     customMapping,
     customUnits,
     importRows,
     templateCombinedColumn,
-    templateDefaults,
+    effectiveTemplateDefaults,
     templateDimensionMode,
     templateDimensionOrder,
     templateHeaderRow,
@@ -292,7 +332,16 @@ export function CargoImportDialog({
   const previewRows = importPreviewRows(importRows, templateHeaderRow, templateStartRow).slice(0, 5)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" data-testid="mapping-modal" role="dialog" aria-modal="true" aria-labelledby="mapping-modal-title">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      data-testid="mapping-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="mapping-modal-title"
+      ref={dialogRef}
+      tabIndex={-1}
+      onKeyDown={handleDialogKeyDown}
+    >
       <div className="w-full max-w-5xl rounded-xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in duration-200 max-h-[92vh] overflow-y-auto">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -363,6 +412,11 @@ export function CargoImportDialog({
                 <div className="font-semibold text-slate-700">
                   {locale === 'zh' ? '解析预览' : 'Parse preview'}: {pendingImport.summary.importedRows} ok / {pendingImport.errors.length} err / {pendingImport.warnings.length} warn
                 </div>
+                {selectedImportTemplateId && effectiveTemplateDefaults.weight !== undefined && !customMapping.weight && (
+                  <p className="mt-1 text-indigo-700" data-testid="weight-default-source">
+                    {locale === 'zh' ? '重量来源：所选模板默认值' : 'Weight source: selected template default'}: {effectiveTemplateDefaults.weight} kg
+                  </p>
+                )}
                 {pendingImport.errors.slice(0, 3).map((issue) => (
                   <p className="mt-1 text-red-700" key={`err-${issue.row}-${issue.code}`}>R{issue.row}: {issue.message}</p>
                 ))}
