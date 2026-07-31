@@ -373,6 +373,27 @@ describe('history snapshot runtime validation', () => {
     }
   })
 
+  it('rejects manual drafts that omit pose metadata present in the saved result', () => {
+    const omitted = matchingManualSnapshot()
+    const box = omitted.manualDraft.boxes[0]
+    Reflect.deleteProperty(box, 'yawQuarterTurn')
+    Reflect.deleteProperty(box, 'pitchQuarterTurn')
+    Reflect.deleteProperty(box, 'orientationAxes')
+    Reflect.deleteProperty(box, 'orientationLabel')
+
+    expect(() => assertValidHistoryPlanData(omitted)).toThrow(/manualDraft/)
+  })
+
+  it('rejects manual base-dimension drift and invalid orientation axes', () => {
+    const baseMismatch = matchingManualSnapshot()
+    baseMismatch.manualDraft.boxes[0].baseLength = 999
+    expect(() => assertValidHistoryPlanData(baseMismatch)).toThrow(/baseLength/)
+
+    const invalidAxes = matchingManualSnapshot()
+    invalidAxes.manualDraft.boxes[0].orientationAxes = { x: 'L+', y: 'L+', z: 'L+' }
+    expect(() => assertValidHistoryPlanData(invalidAxes)).toThrow(/orientationAxes/)
+  })
+
   it('requires manual draft labels and colors to match the saved result', () => {
     const labelMismatch = matchingManualSnapshot()
     labelMismatch.manualDraft.boxes[0].label = 'B'
@@ -415,6 +436,66 @@ describe('history snapshot runtime validation', () => {
     const badStepSupport = structuredClone(snapshot())
     badStepSupport.packingResult.workSteps[0].supportType = 'fully-supported'
     expect(() => assertValidHistoryPlanData(badStepSupport)).toThrow(/supportType/)
+  })
+
+  it('requires unique layer IDs and validates every layer ID', () => {
+    const missingId = structuredClone(snapshot())
+    Reflect.deleteProperty(missingId.packingResult.layers[0], 'id')
+    expect(() => assertValidHistoryPlanData(missingId)).toThrow(/layers\[0\]\.id/)
+
+    const duplicate = structuredClone(snapshot())
+    duplicate.cargoItems[0].quantity = 2
+    duplicate.totalCargoCount = 2
+    duplicate.layerCount = 2
+    duplicate.placedCount = 2
+    duplicate.packingResult.totalCargoCount = 2
+    duplicate.packingResult.placedCount = 2
+    duplicate.packingResult.labelStats[0].planned = 2
+    duplicate.packingResult.labelStats[0].placed = 2
+    duplicate.packingResult.placed.push({
+      ...duplicate.packingResult.placed[0],
+      id: 'box-2',
+      index: 2,
+      z: 300,
+      physicalLayer: 2,
+      workStep: 2,
+      supportType: 'fully-supported',
+      supportedBy: ['box-1'],
+    })
+    duplicate.packingResult.layers.push({
+      ...duplicate.packingResult.layers[0],
+      physicalLayer: 2,
+      id: duplicate.packingResult.layers[0].id,
+      minZ: 300,
+      maxZ: 600,
+      supportedBy: ['box-1'],
+    })
+    duplicate.packingResult.workSteps.push({
+      ...duplicate.packingResult.workSteps[0],
+      step: 2,
+      boxId: 'box-2',
+      physicalLayer: 2,
+      supportType: 'fully-supported',
+    })
+    expect(() => assertValidHistoryPlanData(duplicate)).toThrow(/layer.*id/i)
+  })
+
+  it('reconciles derived label statistics with placed boxes', () => {
+    const inconsistent = structuredClone(snapshot())
+    inconsistent.packingResult.labelStats[0].placed = 0
+    inconsistent.packingResult.labelStats[0].unplaced = 1
+    inconsistent.packingResult.labelStats[0].layers = []
+
+    expect(() => assertValidHistoryPlanData(inconsistent)).toThrow(/labelStats/)
+  })
+
+  it('reconciles placed and unplaced quantities with the cargo plan', () => {
+    const inconsistent = structuredClone(snapshot())
+    inconsistent.cargoItems[0].quantity = 2
+    inconsistent.totalCargoCount = 2
+    inconsistent.packingResult.totalCargoCount = 2
+
+    expect(() => assertValidHistoryPlanData(inconsistent)).toThrow(/unplaced|quantity/i)
   })
 
   it('requires work-step cargo identity to match the placed box', () => {

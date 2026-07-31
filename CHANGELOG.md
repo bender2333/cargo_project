@@ -57,6 +57,13 @@
 - [x] Worker responses are runtime-validated as homogeneous array rows within `10,000` rows / `256` columns / `200,000` cells, malformed and synchronous-post failures normalize to parse errors, and every terminal path terminates once. Serialized first-sheet parsing validates full and truncated absolute-row boundaries before `sheet_to_json`; product overflow is rejected.
 - RED/GREEN: Added dialog-created template weight, worker malformed/mixed/oversized response, serialized product overflow, leading-row sentinel, valid row-two sentinel, matrix-row confirmation, sample failure/locale/alert, and trigger-focus regressions. Focused import command = **9 files / 118 tests passed**; focused ESLint and `npm exec tsc -- -b --pretty false` passed. Fresh spec and code-quality reviews both approved with zero P1/P2 findings.
 
+### 2026-07-31 history parity and recovery follow-up
+
+- [x] Manual history snapshots now require every optional pose field and orientation axis set to match the saved placed result; base dimensions must match the cargo plan; orientation axes must form a distinct L/W/H basis; layer IDs are required and unique; placed boxes plus each unplaced entry must reconcile exactly to every cargo quantity, with duplicate unplaced cargo entries rejected. Frontend and server validators share the same boundaries, including required cargo colors.
+- [x] History GET rows validate non-empty IDs/projects, nullable-or-string shipment names, supported loading modes, and parseable timestamps before returning stored data. The frontend DTO boundary applies the same metadata checks.
+- RED/GREEN: added frontend/server pose omission, base-dimension drift, invalid-axis-basis, missing/duplicate layer ID, placed/unplaced quantity, derived-label-stat, cargo-color, and malformed metadata regressions. Focused frontend command `npx vitest run src/api/historyPlans.test.ts src/lib/historySnapshot.test.ts --pool=threads --maxWorkers=1` = **2 files / 36 tests passed**; focused server command `npx vitest run scripts/historySnapshot.server.test.mjs scripts/historyRoutes.server.test.mjs --pool=threads --maxWorkers=1` = **2 files / 22 tests passed**; targeted ESLint and `npm exec tsc -- -b --pretty false` passed.
+- Review status: final code-quality review APPROVED with no remaining P1/P2 findings. Release/deployment gates remain open and BLOCKED until the full remediation plan is complete.
+
 ### 发布 gate (本地/部署/E2E)
 - [ ] 本地 release checks (Lint/Tests/Build/Benchmark) 全量通过。
 - [ ] 生产环境部署门禁验证。

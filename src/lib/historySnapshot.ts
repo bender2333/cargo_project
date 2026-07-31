@@ -99,6 +99,15 @@ function enumeration<T extends readonly unknown[]>(value: unknown, allowed: T, p
   return value as T[number]
 }
 
+function validateOrientationAxes(value: unknown, path: string): Record<string, unknown> {
+  const axes = record(value, path)
+  const x = enumeration(axes.x, SIGNED_AXES, `${path}.x`)
+  const y = enumeration(axes.y, SIGNED_AXES, `${path}.y`)
+  const z = enumeration(axes.z, SIGNED_AXES, `${path}.z`)
+  if (new Set([x[0], y[0], z[0]]).size !== 3) throw new Error(`${path} must use each body axis exactly once`)
+  return axes
+}
+
 function validateContainer(value: unknown, path: string) {
   const item = record(value, path)
   string(item.id, `${path}.id`)
@@ -138,7 +147,7 @@ function validateCargoItems(value: unknown, path: string) {
   return ids
 }
 
-function validateManualDraft(value: unknown, cargoIds: Set<string>, path: string) {
+function validateManualDraft(value: unknown, cargoIds: Set<string>, path: string, cargoDimensions: ReadonlyMap<string, { length: number; width: number; height: number }>) {
   const draft = record(value, path)
   const boxes = new Map<string, Record<string, unknown>>()
   array(draft.boxes, `${path}.boxes`).forEach((value, index) => {
@@ -153,6 +162,17 @@ function validateManualDraft(value: unknown, cargoIds: Set<string>, path: string
     for (const field of ['baseLength', 'baseWidth', 'baseHeight'] as const) {
       if (box[field] !== undefined) positive(box[field], `${boxPath}.${field}`)
     }
+    const cargoDimensionsForBox = cargoDimensions.get(cargoId)
+    if (cargoDimensionsForBox) {
+      const baseDimensions: Array<['baseLength' | 'baseWidth' | 'baseHeight', number]> = [
+        ['baseLength', cargoDimensionsForBox.length],
+        ['baseWidth', cargoDimensionsForBox.width],
+        ['baseHeight', cargoDimensionsForBox.height],
+      ]
+      for (const [field, expected] of baseDimensions) {
+        if (box[field] !== undefined && box[field] !== expected) throw new Error(`${boxPath}.${field} must match cargo dimensions`)
+      }
+    }
     nonNegative(box.x, `${boxPath}.x`)
     nonNegative(box.y, `${boxPath}.y`)
     nonNegative(box.z, `${boxPath}.z`)
@@ -163,12 +183,7 @@ function validateManualDraft(value: unknown, cargoIds: Set<string>, path: string
     enumeration(box.labelRotationDeg, LABEL_ROTATIONS, `${boxPath}.labelRotationDeg`)
     if (box.yawQuarterTurn !== undefined) enumeration(box.yawQuarterTurn, [0, 1, 2, 3] as const, `${boxPath}.yawQuarterTurn`)
     if (box.pitchQuarterTurn !== undefined) enumeration(box.pitchQuarterTurn, [0, 1, 2, 3] as const, `${boxPath}.pitchQuarterTurn`)
-    if (box.orientationAxes !== undefined) {
-      const axes = record(box.orientationAxes, `${boxPath}.orientationAxes`)
-      enumeration(axes.x, SIGNED_AXES, `${boxPath}.orientationAxes.x`)
-      enumeration(axes.y, SIGNED_AXES, `${boxPath}.orientationAxes.y`)
-      enumeration(axes.z, SIGNED_AXES, `${boxPath}.orientationAxes.z`)
-    }
+    if (box.orientationAxes !== undefined) validateOrientationAxes(box.orientationAxes, `${boxPath}.orientationAxes`)
     if (box.orientationLabel !== undefined) string(box.orientationLabel, `${boxPath}.orientationLabel`)
     if (box.weight !== undefined) nonNegative(box.weight, `${boxPath}.weight`)
     if (box.canRotate !== undefined) boolean(box.canRotate, `${boxPath}.canRotate`)
@@ -194,22 +209,24 @@ function validateManualPlanConsistency(
       if (manual[field] !== placed[field]) throw new Error(`history.manualDraft ${id}.${field} must match packingResult.placed`)
     }
     for (const field of poseFields) {
-      if (manual[field] !== undefined && manual[field] !== placed[field]) {
+      if (manual[field] !== placed[field]) {
         throw new Error(`history.manualDraft ${id}.${field} must match packingResult.placed`)
       }
     }
-    if (manual.orientationAxes !== undefined) {
-      const manualAxes = manual.orientationAxes as Record<string, unknown>
-      const placedAxes = placed.orientationAxes as Record<string, unknown> | undefined
-      if (!placedAxes || ['x', 'y', 'z'].some((axis) => manualAxes[axis] !== placedAxes[axis])) {
-        throw new Error(`history.manualDraft ${id}.orientationAxes must match packingResult.placed`)
-      }
+    const manualAxes = manual.orientationAxes as Record<string, unknown> | undefined
+    const placedAxes = placed.orientationAxes as Record<string, unknown> | undefined
+    if (
+      Boolean(manualAxes) !== Boolean(placedAxes)
+      || (manualAxes && placedAxes && ['x', 'y', 'z'].some((axis) => manualAxes[axis] !== placedAxes[axis]))
+    ) {
+      throw new Error(`history.manualDraft ${id}.orientationAxes must match packingResult.placed`)
     }
   }
 }
 
-function validatePackingResult(value: unknown, cargoIds: Set<string>, path: string, container: Record<string, unknown>, placementMode: 'auto' | 'manual') {
+function validatePackingResult(value: unknown, cargoIds: Set<string>, path: string, container: Record<string, unknown>, placementMode: 'auto' | 'manual', cargoItems: ReadonlyArray<CargoItem>) {
   const result = record(value, path)
+  const cargoQuantities = new Map(cargoItems.map((item) => [item.id, item.quantity]))
   const placed = array(result.placed, `${path}.placed`)
   const unplaced = array(result.unplaced, `${path}.unplaced`)
   const layers = array(result.layers, `${path}.layers`)
@@ -218,8 +235,12 @@ function validatePackingResult(value: unknown, cargoIds: Set<string>, path: stri
   const diagnostics = array(result.diagnostics, `${path}.diagnostics`)
   const boxes = new Map<string, { cargoId: string; workStep: number; physicalLayer: number; supportType: typeof SUPPORT_TYPES[number]; supportedBy: string[]; value: Record<string, unknown> }>()
   const diagnosticIds = new Set<string>()
+  const placedCargoCounts = new Map<string, number>()
+  const placedCargoLayers = new Map<string, Set<number>>()
+  const unplacedCargoCounts = new Map<string, number>()
   const placedLayerCounts = new Map<number, number>()
   const layerPhysicalLayers = new Set<number>()
+  const layerIds = new Set<string>()
   const effectiveLength = Math.max(0, (container.length as number) - (container.doorGap as number))
   const effectiveWidth = Math.max(0, (container.width as number) - (container.sideGap as number) * 2)
   const effectiveHeight = Math.max(0, (container.height as number) - (container.topGap as number))
@@ -231,6 +252,7 @@ function validatePackingResult(value: unknown, cargoIds: Set<string>, path: stri
     if (boxes.has(id)) throw new Error(`${boxPath}.id must be unique`)
     const cargoId = string(box.cargoId, `${boxPath}.cargoId`)
     if (!cargoIds.has(cargoId)) throw new Error(`${boxPath}.cargoId references missing cargo`)
+    placedCargoCounts.set(cargoId, (placedCargoCounts.get(cargoId) ?? 0) + 1)
     string(box.name, `${boxPath}.name`)
     string(box.label, `${boxPath}.label`)
     integer(box.index, `${boxPath}.index`, 1)
@@ -247,12 +269,7 @@ function validatePackingResult(value: unknown, cargoIds: Set<string>, path: stri
     enumeration(box.labelRotationDeg, LABEL_ROTATIONS, `${boxPath}.labelRotationDeg`)
     if (box.yawQuarterTurn !== undefined) enumeration(box.yawQuarterTurn, [0, 1, 2, 3] as const, `${boxPath}.yawQuarterTurn`)
     if (box.pitchQuarterTurn !== undefined) enumeration(box.pitchQuarterTurn, [0, 1, 2, 3] as const, `${boxPath}.pitchQuarterTurn`)
-    if (box.orientationAxes !== undefined) {
-      const axes = record(box.orientationAxes, `${boxPath}.orientationAxes`)
-      enumeration(axes.x, SIGNED_AXES, `${boxPath}.orientationAxes.x`)
-      enumeration(axes.y, SIGNED_AXES, `${boxPath}.orientationAxes.y`)
-      enumeration(axes.z, SIGNED_AXES, `${boxPath}.orientationAxes.z`)
-    }
+    if (box.orientationAxes !== undefined) validateOrientationAxes(box.orientationAxes, `${boxPath}.orientationAxes`)
     if (box.orientationLabel !== undefined) string(box.orientationLabel, `${boxPath}.orientationLabel`)
     nonNegative(box.weight, `${boxPath}.weight`)
     string(box.color, `${boxPath}.color`)
@@ -265,25 +282,63 @@ function validatePackingResult(value: unknown, cargoIds: Set<string>, path: stri
     const workStep = integer(box.workStep, `${boxPath}.workStep`, 1)
     const supportType = enumeration(box.supportType, SUPPORT_TYPES, `${boxPath}.supportType`)
     const supportedBy = array(box.supportedBy, `${boxPath}.supportedBy`).map((id, supporterIndex) => string(id, `${boxPath}.supportedBy[${supporterIndex}]`))
+    const cargoLayers = placedCargoLayers.get(cargoId) ?? new Set<number>()
+    cargoLayers.add(physicalLayer)
+    placedCargoLayers.set(cargoId, cargoLayers)
     placedLayerCounts.set(physicalLayer, (placedLayerCounts.get(physicalLayer) ?? 0) + 1)
     boxes.set(id, { cargoId, workStep, physicalLayer, supportType, supportedBy, value: box })
   })
-
   unplaced.forEach((value, index) => {
     const itemPath = `${path}.unplaced[${index}]`
     const item = record(value, itemPath)
     const cargoId = string(item.cargoId, `${itemPath}.cargoId`)
     if (!cargoIds.has(cargoId)) throw new Error(`${itemPath}.cargoId references missing cargo`)
+    if (unplacedCargoCounts.has(cargoId)) throw new Error(`${itemPath}.cargoId must be unique`)
+    const quantity = integer(item.quantity, `${itemPath}.quantity`, 1)
+    unplacedCargoCounts.set(cargoId, quantity)
     string(item.name, `${itemPath}.name`)
     string(item.label, `${itemPath}.label`)
-    integer(item.quantity, `${itemPath}.quantity`, 1)
     string(item.reason, `${itemPath}.reason`)
     string(item.reasonCode, `${itemPath}.reasonCode`)
+  })
+
+  for (const [cargoId, plannedQuantity] of cargoQuantities) {
+    const accountedQuantity = (placedCargoCounts.get(cargoId) ?? 0) + (unplacedCargoCounts.get(cargoId) ?? 0)
+    if (accountedQuantity !== plannedQuantity) {
+      throw new Error(`${path} cargo ${cargoId} placed and unplaced quantities must match planned quantity`)
+    }
+  }
+  const expectedLabelStats = new Map<string, { label: string; name: string; color: string; planned: number; placed: number; unplaced: number; layers: number[] }>()
+  cargoItems.forEach((item, index) => {
+    const label = String(item.label ?? '').trim() || item.name || `Cargo ${index + 1}`
+    const key = label.toUpperCase() || `__unnamed_${item.id}`
+    const placedCount = placedCargoCounts.get(item.id) ?? 0
+    const layers = [...(placedCargoLayers.get(item.id) ?? [])].sort((a, b) => a - b)
+    const current = expectedLabelStats.get(key)
+    if (current) {
+      current.planned += item.quantity
+      current.placed += placedCount
+      current.unplaced += item.quantity - placedCount
+      current.layers = [...new Set([...current.layers, ...layers])].sort((a, b) => a - b)
+    } else {
+      expectedLabelStats.set(key, {
+        label,
+        name: item.name,
+        color: item.color,
+        planned: item.quantity,
+        placed: placedCount,
+        unplaced: item.quantity - placedCount,
+        layers,
+      })
+    }
   })
 
   layers.forEach((value, index) => {
     const layerPath = `${path}.layers[${index}]`
     const layer = record(value, layerPath)
+    const id = string(layer.id, `${layerPath}.id`)
+    if (layerIds.has(id)) throw new Error(`${layerPath}.id must be unique`)
+    layerIds.add(id)
     const physicalLayer = integer(layer.physicalLayer, `${layerPath}.physicalLayer`, 1)
     if (layerPhysicalLayers.has(physicalLayer)) throw new Error(`${layerPath}.physicalLayer must be unique`)
     layerPhysicalLayers.add(physicalLayer)
@@ -344,17 +399,35 @@ function validatePackingResult(value: unknown, cargoIds: Set<string>, path: stri
     }
   }
 
+  const seenLabelKeys = new Set<string>()
   labelStats.forEach((value, index) => {
     const statPath = `${path}.labelStats[${index}]`
     const stat = record(value, statPath)
-    string(stat.label, `${statPath}.label`)
-    string(stat.name, `${statPath}.name`)
-    string(stat.color, `${statPath}.color`)
-    integer(stat.planned, `${statPath}.planned`)
-    integer(stat.placed, `${statPath}.placed`)
-    integer(stat.unplaced, `${statPath}.unplaced`)
-    array(stat.layers, `${statPath}.layers`).forEach((layer, layerIndex) => integer(layer, `${statPath}.layers[${layerIndex}]`, 1))
+    const label = string(stat.label, `${statPath}.label`)
+    const name = string(stat.name, `${statPath}.name`)
+    const color = string(stat.color, `${statPath}.color`)
+    const planned = integer(stat.planned, `${statPath}.planned`)
+    const placed = integer(stat.placed, `${statPath}.placed`)
+    const unplaced = integer(stat.unplaced, `${statPath}.unplaced`)
+    const statLayers = array(stat.layers, `${statPath}.layers`).map((layer, layerIndex) => integer(layer, `${statPath}.layers[${layerIndex}]`, 1))
+    const key = label.trim().toUpperCase()
+    const expected = expectedLabelStats.get(key)
+    if (!expected || seenLabelKeys.has(key)) throw new Error(`${statPath} must match cargo-derived label statistics`)
+    seenLabelKeys.add(key)
+    if (
+      label !== expected.label
+      || name !== expected.name
+      || color !== expected.color
+      || planned !== expected.planned
+      || placed !== expected.placed
+      || unplaced !== expected.unplaced
+      || statLayers.length !== expected.layers.length
+      || statLayers.some((layer, layerIndex) => layer !== expected.layers[layerIndex])
+    ) {
+      throw new Error(`${statPath} must match cargo-derived label statistics`)
+    }
   })
+  if (seenLabelKeys.size !== expectedLabelStats.size) throw new Error(`${path}.labelStats must cover every cargo-derived label`)
   diagnostics.forEach((value, index) => {
     const diagnosticPath = `${path}.diagnostics[${index}]`
     const diagnostic = record(value, diagnosticPath)
@@ -403,6 +476,8 @@ export function assertValidHistoryPlanData(data: unknown): asserts data is Histo
   string(snapshot.labelSummary, 'history.labelSummary')
   if (snapshot.defaultMaxStackLayers !== undefined) integer(snapshot.defaultMaxStackLayers, 'history.defaultMaxStackLayers', 1)
   const plannedCargoCount = (snapshot.cargoItems as CargoItem[]).reduce((total, item) => total + item.quantity, 0)
+  const cargoItems = snapshot.cargoItems as CargoItem[]
+  const cargoDimensions = new Map(cargoItems.map((item) => [item.id, { length: item.length, width: item.width, height: item.height }]))
   if (snapshot.schemaVersion === undefined) {
     for (const field of ['packingResult', 'manualDraft', 'placementMode', 'draftInitialized']) {
       if (field in snapshot) throw new Error(`Legacy history cannot contain v2-only field ${field}`)
@@ -414,7 +489,7 @@ export function assertValidHistoryPlanData(data: unknown): asserts data is Histo
 
   if (snapshot.schemaVersion !== HISTORY_SNAPSHOT_VERSION) throw new Error(`Unsupported history snapshot version: ${String(snapshot.schemaVersion)}`)
   const placementMode = enumeration(snapshot.placementMode, ['auto', 'manual'] as const, 'history.placementMode')
-  const result = validatePackingResult(snapshot.packingResult, cargoIds, 'history.packingResult', container, placementMode)
+  const result = validatePackingResult(snapshot.packingResult, cargoIds, 'history.packingResult', container, placementMode, cargoItems)
   if (placedCount !== result.placedCount) throw new Error('history.placedCount must match packingResult.placedCount')
   if (totalCargoCount !== result.totalCargoCount) throw new Error('history.totalCargoCount must match packingResult.totalCargoCount')
   if (layerCount !== result.layerCount) throw new Error('history.layerCount must match packingResult.layers.length')
@@ -422,7 +497,7 @@ export function assertValidHistoryPlanData(data: unknown): asserts data is Histo
   if (result.placedCount > totalCargoCount) throw new Error('history.placedCount cannot exceed totalCargoCount')
   if (placementMode === 'manual' && snapshot.manualDraft === undefined) throw new Error('history.manualDraft is required in manual mode')
   if (snapshot.manualDraft !== undefined) {
-    const manualBoxes = validateManualDraft(snapshot.manualDraft, cargoIds, 'history.manualDraft')
+    const manualBoxes = validateManualDraft(snapshot.manualDraft, cargoIds, 'history.manualDraft', cargoDimensions)
     if (placementMode === 'manual') validateManualPlanConsistency(manualBoxes, result.boxes)
   }
   if (snapshot.draftInitialized !== undefined) boolean(snapshot.draftInitialized, 'history.draftInitialized')

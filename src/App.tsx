@@ -1,13 +1,20 @@
-import { Component, lazy, Suspense, useState, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useState } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import { LoginPage } from './components/LoginPage'
 import { RegisterPage } from './components/RegisterPage'
 import { getCurrentUser, getToken, removeToken } from './lib/auth'
 import type { User } from './lib/auth'
 
-const Workbench = lazy(async () => {
-  const module = await import('./Workbench')
-  return { default: module.default }
-})
+type WorkbenchProps = {
+  currentUser: User | null
+  onLogout: () => void
+}
+
+type WorkbenchLoader = () => Promise<{ default: ComponentType<WorkbenchProps> }>
+
+// Keep Workbench in a separate deployment chunk; a static import would defeat lazy loading.
+const loadWorkbench: WorkbenchLoader = () => import('./Workbench')
+
 
 function WorkbenchFallback({ locale }: { locale: 'zh' | 'en' }) {
   return (
@@ -63,10 +70,10 @@ class WorkbenchErrorBoundary extends Component<
   }
 }
 
-export default function App() {
+export default function App({ loadWorkbench: loader = loadWorkbench }: { loadWorkbench?: WorkbenchLoader }) {
   const [session, setSession] = useState<User | null | false>(() => (getToken() ? getCurrentUser() : false))
   const [showRegister, setShowRegister] = useState(false)
-  const [workbenchLoadKey, setWorkbenchLoadKey] = useState(0)
+  const [Workbench, setWorkbench] = useState(() => lazy(loader))
   const [workbenchFailed, setWorkbenchFailed] = useState(false)
   const locale = (typeof window !== 'undefined' && window.localStorage.getItem('locale') === 'en') ? 'en' : 'zh'
 
@@ -80,6 +87,7 @@ export default function App() {
     setSession(false)
     setShowRegister(false)
     setWorkbenchFailed(false)
+    setWorkbench(() => lazy(loader))
   }
 
   if (session === false) {
@@ -102,7 +110,7 @@ export default function App() {
         locale={locale}
         onRetry={() => {
           setWorkbenchFailed(false)
-          setWorkbenchLoadKey((value) => value + 1)
+          setWorkbench(() => lazy(loader))
         }}
         onLogout={handleLogout}
       />
@@ -112,7 +120,6 @@ export default function App() {
   return (
     <Suspense fallback={<WorkbenchFallback locale={locale} />}>
       <WorkbenchErrorBoundary
-        key={workbenchLoadKey}
         onError={() => setWorkbenchFailed(true)}
       >
         <Workbench currentUser={session} onLogout={handleLogout} />

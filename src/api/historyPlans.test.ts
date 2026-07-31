@@ -124,6 +124,40 @@ describe('history plan API', () => {
     })
   })
 
+  it('rejects malformed GET rows visibly instead of casting them', async () => {
+    mockedFetch.mockResolvedValue(new Response(JSON.stringify([
+      { ...dto, data: { ...planData, cargoItems: null } },
+    ]), { status: 200 }))
+
+    await expect(readHistoryPlans()).rejects.toThrow(/cargoItems/)
+  })
+
+  it('rejects history rows with malformed metadata before exposing them', async () => {
+    const cases = [
+      { id: '', project_name: 'History project', created_at: dto.created_at, loading_mode: dto.loading_mode },
+      { id: dto.id, project_name: '', created_at: dto.created_at, loading_mode: dto.loading_mode },
+      { id: dto.id, project_name: dto.project_name, created_at: 'not-a-date', loading_mode: dto.loading_mode },
+      { id: dto.id, project_name: dto.project_name, created_at: dto.created_at, loading_mode: 'bogus' },
+    ]
+    for (const metadata of cases) {
+      mockedFetch.mockResolvedValueOnce(new Response(JSON.stringify([{ ...dto, ...metadata }]), { status: 200 }))
+      await expect(readHistoryPlans()).rejects.toThrow(/metadata|loading_mode/i)
+    }
+  })
+
+  it('validates snapshots before sending a save request', async () => {
+    const invalid = {
+      ...saveInput,
+      data: {
+        ...planData,
+        container: { ...container, maxWeight: Number.POSITIVE_INFINITY },
+      },
+    }
+
+    await expect(saveHistoryPlan(invalid as never)).rejects.toThrow(/finite number/)
+    expect(mockedFetch).not.toHaveBeenCalled()
+  })
+
   it('deletes one plan through the existing history endpoint', async () => {
     mockedFetch.mockResolvedValue(new Response(JSON.stringify({ message: 'deleted' }), { status: 200 }))
 

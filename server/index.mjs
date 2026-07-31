@@ -8,6 +8,7 @@ import db from './db.mjs'
 import authRouter from './auth.mjs'
 import { authenticate, requireAdmin } from './middleware.mjs'
 import { parseCustomCargoPayload, serializeCustomCargo } from './customCargo.mjs'
+import { createHistoryRouter, HISTORY_JSON_BODY_LIMIT } from './historyRoutes.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -24,7 +25,7 @@ app.use(helmet({
 }))
 
 // Body parsing with explicit size guard
-app.use(express.json({ limit: '2mb' }))
+app.use(express.json({ limit: HISTORY_JSON_BODY_LIMIT }))
 
 // Log requests (method + url only; never log bodies or headers)
 app.use((req, res, next) => {
@@ -501,78 +502,7 @@ app.delete('/api/export-templates/:id', authenticate, (req, res) => {
 })
 
 // 6. History Plan Management (CRUD with auto 5-item retention per user!)
-app.get('/api/history', authenticate, (req, res) => {
-  try {
-    const list = db.prepare('SELECT id, project_name, shipment_name, loading_mode, data, created_at FROM history_plans WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id)
-    res.json(list.map(item => ({
-      ...item,
-      data: JSON.parse(item.data)
-    })))
-  } catch (err) {
-    sendServerError(res, req.path, err)
-  }
-})
-
-app.post('/api/history', authenticate, (req, res) => {
-  const { projectName, shipmentName, loadingMode, data } = req.body
-  if (!projectName || !data) {
-    return res.status(400).json({ error: 'Missing required parameters' })
-  }
-
-  const serialized = JSON.stringify(data)
-  const HISTORY_SNAPSHOT_MAX_BYTES = 2_500_000
-  if (Buffer.byteLength(serialized, 'utf8') > HISTORY_SNAPSHOT_MAX_BYTES) {
-    return res.status(413).json({ error: `History snapshot exceeds ${HISTORY_SNAPSHOT_MAX_BYTES} bytes` })
-  }
-
-  const id = randomUUID()
-  
-  try {
-    // Insert new plan
-    db.prepare(`
-      INSERT INTO history_plans (id, user_id, project_name, shipment_name, loading_mode, data, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, req.user.id, projectName, shipmentName || '', loadingMode || 'volume', serialized, new Date().toISOString())
-
-    // Enforce 5-item retention: select all plans for this user ordered by date DESC
-    const all = db.prepare('SELECT id FROM history_plans WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id)
-    if (all.length > 5) {
-      const toKeep = all.slice(0, 5).map(x => x.id)
-      const placeholders = toKeep.map(() => '?').join(',')
-      db.prepare(`
-        DELETE FROM history_plans
-        WHERE user_id = ? AND id NOT IN (${placeholders})
-      `).run(req.user.id, ...toKeep)
-    }
-
-    res.status(201).json({ message: 'History plan saved successfully', id })
-  } catch (err) {
-    sendServerError(res, req.path, err)
-  }
-})
-
-app.delete('/api/history/:id', authenticate, (req, res) => {
-  const { id } = req.params
-  try {
-    const existing = db.prepare('SELECT * FROM history_plans WHERE id = ? AND user_id = ?').get(id, req.user.id)
-    if (!existing) {
-      return res.status(404).json({ error: 'History plan not found or unauthorized' })
-    }
-    db.prepare('DELETE FROM history_plans WHERE id = ?').run(id)
-    res.json({ message: 'History plan deleted' })
-  } catch (err) {
-    sendServerError(res, req.path, err)
-  }
-})
-
-app.delete('/api/history', authenticate, (req, res) => {
-  try {
-    const result = db.prepare('DELETE FROM history_plans WHERE user_id = ?').run(req.user.id)
-    res.json({ deleted: result.changes })
-  } catch (err) {
-    sendServerError(res, req.path, err)
-  }
-})
+app.use('/api/history', authenticate, createHistoryRouter({ db, randomUUID }))
 
 // Admin-only: recent server-side log tail for triage
 import fs from 'fs/promises'

@@ -31,6 +31,13 @@ describe('server history snapshot validator', () => {
     expect(historyPlanDataValidationError(dangling)).toMatch(/boxId/)
   })
 
+  it('requires cargo colors in server snapshots', () => {
+    const invalid = validHistorySnapshot()
+    delete invalid.cargoItems[0].color
+
+    expect(historyPlanDataValidationError(invalid)).toEqual(expect.stringMatching(/history\.cargoItems\[0\]\.color/))
+  })
+
   it('rejects non-consecutive work steps and manual mode without a draft', () => {
     const nonConsecutive = validHistorySnapshot()
     nonConsecutive.packingResult.workSteps[0].step = 2
@@ -102,6 +109,27 @@ describe('server history snapshot validator', () => {
     }
   })
 
+  it('rejects manual drafts that omit pose metadata present in the saved result', () => {
+    const omitted = validManualHistorySnapshot()
+    const box = omitted.manualDraft.boxes[0]
+    delete box.yawQuarterTurn
+    delete box.pitchQuarterTurn
+    delete box.orientationAxes
+    delete box.orientationLabel
+
+    expect(historyPlanDataValidationError(omitted)).toEqual(expect.stringMatching(/manualDraft/))
+  })
+
+  it('rejects manual base-dimension drift and invalid orientation axes', () => {
+    const baseMismatch = validManualHistorySnapshot()
+    baseMismatch.manualDraft.boxes[0].baseLength = 999
+    expect(historyPlanDataValidationError(baseMismatch)).toEqual(expect.stringMatching(/baseLength/))
+
+    const invalidAxes = validManualHistorySnapshot()
+    invalidAxes.manualDraft.boxes[0].orientationAxes = { x: 'L+', y: 'L+', z: 'L+' }
+    expect(historyPlanDataValidationError(invalidAxes)).toEqual(expect.stringMatching(/orientationAxes/))
+  })
+
   it('requires manual draft labels and colors to match the saved result', () => {
     const labelMismatch = validManualHistorySnapshot()
     labelMismatch.manualDraft.boxes[0].label = 'B'
@@ -141,6 +169,66 @@ describe('server history snapshot validator', () => {
     const invalid = validHistorySnapshot()
     invalid.packingResult.workSteps[0].cargoId = 'other-cargo'
     expect(historyPlanDataValidationError(invalid)).toEqual(expect.stringMatching(/cargoId/))
+  })
+
+  it('requires unique layer IDs and validates every layer ID', () => {
+    const missingId = validHistorySnapshot()
+    delete missingId.packingResult.layers[0].id
+    expect(historyPlanDataValidationError(missingId)).toEqual(expect.stringMatching(/layers\[0\]\.id/))
+
+    const duplicate = validHistorySnapshot()
+    duplicate.layerCount = 2
+    duplicate.cargoItems[0].quantity = 2
+    duplicate.totalCargoCount = 2
+    duplicate.placedCount = 2
+    duplicate.packingResult.totalCargoCount = 2
+    duplicate.packingResult.placedCount = 2
+    duplicate.packingResult.labelStats[0].planned = 2
+    duplicate.packingResult.labelStats[0].placed = 2
+    duplicate.packingResult.placed.push({
+      ...duplicate.packingResult.placed[0],
+      id: 'box-2',
+      index: 2,
+      z: 300,
+      physicalLayer: 2,
+      workStep: 2,
+      supportType: 'fully-supported',
+      supportedBy: ['box-1'],
+    })
+    duplicate.packingResult.layers.push({
+      ...duplicate.packingResult.layers[0],
+      physicalLayer: 2,
+      id: duplicate.packingResult.layers[0].id,
+      minZ: 300,
+      maxZ: 600,
+      supportedBy: ['box-1'],
+    })
+    duplicate.packingResult.workSteps.push({
+      ...duplicate.packingResult.workSteps[0],
+      step: 2,
+      boxId: 'box-2',
+      physicalLayer: 2,
+      supportType: 'fully-supported',
+    })
+    expect(historyPlanDataValidationError(duplicate)).toMatch(/layer.*id/i)
+  })
+
+  it('reconciles derived label statistics with placed boxes', () => {
+    const inconsistent = validHistorySnapshot()
+    inconsistent.packingResult.labelStats[0].placed = 0
+    inconsistent.packingResult.labelStats[0].unplaced = 1
+    inconsistent.packingResult.labelStats[0].layers = []
+
+    expect(historyPlanDataValidationError(inconsistent)).toEqual(expect.stringMatching(/labelStats/))
+  })
+
+  it('reconciles placed and unplaced quantities with the cargo plan', () => {
+    const inconsistent = validHistorySnapshot()
+    inconsistent.cargoItems[0].quantity = 2
+    inconsistent.totalCargoCount = 2
+    inconsistent.packingResult.totalCargoCount = 2
+
+    expect(historyPlanDataValidationError(inconsistent)).toEqual(expect.stringMatching(/unplaced|quantity/i))
   })
 
   it('requires v2 totals to match planned cargo quantities', () => {
