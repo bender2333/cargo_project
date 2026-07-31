@@ -104,6 +104,12 @@
 - [x] Committed the remaining previously verified fixture and type hunks: positive import weights/mappings, focused manual canvas keyboard setup, actual workspace ref typing, required depth-layer/pose test fixtures, symmetric overlap identity assertions, and projected overweight diagnostics.
 - These changes were included in the final local gate above; protected user paths remain unstaged and excluded.
 
+### 2026-07-31 production worker XLSX namespace 回归修复
+
+- [x] 修复共享 `/assets/xlsx.js` 仅导出 `t` namespace 导致 native module worker named import 解析失败的问题；边界仍保留首表与 `10,000 / 256 / 200,000` 上限、transfer、timeout 和 parse/limit 协议。
+- [x] 真实俄罗斯 Excel 在固定 production preview 的 Worker 中成功解析为 31 行；聚焦导入 Vitest **109 passed**、聚焦导入 E2E **2 passed**、lint 通过。
+- 该修复发生在上一条全量本地 release gate 记录之后；完整 lint → test → build → E2E → benchmark 及部署/远程 E2E 必须重新执行，当前不提前宣称 release gate 或生产环境 GREEN。
+
 ### 发布 gate (本地/部署/E2E)
 - [x] 本地 release checks (Lint/Tests/Build/Benchmark) 全量通过。
 - [ ] 生产环境部署门禁验证。

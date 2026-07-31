@@ -1,11 +1,13 @@
-import * as XLSX from 'xlsx'
+import * as XLSXModule from 'xlsx'
 import {
   MAX_IMPORT_COLUMNS,
   MAX_IMPORT_ROWS,
   importWorksheetSizeWithinLimits,
   type ImportCargoRow,
 } from './importCargo'
-
+const XLSX = 't' in XLSXModule
+  ? (XLSXModule as typeof XLSXModule & { t: typeof XLSXModule }).t
+  : XLSXModule
 type WorksheetBounds = {
   '!ref'?: string
   '!fullref'?: string

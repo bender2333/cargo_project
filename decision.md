@@ -1,5 +1,13 @@
 # Decision Log
 
+
+## 2026-07-31 生产 module worker 的 XLSX namespace 兼容
+
+- 背景：部署后的真实 Excel 导入路径在文件选择后只显示“导入解析失败：无法解析为工作簿”。浏览器网络日志显示 `/assets/importWorkbook.worker-*.js` 与 `/assets/xlsx.js` 均返回 200，Worker 控制台实际报 `[import-excel] ImportWorkbookWorkerError: Workbook worker failed: parse`。
+- 根因：Vite 的 `manualChunks` 将 SheetJS 产物作为共享 `/assets/xlsx.js`，该文件导出的是包装后的单一命名空间 `t`（文件尾为 `export{t}`）；Worker 产物此前却生成 `import { read, utils } from "/assets/xlsx.js"`，因此 `read`/`utils` 均不存在。远程直接导入同一俄罗斯工作簿复现 `{ ok: false, code: 'parse' }`。
+- 选项：A. 在 Worker 内重新打包 SheetJS，恢复解析但重复约 112KB gzip；B. 让边界按模块形状展开生产包装 namespace，同时保留开发/测试的直接 SheetJS namespace；C. 取消 Worker 边界并回退主线程解析。选择 B，保留共享 chunk、原生 Worker、ArrayBuffer transfer 与既有 10,000/256/200,000 边界，不引入主线程 fallback。
+- 修复与验证：`src/lib/importWorkbookBoundary.ts` 在读取/范围校验前统一处理 `t` 包装；固定 production preview 的 Worker 直接读取 `test-data/excel/俄罗斯整托装柜尺寸.xlsx` 返回 `{ ok: true }` 和 31 行；聚焦导入 E2E `2 passed`，聚焦导入 Vitest `109 passed`，lint 通过。
+- 影响：只兼容共享 SheetJS 产物的模块导出形状；文件大小、首表、范围上限、超限拒绝和错误协议保持不变。远程全量 E2E 需在提交后重新验证。
 ## 2026-07-31 P2-7 benchmark single-authority and first-pixel investigation
 
 - 根因（合同哈希）：当前 `npm run benchmark` 的算法 worker 在每个 warmup/sample 中先以 `canonicalizePackingResult` 计算 SHA-256，并与 `test-data/baselines/packing-results.json` 比较；该 packing golden 是唯一业务合同权威。`test-results/benchmark/frontend-architecture.json` 的五个实际哈希（例如 `russia-volume=313549443068a...`）与 packing golden 完全一致，而 `test-data/baselines/frontend-architecture.json` 仍保留旧值（例如 `6b224f768904...`）。历史对比确认旧 frontend 哈希正是 `e0c1fc2` 时的 packing golden；随后 `0b6cfa9` 把 `depthLayer` 加入 canonical box 并重生 packing golden，几何/数量/密度不变，拓扑 `workStep` 算法在该提交只是等价抽取。第四轮 finalizer 又让运行时 `workSteps` 直接保持连续拓扑顺序、canonical 不再代排序；若旧 canonical 排序恰好等于新运行时顺序，当前 packing hash 可保持不变。因此五项 mismatch 的直接原因是 frontend baseline 未跟随 canonical `depthLayer` 合同演进的重复字段漂移，而非当前算法未通过 canonical contract；不得编辑 frontend baseline 掩盖。
