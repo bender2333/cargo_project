@@ -20,6 +20,11 @@
 - 证据：未改 baseline、阈值、样本、benchmark detector 或 packing golden。最终 `npm run benchmark` GREEN：五项 contract hash 全匹配，`totalJsGzipBytes=694,300`，`canvasFirstNonEmptyPixelsMs` median/P95=`81.875/96.150 ms`，initial HTML gzip=`289 B`，timing comparable。
 - 影响：首次 3D 视图保持现有导出画布与交互；2D 模式不再持续执行隐藏场景的 WebGL render/animation；worker 生产路径依赖部署到根站点的 `/assets/xlsx.js`，本地 dev 与 production preview 均已覆盖导入路径。
 
+## 2026-07-31 release-gate benchmark transient outlier
+
+- 末次按 lint → unit/performance → build → E2E → benchmark 顺序执行时，只有 `algorithm.russia-volume.p95Ms` RED：样本 `3.241, 3.025, 3.117, 4.242, 9.761 ms`，median `3.241`，基线 P95 `3.156 ms` 的 20% 上限为 `3.7872 ms`；其余算法、bundle、首像素和浏览器 timing 门禁均未报错。报告仍保留在 `test-results/benchmark/frontend-architecture.json`。
+- 这不是已证明的源代码回归：同一代码的上一轮完整 benchmark GREEN，当前五次中单个 `9.761 ms` 样本远离其余四次，且无实现改动发生。未修改 benchmark、baseline、阈值或断言；发布门禁暂不宣称 GREEN，先做单 case 空载复测并保留本次 RED 证据。
+
 
 
 ## 2026-07-31 导入确认、重量来源与展开上限
