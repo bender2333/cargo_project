@@ -64,6 +64,12 @@
 - RED/GREEN: added frontend/server pose omission, base-dimension drift, invalid-axis-basis, missing/duplicate layer ID, placed/unplaced quantity, derived-label-stat, cargo-color, and malformed metadata regressions. Focused frontend command `npx vitest run src/api/historyPlans.test.ts src/lib/historySnapshot.test.ts --pool=threads --maxWorkers=1` = **2 files / 36 tests passed**; focused server command `npx vitest run scripts/historySnapshot.server.test.mjs scripts/historyRoutes.server.test.mjs --pool=threads --maxWorkers=1` = **2 files / 22 tests passed**; targeted ESLint and `npm exec tsc -- -b --pretty false` passed.
 - Review status: final code-quality review APPROVED with no remaining P1/P2 findings. Release/deployment gates remain open and BLOCKED until the full remediation plan is complete.
 
+### 2026-07-31 remote debug-log E2E branch
+
+- [x] The admin server-log journey now keeps the exact `E2E server log ready` fixture assertion for local runs, requires a non-whitespace rendered `<pre>` when `PLAYWRIGHT_BASE_URL` targets an external server, and rejects `HTTP 500` in both modes.
+- GREEN: `npx playwright test e2e/manual-3d.spec.ts --grep "调试面板 admin 可拉取服务器日志"` passed locally (**1 passed**) and with `PLAYWRIGHT_BASE_URL=http://101.33.232.150` (**1 passed**). Full release/deployment gates remain pending.
+- Review status: final E2E code-quality review APPROVED with no actionable P1/P2 findings.
+
 ### 发布 gate (本地/部署/E2E)
 - [ ] 本地 release checks (Lint/Tests/Build/Benchmark) 全量通过。
 - [ ] 生产环境部署门禁验证。

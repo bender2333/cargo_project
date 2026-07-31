@@ -533,8 +533,14 @@ test('调试面板 admin 可拉取服务器日志', async ({ page }) => {
   const fetchBtn = page.getByTestId('debug-fetch-logs')
   await expect(fetchBtn).toBeVisible()
   await fetchBtn.click()
-  await expect(page.getByTestId('debug-panel')).toContainText('E2E server log ready')
-  await expect(page.getByTestId('debug-panel')).not.toContainText('HTTP 500')
+  const debugPanel = page.getByTestId('debug-panel')
+  await expect(debugPanel).not.toContainText('HTTP 500')
+  if (process.env.PLAYWRIGHT_BASE_URL) {
+    await expect(debugPanel.locator('pre')).toHaveCount(1)
+    await expect(debugPanel.locator('pre')).toHaveText(/\S+/)
+  } else {
+    await expect(debugPanel).toContainText('E2E server log ready')
+  }
 })
 
 test('网格吸附按钮切换 data-grid-snap', async ({ page }) => {
