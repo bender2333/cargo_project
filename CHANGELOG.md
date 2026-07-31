@@ -1,11 +1,10 @@
 # Changelog
 
-## 2026-07-31 第四轮复审整改（进行中）
+## 2026-07-31 第四轮复审整改（已完成）
 
-- 审查源：`issues/2026-07-30-refactor-review-architecture-business-round-4.md`
-- 当前代码固定点：`59dcd46`
-- 状态：任务分解已完成，待实施。
-- 发布门禁：需全部本地 release checks 通过，部署 gated，E2E 闭环。
+- 审查源：`issues/2026-07-30-refactor-review-architecture-business-round-4.md`；最终代码修复提交：`abf53d6`，最终证据提交：`3289b4c`。
+- 状态：第四轮整改、fresh local release gate、生产部署和远程 E2E 回归均已完成；历史 `BLOCKED` 条目保留为审查时点记录。
+- 发布门禁：Lint、unit/performance、build、local E2E、benchmark、deployment health 和 remote E2E 全部通过，未修改 baseline、阈值、样本或断言。
 
 ### 整改任务 (P1)
 - [x] P1-1: 自动与手动结果统一经 `finalizePlacementGeometry` 完成支撑关系、depth layer、拓扑 work step 与 layer 汇总；自动结果直接消费共享终结器的有序 `workSteps`，保证数组内 `step === index + 1` 且 supporter 先于 dependent。终结器拥有深拷贝输出、不修改/别名输入；重复 box ID 与循环支撑图显式失败，等分以 locale 无关 code-unit 顺序稳定决胜，不再任意追加不可拓扑排序的余项。RED：主合同 `npx vitest run src/lib/packingContract.test.ts src/lib/packingInvariants.test.ts --pool=threads --maxWorkers=1`（2 files / 4 failed）；图边界 `npx vitest run src/lib/finalizePackingResult.test.ts --pool=threads --maxWorkers=1`（cycle 与 locale 顺序 2 failed / 1 passed）。GREEN：最终 packing 聚焦命令（9 files / 91 tests passed）。
