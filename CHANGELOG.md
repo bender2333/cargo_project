@@ -108,12 +108,20 @@
 
 - [x] 修复共享 `/assets/xlsx.js` 仅导出 `t` namespace 导致 native module worker named import 解析失败的问题；边界仍保留首表与 `10,000 / 256 / 200,000` 上限、transfer、timeout 和 parse/limit 协议。
 - [x] 真实俄罗斯 Excel 在固定 production preview 的 Worker 中成功解析为 31 行；聚焦导入 Vitest **109 passed**、聚焦导入 E2E **2 passed**、lint 通过。
-- 该修复发生在上一条全量本地 release gate 记录之后；完整 lint → test → build → E2E → benchmark 及部署/远程 E2E 必须重新执行，当前不提前宣称 release gate 或生产环境 GREEN。
+- 该修复发生在上一条全量本地 release gate 记录之后；当时先要求重新执行全部门禁，后续结果见下方“worker fix 后最终 release 与远程证据”。
+
+### 2026-07-31 worker fix 后最终 release 与远程证据
+
+- [x] Fresh local gates passed in order: `npm run lint`; `npm test` (**91 unit files / 789 tests**, plus **2 packing-performance files / 6 tests**); `npm run build` (**320 modules transformed**); `npm run test:e2e` (**123 passed / 0 failed**); `npm run benchmark` (1 browser test passed).
+- [x] Authoritative benchmark remained GREEN without baseline/threshold/sample changes: all five packing hashes matched; Russia algorithm P95=`3.348 ms`; `totalJsGzipBytes=694,398`; `canvasFirstNonEmptyPixelsMs` median/P95=`41.650/51.825 ms`; initial HTML gzip=`289 B`.
+- [x] `npm run deploy -- --dry-run` resolved to `cargo-server`, site `/usr/share/nginx/html`, backend `/opt/cargo-server`, service `cargo-server.service`, health `http://127.0.0.1/`; `npm run deploy` completed with health check passed and backup `/root/cargo_project-backup-20260731-185009`.
+- [x] Bundle identity matched: local/remote `index.html` SHA-256 `fefa327ac61c351415244043ea24c590ea42e3c9a8add034bb2973a1069f380d`; local/remote `importWorkbook.worker-CGIQznIE.js` SHA-256 `f40ff83acd4d40cedbcb0597fd4b2eda0ba4da4079a52b402e43753bdee8911d`; local/remote `xlsx.js` SHA-256 `507a2d125c9af6b787af5840c54dde75724c6a048a7cdfad144f61eae9750ef9`. Public root referenced `/assets/index-DdsdrC8N.js` and `/assets/index-BhAisA-X.css`; worker returned HTTP 200.
+- [x] `set PLAYWRIGHT_BASE_URL=http://101.33.232.150&& npm run test:e2e` completed against the deployed site: **123 passed / 0 failed**, no skipped tests.
 
 ### 发布 gate (本地/部署/E2E)
-- [x] 本地 release checks (Lint/Tests/Build/Benchmark) 全量通过。
-- [ ] 生产环境部署门禁验证。
-- [ ] 生产环境全量 E2E 回归验证。
+- [x] 本次 worker fix 后本地 release checks (Lint/Tests/Build/E2E/Benchmark) 全量通过。
+- [x] 生产环境部署门禁验证完成，远程健康检查通过。
+- [x] 生产环境全量 E2E 回归验证完成：123 passed / 0 failed。
 
 - 说明：不得通过放宽 baseline、放宽断言、移除夹具或以兼容性旁路处理任何 RED 验收项。
 
