@@ -70,6 +70,12 @@
 - GREEN: `npx playwright test e2e/manual-3d.spec.ts --grep "调试面板 admin 可拉取服务器日志"` passed locally (**1 passed**) and with `PLAYWRIGHT_BASE_URL=http://101.33.232.150` (**1 passed**). Full release/deployment gates remain pending.
 - Review status: final E2E code-quality review APPROVED with no actionable P1/P2 findings.
 
+### 2026-07-31 history save stale-result follow-up
+
+- [x] 全局最大堆叠层数变更继续遵循显式 `Load` 重算契约；自动结果为空时 History 的 Save 现在禁用并显示可访问原因，保存回调也拒绝空结果，避免快照校验错误伪装成可保存状态。
+- RED：定向 E2E 在 `fill stack 4 → History → Save` 处先复现 Save 错误可用；GREEN：`npx playwright test e2e/container-calc.spec.ts --grep "restores a plan stack rule without replacing the persistent user default"` = **1 passed**，覆盖禁用态、`Load → Save → Restore`，并确认恢复值 4 不覆盖持久默认值 2。补充聚焦单测 `npx vitest run src/Workbench.sessionBoundary.test.ts src/components/HistoryPage.test.tsx --pool=threads --maxWorkers=1` = **2 files / 15 tests passed**；`npm exec tsc -- -b --pretty false` 通过。
+- 决策记录：`decision.md`「历史保存前的自动结果有效性」。
+
 ### 发布 gate (本地/部署/E2E)
 - [ ] 本地 release checks (Lint/Tests/Build/Benchmark) 全量通过。
 - [ ] 生产环境部署门禁验证。

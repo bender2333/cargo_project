@@ -19,6 +19,24 @@
 - 影响：极少数缺少 `!fullref` 且正好落在绝对哨兵边界的合法表会要求用户删除前置空行后重试，但不会把截断数据伪装成成功导入；所有输入仍受行、列和单元格上限保护。
 
 
+## 2026-07-31 本地全量 E2E 首次复跑仍 RED
+
+- 背景：完成当前 remediation commits 后首次执行 `npm run test:e2e`，本地浏览器门禁未闭环；未修改测试断言或跳过失败用例。
+- 证据：**116 passed / 7 failed**。失败为 `container-calc.spec.ts` 的 4 个导入模板/确认流程用例（`confirm-mapping` 按钮保持 disabled）、1 个历史恢复持久默认值用例（未找到 Restore 按钮）、`manual-3d.spec.ts` 的悬空 PageUp 提示用例（`manual-operation-notice` 缺失）、以及手动活动结果用例（聚焦场景 Delete 后箱体数仍为 1）。完整输出保留在本次 E2E 命令 artifact 中。
+- 决策：发布与部署继续 BLOCKED；先按真实业务路径分别复现并定位根因，禁止放宽断言、延长超时、跳过冲突用例或修改 benchmark 门禁。其余 lint、unit/performance test、build 已在本轮先后通过，不能抵消 E2E RED。
+- 后续：按失败域检查当前工作区与测试夹具是否存在未提交改动影响；每个根因补定向 RED/GREEN 证据后再重复完整 `npm run test:e2e`。
+- 根因确认：四个 `confirm-mapping` 失败均来自 `createTemplateWorkbookFile()` 只生成 Goods/Code/L/W/H，没有正重量；新的导入合同对未映射且无已保存模板默认值的重量产生 `invalid-weight`，`CargoImportDialog` 因此按设计禁用确认。产品校验和单元测试保持不变，采用测试夹具增加正重量，并在手动/模板管理映射路径补充 Weight 映射。
+- 根因确认：两个手动键盘失败不是产品守卫回退。`ContainerScene` 现在要求事件目标位于启用的 canvas；PageUp 用 2D `dispatchEvent` 选箱后直接点回 3D，未聚焦 canvas；活动结果用例从明细/导出按钮直接按 Delete，目标也不在 `workspaceRef`。现有 focused E2E 已明确先 `canvas.focus()`；修复只补两条真实流程的焦点步骤，保留键盘守卫和断言。
+- 根因确认：历史堆叠规则用例点击 Save plan 后立即 Back to workbench；HistoryPage 的 `onClick={() => void handleSave()}` fire-and-forget，`saveCurrentPlan` 仍在 POST+refresh，重新进入 History 时 DOM 尚为 `No saved plans`，不是数据库或 selector 问题。对照用例已等待保存后的方案行。修复只补保存完成的可见行等待，保留真实 Restore 路径。
+
+## 2026-07-31 历史保存前的自动结果有效性
+
+- 背景：全局最大堆叠层数变更按既有产品契约清空 `automaticResult`，装箱计算仍由用户显式点击「Load」触发；变更后等待不会自动重算。历史保存若继续使用空结果兜底，会在快照校验阶段以“placed and unplaced quantities must match planned quantity”失败，且保存按钮此前仍可点击。
+- 证据：无污染的新浏览器上下文中复现 `fill global stack → History → Save`：无历史 POST、弹出快照计数错误；同一流程补充 `Load` 后 POST 201、Restore 可见，恢复的方案默认层数为 4，持久用户默认仍为 2。
+- 决策：保留显式 `Load` 语义，不让空的自动结果参与历史保存；Workbench 在自动结果未生成时禁用 Save，显示“Load the packing result before saving.”（中文对应提示），保存回调同时保留同一守卫。E2E 先验证禁用态，再走 `Load → Save → Restore` 的有效路径。
+- 影响：避免把结构上无效的占位结果送入历史快照；全局堆叠规则测试明确覆盖重新计算边界，不放宽快照验证，也不改变手动模式保存路径。
+- 后续：其他依赖自动结果的导出控件继续由统一合规/可用性门禁覆盖；若未来改为设置变更自动重算，需同步更新此契约和 E2E。
+
 ## 2026-07-30 第三轮修复交付状态（任务1–9收口）
 
 - 背景：第三轮复审曾判定 BLOCKED（capacity-one RED、手动支撑/合规/历史/导入/朝向/labelStats 未闭环、E2E 8 fail）。本轮按 `plans/2026-07-30-refactor-review-round-3-remediation.md` 实施并 push 至 `09f4991`。

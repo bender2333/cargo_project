@@ -858,6 +858,10 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     [activeResult, locale, manualIssues, placementMode],
   )
   const planComplianceMessage = formatPlanComplianceMessage(activePlanCompliance, locale)
+  const planSaveDisabled = placementMode === 'auto' && !hasCalculated
+  const planSaveDisabledReason = planSaveDisabled
+    ? (locale === 'zh' ? '请先点击“装箱”生成结果，再保存方案。' : 'Load the packing result before saving.')
+    : planComplianceMessage
   const reviewChecklist: ReviewChecklist = useMemo(
     () => buildReviewChecklist({
       result: activeResult,
@@ -1319,6 +1323,9 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   const saveCurrentPlan = async () => {
     try {
+      if (planSaveDisabled) {
+        throw new Error(planSaveDisabledReason || (locale === 'zh' ? '请先点击“装箱”生成结果，再保存方案。' : 'Load the packing result before saving.'))
+      }
       assertPlanCompliant(activePlanCompliance)
       const planData = buildHistorySnapshot({
         container: selectedContainer,
@@ -1543,8 +1550,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             loadFailed={historyLoadFailed}
             onRetry={refreshHistory}
             onSave={saveCurrentPlan}
-            saveDisabled={!activePlanCompliance.ok}
-            saveDisabledReason={planComplianceMessage}
+            saveDisabled={planSaveDisabled || !activePlanCompliance.ok}
+            saveDisabledReason={planSaveDisabledReason}
             onRestore={restorePlan}
             onDelete={removeHistory}
             onBack={() => activateNav('overview')}
