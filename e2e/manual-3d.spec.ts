@@ -398,6 +398,51 @@ test('从历史方案恢复自定义柜型后 3D 场景重建并显示新箱体'
   expect(colors).toBeGreaterThanOrEqual(4)
 })
 
+test('手动历史快照在当前货物切换后恢复货物 A 身份和数量', async ({ page }) => {
+  await ensureChinese(page)
+
+  await page.getByRole('button', { name: '编辑货物: Carton A' }).click()
+  const editA = page.getByRole('form', { name: '编辑货物项目' })
+  await editA.getByLabel('名称', { exact: true }).fill('Manual cargo A')
+  await editA.getByLabel('标识', { exact: true }).fill('A')
+  await editA.getByLabel('数量', { exact: true }).fill('1')
+  await editA.getByRole('button', { name: '保存修改' }).click()
+  await page.getByRole('button', { name: '装箱', exact: true }).click()
+  await expect(page.getByTestId('report-panel')).toContainText('已装载: 1 / 1')
+
+  await enterManualModeEmpty(page)
+  await page.getByTestId('pool-quick-place-sample-1').click()
+  await expect(page.getByTestId('container-scene')).toHaveAttribute('data-box-count', '1')
+
+  await page.getByTestId('nav-history').click()
+  await expect(page.getByTestId('history-page')).toBeVisible()
+  await page.getByRole('button', { name: '保存方案' }).click()
+  await expect(page.getByTestId('history-plan-snapshot')).toHaveCount(1)
+
+  await page.getByRole('button', { name: '工作台', exact: true }).click()
+  await page.getByRole('button', { name: '编辑货物: Manual cargo A' }).click()
+  const editB = page.getByRole('form', { name: '编辑货物项目' })
+  await editB.getByLabel('名称', { exact: true }).fill('Manual cargo B')
+  await editB.getByLabel('标识', { exact: true }).fill('B')
+  await editB.getByLabel('数量', { exact: true }).fill('2')
+  await editB.getByRole('button', { name: '保存修改' }).click()
+  await page.getByRole('button', { name: '装箱', exact: true }).click()
+  await expect(page.getByTestId('cargo-list-item').filter({ hasText: 'Manual cargo B' })).toBeVisible()
+  await page.getByTestId('placement-mode-auto').click()
+  await expect(page.getByTestId('report-panel')).toContainText('已装载: 2 / 2')
+
+  await page.getByTestId('nav-history').click()
+  await expect(page.getByTestId('history-plan-snapshot')).toHaveCount(1)
+  await page.getByRole('button', { name: '恢复' }).click()
+  await expect(page.getByTestId('manual-workspace')).toBeVisible()
+  await expect(page.getByTestId('container-scene')).toHaveAttribute('data-box-count', '1')
+  await expect(page.getByTestId('cargo-list-item').filter({ hasText: 'Manual cargo A' })).toBeVisible()
+  await expect(page.getByTestId('cargo-list-item').filter({ hasText: 'Manual cargo B' })).toHaveCount(0)
+  await page.getByRole('button', { name: '明细表', exact: true }).click()
+  await expect(page.getByTestId('report-panel')).toContainText('Manual cargo A')
+  await expect(page.getByTestId('report-panel')).toContainText('已装载: 1 / 1')
+})
+
 test('?debug=1 显示调试面板并展示当前状态', async ({ page }) => {
   await page.goto('/?debug=1')
   await expect(page.getByTestId('debug-panel')).toBeVisible()

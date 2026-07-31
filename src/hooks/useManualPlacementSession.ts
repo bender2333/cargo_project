@@ -100,8 +100,17 @@ export type UseManualPlacementSessionOptions = {
   container: ContainerSpec
   automaticDisplayResult: PackingResult
   supportPolicy?: SupportPolicy
+  defaultMaxStackLayers?: number
   createId?: CreateManualPlacementId
   initialState?: Partial<ManualPlacementSessionState>
+}
+
+export type RestoreHistoryDraftInput = {
+  draft: ManualDraft
+  mode: ManualPlacementMode
+  draftInitialized: boolean
+  cargoItems: CargoItem[]
+  defaultMaxStackLayers?: number
 }
 
 function commandSuccess(
@@ -190,28 +199,37 @@ function draftFromAutomaticResult(
   }
 }
 
+function buildManualCargoPlan(items: CargoItem[], defaultMaxStackLayers: number | undefined) {
+  return items.map(({ id, quantity, weight, length, width, height, canRotate, stackable, maxStackLayers, groundOnly }) => ({
+    id,
+    quantity,
+    weight,
+    length,
+    width,
+    height,
+    canRotate,
+    stackable,
+    maxStackLayers: maxStackLayers ?? defaultMaxStackLayers,
+    groundOnly,
+  }))
+}
+
 export function useManualPlacementSession(options: UseManualPlacementSessionOptions) {
   const {
     cargoItems,
     container,
     automaticDisplayResult,
     supportPolicy = DEFAULT_PLACEMENT_SETTINGS.supportPolicy,
+    defaultMaxStackLayers,
     createId = defaultCreateId,
   } = options
   const cargoPlan = useMemo(
-    () => cargoItems.map(({ id, quantity, weight, length, width, height, canRotate, stackable, maxStackLayers, groundOnly }) => ({
-      id,
-      quantity,
-      weight,
-      length,
-      width,
-      height,
-      canRotate,
-      stackable,
-      maxStackLayers,
-      groundOnly,
-    })),
-    [cargoItems],
+    () => buildManualCargoPlan(cargoItems, defaultMaxStackLayers),
+    [cargoItems, defaultMaxStackLayers],
+  )
+  const effectiveCargoItems = useMemo(
+    () => cargoItems.map((item) => ({ ...item, maxStackLayers: item.maxStackLayers ?? defaultMaxStackLayers })),
+    [cargoItems, defaultMaxStackLayers],
   )
   const [state, dispatch] = useReducer(
     manualPlacementSessionReducer,
@@ -227,8 +245,8 @@ export function useManualPlacementSession(options: UseManualPlacementSessionOpti
   const draft = state.history.present
 
   const pool = useMemo(
-    () => buildPool(cargoItems, draft),
-    [cargoItems, draft],
+    () => buildPool(effectiveCargoItems, draft),
+    [effectiveCargoItems, draft],
   )
   const issues = useMemo(
     () => validateDraft(draft, container, supportPolicy),
@@ -246,29 +264,27 @@ export function useManualPlacementSession(options: UseManualPlacementSessionOpti
     [blockingInvalidBoxIds, draft],
   )
   const manualResult = useMemo(
-    () => buildManualPackingResult(rawPlacedBoxes, container, cargoItems, issues),
-    [cargoItems, container, issues, rawPlacedBoxes],
+    () => buildManualPackingResult(rawPlacedBoxes, container, effectiveCargoItems, issues),
+    [container, effectiveCargoItems, issues, rawPlacedBoxes],
   )
   const placedBoxes = manualResult.placed
   const activeResult = state.mode === 'manual' ? manualResult : automaticDisplayResult
 
   const setMode = useCallback((mode: ManualPlacementMode): ManualPlacementCommandResult => {
     const changed = mode !== state.mode
-    // First entry into manual seeds from automatic only when the draft has never been
-    // initialized. An intentionally emptied draft keeps draftInitialized=true.
     if (
       mode === 'manual'
       && state.mode !== 'manual'
       && !state.draftInitialized
       && automaticDisplayResult.placed.length > 0
     ) {
-      const nextDraft = draftFromAutomaticResult(automaticDisplayResult, cargoItems, createId)
+      const nextDraft = draftFromAutomaticResult(automaticDisplayResult, effectiveCargoItems, createId)
       dispatch({ type: 'continuedFromAutomatic', draft: nextDraft, cargoPlan })
       return commandSuccess('set-mode', changed)
     }
     dispatch({ type: 'modeSet', mode })
     return commandSuccess('set-mode', changed)
-  }, [automaticDisplayResult, cargoItems, cargoPlan, createId, state.draftInitialized, state.mode])
+  }, [automaticDisplayResult, cargoPlan, createId, effectiveCargoItems, state.draftInitialized, state.mode])
 
   const select = useCallback((boxId: string | null): ManualPlacementCommandResult => {
     if (boxId !== null && !draft.boxes.some((box) => box.id === boxId)) {
@@ -317,7 +333,7 @@ export function useManualPlacementSession(options: UseManualPlacementSessionOpti
     dropY: number,
     dropZ?: number,
   ): ManualPlacementCommandResult => {
-    const cargo = cargoItems.find((item) => item.id === cargoId)
+    const cargo = effectiveCargoItems.find((item) => item.id === cargoId)
     if (!cargo) return commandFailure('drop', 'missing-cargo', { cargoId })
     const used = draft.boxes.filter((box) => box.cargoId === cargoId).length
     if (used >= cargo.quantity) {
@@ -356,10 +372,10 @@ export function useManualPlacementSession(options: UseManualPlacementSessionOpti
 
     dispatch({ type: 'draftCommitted', draft: nextDraft, selectedId: boxId, cargoPlan })
     return commandSuccess('drop', true, { boxId, cargoId, issues: nextIssues })
-  }, [cargoItems, cargoPlan, container, createId, draft, supportPolicy])
+  }, [cargoPlan, container, createId, draft, effectiveCargoItems, supportPolicy])
 
   const quickPlace = useCallback((cargoId: string): ManualPlacementCommandResult => {
-    const cargo = cargoItems.find((item) => item.id === cargoId)
+    const cargo = effectiveCargoItems.find((item) => item.id === cargoId)
     if (!cargo) return commandFailure('quick-place', 'missing-cargo', { cargoId })
     const result = quickPlaceCargo({
       cargo,
@@ -383,7 +399,7 @@ export function useManualPlacementSession(options: UseManualPlacementSessionOpti
       cargoId,
       issues: result.issues,
     })
-  }, [cargoItems, cargoPlan, container, createId, draft, supportPolicy])
+  }, [cargoPlan, container, createId, draft, effectiveCargoItems, supportPolicy])
 
   const rotate = useCallback((
     boxId: string,
@@ -450,27 +466,26 @@ export function useManualPlacementSession(options: UseManualPlacementSessionOpti
   }, [state.history.future.length])
 
   const continueFromAutomatic = useCallback((): ManualPlacementCommandResult => {
-    const nextDraft = draftFromAutomaticResult(automaticDisplayResult, cargoItems, createId)
+    const nextDraft = draftFromAutomaticResult(automaticDisplayResult, effectiveCargoItems, createId)
     dispatch({ type: 'continuedFromAutomatic', draft: nextDraft, cargoPlan })
     return commandSuccess('continue-from-automatic', true)
-  }, [automaticDisplayResult, cargoItems, cargoPlan, createId])
+  }, [automaticDisplayResult, cargoPlan, createId, effectiveCargoItems])
 
-  const restoreHistoryDraft = useCallback((input: {
-    draft: ManualDraft
-    mode: ManualPlacementMode
-    draftInitialized: boolean
-  }): ManualPlacementCommandResult => {
+  const restoreHistoryDraft = useCallback((input: RestoreHistoryDraftInput): ManualPlacementCommandResult => {
     dispatch({
       type: 'historyDraftRestored',
       draft: {
-        boxes: input.draft.boxes.map((box) => ({ ...box })),
+        boxes: input.draft.boxes.map((box) => ({
+          ...box,
+          orientationAxes: box.orientationAxes ? { ...box.orientationAxes } : undefined,
+        })),
       },
       mode: input.mode,
       draftInitialized: input.draftInitialized,
-      cargoPlan,
+      snapshotCargoPlan: buildManualCargoPlan(input.cargoItems, input.defaultMaxStackLayers),
     })
     return commandSuccess('restore-history-draft', true)
-  }, [cargoPlan])
+  }, [])
 
   return {
     state,

@@ -504,6 +504,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     container: renderingContainer,
     automaticDisplayResult,
     supportPolicy: placementSettings.supportPolicy,
+    defaultMaxStackLayers,
   })
   const detailRows = useMemo(
     () => buildExportPlanRows(displayCargoItems, activeResult, { defaultMaxStackLayers }),
@@ -1380,12 +1381,16 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         draft: decision.data.manualDraft,
         mode: 'manual',
         draftInitialized: decision.data.draftInitialized ?? true,
+        cargoItems: decision.data.cargoItems,
+        defaultMaxStackLayers: decision.data.defaultMaxStackLayers,
       })
     } else {
       restoreHistoryDraft({
         draft: { boxes: [] },
         mode: 'auto',
         draftInitialized: false,
+        cargoItems: data.cargoItems,
+        defaultMaxStackLayers: data.defaultMaxStackLayers,
       })
     }
 

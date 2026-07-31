@@ -1,9 +1,10 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { CargoItem, ContainerSpec, PackingResult, PlacedBox } from '../types'
-import { addBox, emptyDraft, makeManualBox } from '../lib/manualPlacement'
+import { addBox, emptyDraft, makeManualBox, type ManualDraft, type ManualPlacedBox } from '../lib/manualPlacement'
 import { renderedFootprint } from '../lib/renderedFootprint'
 import { useManualPlacementSession } from './useManualPlacementSession'
+import type { ManualPlacementCommandResult } from './useManualPlacementSession'
 
 const container: ContainerSpec = {
   id: 'manual-test',
@@ -58,6 +59,7 @@ function placedBox(overrides: Partial<PlacedBox> = {}): PlacedBox {
     color: '#f59e0b',
     canRotate: true,
     stackable: true,
+    depthLayer: 1,
     maxStackLayers: 8,
     physicalLayer: 1,
     workStep: 1,
@@ -431,7 +433,7 @@ describe('useManualPlacementSession', () => {
     expect(result.current.blockingInvalidBoxIds.has('top')).toBe(false)
   })
 
-  it('continues from automatic placement in one action while preserving displayed geometry and cargo rules', () => {
+  it('continues from automatic placement while canonicalizing newly forbidden rotation', () => {
     const sourceBox = placedBox({
       canRotate: true,
       stackable: true,
@@ -471,15 +473,15 @@ describe('useManualPlacementSession', () => {
         baseLength: 300,
         baseWidth: 500,
         baseHeight: 700,
-        length: 500,
-        width: 700,
-        height: 300,
-        orientationKey: 'WHL',
-        labelRotationDeg: 270,
-        yawQuarterTurn: 1,
-        pitchQuarterTurn: 1,
-        orientationAxes: { x: 'W+', y: 'H-', z: 'L-' },
-        orientationLabel: 'X:W+ Y:T- Z:L-',
+        length: 300,
+        width: 500,
+        height: 700,
+        orientationKey: 'LWH',
+        labelRotationDeg: 0,
+        yawQuarterTurn: 0,
+        pitchQuarterTurn: 0,
+        orientationAxes: { x: 'L+', y: 'W+', z: 'H+' },
+        orientationLabel: 'X:L+ Y:W+ Z:T+',
         canRotate: false,
         stackable: false,
         maxStackLayers: 2,
@@ -487,14 +489,14 @@ describe('useManualPlacementSession', () => {
       }),
     ])
     expect(renderedFootprint(result.current.draft.boxes[0])).toEqual({
-      xExtent: 500,
-      yExtent: 700,
-      zExtent: 300,
+      xExtent: 300,
+      yExtent: 500,
+      zExtent: 700,
     })
     expect(result.current.activeResult.placed[0]).toMatchObject({
-      orientationKey: 'WHL',
-      labelRotationDeg: 270,
-      orientationAxes: { x: 'W+', y: 'H-', z: 'L-' },
+      orientationKey: 'LWH',
+      labelRotationDeg: 0,
+      orientationAxes: { x: 'L+', y: 'W+', z: 'H+' },
     })
   })
 
@@ -592,6 +594,197 @@ describe('useManualPlacementSession', () => {
     rerender({ cargoItems: [cargo({ quantity: 3 })] })
     expect(result.current.draft.boxes.map((box) => box.id)).toEqual(['pump-1'])
     expect(result.current.manualResult).toMatchObject({ placedCount: 1, totalCargoCount: 3 })
+  })
+
+  it('restores cargo A atomically while current cargo B and global defaults are still active', () => {
+    const snapshotCargo = [cargo({ id: 'cargo-a', quantity: 2 })]
+    const currentCargo = [cargo({ id: 'cargo-b', name: 'Control valve', label: 'V', quantity: 1 })]
+    const restoredDraft = {
+      boxes: [
+        {
+          ...manualBox('snapshot-a-1', 'cargo-a', 25),
+          length: 400,
+          width: 400,
+          height: 400,
+          orientationKey: 'WLH' as const,
+          labelRotationDeg: 90 as const,
+          yawQuarterTurn: 1 as const,
+          pitchQuarterTurn: 2 as const,
+          orientationAxes: { x: 'W+', y: 'L-', z: 'H+' } as const,
+          orientationLabel: 'X:W+ Y:L- Z:T+',
+        },
+        {
+          ...manualBox('snapshot-a-2', 'cargo-a', 425),
+          length: 400,
+          width: 400,
+          height: 400,
+          orientationKey: 'WLH' as const,
+          labelRotationDeg: 90 as const,
+          yawQuarterTurn: 1 as const,
+          pitchQuarterTurn: 2 as const,
+          orientationAxes: { x: 'W+', y: 'L-', z: 'H+' } as const,
+          orientationLabel: 'X:W+ Y:L- Z:T+',
+        },
+      ],
+    }
+    const projectPose = (box: Pick<ManualPlacedBox | PlacedBox, 'id' | 'cargoId' | 'x' | 'y' | 'z' | 'length' | 'width' | 'height' | 'orientationKey' | 'labelRotationDeg' | 'yawQuarterTurn' | 'pitchQuarterTurn' | 'orientationAxes' | 'orientationLabel' | 'maxStackLayers'>) => ({
+      id: box.id,
+      cargoId: box.cargoId,
+      x: box.x,
+      y: box.y,
+      z: box.z,
+      length: box.length,
+      width: box.width,
+      height: box.height,
+      orientationKey: box.orientationKey,
+      labelRotationDeg: box.labelRotationDeg,
+      yawQuarterTurn: box.yawQuarterTurn,
+      pitchQuarterTurn: box.pitchQuarterTurn,
+      orientationAxes: box.orientationAxes,
+      orientationLabel: box.orientationLabel,
+      maxStackLayers: box.maxStackLayers,
+    })
+    const { result, rerender } = renderHook(
+      ({ cargoItems, defaultMaxStackLayers }: { cargoItems: CargoItem[]; defaultMaxStackLayers?: number }) => useManualPlacementSession({
+        cargoItems,
+        container,
+        defaultMaxStackLayers,
+        automaticDisplayResult: automaticResult(),
+      }),
+      { initialProps: { cargoItems: currentCargo, defaultMaxStackLayers: 5 } },
+    )
+
+    act(() => {
+      result.current.restoreHistoryDraft({
+        draft: restoredDraft,
+        mode: 'manual',
+        draftInitialized: true,
+        cargoItems: snapshotCargo,
+        defaultMaxStackLayers: undefined,
+      })
+    })
+    rerender({ cargoItems: snapshotCargo, defaultMaxStackLayers: undefined })
+
+    expect(result.current.draft.boxes).toHaveLength(2)
+    expect(result.current.draft.boxes.map(projectPose)).toEqual(restoredDraft.boxes.map(projectPose))
+    expect(result.current.manualResult.placed).toHaveLength(2)
+    expect(result.current.manualResult.placed.map(projectPose)).toEqual(restoredDraft.boxes.map(projectPose))
+    expect(result.current.draft.boxes.every((box) => box.maxStackLayers === undefined)).toBe(true)
+  })
+
+  it('owns restored orientation axes independently from the snapshot caller', () => {
+    const restoredDraft: ManualDraft = {
+      boxes: [{
+        ...manualBox('snapshot-a-1'),
+        orientationAxes: { x: 'W+' as const, y: 'L-' as const, z: 'H+' as const },
+      }],
+    }
+    const { result } = renderHook(() => useManualPlacementSession({
+      cargoItems: [cargo({ quantity: 1 })],
+      container,
+      automaticDisplayResult: automaticResult(),
+    }))
+
+    act(() => {
+      result.current.restoreHistoryDraft({
+        draft: restoredDraft,
+        mode: 'manual',
+        draftInitialized: true,
+        cargoItems: [cargo({ quantity: 1 })],
+      })
+    })
+    restoredDraft.boxes[0].orientationAxes.x = 'L+'
+
+    expect(result.current.draft.boxes[0].orientationAxes).toEqual({ x: 'W+', y: 'L-', z: 'H+' })
+  })
+
+  it.each([
+    { name: 'cargo limit', cargoLimit: 2, globalLimit: 1, expected: 2 },
+    { name: 'global fallback', cargoLimit: undefined, globalLimit: 1, expected: 1 },
+    { name: 'unlimited fallback', cargoLimit: undefined, globalLimit: undefined, expected: undefined },
+  ])('freezes the effective max stack layers for $name', ({ cargoLimit, globalLimit, expected }) => {
+    const { result } = renderHook(() => useManualPlacementSession({
+      cargoItems: [cargo({ maxStackLayers: cargoLimit })],
+      container,
+      automaticDisplayResult: automaticResult(),
+      defaultMaxStackLayers: globalLimit,
+    }))
+
+    act(() => {
+      result.current.commit({
+        boxes: [manualBox('bottom'), manualBox('top', 'cargo-a', 0, 400)],
+      })
+    })
+
+    expect(result.current.draft.boxes.map((box) => box.maxStackLayers)).toEqual([expected, expected])
+    expect(result.current.issues.some((issue) => issue.type === 'max-stack-layers')).toBe(expected === 1)
+  })
+
+  it('uses the global stack limit while seeding and while validating a drop', () => {
+    const source = placedBox({
+      x: 0,
+      y: 0,
+      z: 0,
+      length: 400,
+      width: 400,
+      height: 400,
+      orientationKey: 'LWH',
+      labelRotationDeg: 0,
+      yawQuarterTurn: 0,
+      pitchQuarterTurn: 0,
+      orientationAxes: { x: 'L+', y: 'W+', z: 'H+' },
+      orientationLabel: 'X:L+ Y:W+ Z:T+',
+      maxStackLayers: 8,
+    })
+    const { result } = renderHook(() => useManualPlacementSession({
+      cargoItems: [cargo({ maxStackLayers: undefined })],
+      container,
+      automaticDisplayResult: automaticResult([source]),
+      defaultMaxStackLayers: 1,
+      createId: (sourceId) => sourceId ? `manual-${sourceId}` : 'dropped',
+    }))
+
+    act(() => { result.current.continueFromAutomatic() })
+    expect(result.current.draft.boxes[0].maxStackLayers).toBe(1)
+
+    let command: ManualPlacementCommandResult
+    act(() => { command = result.current.drop('cargo-a', 0, 0, 400) })
+    expect(command!).toMatchObject({
+      ok: false,
+      reason: 'validation-failed',
+      issues: [expect.objectContaining({ type: 'max-stack-layers' })],
+    })
+  })
+  it('reconciles every retained history frame when the global stack limit changes', () => {
+    const { result, rerender } = renderHook(
+      ({ defaultMaxStackLayers }: { defaultMaxStackLayers?: number }) => useManualPlacementSession({
+        cargoItems: [cargo({ maxStackLayers: undefined })],
+        container,
+        automaticDisplayResult: automaticResult(),
+        defaultMaxStackLayers,
+      }),
+      { initialProps: { defaultMaxStackLayers: 5 } },
+    )
+
+    act(() => { result.current.commit({ boxes: [manualBox('frame-1')] }) })
+    act(() => { result.current.commit({ boxes: [manualBox('frame-2', 'cargo-a', 400)] }) })
+    act(() => { result.current.commit({ boxes: [manualBox('frame-3', 'cargo-a', 800)] }) })
+    act(() => { result.current.commit({ boxes: [manualBox('frame-4', 'cargo-a', 1200)] }) })
+    act(() => { result.current.undo() })
+    act(() => { result.current.undo() })
+
+    expect(result.current.history.past).not.toHaveLength(0)
+    expect(result.current.history.present.boxes).not.toHaveLength(0)
+    expect(result.current.history.future).not.toHaveLength(0)
+    expect(result.current.history.past.flatMap((draft) => draft.boxes).every((box) => box.maxStackLayers === 5)).toBe(true)
+    expect(result.current.history.present.boxes.every((box) => box.maxStackLayers === 5)).toBe(true)
+    expect(result.current.history.future.flatMap((draft) => draft.boxes).every((box) => box.maxStackLayers === 5)).toBe(true)
+
+    rerender({ defaultMaxStackLayers: 1 })
+
+    expect(result.current.history.past.flatMap((draft) => draft.boxes).every((box) => box.maxStackLayers === 1)).toBe(true)
+    expect(result.current.history.present.boxes.every((box) => box.maxStackLayers === 1)).toBe(true)
+    expect(result.current.history.future.flatMap((draft) => draft.boxes).every((box) => box.maxStackLayers === 1)).toBe(true)
   })
 })
 
