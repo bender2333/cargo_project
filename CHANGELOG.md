@@ -1,4 +1,12 @@
 # Changelog
+
+## 2026-08-03 issues/0802 证据复核
+
+- 修订 `issues/0802/analysis.md`，将当前快照/源码事实、已删除 scratch/worktree 的历史实验和未验证项分开；确认 860/877 当前结果与块引擎门槛，保留 quick-place 朝向承诺缺口，并将旋转 gizmo 降级为未验证的静态候选。
+- 追加 `decision.md` superseding 记录：不清洗 `groundOnly`/`maxStackLayers`，不把 873 或“无代码回归”当作当前证明；groundOnly 块策略、99 有效上限和 gizmo 视觉修复继续阻塞。
+- 只读验证：两个快照的排序后 cargo 输入 SHA-256 均为 `7dc1fff301d35e0dfd7e55d223819f9dd72153539e119bc71486bd7ac9d33e4d`，自动摘要 SHA-256 均为 `7fbddb83a36bada7a3e47c03d39d4efd6e5cc26ae573fbfa6bc26365f364c24c`；自动结果均为 860/877，手动草稿为 0/162，标签 13 混合方向为 `LWH:13,WHL:4,WLH:19`。
+- 本次只改分析/决策/执行记录，未改产品代码、测试、fixture、baseline、threshold 或部署；未运行 lint、unit、build、E2E、benchmark，不能据此宣称运行时门禁 GREEN。
+
 ## 2026-08-03 当前架构与 loop/agent 复审
 
 - 审查报告：`issues/2026-08-03-refactor-review-architecture-project-test-loop.md`。本轮只修改审查报告与本条执行记录，未修改运行时代码、测试、夹具、baseline、`.serena/project.yml` 或 `issues/0720/`，未部署。

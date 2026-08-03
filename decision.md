@@ -2089,3 +2089,37 @@
 - 验证：在加入自动快照 manual provenance 回归后，`npm exec tsc -- -b --pretty false` 仍失败：`planCompliance.ts` 的 `encodeURIComponent` 输入因 `Pick<ValidationIssue>` 丢失 discriminated-union narrowing；ResultsPanel 合规 fixture 使用非法 `VehicleProfileId`；manual session 的 global-default/pose fixture 未处理可选值；worker client 测试错误使用泛型 matcher，client 使用 `enum` 触发 `erasableSyntaxOnly`；Workbench workspace ref 为 `HTMLElement` 而目标 div 要求 `HTMLDivElement`。
 - 决策：保留 RED；先在各自根因处修复类型与夹具，不放宽 `tsc`、删除断言或改用类型逃逸，再以同一命令复核。
 - 影响：合规提交及后续 release gate 暂不宣称类型检查通过；本条与混合工作区已有 RED 记录并存，均需在最终门禁前收口。
+
+## 2026-08-03 越南40尺 860/873 回归 + 手动同型号朝向不齐（历史定位，已由后续证据复核收窄）
+
+- 背景：issues/0802 反馈两问题。数据取自 issues/0802 快照（越南40尺 40HQ，877 箱 / 28 型号，quantity 模式），与 7/22 测试数据一致。用户报 7/22 装 873、现在只装 860，且底部近柜门存在大量空隙；手动排布同一型号朝向不一致（LWH/WLH 混摆）。
+
+### 问题一：860 vs 873 —— 非算法回归，是输入数据属性差异
+- 复现：用快照 cargo（`src/lib/scratch*` 一次性脚本，已删）跑 `calculatePacking` 得 placed=860/877、vol=78.24%、地面覆盖 82.0%、未放 `3:4,25:6,18:4,10:3`，与快照 `automatic.placedCount=860` 完全一致。
+- 对照实验（同数据，7/22 worktree `a2432a3` 代码 vs 当前 HEAD，二者输出**逐项相同**）：
+  - as-is（全部 `maxStackLayers:99`，item27 `groundOnly:true`）→ blockEngine=off，old=860 / head=860
+  - item27 `groundOnly:false`（其余不动）→ blockEngine=off，old=873 / head=873
+  - `maxStackLayers` 全改 undefined 且无 groundOnly → blockEngine=on，old=877 / head=877
+- 结论：`packing.ts` 在 7/22→今的改动（新增 `respectsStackCapacityWithUpwardRiders`、`finalizePlacementGeometry`）对本数据**零影响**——因所有型号 `maxStackLayers:99` 使 `stackCapacity=99`，向上骑手约束永不触发；finalize 只改分层/步骤/labelStats，不改落位。860 与 873 的差异**完全由输入属性驱动**：
+  - 关键变量 A：item27（`390×335×310`，28 箱）的 `groundOnly` 标志。groundOnly=true 时该型号只能落地，柜门附近底面被其占用/碎片化 → 少装 13 箱（873→860）。
+  - 关键变量 B（更大杠杆）：`maxStackLayers:99` + 任一 groundOnly 均会使 `shouldUseBlockEngine`（packing.ts:864-870）返回 false。该门槛要求「每个型号 `maxStackLayers===undefined` 且非 groundOnly、可堆叠」。块引擎在本数据上能装满 877/877（vol 80.27%），贪心 else 分支只能 860。
+- 待决策：(1) 用户数据里 `maxStackLayers:99` 与 item27 `groundOnly` 来自哪里？——`importCargo.ts:329` 导入时 `maxStackLayers` 仅在单元格 >0 时取值否则 undefined；:330 `groundOnly` 默认 false。故 99 与 groundOnly 应来自用户录入/模板默认或历史方案，需与用户确认原始 Excel/录入。(2) 是否应放宽块引擎门槛，使「显式 `maxStackLayers` 但值足够大 / 少量 groundOnly」也能走块引擎，或让贪心分支具备同等地面填充能力。(3) 若 item27 groundOnly 是误设，纠正数据即可回到 873；但 873 仍非最优（块引擎 877）。
+
+### 问题二：手动同型号朝向不齐 —— quickPlace 未做朝向承诺
+- 根因：`src/lib/quickPlace.ts:120-133` `quickPlaceCargo` 调 `placementScore` 时**未传 `committedOrientation`**（第 5 参省略）。自动装箱通过 `committedOrientations` map 记住某型号首个直立朝向并对后续同型号施加强惩罚（`packing.ts:395-398 orientationCommitmentPenalty`），使同型号同朝向、行距一致；手动逐个 quickPlace 各自独立打分，`snapBonus`/`sameLabelBonus` 会因邻居几何不同而选出不同朝向（LWH vs WLH），导致同型号混摆。
+- 复现：对 label「4」型号（580×365×435）连续 quickPlace 40 次 → orientationKey 分布 LWH:6 / WLH:34，证实同型号朝向不统一。
+- 待决策：quickPlace 是否应像自动装箱一样，对「同一 cargoId 已放箱子的既有朝向」施加承诺惩罚（把已放同型号箱的 orientationKey 作为 committedOrientation 传入 placementScore），或读取用户手动设定的目标朝向。需与用户确认期望：手动补位是否要强制对齐到该型号已有朝向。
+
+- 影响：本轮仅定位，未改代码、未改测试。scratch 复现脚本与 `.worktrees/at-0722` 已清理。
+- 后续：待用户就上述待决策点拍板后，另起 `plans/2026-08-03-*.md` 定稿计划交 Codex 执行。
+
+
+## 2026-08-03 issues/0802 证据复核：收窄结论与保留阻塞
+
+- 背景：复核 `issues/0802/analysis.md`、`issue.txt`、两个 2026-07-27 快照、PNG 和当前源码后，发现原条目把已删除 scratch/worktree 的 7/22 对照与当前仓库事实混在一起，并把未出现在 `issue.txt` 的 gizmo 推断列为已确认用户问题。
+- 当前已证实：两个快照的自动输入/摘要一致，40HQ quantity 场景为 28 个型号、877 箱、`placedCount=860`；全部型号带 `maxStackLayers:99`，仅型号 27 为 `groundOnly:true`；当前 `shouldUseBlockEngine` 因显式有限上限和 groundOnly 条件关闭。`quickPlaceCargo` 调 `placementScore` 时确实未传 `committedOrientation`。
+- 证据降级：873、842、855、877 counterfactual、82.04% 地面覆盖率、40 次 quick-place 分布以及 old/current 逐项相同，均保留为历史实验记录；临时脚本和 detached worktree 已删除，仓库没有同一 877 箱输入的可复跑 runner，因此不作为当前门禁或“无代码回归”证明。
+- 属性来源：快照只保存解析后的 `CargoItem`，没有源 Excel、mapping、模板 defaults、历史或自定义货物来源。`groundOnly` 与 99 的来源均未闭环；99 是有限值，不能在一般情况下等同于 `undefined` 无限上限。
+- 决策：不清洗、不静默改写 `groundOnly`/`maxStackLayers`；不裸放开混合 groundOnly 的块引擎；先补可复跑 fixture/runner、有限上限阈值矩阵和 groundOnly 选择实验，再决定路由。quick-place 朝向承诺作为独立代码缺口，先以确定性行为测试证明后实施。
+- Gizmo：`issue.txt`、PNG 和可读取快照没有箭头反馈，MP4 当前无法读取。`HANDLE_SPECS` 的非镜像是高置信静态候选，但用户报告、屏幕 CW/CCW、影响轴和具体反转对象均未验证；在浏览器/媒体证据出现前不改 gizmo。
+- 影响：本条 supersede 本文件 2026-08-03 `2093-2114` 中“非算法回归/属性来源已证实/问题三已证实”的过强表述；不修改产品代码、测试、fixture、benchmark、阈值或部署状态。
