@@ -1,4 +1,10 @@
 # Changelog
+## 2026-08-03 当前架构与 loop/agent 复审
+
+- 审查报告：`issues/2026-08-03-refactor-review-architecture-project-test-loop.md`。本轮只修改审查报告与本条执行记录，未修改运行时代码、测试、夹具、baseline、`.serena/project.yml` 或 `issues/0720/`，未部署。
+- 当前保护状态：工作区保留既有 `.serena/project.yml` 用户改动（`languages` → `language_servers`）；当前 HEAD 为 `c28a30b stage`。
+- Fresh 本地证据：`npm run lint` 通过；`npm test` 通过（91 ordinary files / 789 tests，另 2 performance files / 6 tests）；`npm run build` 通过（320 modules，保留 Vite 大 chunk warning）；`npm run test:e2e` 通过（123 passed / 0 failed，no-skipped reporter）；`npm run benchmark` 通过（五个实际 packing hashes、bundle 和 timing gate 均通过，报告生成时间 2026-08-03）；聚焦合同测试 12 files / 152 tests；俄罗斯 31 托 E2E 1 passed；手动历史恢复 E2E 1 passed；`git diff --check` 通过。
+- Review 结论：运行时门禁 GREEN；架构目标、README 运行事实、反馈素材索引和 loop/agent 可审计状态仍需 P1/P2 整改。远程部署/E2E 本轮按计划未执行，历史 CHANGELOG 声明不作为本轮 fresh evidence。
 
 ## 2026-07-31 第四轮复审整改（已完成）
 
