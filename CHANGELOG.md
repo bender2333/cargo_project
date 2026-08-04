@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-04 issues/0802 实施证据同步
+
+- 更新 `issues/0802/analysis.md` 的当前状态与「2026-08-04 实施复核」，并在 `decision.md` 追加 superseding 决策；保留 873/已删除实验的历史等级、未闭环的输入 provenance、未验证且范围外的 rotation gizmo，以及原分析边界。
+- 同步引用已观察的 focused 证据：manual 提交 `6f864a9` 后 Vitest **9/9**、Chromium **1/1** 与单一正立朝向场景；automatic 提交 `d037df0` 后 **877/877**、ground-only **28/28** 位于 `z=0`、零 error/geometry/stack violations，0629 对照、五项不变合同 hash 及真实 XLSX Chromium **1/1** 详见上述两份文档。
+- 本次仅同步文档，没有新运行 runtime validation；未执行完整本地 gate、正式 benchmark、部署或远程 E2E，不作 release/deployment GREEN 声明。
+
 ## 2026-08-04 (0802 Automatic Packing Constraints)
 
 - Fixture preserved from snapshot `(4)(3)`: **28 SKUs / 877 boxes**. RED evidence: the block route was `false`, automatic packing placed **860/877** with **17** `no-space`, and the 0629 quantity regression placed **160**, below the required **188**.

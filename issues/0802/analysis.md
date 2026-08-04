@@ -28,8 +28,8 @@
 
 | # | 用户反馈 | 当前证据支持的根因 | 性质 | 状态 |
 |---|---|---|---|---|
-| 1 | 越南 40 尺自动排布只装 860，用户称 7/22 为 873 | 当前输入属性使块引擎关闭；当前快照输出 860/877 | 输入/路由交互；7/22 差异仍是历史实验记录 | **860/877 与当前路由已证实；873 差异未独立复现** |
-| 2 | 手动同型号方向混摆 | `quickPlaceCargo` 调用 `placementScore` 时未传 `committedOrientation` | 代码缺陷 | **源码缺口已证实；需新增行为回归测试** |
+| 1 | 越南 40 尺自动排布只装 860，用户称 7/22 为 873 | 当前输入属性使块引擎关闭；当前快照输出 860/877 | 输入/路由交互；7/22 差异仍是历史实验记录 | **实施后聚焦复核已通过；873 仍为历史记录，见「2026-08-04 实施复核」** |
+| 2 | 手动同型号方向混摆 | `quickPlaceCargo` 调用 `placementScore` 时未传 `committedOrientation` | 代码缺陷 | **实施后聚焦单测与 Chromium 流程已通过，见「2026-08-04 实施复核」** |
 | 3 | 旋转箭头左右都显示顺时针 | `HANDLE_SPECS` 两个相对手柄都按正向角度扫掠，存在静态非镜像风险 | 候选显示缺陷 | **静态结构已证实；用户报告和屏幕方向未验证** |
 
 补充结论：当前代码确实要求所有型号同时满足「非 `groundOnly`、可堆叠、`maxStackLayers === undefined`」才进入块引擎。是否应扩大该门槛，必须分别验证有限堆叠上限和 `groundOnly` 地面选择；不能把“全部强制走块引擎”当作无条件修复。
@@ -165,7 +165,31 @@ score: placementScore(input.cargo, box, point, placedForScore, input.container),
 
 ## 当前决策
 
-- 不清除、不归一化、不静默改写用户的 `groundOnly` 或 `maxStackLayers`。
-- 不把 7/22 的 873 或“无代码回归”作为当前已证明结论。
-- quick-place 缺少朝向承诺是可实施的代码根因，但必须先补确定性行为合同。
-- 块引擎的 `groundOnly` 策略、99 的有效上限语义和 gizmo 显示修复均保持待验证；不在本分析中替用户选择算法或具体手柄。
+- 不清除、不归一化、不静默改写用户的 `groundOnly` 或 `maxStackLayers`；实施后的有限上限资格判定仍消费这些约束，见「2026-08-04 实施复核」。
+- 7/22 的 873 和已删除 scratch/worktree 数值仍是历史记录，快照输入来源仍未闭环；本次实施复核不回写这些早期证据边界。
+- quick-place 缺少朝向承诺的根因已由提交 `6f864a9` 修复并通过聚焦证明；当前语义与结果见「2026-08-04 实施复核」。
+- 有限上限 gate 与混合 `groundOnly` 块路径已由提交 `d037df0` 修复并通过聚焦证明；旋转 gizmo 仍未验证且不在本次实施范围。
+
+## 2026-08-04 实施复核
+
+本节只记录实施前证据复核提交 `bd806f835e4c80b88bbc48ff4b99be8dd93e7027` 之后、已提交的两项产品修复及其 fresh 聚焦证据，不把结果倒写成上文分析时点已经存在的事实。上文的 873、已删除 scratch/worktree 实验及其数值继续只属于历史记录；两个快照没有闭环原始 Excel、mapping、模板 defaults、历史或自定义货物来源，输入 provenance 仍未解决；旋转 gizmo 仍是未验证候选且不在本次范围。
+
+### 手动 quick-place：提交 `6f864a9`
+
+- 实施语义：按草稿顺序取首个同 `cargoId` 箱体的正立 `LWH`/`WLH` 语义朝向作为承诺；候选评分值仍按既有 `placementScore` 计算，但排序比较时先比较是否匹配承诺朝向，再比较评分；既有循环按此顺序逐个校验合法性，全部承诺朝向候选均不合法时自然继续尝试其余按分数排序的候选；聚焦 `600×400×400` 合同证明第三次放置回退到了另一正立朝向。
+- focused RED：`src/lib/quickPlace.test.ts` 9 项中 3 项失败，其中重复放置得到 `Set { 'WLH', 'LWH' }`，另两项分别暴露过早切换与低分承诺候选未被采用。
+- focused GREEN：同一 Vitest 文件 **9/9** 通过；Chromium 聚焦 E2E **1/1** 通过。
+- 浏览器场景 fresh 观察：同一货物连续操作后场景箱数 **1 → 2 → 3**，目标剩余数为 **0** 且按钮禁用；2D 中恰有三个无 issue 箱体，全部正立且只有一种朝向。
+
+### 自动装箱约束：提交 `d037df0`
+
+- 固化的最小精确 fixture 来自 `issues/0802/cargo-debug-snapshot(4)(3).json`：**28 SKUs / 877 boxes**，全部 `maxStackLayers:99`，其中一个 `groundOnly` SKU 数量 **28**。
+- gate 采用保守的整批 fitting-height ceil：显式有限上限必须为正且对整批物理可达层数不构成约束；effective container 和 default stack limit 均参与判定。块路径在共享 EMS 上先执行仅落地货物阶段，再执行非落地阶段；未放下的 `groundOnly` 货物不进入后续 fallback。
+- 修复前同一 fixture 的 gate 为 `false`，结果 **860/877**、`no-space` **17**。修复后走块路径并得到 **877/877**、unplaced **0**；`groundOnly` **28/28** 均为 `z=0`；全部 **877** 箱保留 `maxStackLayers:99`；error diagnostics、geometry violations、stack violations 均为 **0**；观察到 packing elapsed **4371 ms**。
+- 0629 post-fix 对照：quantity **188/283**，volume **156/283**；两种模式下 label-C **84/84** 均为 `z=0`，error diagnostics、geometry violations、stack violations 均为 **0**。
+- focused Chromium E2E **1/1**：真实 XLSX mapping/import、自定义柜型均实际经过浏览器流程，页面显示 `Loaded 877 / 877`，utilization **80.3%**。
+- 既有 70/70 聚焦组中的五项 canonical contract assertion 均通过，期望 hash 保持不变：Russia `313549443068a5df3e87a5850d86a959ff56fe8ec4bd315f895c17c360c6b25f`；Vietnam 20GP quantity `59cfb38d7f6cde158d0e994edbb7d94cbcdcf73ecc9855b5ede53f0404051d43`；Vietnam 20GP volume `995b3b5a116547dc7af4944da8981ad552a2db7bbbd2c8281acaedaa95c525d6`；Vietnam 40HQ quantity `e1d660e1fe5333fcddece8fa9c3a2edd3e1b40782fb2bc6535b0f71c8851a10f`；Vietnam 40HQ volume `bd278dca258ea212822e75b75d43ed3a9ea39ec458fd76ca242afc53b8bd6a21`。
+
+### 当前边界
+
+上述证据只证明两个提交对应的 focused unit/contract/browser 场景；尚未执行或证明完整本地 gate、正式 benchmark、部署或远程 E2E，因此不作 release/deployment GREEN 声明。
