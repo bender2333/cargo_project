@@ -190,6 +190,6 @@ score: placementScore(input.cargo, box, point, placedForScore, input.container),
 - focused Chromium E2E **1/1**：真实 XLSX mapping/import、自定义柜型均实际经过浏览器流程，页面显示 `Loaded 877 / 877`，utilization **80.3%**。
 - 既有 70/70 聚焦组中的五项 canonical contract assertion 均通过，期望 hash 保持不变：Russia `313549443068a5df3e87a5850d86a959ff56fe8ec4bd315f895c17c360c6b25f`；Vietnam 20GP quantity `59cfb38d7f6cde158d0e994edbb7d94cbcdcf73ecc9855b5ede53f0404051d43`；Vietnam 20GP volume `995b3b5a116547dc7af4944da8981ad552a2db7bbbd2c8281acaedaa95c525d6`；Vietnam 40HQ quantity `e1d660e1fe5333fcddece8fa9c3a2edd3e1b40782fb2bc6535b0f71c8851a10f`；Vietnam 40HQ volume `bd278dca258ea212822e75b75d43ed3a9ea39ec458fd76ca242afc53b8bd6a21`。
 
-### 当前边界
+### 当前验证边界
 
-上述证据只证明两个提交对应的 focused unit/contract/browser 场景；尚未执行或证明完整本地 gate、正式 benchmark、部署或远程 E2E，因此不作 release/deployment GREEN 声明。
+两个提交对应的 focused unit/contract/browser 场景已经由上述证据闭环。其后完整本地 release gate 也已执行：`npm run lint` 通过；`npm test` 通过常规 unit **91 files / 792 tests** 与 packing performance **2 files / 7 tests**；`npm run build` 通过并保留既有 `>500 kB` chunk warning；`npm run test:e2e` **125/125** 通过、零失败/跳过。正式 `npm run benchmark` 首轮因三个 p95 timing gate 返回非零，未修改源码、baseline、threshold、iterations 或 case 后重跑通过且 timing comparable；成功报告为 `test-results/benchmark/frontend-architecture.json`，`jq -e` 再次确认五项 contract hash 完全一致，protected-file diff 为空。首轮失败与重跑实测保留在 `decision.md` 的「本地 benchmark 首轮门禁失败」条目。部署与远程 E2E 尚未执行，因此此处只声明 local release gate GREEN，不作 production GREEN 声明。

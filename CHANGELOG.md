@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-04 issues/0802 完整本地 release gate
+
+- `npm run lint` 通过；`npm test` 通过常规 unit **91 files / 792 tests** 与 packing performance **2 files / 7 tests**，零失败/跳过；`npm run build` 通过，Vite 仍报告既有 `>500 kB` chunk warning（最大列出 chunk `three.module` **543.76 kB**）。
+- `npm run test:e2e` 本地 **125/125** 通过，零失败/跳过，耗时约 **10.0 min**；Vite web-server 日志同时显示测试覆盖的柜型、历史、货物库、模板与动态模块失败路径 console errors，本轮没有用隐藏日志或放宽断言换取通过。
+- `npm run benchmark` 首轮的 Chromium benchmark **1/1** 通过，但 Vietnam 40HQ quantity/volume 与 login 的 p95 timing gate 返回非零；未修改源码、baseline、threshold、iterations、case 或断言后，同一完整命令重跑通过且 `timings comparable`。成功报告 `test-results/benchmark/frontend-architecture.json` 记录 quantity median/p95 **2208.022/2462.220 ms**、volume **5223.638/5949.617 ms**、login **575.633/678.767 ms**；首轮与诊断过程保留在 `decision.md`。
+- `jq -e` 直接验证五项 canonical contract hash 与计划值完全一致；以任务前 HEAD `bd806f835e4c80b88bbc48ff4b99be8dd93e7027` 检查 baseline、benchmark case/脚本、更新脚本与 benchmark Playwright 配置，protected-file diff 为空。部署与远程 E2E 尚未执行，本条只声明 local release gate GREEN。
+- Final spec review found the one-SKU gate case was coupled to the `<100` quantity gate; the fixture now keeps one SKU at quantity **100**, while the separate two-SKU quantity-99 case remains. Focused block tests passed **4/4**; fresh `npm run lint` and `npm test` again passed **91 files / 792 tests** plus **2 files / 7 tests**. Final spec, TypeScript, and React/UI reviews report no remaining Critical/Important findings.
+
 ## 2026-08-04 issues/0802 实施证据同步
 
 - 更新 `issues/0802/analysis.md` 的当前状态与「2026-08-04 实施复核」，并在 `decision.md` 追加 superseding 决策；保留 873/已删除实验的历史等级、未闭环的输入 provenance、未验证且范围外的 rotation gizmo，以及原分析边界。

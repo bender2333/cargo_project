@@ -134,7 +134,7 @@ describe('block-building packing engine', () => {
       { name: 'volume mode eligible', cargoItems: items, loadingMode: 'volume', expected: true },
       { name: 'input mode ineligible', cargoItems: items, loadingMode: 'input', expected: false },
       { name: 'weight mode ineligible', cargoItems: items, loadingMode: 'weight', expected: false },
-      { name: 'one SKU ineligible', cargoItems: items.slice(0, 1), loadingMode: 'quantity', expected: false },
+      { name: 'one SKU ineligible', cargoItems: [{ ...items[0], quantity: 100 }], loadingMode: 'quantity', expected: false },
       { name: 'total quantity 99 ineligible', cargoItems: [{ ...items[0], quantity: 48 }, items[1]], loadingMode: 'quantity', expected: false },
       { name: 'undefined maxStackLayers eligible', cargoItems: items.map((item) => ({ ...item, maxStackLayers: undefined })), loadingMode: 'quantity', expected: true },
       { name: '600mm boxes with four layers eligible', cargoItems: [{ ...items[0], maxStackLayers: 4 }, items[1]], loadingMode: 'quantity', expected: true },
