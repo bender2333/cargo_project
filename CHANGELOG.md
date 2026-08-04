@@ -1623,3 +1623,10 @@ Implements REVIEW.md「第三十三轮」points 1-4 (scope A+B per decision.md 2
 - Completed subtask: align deployment documentation and script defaults with the working SSH alias.
   - Changed the default deploy SSH host from the stale `tencent-container-layout` alias to `cargo-server`, matching the current `~/.ssh/config` entry used for the successful deployment.
 - Verification: `npm run deploy -- --dry-run` printed `Target: cargo-server` and all remote commands using `cargo-server`; `npm run lint` passed.
+
+## 2026-08-04 (0802 Quick-place Orientation Commitment)
+
+- Added repeated same-cargo orientation commitment with legal alternate-upright fallback, three focused unit contracts, and the focused Chinese manual-placement journey.
+- RED: `npx vitest run src/lib/quickPlace.test.ts` failed 3 of 9 tests; the 580 x 365 x 435 repetition contract produced `Set { 'WLH', 'LWH' }` (size 2 instead of 1), the fallback contract alternated before the boundary, and the lower-score case chose `WLH` at the origin instead of committed `LWH` at `(800, 50, 0)`.
+- GREEN: `npx vitest run src/lib/quickPlace.test.ts` passed 1 file / 9 tests.
+- Focused E2E: `npx playwright test e2e/manual-3d.spec.ts --grep "同型号一键放置沿用首个正立朝向"` passed 1 test in Chromium. No broader gates were run.

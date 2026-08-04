@@ -142,6 +142,98 @@ describe('quickPlaceCargo', () => {
 
     expect(validateDraft(draft, snapshotContainer)).toEqual([])
   })
+  it('keeps repeated same-cargo quick placements on the first upright orientation', () => {
+    const testContainer = container({ length: 1000, width: 1000, height: 1200 })
+    const testCargo = cargo({ length: 580, width: 365, height: 435, quantity: 3 })
+    let draft = emptyDraft()
+
+    for (let index = 1; index <= 3; index += 1) {
+      const result = quickPlaceCargo({
+        cargo: testCargo,
+        draft,
+        container: testContainer,
+        createId: () => `quick-repeat-${index}`,
+      })
+      expect(result.ok).toBe(true)
+      if (!result.ok) throw new Error(`Expected repeated placement ${index} to succeed`)
+      draft = result.nextDraft
+    }
+
+    expect(draft.boxes).toHaveLength(3)
+    expect(validateDraft(draft, testContainer)).toEqual([])
+    const orientationKeys = draft.boxes.map((box) => box.orientationKey)
+    expect(['LWH', 'WLH']).toContain(orientationKeys[0])
+    expect(new Set(orientationKeys)).toHaveProperty('size', 1)
+  })
+
+  it('falls back to the other upright orientation when the committed orientation is illegal', () => {
+    const testContainer = container({ length: 1000, width: 1000, height: 400 })
+    const testCargo = cargo({ length: 600, width: 400, height: 400, quantity: 3 })
+    let draft = emptyDraft()
+
+    for (let index = 1; index <= 3; index += 1) {
+      const result = quickPlaceCargo({
+        cargo: testCargo,
+        draft,
+        container: testContainer,
+        createId: () => `quick-fallback-${index}`,
+      })
+      expect(result.ok).toBe(true)
+      if (!result.ok) throw new Error(`Expected fallback placement ${index} to succeed`)
+      draft = result.nextDraft
+    }
+
+    const keys = draft.boxes.map((box) => box.orientationKey)
+    expect(keys[1]).toBe(keys[0])
+    expect(keys[2]).not.toBe(keys[0])
+    expect(new Set(keys)).toEqual(new Set(['LWH', 'WLH']))
+    expect(validateDraft(draft, testContainer)).toEqual([])
+  })
+
+  it('prefers a legal committed orientation over an uncommitted lower-score placement', () => {
+    const testContainer = container({ length: 1000, width: 1000, height: 100 })
+    const testCargo = cargo({ length: 100, width: 50, height: 100, quantity: 2 })
+    const unrelated = makeManualBox({
+      id: 'unrelated',
+      cargoId: 'cargo-b',
+      label: 'B',
+      color: '#0ea5e9',
+      length: 750,
+      width: 1000,
+      height: 100,
+      x: 50,
+      y: 0,
+    })
+    const firstTarget = makeManualBox({
+      id: 'target-first',
+      cargoId: testCargo.id,
+      label: testCargo.label ?? testCargo.name,
+      color: testCargo.color,
+      length: testCargo.length,
+      width: testCargo.width,
+      height: testCargo.height,
+      x: 800,
+      y: 0,
+    })
+    const draft = addBox(addBox(emptyDraft(), unrelated), firstTarget)
+
+    const result = quickPlaceCargo({
+      cargo: testCargo,
+      draft,
+      container: testContainer,
+      createId: () => 'quick-committed',
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.box).toMatchObject({
+      id: 'quick-committed',
+      orientationKey: 'LWH',
+      x: 800,
+      y: 50,
+      z: 0,
+    })
+  })
+
 
   it('stacks on an existing compatible top when no floor space remains', () => {
     const floor = [

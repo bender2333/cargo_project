@@ -124,13 +124,21 @@ export function quickPlaceCargo(input: QuickPlaceInput): QuickPlaceResult {
   }
 
   const placedForScore = input.draft.boxes.map(manualBoxAsPlacedBox)
+  const committedOrientation = input.draft.boxes.find((box) => (
+    box.cargoId === input.cargo.id && (box.orientationKey === 'LWH' || box.orientationKey === 'WLH')
+  ))?.orientationKey
   const candidates = orientations(input.cargo)
     .flatMap((box) => quickPlaceCandidates(input.draft, input.container).map((point) => ({
       box,
       point,
-      score: placementScore(input.cargo, box, point, placedForScore, input.container),
+      score: placementScore(input.cargo, box, point, placedForScore, input.container, committedOrientation),
     })))
-    .sort((a, b) => a.score - b.score || b.box.width - a.box.width || b.box.length * b.box.width - a.box.length * a.box.width)
+    .sort((a, b) => (
+      Number(b.box.orientationKey === committedOrientation) - Number(a.box.orientationKey === committedOrientation)
+      || a.score - b.score
+      || b.box.width - a.box.width
+      || b.box.length * b.box.width - a.box.length * a.box.width
+    ))
 
   for (const candidate of candidates) {
     const box = makeCandidateBox(input, candidate.point, candidate.box)

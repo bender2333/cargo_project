@@ -175,6 +175,58 @@ test('手动模式一键放置从 pool 添加货物并减少剩余数量', async
   await expect(scene).not.toHaveAttribute('data-selected-orientation', '')
 })
 
+test('同型号一键放置沿用首个正立朝向', async ({ page }) => {
+  await ensureChinese(page)
+  await page.getByLabel('货柜类型').selectOption('custom')
+  await page.getByLabel('长 mm').first().fill('1000')
+  await page.getByLabel('宽 mm').first().fill('1000')
+  await page.getByLabel('高 mm').first().fill('1200')
+
+  await page.getByRole('button', { name: '编辑货物: Carton A' }).click()
+  const editCargo = page.getByRole('form', { name: '编辑货物项目' })
+  await editCargo.getByLabel('长 mm').fill('580')
+  await editCargo.getByLabel('宽 mm').fill('365')
+  await editCargo.getByLabel('高 mm').fill('435')
+  await editCargo.getByLabel('数量', { exact: true }).fill('3')
+  await editCargo.getByRole('button', { name: '保存修改' }).click()
+
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('名称', { exact: true }).fill('Pool sentinel')
+  await cargoForm.getByLabel('标识', { exact: true }).fill('Z')
+  await cargoForm.getByLabel('长 mm').fill('50')
+  await cargoForm.getByLabel('宽 mm').fill('50')
+  await cargoForm.getByLabel('高 mm').fill('50')
+  await cargoForm.getByLabel('重量 kg').fill('1')
+  await cargoForm.getByLabel('数量', { exact: true }).fill('1')
+  await page.getByRole('button', { name: '+ 添加货物' }).click()
+
+  await page.getByRole('button', { name: '装箱', exact: true }).click()
+  await enterManualModeEmpty(page)
+  const scene = page.getByTestId('container-scene')
+  const quickPlace = page.getByTestId('pool-quick-place-sample-1')
+  const poolItem = page.getByTestId('manual-pool-item').filter({ has: quickPlace })
+
+  for (const count of ['1', '2', '3']) {
+    await quickPlace.click()
+    await expect(scene).toHaveAttribute('data-box-count', count)
+  }
+
+  await expect(poolItem).toHaveAttribute('data-remaining', '0')
+  await expect(quickPlace).toBeDisabled()
+  await page.getByRole('button', { name: '2D', exact: true }).click()
+
+  const boxes = page.locator('[data-testid="manual-placement-2d"] g[data-box-id][data-orientation]')
+  await expect(boxes).toHaveCount(3)
+  const boxAttributes = await boxes.evaluateAll((nodes) => nodes.map((node) => ({
+    hasIssue: node.getAttribute('data-has-issue'),
+    orientation: node.getAttribute('data-orientation') ?? '',
+  })))
+  expect(boxAttributes.map(({ hasIssue }) => hasIssue)).toEqual(['false', 'false', 'false'])
+  expect(boxAttributes.every(({ orientation }) => Boolean(orientation))).toBe(true)
+  expect(boxAttributes.every(({ orientation }) => orientation === 'LWH' || orientation === 'WLH')).toBe(true)
+  expect(new Set(boxAttributes.map(({ orientation }) => orientation)).size).toBe(1)
+})
+
 test('手动模式默认即可旋转视角与拖箱，显示旋转提示', async ({ page }) => {
   await ensureChinese(page)
   await enterManualMode(page)
