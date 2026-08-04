@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-04 issues/0802 生产发布尝试已回滚
+
+- 两次部署分别创建 backup `/root/cargo_project-backup-20260804-082126`、`/root/cargo_project-backup-20260804-084101`；部署后 static HTTP **200**、未认证 API **401**，统一 `sha256sum -b` 后本地/远端 static manifest 无差异。
+- 第一次完整 remote E2E **124/125**，既有手动历史测试在工作台切换后因编辑按钮持续 DOM detach 超时；回滚后 focused 重跑 **1/1**。第二次完整 remote E2E **123/125**，同一测试再次失败，另有一次登录后「工作台加载中…」超过 5 秒；第二次回滚后两个失败测试 focused 重跑各 **1/1**，但不能替代完整 remote gate。
+- 第一次计划原始 rollback 因 backup `server/` 不含 SQLite DB，却对 live server 使用 `rsync --delete`，将 **475136-byte** live DB（SHA-256 `76c21bbf5c5df7eb05121c9453cfbf6180e8c5dcfbe17a776452077dfae27563`）删除并触发 **65536-byte** 新库重建（SHA-256 `6bb13149dccca51fb34563fc6d184432b3a402c227378f5c7f5aa318bb1b5d73`）；立即从 incident `/root/cargo_project-incident-20260804-163753` 恢复并验证原 hash。第二次使用排除 `database.db` 的安全 rollback，incident `/root/cargo_project-incident-20260804-165805` 与 live DB hash 均为 `aba20cc7087c4eefe3579a1b08e1a2421b8c6206dbe0977c362a72d1ef6b53c6`。
+- 两次回滚后 static/backend 均与对应 backup manifest 一致；最终复核仍为 service active、static **200**、API **401**，SQLite `PRAGMA quick_check` 返回 `ok`。当前生产为任务前 release，0802 修复未留在生产；本地 gate GREEN，但 remote E2E 与 production feature verification 非 GREEN，失败与 rollback 修正详见 `decision.md`。
+
 ## 2026-08-04 issues/0802 完整本地 release gate
 
 - `npm run lint` 通过；`npm test` 通过常规 unit **91 files / 792 tests** 与 packing performance **2 files / 7 tests**，零失败/跳过；`npm run build` 通过，Vite 仍报告既有 `>500 kB` chunk warning（最大列出 chunk `three.module` **543.76 kB**）。
