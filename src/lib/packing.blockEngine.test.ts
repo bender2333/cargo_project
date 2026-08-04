@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { containers, effectiveContainer } from '../data/containers'
-import type { ContainerSpec, CargoItem, PlacedBox } from '../types'
+import type { ContainerSpec, CargoItem, LoadingMode, PlacedBox } from '../types'
 import { calculatePacking, shouldUseBlockEngine } from './packing'
 import { expectPackingResultContract } from './packingContract.testSupport'
 import { isGapFillBox } from './placementSource'
+import { violatesStackChain } from './stackCapacity'
 
 const VOXEL_MM = 50
 
@@ -18,6 +19,7 @@ function vietnamFixture(): { container: ContainerSpec; items: CargoItem[] } {
     })),
   }
 }
+
 
 function packingMetrics(placed: PlacedBox[], container: ContainerSpec) {
   const effective = effectiveContainer(container)
@@ -104,7 +106,7 @@ function expectNoOverlapOrBounds(container: ContainerSpec, placed: PlacedBox[]) 
 }
 
 describe('block-building packing engine', () => {
-  it('uses the block path for large pure carton loads even below the old five-SKU gate', () => {
+  it('uses the block path only for whole loads that meet every conservative gate', () => {
     const container: ContainerSpec = {
       id: 'two-sku-cartons',
       label: 'Two SKU carton container',
@@ -122,15 +124,78 @@ describe('block-building packing engine', () => {
       { id: 'b', name: 'B carton', label: 'B', length: 800, width: 600, height: 600, weight: 10, quantity: 51, color: '#0ea5e9', canRotate: false, stackable: true },
     ]
 
-    expect(shouldUseBlockEngine(items, 'quantity')).toBe(true)
-    expect(shouldUseBlockEngine(items.slice(0, 1), 'quantity')).toBe(false)
-    expect(shouldUseBlockEngine([{ ...items[0], maxStackLayers: 2 }, items[1]], 'quantity')).toBe(false)
+    const gateCases: Array<{
+      name: string
+      cargoItems: CargoItem[]
+      loadingMode: LoadingMode
+      expected: boolean
+    }> = [
+      { name: 'quantity mode eligible', cargoItems: items, loadingMode: 'quantity', expected: true },
+      { name: 'volume mode eligible', cargoItems: items, loadingMode: 'volume', expected: true },
+      { name: 'input mode ineligible', cargoItems: items, loadingMode: 'input', expected: false },
+      { name: 'weight mode ineligible', cargoItems: items, loadingMode: 'weight', expected: false },
+      { name: 'one SKU ineligible', cargoItems: items.slice(0, 1), loadingMode: 'quantity', expected: false },
+      { name: 'total quantity 99 ineligible', cargoItems: [{ ...items[0], quantity: 48 }, items[1]], loadingMode: 'quantity', expected: false },
+      { name: 'undefined maxStackLayers eligible', cargoItems: items.map((item) => ({ ...item, maxStackLayers: undefined })), loadingMode: 'quantity', expected: true },
+      { name: '600mm boxes with four layers eligible', cargoItems: [{ ...items[0], maxStackLayers: 4 }, items[1]], loadingMode: 'quantity', expected: true },
+      { name: '600mm boxes with three layers ineligible', cargoItems: [{ ...items[0], maxStackLayers: 3 }, items[1]], loadingMode: 'quantity', expected: false },
+      { name: 'zero maxStackLayers ineligible', cargoItems: [{ ...items[0], maxStackLayers: 0 }, items[1]], loadingMode: 'quantity', expected: false },
+      { name: 'NaN maxStackLayers ineligible', cargoItems: [{ ...items[0], maxStackLayers: Number.NaN }, items[1]], loadingMode: 'quantity', expected: false },
+      { name: 'infinite maxStackLayers ineligible', cargoItems: [{ ...items[0], maxStackLayers: Number.POSITIVE_INFINITY }, items[1]], loadingMode: 'quantity', expected: false },
+      { name: 'stackable ground-only cargo eligible', cargoItems: [{ ...items[0], groundOnly: true }, items[1]], loadingMode: 'quantity', expected: true },
+      { name: 'non-stackable ground-only cargo ineligible', cargoItems: [{ ...items[0], groundOnly: true, stackable: false }, items[1]], loadingMode: 'quantity', expected: false },
+      { name: 'mixed 300mm height raises whole-load bound to eight', cargoItems: [{ ...items[0], maxStackLayers: 4 }, { ...items[1], height: 300 }], loadingMode: 'quantity', expected: false },
+    ]
+
+    for (const gateCase of gateCases) {
+      expect(shouldUseBlockEngine(gateCase.cargoItems, gateCase.loadingMode, container), gateCase.name).toBe(gateCase.expected)
+    }
 
     const result = calculatePacking(container, items, { loadingMode: 'quantity' })
 
     expect(result.placedCount).toBeGreaterThan(0)
     expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
   })
+
+  it('packs the captured 0802 Vietnam 40HQ quantity load completely with its constraints retained', () => {
+    const fixture = JSON.parse(readFileSync('test-data/json/0802/input.json', 'utf8')) as {
+      source: string
+      capturedAt: string
+      loadingMode: LoadingMode
+      container: ContainerSpec
+      items: CargoItem[]
+    }
+    const totalQuantity = fixture.items.reduce((sum, item) => sum + item.quantity, 0)
+    const groundOnlyItems = fixture.items.filter((item) => item.groundOnly)
+
+    expect(fixture.items).toHaveLength(28)
+    expect(totalQuantity).toBe(877)
+    expect(fixture.items.every((item) => item.maxStackLayers === 99)).toBe(true)
+    expect(groundOnlyItems).toHaveLength(1)
+    expect(groundOnlyItems[0]?.quantity).toBe(28)
+    expect.soft(shouldUseBlockEngine(fixture.items, fixture.loadingMode, effectiveContainer(fixture.container))).toBe(true)
+
+    const startedAt = Date.now()
+    const result = calculatePacking(fixture.container, fixture.items, { loadingMode: fixture.loadingMode })
+    const elapsedMs = Date.now() - startedAt
+    const groundOnlyBoxes = result.placed.filter((box) => box.cargoId === groundOnlyItems[0]?.id)
+
+    expect.soft(result.totalCargoCount).toBe(877)
+    expect.soft(result.placedCount).toBe(result.totalCargoCount)
+    expect.soft(result.placedCount).toBe(877)
+    expect.soft(result.unplaced).toEqual([])
+    expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
+    expect(groundOnlyBoxes).toHaveLength(28)
+    expect(groundOnlyBoxes.every((box) => box.z === 0)).toBe(true)
+    expect(result.placed.every((box) => box.maxStackLayers === 99)).toBe(true)
+    expectNoOverlapOrBounds(fixture.container, result.placed)
+
+    const graph = new Map(result.placed.map((box) => [box.id, box]))
+    for (const box of graph.values()) {
+      expect(violatesStackChain(box, graph)).toBeNull()
+    }
+    expect(elapsedMs).toBeLessThan(20_000)
+  }, 25_000)
 
   it('removes the Vietnam 20GP vertical-gap regression in both optimization modes', () => {
     const fixture = vietnamFixture()

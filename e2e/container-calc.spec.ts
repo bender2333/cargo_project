@@ -30,6 +30,41 @@ async function createWorkbookFile() {
   return filePath
 }
 
+const vietnam0802Columns = [
+  'label',
+  'name',
+  'length',
+  'width',
+  'height',
+  'weight',
+  'quantity',
+  'color',
+  'canRotate',
+  'stackable',
+  'maxStackLayers',
+  'groundOnly',
+] as const
+
+async function create0802WorkbookFile() {
+  const fixturePath = path.join(process.cwd(), 'test-data', 'json', '0802', 'input.json')
+  const fixture = JSON.parse(await fs.readFile(fixturePath, 'utf8')) as {
+    items: Array<Record<(typeof vietnam0802Columns)[number], unknown>>
+  }
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cargo-calc-0802-'))
+  const filePath = path.join(dir, 'cargo-import-0802.xlsx')
+  const rows = fixture.items.map((item) => Object.fromEntries(
+    vietnam0802Columns.map((column) => [column, item[column]]),
+  ))
+  const sheet = XLSX.utils.json_to_sheet(rows, { header: [...vietnam0802Columns] })
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Cargo Items')
+  XLSX.writeFile(workbook, filePath)
+  return {
+    filePath,
+    cleanup: () => fs.rm(dir, { recursive: true, force: true }),
+  }
+}
+
 async function createChineseWorkbookFile() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cargo-calc-zh-'))
   const filePath = path.join(dir, 'cargo-import-zh.xlsx')
@@ -1634,4 +1669,39 @@ test('P2-6 full 31-pallet flow: import real workbook, custom container, all pall
   // Verify the details table shows real dimensions from the workbook
   await page.getByRole('button', { name: 'Details' }).click()
   await expect(page.locator('tr').filter({ hasText: '1250 x 830 x 2500' }).first()).toBeVisible()
+})
+
+test('0802 Vietnam 40HQ: imports exact constraints and loads all 877 boxes', async ({ page }) => {
+  test.setTimeout(60_000)
+  const { filePath, cleanup } = await create0802WorkbookFile()
+
+  try {
+    await openEnglish(page)
+    await page.getByRole('button', { name: /Delete cargo: Carton A/ }).click()
+
+    await page.getByLabel('Container type').selectOption('custom')
+    await page.getByLabel('Length mm').first().fill('12030')
+    await page.getByLabel('Width mm').first().fill('2350')
+    await page.getByLabel('Height mm').first().fill('2690')
+    await page.getByLabel('Max payload kg').fill('29600')
+
+    await page.locator('input[accept*="xlsx"]').setInputFiles(filePath)
+    await expect(page.getByTestId('mapping-modal')).toBeVisible()
+    for (const column of vietnam0802Columns) {
+      await expect(page.getByTestId(`map-select-${column}`)).toHaveValue(column)
+    }
+    await page.getByTestId('confirm-mapping').click()
+    await expect(page.getByTestId('import-log-panel').getByText('Import success: 28')).toBeVisible()
+
+    await page.getByLabel('Loading rules').selectOption('quantity')
+    await page.getByRole('button', { name: 'Load', exact: true }).click()
+
+    await expect(page.getByText(/Loaded: 877 \/ 877/)).toBeVisible({ timeout: 30_000 })
+    const utilText = await page.getByText(/Volume utilization: \d+\.\d%/).textContent()
+    const utilPct = parseFloat((utilText ?? '0%').match(/[\d.]+/)?.[0] ?? '0')
+    console.info(`Observed volume utilization: ${utilPct}%`)
+    expect(utilPct).toBeGreaterThanOrEqual(80.2)
+  } finally {
+    await cleanup()
+  }
 })

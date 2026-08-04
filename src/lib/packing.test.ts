@@ -582,17 +582,25 @@ describe('calculatePacking', () => {
     expect(result.placed.find((box) => box.cargoId === 'top-only')?.z).toBeGreaterThan(0)
   })
 
-  it('keeps 0629 ground-only cartons off pallet tops', () => {
+  it('keeps 0629 ground-only cartons on the floor in quantity and volume modes', () => {
     const { container, cargoItems } = load0629Fixture()
-    const result = calculatePacking(container, cargoItems.map((item) => item.label === 'C' ? { ...item, groundOnly: true } : item), { loadingMode: 'quantity' })
-    const cBoxes = result.placed.filter((box) => box.label === 'C')
+    const constrainedItems = cargoItems.map((item) => item.label === 'C' ? { ...item, groundOnly: true } : item)
 
-    expectValidLargePacking(container, result)
-    expect(cBoxes.every((box) => box.z === 0)).toBe(true)
-    expect(result.unplaced).toContainEqual(expect.objectContaining({
-      label: 'C',
-      reasonCode: UNPLACED_REASON_CODES.NO_SPACE,
-    }))
+    for (const loadingMode of ['quantity', 'volume'] as const) {
+      const result = calculatePacking(container, constrainedItems, { loadingMode })
+      const cBoxes = result.placed.filter((box) => box.label === 'C')
+
+      expectValidLargePacking(container, result)
+      expect(result.placedCount).toBeGreaterThanOrEqual(loadingMode === 'quantity' ? 188 : 156)
+      expect(cBoxes.length).toBeGreaterThan(0)
+      expect(cBoxes.every((box) => box.z === 0)).toBe(true)
+      expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
+
+      const graph = new Map(result.placed.map((box) => [box.id, box]))
+      for (const box of graph.values()) {
+        expect(violatesStackChain(box, graph)).toBeNull()
+      }
+    }
   })
 
   it('honors cargo max stack layers while preserving unlimited legacy behavior by default', () => {

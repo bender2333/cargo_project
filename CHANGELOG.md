@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-04 (0802 Automatic Packing Constraints)
+
+- Fixture preserved from snapshot `(4)(3)`: **28 SKUs / 877 boxes**. RED evidence: the block route was `false`, automatic packing placed **860/877** with **17** `no-space`, and the 0629 quantity regression placed **160**, below the required **188**.
+- Focused GREEN evidence: `npx vitest run src/lib/packing.blockEngine.test.ts src/lib/packing.stackfill.test.ts --pool=threads --maxWorkers=1` passed **2 files / 7 of 7 tests**; `npx vitest run src/lib/packing.test.ts src/lib/packing.31pallet.test.ts src/lib/packingInvariants.test.ts src/lib/packingContract.test.ts --pool=threads --maxWorkers=1` passed **4 files / 70 of 70 tests**.
+- 0802 result: **877/877**, zero unplaced; **28/28** ground-only boxes at `z=0`; all **877** boxes preserve `maxStackLayers: 99`; zero error diagnostics, geometry violations, or stack violations; observed packing elapsed **4371 ms**. 0629 result: quantity **188/283**, volume **156/283**, with all **84** label-C boxes at `z=0` in both modes.
+- Focused browser evidence passed **1/1** with `Loaded 877 / 877` and **80.3%** utilization. The existing five canonical contract assertions passed; direct benchmark and full gates remain pending, so no broader success claim is made.
+
 ## 2026-08-03 issues/0802 证据复核
 
 - 修订 `issues/0802/analysis.md`，将当前快照/源码事实、已删除 scratch/worktree 的历史实验和未验证项分开；确认 860/877 当前结果与块引擎门槛，保留 quick-place 朝向承诺缺口，并将旋转 gizmo 降级为未验证的静态候选。

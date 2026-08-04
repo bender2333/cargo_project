@@ -861,12 +861,24 @@ function canUseTopSurfacePoints(item: CargoItem) {
   return !item.groundOnly && stackCapacity(item) === 1
 }
 
-export function shouldUseBlockEngine(cargoItems: CargoItem[], loadingMode: LoadingMode): boolean {
+export function shouldUseBlockEngine(cargoItems: CargoItem[], loadingMode: LoadingMode, container: ContainerSpec): boolean {
   const totalCargoCount = cargoItems.reduce((sum, item) => sum + item.quantity, 0)
-  return (loadingMode === 'quantity' || loadingMode === 'volume')
-    && cargoItems.length >= 2
-    && totalCargoCount >= 100
-    && cargoItems.every((item) => !item.groundOnly && item.stackable && item.maxStackLayers === undefined)
+  if (
+    (loadingMode !== 'quantity' && loadingMode !== 'volume')
+    || cargoItems.length < 2
+    || totalCargoCount < 100
+    || cargoItems.some((item) => !item.stackable)
+  ) return false
+
+  const fittingHeights = cargoItems.map((item) => minimumFittingHeight(item, container))
+  if (fittingHeights.some((height) => height <= EPSILON)) return false
+
+  const conservativeMaxPhysicalLayers = Math.ceil(container.height / Math.min(...fittingHeights))
+  return cargoItems.every((item) => item.maxStackLayers === undefined || (
+    Number.isFinite(item.maxStackLayers)
+    && item.maxStackLayers > 0
+    && item.maxStackLayers >= conservativeMaxPhysicalLayers
+  ))
 }
 
 export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[], options: CalculatePackingOptions = {}): PackingResult {
@@ -1082,7 +1094,10 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     })
   }
 
-  const selectBlockPlacement = (rejected: Set<string>): BlockPlacementChoice | undefined => {
+  const selectBlockPlacement = (
+    rejected: Set<string>,
+    accepts: (choice: BlockPlacementChoice) => boolean,
+  ): BlockPlacementChoice | undefined => {
     let best: BlockPlacementChoice | undefined
     for (const state of cargoStates) {
       if (state.remaining <= 0) continue
@@ -1091,7 +1106,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         if (usedWeight + block.weight > effective.maxWeight + EPSILON) continue
         for (const fit of emsFitsForBlock(emsList, block)) {
           const choice = { state, block, ems: fit.ems, point: fit.point, waste: fit.waste }
-          if (rejected.has(blockPlacementKey(choice))) continue
+          if (rejected.has(blockPlacementKey(choice)) || !accepts(choice)) continue
           if (!best || compareBlockChoices(choice, best, loadingMode) < 0) best = choice
           break
         }
@@ -1100,13 +1115,11 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     return best
   }
 
-  const useBlockEngine = shouldUseBlockEngine(cargoStates.map((state) => state.item), loadingMode)
-
-  if (useBlockEngine) {
+  const placeBlocks = (accepts: (choice: BlockPlacementChoice) => boolean) => {
     const rejected = new Set<string>()
     let rejectionsSinceCommit = 0
     while (cargoStates.some((state) => state.remaining > 0)) {
-      const choice = selectBlockPlacement(rejected)
+      const choice = selectBlockPlacement(rejected, accepts)
       if (!choice) break
       if (!canStageBlock(choice)) {
         rejected.add(blockPlacementKey(choice))
@@ -1118,10 +1131,18 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       rejected.clear()
       rejectionsSinceCommit = 0
     }
+  }
 
+  const useBlockEngine = shouldUseBlockEngine(cargoStates.map((state) => state.item), loadingMode, effective)
+
+  if (useBlockEngine) {
+    placeBlocks((choice) => choice.state.item.groundOnly === true && choice.point.z <= EPSILON)
+    placeBlocks((choice) => !choice.state.item.groundOnly)
+
+    const nonGroundStates = cargoStates.filter((state) => !state.item.groundOnly)
     const fallbackStates = loadingMode === 'quantity'
-      ? [...cargoStates].sort((a, b) => b.remaining - a.remaining || cargoVolume(b.item) - cargoVolume(a.item))
-      : cargoStates
+      ? nonGroundStates.sort((a, b) => b.remaining - a.remaining || cargoVolume(b.item) - cargoVolume(a.item))
+      : nonGroundStates
     for (const state of fallbackStates) {
       while (state.remaining > 0) {
         if (usedWeight + state.item.weight > effective.maxWeight + EPSILON) break
