@@ -2396,3 +2396,13 @@
 - **新 oracle RED**：保持同一 detector mutation 与同一临时越界 fixture，仅切换为最终独立重算 oracle；聚焦命令按预期 **1 failed / 14 skipped**，明确报告 `russia-pallet-29-1 x=[13450, 13460] outside [0, 13400]`，失败位于独立 `boundaryOffenders` 的空数组契约。
 - **Restoration/GREEN**：所有临时 product/test mutations 均还原；`src/lib/packing.ts` SHA-256 回到 `78ba8068bcea628cc82c6b823d13ec5da401c2d354a07236cc2d1622d08ff14d`，最终 `packingInvariants.test.ts` SHA-256 `3fdc7c34ef8a90937e37c098747e964200c6c89fd53693da1ac33ab284c23044`。`npx vitest run src/lib/packingInvariants.test.ts` 为 **1 file / 15 tests passed**，targeted ESLint exit **0**。最终只保留测试文件修改，无算法、fixture、baseline 或阈值变化。
 - **决策**：几何正确性与 diagnostics 正确性分层测试；P2-2 完成后进入 P2-3，完整阶段 gate 仍留到 P2-7。
+
+## 2026-08-06 P2-3 automatic support-ratio contracts
+
+- **Constructability choice**：采用计划优先方案，直接 export 既有 `supportDetails` 与固定 `MINIMUM_SUPPORT_RATIO=0.5` 的判定 `isSupportRatioAccepted`；`canPlace` 改为调用该判定。未增加 minimum 参数、配置通道或手动策略；`!(!(ratio < 0.5))` 与原 rejection `ratio < 0.5` 对所有 JavaScript number（含 `NaN`）完全等价，产品行为未改。
+- **Initial RED/GREEN**：在 seam export 前运行 `npx vitest run src/lib/packing.test.ts -t "automatic support-ratio rule|warns when a real packing result contains partially-supported cargo"`，三个 direct geometry tests 因 `supportDetails` 未导出而 RED，真实 diagnostic case 已通过（**3 failed / 1 passed / 47 skipped**）；完成 behavior-equivalent seam 后同命令 **4 passed / 47 skipped**。
+- **Named contracts**：1000×1000 顶箱分别由 600/400/500×1000 底箱支撑，独立得到 ratio **0.6 / 0.4 / 0.5**，三者均为 `partially-supported`；规则依次固定为 accepted / rejected / accepted，并明确「仅 `<0.5` 拒绝，所以 exact 0.5 放行」。另以真实 `calculatePacking` 两箱场景先证明存在 partially-supported placed box，再断言 `support-check` 为 `warning`；既有 fully-supported case 仍要求 `info`。
+- **Mutation RED 0.1**：临时将 threshold 改为 **0.1** 后，三条 rule tests 为 **1 failed / 2 passed / 48 skipped**；只失败「40% must be rejected」，失败信息直接指向 minimum-support predicate。恢复 0.5 后再做下一次 mutation。
+- **Mutation RED 0.95**：临时改为 **0.95** 后为 **2 failed / 1 passed / 48 skipped**；分别失败「60% must be accepted」与「exactly 50% must be accepted by boundary policy」。最终恢复 **0.5**，所有临时变化均未提交。
+- **Final GREEN**：fresh `npx vitest run src/lib/packing.test.ts` 为 **1 file / 51 tests passed**；targeted ESLint、`npx tsc -b --pretty false`、`git diff --check` 均 exit **0**。最终 `packing.ts` SHA-256 `1ea84bb2d2089d5285ca66d35ec9095ad926bf574736af89bae238a157669122`，`packing.test.ts` SHA-256 `09a7eb751da9771af77da965089e3a9da92054df152402383d6391f810abdd63`；无 fixture、baseline、timeout 或阈值值变化。
+- **决策**：本任务只为自动路径的现有 50% 规则和 diagnostics 命名；自动/手动 support policy 双源留给 P3-5，不在 P2 引入未来配置。

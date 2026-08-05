@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from '../data/containers'
 import type { CargoItem, ContainerSpec, PackingResult, PlacedBox } from '../types'
-import { UNPLACED_REASON_CODES, calculatePacking, orientations } from './packing'
+import { UNPLACED_REASON_CODES, calculatePacking, isSupportRatioAccepted, orientations, supportDetails } from './packing'
 import { expectQuantityConservation } from './packingContract.testSupport'
 import { violatesStackChain } from './stackCapacity'
 
@@ -20,6 +20,37 @@ const cargo = (overrides: Partial<CargoItem> = {}): CargoItem => ({
   stackable: true,
   ...overrides,
 })
+
+const supportBox = (length: number): PlacedBox => ({
+  id: `support-${length}`,
+  cargoId: 'support',
+  name: 'Support box',
+  label: 'S',
+  index: 1,
+  x: 0,
+  y: 0,
+  z: 0,
+  length,
+  width: 1000,
+  height: 500,
+  orientationKey: 'LWH',
+  labelRotationDeg: 0,
+  weight: 1,
+  color: '#64748b',
+  canRotate: false,
+  stackable: true,
+  physicalLayer: 1,
+  depthLayer: 1,
+  workStep: 1,
+  supportType: 'floor',
+  supportedBy: [],
+})
+
+const supportGeometry = (supportedLength: number) => supportDetails(
+  { x: 0, y: 0, z: 500 },
+  { length: 1000, width: 1000, height: 500 },
+  [supportBox(supportedLength)],
+)
 
 const testContainer = (overrides: Partial<ContainerSpec> = {}): ContainerSpec => ({
   id: 'test-container',
@@ -155,6 +186,33 @@ function maxSupportedDistance(box: PlacedBox, graph: Map<string, PlacedBox>) {
   }
   return maxDistance
 }
+
+describe('automatic support-ratio rule', () => {
+  it('accepts a partially-supported placement at approximately 60% support', () => {
+    const support = supportGeometry(600)
+
+    expect(support.supportRatio, '60% geometry must calculate a 0.6 support ratio').toBeCloseTo(0.6, 10)
+    expect(support.supportType, '60% geometry must remain partially-supported').toBe('partially-supported')
+    expect(isSupportRatioAccepted(support.supportRatio), '60% support must be accepted by the minimum-support predicate').toBe(true)
+  })
+
+  it('rejects a partially-supported placement at approximately 40% support', () => {
+    const support = supportGeometry(400)
+
+    expect(support.supportRatio, '40% geometry must calculate a 0.4 support ratio').toBeCloseTo(0.4, 10)
+    expect(support.supportType, '40% geometry must remain partially-supported').toBe('partially-supported')
+    expect(isSupportRatioAccepted(support.supportRatio), '40% support must be rejected by the minimum-support predicate').toBe(false)
+  })
+
+  it('accepts a partially-supported placement at the exact 50% support boundary', () => {
+    const support = supportGeometry(500)
+
+    expect(support.supportRatio, '50% geometry must calculate the exact 0.5 support ratio').toBe(0.5)
+    expect(support.supportType, '50% geometry must remain partially-supported').toBe('partially-supported')
+    // Boundary policy: the automatic rule rejects ratios below 0.5, so exactly 0.5 is accepted.
+    expect(isSupportRatioAccepted(support.supportRatio), 'exactly 50% support must be accepted by the boundary policy').toBe(true)
+  })
+})
 
 describe('container specs', () => {
   it('matches EasyCargo captured container dimensions', () => {
@@ -510,6 +568,19 @@ describe('calculatePacking', () => {
       name: 'Alpha',
       quantity: 1,
       reasonCode: UNPLACED_REASON_CODES.EXCEEDS_PAYLOAD,
+    })
+  })
+
+  it('warns when a real packing result contains partially-supported cargo', () => {
+    const result = calculatePacking(testContainer({ length: 1000, width: 1000, height: 1000 }), [
+      cargo({ id: 'support', label: 'S', length: 600, width: 1000, height: 500, quantity: 1, canRotate: false }),
+      cargo({ id: 'top', label: 'T', length: 1000, width: 1000, height: 500, quantity: 1, canRotate: false }),
+    ], { loadingMode: 'input' })
+    const partiallySupported = result.placed.filter((box) => box.supportType === 'partially-supported')
+
+    expect(partiallySupported.length, 'fixture must produce at least one partially-supported placed box').toBeGreaterThan(0)
+    expect(result.diagnostics.find((item) => item.id === 'support-check'), 'partial support must produce the support-check warning').toMatchObject({
+      severity: 'warning',
     })
   })
 

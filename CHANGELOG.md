@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-06 P2-3 自动路径 50% 支撑率契约
+
+- 导出现有 support geometry 与固定 0.5 判定 seam，`canPlace` 以完全等价表达式复用；未增加配置或改变自动装箱行为。
+- 新增 60% 放行、40% 拒绝、exact 50% 放行三个具名几何契约；真实装箱结果出现 partially-supported 箱时，`support-check` 必须为 `warning`。
+- 反向 mutation：threshold=0.1 时只让 40% rejection RED（**1 failed / 2 passed**）；threshold=0.95 时让 60% 与 50% acceptance RED（**2 failed / 1 passed**）；最终恢复 0.5。
+- 针对性验证：`packing.test.ts` **51/51**，targeted ESLint、TypeScript build 与 diff-check 均 exit **0**。fixture、baseline、timeout 和阈值值未改；自动/手动 policy 合并留给 P3-5。
+
 ## 2026-08-06 P2-2 独立几何重算
 
 - `packingInvariants` 不再读取生产 diagnostics 自证边界/重叠；测试独立重算 effective container 的三轴边界与所有 box pair 的三轴交叠，并保留独立的真实 boundary diagnostic 契约。

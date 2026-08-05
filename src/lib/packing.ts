@@ -69,6 +69,11 @@ export type PackingPoint = {
 }
 
 const EPSILON = 0.001
+export const MINIMUM_SUPPORT_RATIO = 0.5
+
+export function isSupportRatioAccepted(supportRatio: number) {
+  return !(supportRatio < MINIMUM_SUPPORT_RATIO)
+}
 const MAX_BLOCK_CATALOG_SIZE = 120
 const MAX_BLOCK_REJECTIONS_PER_STEP = 40
 
@@ -172,7 +177,7 @@ function supportOverlap(candidate: PlacementBox, point: PackingPoint, box: BoxSi
 }
 
 
-function supportDetails(point: PackingPoint, box: BoxSize, placed: PlacementBox[]) {
+export function supportDetails(point: PackingPoint, box: BoxSize, placed: PlacementBox[]) {
   if (point.z <= EPSILON) {
     return {
       supportedArea: box.length * box.width,
@@ -342,7 +347,7 @@ function canPlace(
   if (!placed.every((candidate) => !overlaps(candidate, point, box))) return false
 
   const support = supportDetails(point, box, placed)
-  if (support.supportRatio < 0.5) return false
+  if (!isSupportRatioAccepted(support.supportRatio)) return false
   if (reserveTopPassengerStackSlot && !preservesReservedTopPassengerStackSlot(support, placedById)) return false
   if (!respectsMaxStackLayers(support, placedById, item)) return false
   return respectsStackCapacityWithUpwardRiders(point, box, item, support, placed, placedById)
