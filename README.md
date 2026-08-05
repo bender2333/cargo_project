@@ -1,8 +1,8 @@
 # 货柜装箱计算系统
 
-这是一个基于 Vite + React + TypeScript 的货柜装箱工作台，用于录入或导入货物数据，计算装柜方案，并通过 2D、3D、分层、明细、诊断和导出能力支持装柜作业复核。
+这是一个由 Vite + React + TypeScript 前端工作台和 Express + SQLite 服务端组成的货柜装箱系统，用于录入或导入货物数据，计算装柜方案，并通过 2D、3D、分层、明细、诊断和导出能力支持装柜作业复核。
 
-当前项目是按 `PRD.md` 进行的前端重构版本。系统保留浏览器端单页应用形态，暂不包含账号、多用户、权限、许可证或在线协作等管理能力。
+系统保留浏览器端单页应用形态，并提供账号注册/登录、JWT 认证以及普通用户/管理员基础身份。当前范围不包含在线协作、复杂权限模型或许可证管理。
 
 ## 功能概览
 
@@ -13,7 +13,8 @@
 - 分层查看：按真实支撑关系生成物理层级，而不是单纯按 `z` 高度过滤。
 - 可视化：提供 3D 轴测/俯视/正视/侧视视角，以及 2D 俯视/正视/侧视投影。
 - 导入导出：支持 XLSX/XLS/CSV 导入，导出包含装箱结果的 Excel 明细，支持导出当前 2D/3D 视图。
-- 诊断与历史：提供边界、载重、重叠、支撑、堆叠和未装入诊断；历史方案保存在浏览器 `localStorage`。
+- 诊断与历史：提供边界、载重、重叠、支撑、堆叠和未装入诊断；认证用户的历史方案由服务端持久化到 SQLite。
+- 服务端持久化：历史方案、自定义柜型、自定义货物、导入模板和导出模板均通过受 JWT 保护的 API 按用户保存。
 - 中英文界面：工作台内置中文和英文文案切换。
 
 ## 技术栈
@@ -23,6 +24,9 @@
 - Vite 8
 - Tailwind CSS 4
 - Three.js
+- Express 5
+- SQLite（better-sqlite3）
+- JWT（jsonwebtoken）
 - XLSX
 - Vitest
 - Playwright
@@ -40,13 +44,17 @@
 npm ci
 ```
 
-启动开发服务器：
+分别启动 Express API 和 Vite 前端。`vite.config.ts` 默认把 `/api` 代理到 `127.0.0.1:3010`：
 
 ```bash
+# 终端 1（POSIX shell）
+PORT=3010 npm run start:server
+
+# 终端 2
 npm run dev
 ```
 
-Vite 会在终端输出本地访问地址，通常是 `http://localhost:5173/`。
+PowerShell 中启动 API 时使用 `$env:PORT='3010'; npm run start:server`。未设置 `CARGO_DB_PATH` 时，本地服务使用 `server/database.db`；Playwright 的本地配置则自动启动端口 `3010` 的 API，并使用内存数据库。
 
 ## 常用脚本
 
@@ -58,6 +66,9 @@ Vite 会在终端输出本地访问地址，通常是 `http://localhost:5173/`�
 | `npm run lint` | 运行 ESLint |
 | `npm test` | 运行 Vitest 单元测试 |
 | `npm run test:e2e` | 运行 Playwright 浏览器自动化测试 |
+| `npm run start:server` | 启动 Express API 服务 |
+| `npm run deploy` | 构建并同步前端、后端模块后重启生产服务 |
+| `npm run rollback -- --backup <path>` | 使用指定部署备份执行受保护回滚 |
 
 ## 构建
 
@@ -82,182 +93,168 @@ npm run preview
 
 ## 部署
 
-本项目目前是纯前端静态站点，不依赖后端服务。部署步骤：
+生产运行时不是单独的静态站点，而是以下四部分：
+
+- Nginx 从 `/usr/share/nginx/html` 提供 `dist/` 前端资源，并把 `/api/` 反向代理到 Express 的 `PORT`。当前 `server/index.mjs` 调用 `app.listen(PORT)` 时未指定 host，可能监听所有接口；在代码另行收紧绑定前，主机防火墙和云安全组必须拒绝外部访问该 API 端口，只允许经 Nginx 入口访问。
+- `/opt/cargo-server/server/*.mjs` 是后端模块，`/opt/cargo-server/package*.json` 描述后端运行依赖。
+- `cargo-server.service` 启动 `/opt/cargo-server/server/index.mjs`，并读取 `/etc/cargo-server.env`。
+- SQLite 默认位于后端模块旁的 `/opt/cargo-server/server/database.db`；生产应通过 `CARGO_DB_PATH` 显式固定该路径。
+
+### 首次配置生产主机
+
+`scripts/deploy.mjs` 只更新已经完成基础配置的主机；它不会安装 Node.js、Nginx、systemd unit、SQLite CLI 或 npm 依赖。首次部署前需要：
+
+1. 安装 Node.js/npm、Nginx、`rsync` 和 `sqlite3`，创建 `/opt/cargo-server/server` 与 `/usr/share/nginx/html`。
+2. 创建专用 `cargo-server` 用户和同名组；该账号必须是不可登录的 system account，不得复用 root 或部署 SSH 账号。部署 SSH 身份及其同步/重启权限与应用运行身份分开管理。
+3. 在 `/opt/cargo-server` 按 `package-lock.json` 执行 `npm ci --omit=dev`。部署脚本会同步 `package*.json`，但不会执行依赖安装；锁文件变化时也必须先更新远端依赖。
+4. 配置 `cargo-server.service`，至少设置 `User=cargo-server`、`Group=cargo-server`、`WorkingDirectory=/opt/cargo-server`、`EnvironmentFile=/etc/cargo-server.env` 和 `ExecStart=/usr/bin/node /opt/cargo-server/server/index.mjs`。
+5. 权限必须使 `.mjs`、`package*.json` 和静态资源保持 root 所有且应用账号不可写；当前 DB 又与 `.mjs` 同处 `server/`，因此普通 group-writable 目录**不安全**（目录写权限可删除/替换 root 所有文件）。在不修改 rollback 脚本所要求 DB 路径的前提下，使用仅含服务账号的专用组、sticky group-writable 目录、root-owned 模块和 service-owned SQLite 文件，并在 unit 中设置 `UMask=0077`：
+
+   ```bash
+   sudo systemctl stop cargo-server.service
+   sudo chown root:cargo-server /opt/cargo-server/server
+   sudo chmod 1770 /opt/cargo-server/server
+   sudo find /opt/cargo-server/server -maxdepth 1 -type f -name '*.mjs' -exec chown root:root {} + -exec chmod 0644 {} +
+   sudo find /opt/cargo-server/server -maxdepth 1 -type f -name 'database.db*' -exec chown cargo-server:cargo-server {} + -exec chmod 0600 {} +
+   ```
+
+   应在 `cargo-server.service` 停止状态下应用或重验这些权限，避免 SQLite sidecar 同时变化；完成环境文件和 Nginx 配置后再启动服务。sticky bit 防止 `cargo-server` 删除/重命名不属于它的现有 `.mjs`，文件 mode 防止内容改写，同时允许 SQLite 创建/删除自身 WAL/SHM/journal。`cargo-server` 组不得加入部署 SSH 用户或其他账号；部署后必须重新确认 `.mjs` 为 `root:root 0644`、DB family 为 `cargo-server:cargo-server 0600`。此布局仍允许受侵服务在共享目录创建新文件，需用 systemd 文件系统限制/磁盘配额作纵深防御；当前 rollback 固定检查 `server/database.db*`，因此不能只改 `CARGO_DB_PATH` 或在本任务中推荐未受 rollback 保护的状态目录。
+6. 在启用 TLS 的 Nginx server block 中提供 SPA fallback，并将 `/api/` 代理到 `/etc/cargo-server.env` 中 `PORT` 对应的端口。公开登录入口必须使用 HTTPS。
+
+`/etc/cargo-server.env` 必须设为 `root:cargo-server`、mode `0640`，不得提交到仓库。使用 root-only 编辑流程创建或更新它，而不是把秘密写进命令参数或 shell 历史：
 
 ```bash
-npm ci
-npm run build
+sudo touch /etc/cargo-server.env
+sudo chown root:cargo-server /etc/cargo-server.env
+sudo chmod 0640 /etc/cargo-server.env
+sudoedit /etc/cargo-server.env
 ```
 
-然后将 `dist/` 目录部署到任意静态资源服务，例如：
+文件必须设置 `NODE_ENV=production`、与 Nginx upstream 一致的 `PORT`（当前部署为 `3100`）、`CARGO_DB_PATH=/opt/cargo-server/server/database.db`、`ADMIN_PASSWORD` 和 `JWT_SECRET`。通过密码管理器/secret manager 生成管理员口令；JWT secret 可用 `openssl rand -hex 32` 生成后在 root-only 编辑器中粘贴，不要把生成值拼进命令。生产缺少 `ADMIN_PASSWORD` 会直接启动失败；`JWT_SECRET` 必须至少 32 个字符且不能使用开发默认值。
 
-- Nginx
-- GitHub Pages
-- Netlify
-- Vercel 静态输出
-- 对象存储 + CDN
-
-Nginx 示例：
+修改后先以 `stat` 确认 owner/group/mode，确认变量名存在且值非空，再重启 `cargo-server.service`；验证命令不得打印 secret 值。基础反向代理形态如下，端口必须与环境文件一致：
 
 ```nginx
-server {
-  listen 80;
-  server_name example.com;
+location /api/ {
+  proxy_pass http://127.0.0.1:3100;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+}
 
-  root /var/www/container-calc/dist;
-  index index.html;
-
-  location / {
-    try_files $uri $uri/ /index.html;
-  }
+location / {
+  try_files $uri $uri/ /index.html;
 }
 ```
 
-部署注意事项：
+TLS 证书与续期、HTTP → HTTPS 重定向、HSTS 和适合当前前端资源的 CSP 都由公开 Nginx/边缘层负责；这里不提供未经部署验证的 CSP 模板。API 端口仍必须由主机防火墙和云安全组阻断公网访问。
 
-- 当前应用没有后端 API，历史方案保存在用户浏览器的 `localStorage` 中。
-- 如果未来增加前端路由，静态服务器需要把未知路径回退到 `index.html`。
-- 如果部署到非站点根路径，需要同步配置 Vite `base`，否则静态资源路径可能不正确。
-- 导入导出在浏览器端完成，用户文件不会上传到服务器。
+### 使用部署脚本
 
-### 当前远端服务器
+当前 `scripts/deploy.mjs` 默认配置与生产目录如下：
 
-当前生产静态站点部署在 `cargo-server`：
-
-| 项目 | 值 |
+| 项目 | 默认值 |
 | --- | --- |
-| SSH 主机别名 | `cargo-server` |
-| 服务器 | `VM-0-12-opencloudos` |
-| 部署用户 | `root` |
-| 访问地址 | `http://101.33.232.150/` |
-| Web 服务 | Nginx |
-| 站点根目录 | `/usr/share/nginx/html` |
-| 备份目录格式 | `/root/cargo_project-backup-YYYYMMDD-HHMMSS` |
+| SSH 目标 | `cargo-server` |
+| 前端站点根目录 | `/usr/share/nginx/html` |
+| 后端应用根目录 | `/opt/cargo-server` |
+| systemd 服务 | `cargo-server.service` |
+| 静态暂存目录 | `/tmp/cargo-dist` |
+| 部署备份前缀 | `/root/cargo_project-backup` |
+| 远端健康检查 | `http://127.0.0.1/` |
 
-当前远端 Nginx 直接从 `/usr/share/nginx/html` 提供静态文件。部署时先在本地构建，再上传 `dist/` 内容并覆盖站点根目录。
-
-#### 一键部署
-
-推荐使用脚本 `scripts/deploy.mjs`，对应的 npm 命令是 `npm run deploy`。脚本会按顺序执行：本地构建 → 远端备份当前站点 → 上传 `dist/*` 到远端 `/tmp/cargo-dist/` 暂存目录 → `rsync -a --delete` 同步到 `/usr/share/nginx/html/` → 重置 owner 和权限 → 远端本地健康检查 `curl -fsS http://127.0.0.1/`。
+脚本会依次执行本地构建、备份当前静态文件和后端 `.mjs` 模块、上传并同步 `dist/`、同步 `server/*.mjs` 与 `package*.json`、重启服务、修正静态目录权限，最后在服务器本机以 `curl -fsS` 确认首页请求成功（不返回 4xx/5xx），并确认未认证 API 的状态码严格为 401。
 
 ```bash
-# 真正执行部署
-npm run deploy
-
-# 只打印命令、不连接远端（用于自检）
+# 先检查将执行的命令，不连接或修改远端
 npm run deploy -- --dry-run
 
-# 查看完整帮助
-npm run deploy -- --help
+# 确认环境文件、数据库备份和依赖均已就绪后再部署
+npm run deploy
 ```
 
-脚本不会硬编码任何密码或私钥，SSH 鉴权完全复用本机的 SSH agent 或 `~/.ssh/config` 中 `cargo-server` 主机别名对应的私钥。
-
-常用环境变量（全部带默认值，平时无需设置）：
+常用覆盖变量均来自 `scripts/deploy.mjs`：
 
 | 变量 | 作用 | 默认值 |
 | --- | --- | --- |
 | `DEPLOY_SSH_HOST` | SSH 主机别名 | `cargo-server` |
-| `DEPLOY_REMOTE_USER` | 显式的 `user@host`，覆盖主机别名 | 未设置 |
-| `DEPLOY_SITE_ROOT` | 远端站点目录 | `/usr/share/nginx/html` |
-| `DEPLOY_BACKUP_BASE` | 远端备份目录前缀 | `/root/cargo_project-backup` |
-| `DEPLOY_STAGING_DIR` | 远端暂存目录 | `/tmp/cargo-dist` |
-| `DEPLOY_HEALTHCHECK` | 健康检查 URL | `http://127.0.0.1/` |
-| `DEPLOY_OWNER` | 站点目录 chown 目标 | `root:root` |
+| `DEPLOY_REMOTE_USER` | 显式 `user@host`，覆盖主机别名 | 未设置 |
+| `DEPLOY_SITE_ROOT` | 前端站点目录 | `/usr/share/nginx/html` |
+| `DEPLOY_APP_ROOT` | 后端应用目录 | `/opt/cargo-server` |
+| `DEPLOY_SERVICE` | systemd 服务名 | `cargo-server.service` |
+| `DEPLOY_BACKUP_BASE` | 部署备份目录前缀 | `/root/cargo_project-backup` |
+| `DEPLOY_STAGING_DIR` | 前端暂存目录 | `/tmp/cargo-dist` |
+| `DEPLOY_HEALTHCHECK` | 远端本机健康检查 URL | `http://127.0.0.1/` |
+| `DEPLOY_OWNER` | 前端目录 owner | `root:root` |
 | `DEPLOY_SKIP_BUILD` | 设为 `1` 跳过本地构建 | 未设置 |
 
-部署成功后，脚本会在终端打印本次备份的远端路径，例如：
+SSH 鉴权复用本机 agent 或 `~/.ssh/config`，脚本不保存密码或私钥。部署成功时会打印本次 `/root/cargo_project-backup-YYYYMMDD-HHMMSS` 路径；必须记录该路径供回滚使用。
 
-```
-Backup saved at: /root/cargo_project-backup-20260520-192916
-Deployment complete. Backup: /root/cargo_project-backup-20260520-192916
-```
+### SQLite 备份与受保护回滚
 
-请把这一行记入运维日志，下面的「回滚」步骤会用到。
-
-#### 手动部署（保留参考）
-
-不依赖 `scripts/deploy.mjs` 时，也可以直接拼接 SSH/SCP 命令完成部署：
+部署备份只包含静态文件和后端 `.mjs`，**不包含 SQLite**。每次部署前必须单独创建并校验数据库备份，例如：
 
 ```bash
-npm run build
-
-ssh cargo-server 'set -e; ts=$(date +%Y%m%d-%H%M%S); backup=/root/cargo_project-backup-$ts; mkdir -p "$backup"; cp -a /usr/share/nginx/html/. "$backup"/; echo "$backup"'
-ssh cargo-server 'rm -rf /tmp/cargo-dist && mkdir -p /tmp/cargo-dist'
-scp -r dist/* cargo-server:/tmp/cargo-dist/
-ssh cargo-server 'rsync -a --delete /tmp/cargo-dist/ /usr/share/nginx/html/ && chown -R root:root /usr/share/nginx/html && chmod -R a+rX /usr/share/nginx/html'
-ssh cargo-server 'curl -fsS http://127.0.0.1/ >/dev/null && echo deployed'
+ssh cargo-server 'set -eu; umask 077; ts=$(date -u +%Y%m%d-%H%M%S); backup=/root/cargo-database-$ts.db; sqlite3 /opt/cargo-server/server/database.db ".backup $backup"; test "$(stat -c %a "$backup")" = 600; test "$(sqlite3 "$backup" "PRAGMA quick_check;")" = ok; echo "$backup"'
 ```
 
-部署后从本机验证公网访问：
+应用版本回滚只能使用受保护脚本，不要手工对 `/opt/cargo-server/server` 执行带 `--delete` 的同步：
 
 ```bash
-curl -I http://101.33.232.150/
+# 先预演；把路径替换为部署成功时打印的备份目录
+npm run rollback -- --backup /root/cargo_project-backup-YYYYMMDD-HHMMSS --dry-run
+
+# 执行同一目标的回滚
+npm run rollback -- --backup /root/cargo_project-backup-YYYYMMDD-HHMMSS
 ```
 
-最近一次部署备份目录：`/root/cargo_project-backup-20260520-192916`。
+`scripts/rollback.mjs` 会先创建 incident 快照，只恢复静态文件和 `.mjs` 模块，显式排除 `database.db` 及其 journal/WAL/SHM 文件，并验证数据库哈希、`PRAGMA quick_check`、服务状态、静态 200 和未认证 API 401。它不会把部署备份当作数据库备份；真正的数据库恢复必须使用已验证的独立 SQLite 备份并按事故流程处理。
 
-#### 回滚到上一次备份
+### 部署后远程 E2E
 
-如果新版本上线后发现回归，可以快速回滚到任意一次备份。先在远端列出可用备份：
+设置 `PLAYWRIGHT_BASE_URL` 后，`playwright.config.ts` 不会启动本地 Vite/API；四个远程凭据变量 `E2E_USERNAME`、`E2E_PASSWORD`、`E2E_ADMIN_USERNAME`、`E2E_ADMIN_PASSWORD` 都必须已设置。允许的远端入口只有 HTTPS，或经 SSH 转发后的回环 HTTP。
+
+当前配置没有启用 Playwright retries（默认 `0`）；带生产 secret 的远程运行必须保持零重试。`trace: 'on-first-retry'` 只有在启用 retry 后才会产出 trace，因此不要为远程运行打开 retry/trace；任何可能含凭据的 trace、截图或日志都不得上传或分享，必须先删除或完成脱敏审查。
+
+HTTPS 入口：
 
 ```bash
-ssh cargo-server 'ls -1dt /root/cargo_project-backup-* | head -n 5'
+export PLAYWRIGHT_BASE_URL=https://cargo.example.com/
+export E2E_USERNAME E2E_PASSWORD E2E_ADMIN_USERNAME E2E_ADMIN_PASSWORD
+npm run test:e2e
 ```
 
-确认目标备份目录后，按以下步骤恢复站点：
+生产尚未配置 TLS 时，开两个终端，通过 SSH 把本机回环端口转发到服务器的 Nginx；凭据不会经过公网明文 HTTP：
 
 ```bash
-# 1) 把当前线上目录另存为应急备份，便于事后排查
-ssh cargo-server 'set -e; ts=$(date +%Y%m%d-%H%M%S); incident=/root/cargo_project-incident-$ts; mkdir -p "$incident"; cp -a /usr/share/nginx/html/. "$incident"/; echo "$incident"'
+# 终端 1：保持隧道运行
+ssh -o ExitOnForwardFailure=yes -N -L 127.0.0.1:8080:127.0.0.1:80 cargo-server
 
-# 2) 用 rsync 把备份目录覆盖回站点根目录，并修正权限
-ssh cargo-server 'rsync -a --delete /root/cargo_project-backup-20260520-192916/ /usr/share/nginx/html/ && chown -R root:root /usr/share/nginx/html && chmod -R a+rX /usr/share/nginx/html'
-
-# 3) 远端健康检查
-ssh cargo-server 'curl -fsS http://127.0.0.1/ >/dev/null && echo rolled-back'
-
-# 4) 本机验证公网访问
-curl -I http://101.33.232.150/
+# 终端 2
+export PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080/
+export E2E_USERNAME E2E_PASSWORD E2E_ADMIN_USERNAME E2E_ADMIN_PASSWORD
+npm run test:e2e
 ```
 
-请将示例中的 `20260520-192916` 替换为你实际要恢复的备份时间戳。
-
-#### 备份恢复步骤
-
-“回滚”是把整套站点切换回旧版本；如果只是误删了少量文件，或者需要从备份目录中取出单个资源，可以参考下面的步骤：
-
-```bash
-# 查看备份目录内容
-ssh cargo-server 'ls -la /root/cargo_project-backup-20260520-192916/'
-
-# 把备份打成 tarball 拉到本机审查
-ssh cargo-server 'tar -C /root/cargo_project-backup-20260520-192916 -czf /tmp/cargo-backup.tgz .'
-scp cargo-server:/tmp/cargo-backup.tgz ./cargo-backup-20260520-192916.tgz
-
-# 把单个文件恢复回线上目录
-ssh cargo-server 'install -m 0644 /root/cargo_project-backup-20260520-192916/index.html /usr/share/nginx/html/index.html && chown root:root /usr/share/nginx/html/index.html'
-```
-
-清理过旧的备份（保留最近 5 份）：
-
-```bash
-ssh cargo-server "ls -1dt /root/cargo_project-backup-* | tail -n +6 | xargs -r rm -rf"
-```
-
-注意事项：
-
-- 当前站点目录只存放静态资源，不包含数据库或用户上传内容，因此 `rsync --delete` 和回滚操作都不会破坏生产数据。
-- 如果将来引入服务器端数据，请先在 `scripts/deploy.mjs` 中拓展备份范围，再启用 `--delete` 风格的同步。
+绝不能把带真实账号密码的 E2E 指向 `http://<公网地址>`。`e2e/credentials.ts` 也会拒绝非回环的 HTTP `PLAYWRIGHT_BASE_URL`。
 
 ## 架构设计
 
-项目采用“UI 组合层 + 可测试业务逻辑 + 可视化组件”的结构，避免把核心装箱逻辑写死在 React 组件中。
+项目采用“React 工作台 + 受认证 API + SQLite 持久化”的运行时结构，同时将装箱核心逻辑与 React 组件分离以便测试。
 
 ```text
 src/
-  Workbench.tsx                 # 主工作台：状态、交互、导入导出、历史方案和中英文文案
+  App.tsx                       # 登录/注册壳、JWT 会话和工作台入口
+  Workbench.tsx                 # 主工作台：状态、交互、导入导出和中英文文案
   types.ts                      # 核心类型契约，包括 PackingResult
+  api/
+    client.ts                   # 携带 JWT 的统一 API 请求边界
+    historyPlans.ts             # 服务端历史方案读写
+    customContainers.ts         # 自定义柜型 API
+    customCargo.ts              # 自定义货物 API
+    importTemplates.ts          # 导入模板 API
+    exportTemplates.ts          # 导出模板 API
+  hooks/                        # 历史、模板、货物库和装箱会话编排
   data/
     containers.ts               # 柜型预设、有效尺寸和体积计算
   lib/
@@ -266,24 +263,34 @@ src/
     labels.ts                   # 标签颜色归一化
     importCargo.ts              # Excel/CSV 行解析、字段映射和单位换算
     exportPlan.ts               # 结果明细导出数据
-    historyPlans.ts             # localStorage 历史方案
   components/
     ContainerScene.tsx          # Three.js 3D 货柜视图
     ContainerPlan2D.tsx         # SVG 2D 投影视图
-e2e/
-  container-calc.spec.ts        # 浏览器工作流测试
-test-data/
-  excel/                        # 真实业务 Excel 夹具
+server/
+  index.mjs                     # Express 入口、受保护资源路由和静态 fallback
+  auth.mjs                      # 注册、登录和修改密码
+  middleware.mjs                # JWT 签发、校验和管理员守卫
+  db.mjs                        # SQLite 连接、迁移和账号初始化
+  historyRoutes.mjs             # 用户级历史快照路由
+scripts/
+  deploy.mjs                    # 前端/后端生产部署
+  rollback.mjs                  # 保留 SQLite 的受保护回滚
+e2e/                            # Playwright 浏览器工作流测试
+test-data/excel/                # 真实业务 Excel 夹具
 archive/                        # 旧版样式和功能参考，不作为运行时依赖
 ```
 
 ### 核心数据流
 
-1. 用户在 `Workbench` 中录入货物，或通过 XLSX/XLS/CSV 导入货物。
-2. `parseCargoRows` 将表格行转换为 `CargoItem[]`，并返回映射摘要、警告和错误。
-3. `normalizeCargoLabelColors` 保证同一业务标签使用一致颜色。
-4. `calculatePacking` 根据柜型、货物和装载模式生成 `PackingResult`。
-5. `PackingResult` 作为统一数据源驱动 2D、3D、分层、明细、诊断、导出和历史方案。
+1. `App` 通过 `/api/auth` 注册或登录，后续 API 请求携带 JWT。
+2. `Workbench` 通过 `src/api/` 与 `src/hooks/` 加载当前用户的历史、自定义柜型/货物和模板。
+3. 用户在 `Workbench` 中录入货物，或通过 XLSX/XLS/CSV 导入货物。
+4. `parseCargoRows` 将表格行转换为 `CargoItem[]`，并返回映射摘要、警告和错误。
+5. `normalizeCargoLabelColors` 保证同一业务标签使用一致颜色。
+6. `calculatePacking` 根据柜型、货物和装载模式生成 `PackingResult`。
+7. `PackingResult` 驱动 2D、3D、分层、明细、诊断和导出；保存历史时，完整快照经受认证 API 写入 SQLite。
+
+JWT token、语言、放置设置和最近使用的导入配置等客户端会话/界面偏好可以保存在浏览器 `localStorage`；历史方案、自定义柜型、自定义货物及导入/导出模板不以它作为持久化来源。
 
 核心契约是 `PackingResult`，包含：
 

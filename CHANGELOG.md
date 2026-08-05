@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-08-05 P1-2b README 运行架构与安全部署修正
+
+- 初始 RED literal 检查 `纯前端|没有后端 API|localStorage|historyPlans\.ts|暂不包含账号` 精确命中旧 README 五处冲突：原 `:5`「暂不包含账号、多用户、权限」、`:16`「历史方案保存在浏览器 `localStorage`」、`:85`「本项目目前是纯前端静态站点，不依赖后端服务」、`:118`「当前应用没有后端 API，历史方案保存在用户浏览器的 `localStorage` 中」、`:269` `historyPlans.ts # localStorage 历史方案`。
+- README 现按当前源码描述 React/Vite 工作台 + Express/JWT + SQLite：历史方案、自定义柜型、自定义货物、导入模板和导出模板均为用户级服务端持久化；保留不做在线协作、复杂权限模型和许可证管理的产品边界，并只把 JWT token 与界面偏好列为浏览器存储用途。
+- 部署说明已与 `scripts/deploy.mjs`、`scripts/rollback.mjs`、`server/db.mjs`、`server/middleware.mjs`、`playwright.config.ts` 和 `e2e/credentials.ts` 交叉核对：前端 `/usr/share/nginx/html`、后端 `/opt/cargo-server`、`cargo-server.service`、SQLite `/opt/cargo-server/server/database.db`、`/etc/cargo-server.env` 的 `ADMIN_PASSWORD`/`JWT_SECRET`、独立 SQLite 备份、`npm run rollback -- --backup <path>`，以及 HTTPS/SSH loopback tunnel 远程 E2E 均已写明；禁止真实凭据经公网 HTTP。
+- GREEN literal 检查 `纯前端|没有后端 API|历史方案保存在[^\n]*localStorage|src/lib/historyPlans\.ts|historyPlans\.ts\s+# localStorage|暂不包含账号` 对 README 为 **0 命中**；`101\.33\.232\.150|PLAYWRIGHT_BASE_URL=http://(?!127\.0\.0\.1|localhost|\[?::1\]?)` 为 **0 命中**。正向检查命中 `src/api/`、`src/hooks/`、`server/`、JWT/SQLite 持久化、生产路径与 env、受保护 rollback、HTTPS 和 `127.0.0.1` SSH tunnel；Markdown fence literal 扫描为 **15 对**。
+- 本任务只修改 `README.md` 与 `CHANGELOG.md`；没有新歧义，因此未改 `decision.md`。上述文档编写/聚焦检查阶段未运行代码测试、项目级 lint/build/E2E、部署或生产操作；任务最终 gate 证据另见下方。
+
+- Review remediation RED/source check: `server/index.mjs:549` is `app.listen(PORT)` with no host argument, so the earlier README claim that Express listened only on loopback was false. `scripts/deploy.mjs:311-313` uses `curl -fsS` for the homepage but compares only the unauthenticated API status exactly to `401`; the earlier “homepage HTTP 200” description overstated this check.
+- Review remediation: README now requires firewall/security-group isolation for the API port, a dedicated non-login `cargo-server` service user/group with `User=`/`Group=` and code kept non-writable, separation from the privileged deployment SSH identity, and `/etc/cargo-server.env` ownership/mode `root:cargo-server 0640`. Secret values are generated through a password/secret manager or `openssl rand -hex 32` and entered with a root-only editor rather than placeholders or value-bearing shell commands.
+- Review remediation: the SQLite backup command now starts with `umask 077` and verifies mode `600`; the SSH tunnel uses `ExitOnForwardFailure=yes`; Nginx/edge ownership of TLS renewal, HTTP→HTTPS redirect, HSTS and deployment-specific CSP is explicit. Production-secret Playwright runs must remain zero-retry/trace-safe and must not publish unreviewed artifacts.
+- Review GREEN literal/source checks: `仅监听回环|确认首页为 HTTP 200|ADMIN_PASSWORD=<|JWT_SECRET=<` is **0 matches** in README; the original prohibited architecture/history pattern and non-loopback public-HTTP E2E pattern remain **0 matches**. Positive matches confirm `app.listen(PORT)`/`curl -fsS`/API `401` source facts and all new account, permission, backup, TLS, tunnel and retry/trace controls.
+- Spec rereview P2 closure: because SQLite and `.mjs` are currently co-located, README now gives an exact stopped-service permission recipe: systemd `UMask=0077`; `/opt/cargo-server/server` `root:cargo-server 1770`; existing `.mjs` `root:root 0644`; `database.db*` `cargo-server:cargo-server 0600`. It explains the sticky-bit unlink/rename protection, the residual unknown-file-creation limit, and why changing `CARGO_DB_PATH` alone is unsupported while rollback fixes `server/database.db*`.
+- Focused verification matched every recipe command/claim and confirmed `scripts/rollback.mjs` sets `server_root="$app_root/server"`, enumerates/protects `database.db*`, and hashes `server/database.db`; no code test, deployment, permission command or production operation was executed.
+- P1-2b final gate：`npm run lint` **exit 0**；`npm test` 通过 unit **93 files / 831 tests** 与 packing performance **2 files / 7 tests**；`npm run build` **exit 0**，仅保留既有 `>500 kB` chunk warning。最终 spec review 与 security review 均 **APPROVED**。
+- 本任务是 docs-only，未重新运行 E2E；紧接此前的 P1-2 本地 E2E 证据为 **125/125**，不冒充本任务 fresh E2E。未提交、未部署、未执行生产操作。
+
 ## 2026-08-04 issues/0802 生产发布尝试已回滚
 
 - 两次部署分别创建 backup `/root/cargo_project-backup-20260804-082126`、`/root/cargo_project-backup-20260804-084101`；部署后 static HTTP **200**、未认证 API **401**，统一 `sha256sum -b` 后本地/远端 static manifest 无差异。
