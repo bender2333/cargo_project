@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-05 P1-3c 生产发布 RED 与 rollback readiness incident
+
+- 部署后所有远程门禁均经安全 SSH loopback：run 1 process status **0**，但 child output 未保留，**不得推断测试数量或把它计作明确 128/128**；run 2 明确 **128/128**（**12.9 min**）；run 3 为 **127/128**（**13.0 min**），唯一失败是 `container-calc.spec.ts:845` 登录后在未改的 **5s** 门槛内没有 `report-panel`，页面仍为「工作台加载中…」。因此连续两次明确 128/128 gate 未满足，production release 为 RED。
+- 按门禁只运行 `npm run rollback -- --backup /root/cargo_project-backup-20260805-154503`，没有手工 rsync。rollback 创建 incident `/root/cargo_project-incident.L2b3Lyfc`，恢复旧 static/modules 并启动服务后，单次 API health probe 返回 **502** 而不是 401；EXIT recovery 随后恢复 attempted release 并重新启动服务。
+- 当前 production 暂时仍是 attempted known-RED release，明确**未验收**：service active、static **200**、API **401**。incident/live DB SHA-256 均为 `6b866b7737084dc44a680310caf4e82a5a35cf9adce45ef8a67251d64b9b8066`，两者 `quick_check=ok`。当前 live `db.mjs` hash prefix `5928f3…`（old backup `8c07e2…`），`index.html` prefix `2fa46c…`（old backup `fefa32…`），证明 EXIT recovery 已把 attempted release 放回 live。
+- 根因证据：guarded rollback 在 `systemctl is-active` 后立即只发一次 health curl；随后稳定的 API **401** 表明当时 **502** 是 post-restart readiness transient，不是旧服务最终 contract。决策是不做手工 rsync或猜测式重试；先用 TDD 为 rollback 增加有界 post-restart readiness polling，再对同一 backup 重试相同 `npm run rollback`。本条未记录或暴露任何 secret 值。
+
+
 ## 2026-08-05 P1-3c 生产变更准备记录
 
 - 完整本地 gate：lint exit **0**；unit **93 files / 832 tests**；packing performance **2 files / 7 tests**；build exit **0**，保留既有 `>500 kB` warning；本地 E2E **128/128**（**7.2 min**），utilization **80.3%**。

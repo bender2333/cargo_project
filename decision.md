@@ -2299,3 +2299,16 @@
 - **Independent DB recovery point**：以 `umask 077` 创建 `/root/cargo-database-20260805-154156.db`，metadata `root:root 0600`，size **598016 B**，SHA-256 `ad67687854e40e97ebd48fc6108c3711a66fec78b8a560fcc5e80da21dea3ede`，`PRAGMA quick_check = ok`。操作后 live DB SHA-256 为 `38772a334458d112bba8672a0c1277eb7a654de359dd8a43a006cd6c650c9ee4`，`quick_check = ok`；service active、static **200**、未认证 API **401**。
 - **Hash provenance**：preflight 的 live `c7a84e2767e3ecbb3839a485ff7c193cc2fde51e900fef6aaa71d90ada6cd97f` 是三次 diagnostic E2E 发生登录/审计等 DB 写入之前的观察值，不能与后续 live hash直接比较为“无写入”。SQLite `.backup` 是通过 quick_check 的一致逻辑备份，不承诺 backup 文件与持续运行、可能继续写入的 live SQLite 具有相同字节 SHA-256；本记录不作二者 hash 相等声明。
 - **当前边界与下一步**：已执行的 production mutation 仅为 env backup/secret append、static/module metadata normalization 和独立 SQLite backup；root service identity debt 未改变。尚未 deploy、release restart、remote E2E 或 rollback。下一步仍须先 deploy dry-run，随后 deploy、manifest/health/DB 核验及两次 tunnel remote E2E；任一失败只用 deploy 输出的 backup 运行受保护 rollback。
+
+## 2026-08-05 P1-3c rollback readiness incident 与未验收生产状态
+
+- **背景 / remote gate**：部署后通过安全 SSH loopback 运行三次完整门禁。run 1 的 process status 为 **0**，但 child output 未保留，不能推断 count，也不能作为有明确输出的 128/128 证据。run 2 明确 **128/128**，耗时 **12.9 min**。run 3 为 **127/128**，耗时 **13.0 min**；唯一失败为 `container-calc.spec.ts:845`，登录后在保持不变的 **5s** 门槛内 `report-panel` 未出现，仍显示「工作台加载中…」。要求的连续两次明确 **128/128** 未成立，故 release gate RED。
+- **已执行 rollback 与 failure**：严格按发布门槛只运行 `npm run rollback -- --backup /root/cargo_project-backup-20260805-154503`，未使用手工 rsync。脚本创建 `/root/cargo_project-incident.L2b3Lyfc`，恢复 old static/modules、启动服务后，one-shot 未认证 API health check 得到 **502**（期望 401）。EXIT recovery 因此恢复 attempted release 并再次启动服务。
+- **当前事实**：production 目前仍为 attempted known-RED release，明确未 accepted。当前 `cargo-server.service` active、static **200**、未认证 API **401**。incident 与 live DB SHA-256 同为 `6b866b7737084dc44a680310caf4e82a5a35cf9adce45ef8a67251d64b9b8066`，二者 `PRAGMA quick_check = ok`。文件身份也证明 live 是 attempted release：live `db.mjs` hash prefix `5928f3…`，而 target backup old prefix 为 `8c07e2…`；live `index.html` prefix `2fa46c…`，old backup prefix `fefa32…`。这里只记录已提供的 hash prefix，不补造完整值。
+- **根因证据**：当前 `scripts/rollback.mjs` 顺序是服务 start 后先 `systemctl is-active`，随后立即对 static/API 各做一次 curl；没有 readiness polling。rollback 当下 API 502，但 recovery 后同一 attempted release 已稳定为 401，支持“旧服务进程 active 后 API 尚未 ready”的 transient readiness，而不支持“旧服务最终 API contract 不是 401”。
+- **选项**：
+  1. 手工 rsync old files，或不改脚本直接反复猜测式重跑 rollback。
+  2. 放宽 API 401 要求，把 502 当成功。
+  3. 保持最终 200/401 contract，TDD 增加有界 post-restart readiness polling，再对同一 backup 运行同一个受保护 rollback 命令。
+- **决策**：选择选项 3。禁止手工 rsync、绕过 health contract 或无证据重试。先构造“service active 后短暂 502、随后 401”的 deterministic RED，给 guarded rollback 增加有界 polling；timeout 后仍非 401 必须失败并保留现有 EXIT recovery。修正验证通过后，仍对 `/root/cargo_project-backup-20260805-154503` 使用 `npm run rollback -- --backup ...`，不得改用其他恢复路径。
+- **影响 / 后续**：在 rollback readiness 修正及同一 backup 成功恢复前，production 暂留 attempted known-RED release，只为保持当前 active/200/401 可用性，不构成上线验收。修正后必须确认 old static/backend manifests、incident/live DB hash 保护与 `quick_check`、service active/static 200/API 401，再决定后续发布流程。本记录不包含 secret 值；本 docs-only 记录没有执行新命令、代码修改、commit 或额外 production mutation。
