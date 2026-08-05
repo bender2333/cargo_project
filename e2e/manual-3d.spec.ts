@@ -26,6 +26,78 @@ async function ensureChinese(page: Page) {
     await zhButton.click()
   }
 }
+async function gateNextHistorySave(page: Page) {
+  let releaseSaveResponse!: () => void
+  const saveResponseGate = new Promise<void>((resolve) => {
+    releaseSaveResponse = resolve
+  })
+  let resolveSaveRequest!: () => void
+  const saveRequestSeen = new Promise<void>((resolve) => {
+    resolveSaveRequest = resolve
+  })
+  let resolveSaveResponseReady!: () => void
+  const saveResponseReady = new Promise<void>((resolve) => {
+    resolveSaveResponseReady = resolve
+  })
+  let saveResponseForwarded = false
+  let releaseRefreshResponse!: () => void
+  const refreshResponseGate = new Promise<void>((resolve) => {
+    releaseRefreshResponse = resolve
+  })
+  let resolveRefreshRequest!: () => void
+  const refreshRequestSeen = new Promise<void>((resolve) => {
+    resolveRefreshRequest = resolve
+  })
+  let resolveRefreshResponseReady!: () => void
+  const refreshResponseReady = new Promise<void>((resolve) => {
+    resolveRefreshResponseReady = resolve
+  })
+
+  await page.route('**/api/history', async (route) => {
+    const method = route.request().method()
+    if (method === 'POST') {
+      resolveSaveRequest()
+      const upstreamResponse = await route.fetch()
+      await upstreamResponse.body()
+      resolveSaveResponseReady()
+      await saveResponseGate
+      saveResponseForwarded = true
+      await route.fulfill({ response: upstreamResponse })
+      return
+    }
+    if (method === 'GET' && saveResponseForwarded) {
+      resolveRefreshRequest()
+      const upstreamResponse = await route.fetch()
+      await upstreamResponse.body()
+      resolveRefreshResponseReady()
+      await refreshResponseGate
+      await route.fulfill({ response: upstreamResponse })
+      return
+    }
+    await route.continue()
+  })
+
+  const saveResponse = page.waitForResponse((response) => (
+    response.url().includes('/api/history')
+    && response.request().method() === 'POST'
+    && response.ok()
+  ))
+  return {
+    saveRequestSeen,
+    saveResponseReady,
+    releaseSaveResponse,
+    refreshRequestSeen,
+    refreshResponseReady,
+    releaseRefreshResponse,
+    saveResponse,
+    waitForRefreshResponse: () => page.waitForResponse((response) => (
+      response.url().includes('/api/history')
+      && response.request().method() === 'GET'
+      && response.ok()
+    )),
+  }
+}
+
 
 async function enterManualMode(page: Page) {
   await page.getByTestId('placement-mode-manual').click()
@@ -489,6 +561,100 @@ test('从历史方案恢复自定义柜型后 3D 场景重建并显示新箱体'
     return set.size
   })
   expect(colors).toBeGreaterThanOrEqual(4)
+})
+
+test('延迟历史保存完成后保留用户切换到工作台的导航', async ({ page }) => {
+  await page.reload()
+  await expect(page.getByTestId('report-panel')).toBeVisible()
+  await ensureChinese(page)
+  await page.getByRole('button', { name: '装箱', exact: true }).click()
+  await page.getByTestId('nav-history').click()
+  await expect(page.getByTestId('history-page')).toBeVisible()
+  await expect(page.getByTestId('history-empty-state')).toBeVisible()
+
+  const historySave = await gateNextHistorySave(page)
+  await page.getByRole('button', { name: '保存方案' }).click()
+  await historySave.saveRequestSeen
+
+  await page.getByTestId('nav-overview').click()
+  await expect(page.getByTestId('report-panel')).toBeVisible()
+  await expect(page.getByTestId('history-page')).toHaveCount(0)
+
+  historySave.releaseSaveResponse()
+  await historySave.saveResponseReady
+  await historySave.refreshRequestSeen
+  const refreshResponse = historySave.waitForRefreshResponse()
+  await historySave.refreshResponseReady
+  historySave.releaseRefreshResponse()
+  const [saveResponseResult, refreshResponseResult] = await Promise.all([historySave.saveResponse, refreshResponse])
+  await Promise.all([saveResponseResult.body(), refreshResponseResult.body()])
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  }))
+
+  await expect(page.getByTestId('history-page')).toHaveCount(0)
+  await expect(page.getByTestId('report-panel')).toBeVisible()
+  const editCargo = page.getByRole('button', { name: '编辑货物: Carton A' })
+  await expect(editCargo).toBeVisible()
+  await expect(editCargo).toBeEnabled()
+  await editCargo.click()
+  await expect(page.getByRole('form', { name: '编辑货物项目' })).toBeVisible()
+})
+
+test('概览保存期间离开并返回工作台仍保留最新导航', async ({ page }) => {
+  await page.reload()
+  await expect(page.getByTestId('report-panel')).toBeVisible()
+  await ensureChinese(page)
+  await page.getByRole('button', { name: '装箱', exact: true }).click()
+
+  await page.getByTestId('nav-history').click()
+  await expect(page.getByTestId('history-page')).toBeVisible()
+  await expect(page.getByTestId('history-empty-state')).toBeVisible()
+  await page.getByTestId('nav-overview').click()
+  await expect(page.getByTestId('report-panel')).toBeVisible()
+
+  const reportPanel = page.getByTestId('report-panel')
+  const saveButton = reportPanel.getByRole('button', { name: '保存方案' })
+  await expect(saveButton).toBeEnabled()
+  const historySave = await gateNextHistorySave(page)
+  await saveButton.click()
+  await historySave.saveRequestSeen
+
+  await page.getByTestId('nav-history').click()
+  await expect(page.getByTestId('history-page')).toBeVisible()
+  await page.getByTestId('nav-overview').click()
+  await expect(page.getByTestId('report-panel')).toBeVisible()
+
+  historySave.releaseSaveResponse()
+  await historySave.saveResponseReady
+  await historySave.refreshRequestSeen
+  const refreshResponse = historySave.waitForRefreshResponse()
+  await historySave.refreshResponseReady
+  historySave.releaseRefreshResponse()
+  const [saveResponseResult, refreshResponseResult] = await Promise.all([historySave.saveResponse, refreshResponse])
+  await Promise.all([saveResponseResult.body(), refreshResponseResult.body()])
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  }))
+
+  await expect(page.getByTestId('history-page')).toHaveCount(0)
+  await expect(page.getByTestId('report-panel')).toBeVisible()
+  const editCargo = page.getByRole('button', { name: '编辑货物: Carton A' })
+  await expect(editCargo).toBeVisible()
+  await expect(editCargo).toBeEnabled()
+  await editCargo.click()
+  await expect(page.getByRole('form', { name: '编辑货物项目' })).toBeVisible()
+})
+
+test('概览报告保存成功后跳转历史方案', async ({ page }) => {
+  await ensureChinese(page)
+  await page.getByRole('button', { name: '装箱', exact: true }).click()
+  const reportPanel = page.getByTestId('report-panel')
+  const saveButton = reportPanel.getByRole('button', { name: '保存方案' })
+  await expect(saveButton).toBeEnabled()
+  await saveButton.click()
+  await expect(page.getByTestId('history-page')).toBeVisible()
+  await expect(page.getByTestId('history-plan-snapshot')).toHaveCount(1)
 })
 
 test('手动历史快照在当前货物切换后恢复货物 A 身份和数量', async ({ page }) => {

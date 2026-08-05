@@ -240,6 +240,13 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const t = copy[locale]
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeNav, setActiveNav] = useState<NavTarget>('overview')
+  const navigationRevisionRef = useRef(0)
+  const navigateTo = (target: NavTarget, expectedRevision?: number) => {
+    if (expectedRevision !== undefined && navigationRevisionRef.current !== expectedRevision) return false
+    navigationRevisionRef.current += 1
+    setActiveNav(target)
+    return true
+  }
   const [TemplateManagerPage, setTemplateManagerPage] = useState<TemplateManagerPageComponent | null>(null)
   const [templateManagerPageLoadFailed, setTemplateManagerPageLoadFailed] = useState(false)
   const [UserManagement, setUserManagement] = useState<UserManagementComponent | null>(null)
@@ -1113,7 +1120,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       type: 'cargoAdded',
       items: [{ ...item, id: createClientId(), quantity: 1 }],
     })
-    setActiveNav('overview')
+    navigateTo('overview')
   }
 
   const downloadImportTemplate = async () => {
@@ -1140,7 +1147,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     if (file.size > MAX_IMPORT_FILE_BYTES) {
       setImportMessages([`${t.importIssue}: ${t.importFileTooLarge}`])
       setActiveResultTab('importLog')
-      setActiveNav('report')
+      navigateTo('report')
       return
     }
     let rows: ImportCargoRow[]
@@ -1158,21 +1165,21 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           : t.importFileUnreadable
       setImportMessages([`${workerError?.code === 'limit' ? t.importIssue : t.importParseFailed}: ${detail}`])
       setActiveResultTab('importLog')
-      setActiveNav('report')
+      navigateTo('report')
       return
     }
 
     if (rows.length === 0) {
       setImportMessages([`${t.importIssue}: ${t.importNoData}`])
       setActiveResultTab('importLog')
-      setActiveNav('report')
+      navigateTo('report')
       return
     }
 
     if (importPreviewRows(rows, 1, 2).length === 0) {
       setImportMessages([`${t.importIssue}: ${t.importNoData}`])
       setActiveResultTab('importLog')
-      setActiveNav('report')
+      navigateTo('report')
       return
     }
 
@@ -1322,6 +1329,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   })
 
   const saveCurrentPlan = async () => {
+    const saveStartNavigationRevision = navigationRevisionRef.current
     try {
       if (planSaveDisabled) {
         throw new Error(planSaveDisabledReason || (locale === 'zh' ? '请先点击“装箱”生成结果，再保存方案。' : 'Load the packing result before saving.'))
@@ -1344,7 +1352,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         loadingMode,
         data: planData,
       })
-      setActiveNav('history')
+      navigateTo('history', saveStartNavigationRevision)
     } catch (err) {
       console.error(err)
       const message = err instanceof Error && err.message
@@ -1407,7 +1415,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     setActiveLabelId('all')
     setSelectedBoxId(null)
     setActiveResultTab('layers')
-    setActiveNav('overview')
+    navigateTo('overview')
   }
 
   const deleteCargo = (cargoId: string) => {
@@ -1457,7 +1465,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   }
 
   const activateNav = (target: NavTarget) => {
-    setActiveNav(target)
+    navigateTo(target)
     setMenuOpen(false)
     if (target === 'report') {
       setActiveResultTab('layers')
@@ -1822,7 +1830,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
               }
               setActiveResultTab('importLog')
               setShowMappingModal(false)
-              setActiveNav('report')
+              navigateTo('report')
             }}
             onClose={() => setShowMappingModal(false)}
             onRefreshTemplates={() => void fetchImportTemplates()}

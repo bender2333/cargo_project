@@ -7,6 +7,15 @@
 - loader artifacts 显示认证成功后停在 Suspense fallback，并非认证/load-error。fresh-cache 样本：`Workbench-Dvs3cuNT.js` **382478 B / 1402 ms**，随后 `three.module` **544062 B / 1522 ms**，report 登录后 **3965 ms** ready；当前动态 import 只在 post-auth render 启动。决策：测试先行，在登录页可见时预加载同一个独立 Workbench chunk，保留错误/重试边界；不延长 timeout、不静态合包。
 - 本条仅记录诊断与下一步，不改产品代码/测试、不部署、不修改生产。修正后仍须通过本地门禁，并经安全 tunnel 连续两次完整 remote E2E **125/125**，再验证 Vietnam **877/877** 与手动同型号朝向一致。
 
+## 2026-08-05 P1-3b History save navigation race
+
+- TDD RED (History-originated delayed navigation): focused delayed-save regression failed because the save completion reopened `history-page` (`expected 0, received 1`; Playwright `Timeout: 5000ms`) before the navigation fix.
+- TDD RED (overview delayed ABA): `概览保存期间离开并返回工作台仍保留最新导航` failed at `e2e/manual-3d.spec.ts:640` with the same stale History reopen after overview → History → overview while POST/refresh were held; the unchanged overview redirect case also failed to find `history-page` before its redirect was restored.
+- GREEN: the combined focused history command passed **4 tests** (`4 passed (23.7s)`; individual durations **4.5s / 5.2s / 2.1s / 5.5s`) for delayed navigation, ABA navigation, unchanged overview redirect, and unchanged history snapshot. `Workbench` now uses a monotonic revision through `navigateTo` for every navigation setter; save redirects only when its captured revision remains unchanged. The shared route helper fetches complete upstream response bodies before gated fulfillment, and the tests await page response bodies plus two `requestAnimationFrame` turns and exercise the edit control.
+- Related history units passed **2 files / 10 tests**; targeted ESLint `npm exec eslint -- src/Workbench.tsx e2e/manual-3d.spec.ts` exited **0**. No timeout, retry, locator, assertion weakening, deployment, full gate, or commit was made; no production-environment operation was performed.
+
+- Final orchestrator verification: `npx playwright test e2e/manual-3d.spec.ts --grep "延迟历史保存|概览保存期间|概览报告保存|手动历史快照"` passed **4 tests** (`4 passed (23.3s)`); `npx vitest run src/components/HistoryPage.test.tsx src/hooks/useHistoryPlans.test.ts` passed **2 files / 10 tests** in **3.02s**; targeted ESLint exited **0**. Final spec, React, TypeScript, and code reviews were **APPROVED**. This rerun made no code, test, or commit changes.
+
 ## 2026-08-05 P1-2b README 运行架构与安全部署修正
 
 - 初始 RED literal 检查 `纯前端|没有后端 API|localStorage|historyPlans\.ts|暂不包含账号` 精确命中旧 README 五处冲突：原 `:5`「暂不包含账号、多用户、权限」、`:16`「历史方案保存在浏览器 `localStorage`」、`:85`「本项目目前是纯前端静态站点，不依赖后端服务」、`:118`「当前应用没有后端 API，历史方案保存在用户浏览器的 `localStorage` 中」、`:269` `historyPlans.ts # localStorage 历史方案`。
