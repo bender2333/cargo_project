@@ -2322,3 +2322,15 @@
 - Reversible mutation: reducing the generated loop from `-le 10` to `-le 1` made `retries transient API 502 responses until the expected 401` fail **1 test** (`RUN_STATUS=1`); the ten-attempt budget was restored before final GREEN. `npm run rollback:dry` exited **0** and printed the complete retry-enabled SSH invocation with no executor/SSH call. No full project gates, deployment, or production rollback was run in this correction slice.
 
 - Harness hardening after review: both generated-shell `execFileSync` calls now use `timeout: 20_000` and `killSignal: 'SIGKILL'`, preventing an unbounded polling regression from hanging Vitest beyond the per-test budget. Final focused `npx vitest run scripts/rollback.test.mjs` passed **1 file / 29 tests** in **102.60s**; `npm run rollback:dry` exited **0** with the retry-enabled invocation. No full project gates, deployment, production rollback, or commit was run.
+
+## 2026-08-06 P1-3c rollback 成功与 Workbench/Three waterfall 决策
+
+- **Rollback fix evidence**：readiness correction commit `185be95` 的 focused suite 为 **29 passed / 102.70s**，`npm run rollback:dry` exit **0**，final reviews **APPROVED**。生产侧只重试既定命令 `npm run rollback -- --backup /root/cargo_project-backup-20260805-154503`，没有手工恢复或改用其他 backup；本次成功并创建 incident `/root/cargo_project-incident.JupqcwjI`。
+- **Post-rollback verification**：service active、static **200**、未认证 API **401**；`ADMIN_PASSWORD` 保持 **SET**，未记录值。incident/live DB SHA-256 同为 `6b866b7737084dc44a680310caf4e82a5a35cf9adce45ef8a67251d64b9b8066`，二者 `PRAGMA quick_check = ok`。static manifest 与 backend manifest 对 target backup 的 diff 均为空；`db.mjs` old backup/live hash prefix 同为 `8c07e2…`，`index.html` 同为 `fefa327…`。这些证据确认 production 已恢复 prior release；它不包含本轮新功能，不能宣称新功能 production GREEN。
+- **残余 RED 证据**：attempted release 的第三次 remote gate 仍出现 **1/128** post-login loader failure。fresh built-bundle inspection 显示生成入口对 Workbench dynamic import 的 preload dependency 列表为空；Workbench 约 **383.98 kB** chunk 到达后才发起 Three import，登录页阶段启动 Workbench loader 仍留下串行 waterfall。该 bundle evidence 与 `report-panel` 在固定 5 秒内未出现的 remote RED 一致。
+- **选项**：
+  1. 延长登录后 timeout、加 retry，或把 Workbench/Three 静态合并。
+  2. 保持现有 timeout、独立 chunks 与 error boundary，只让 default loader 同时启动 Workbench 和 `three` dynamic imports，再由 Workbench 正常消费已在途/已完成的 Three chunk。
+  3. 因 rollback 已成功而接受 1/128，直接再次部署同一 bundle。
+- **决策**：选择选项 2。现有 remote **1/128 RED** 是下一步 test-first 证据；实现必须最小化，只消除 Workbench → Three 的串行启动，不吞错误、不加 retry、不放宽 5 秒断言、不合并 chunks，并保持现有加载失败/重试 error boundary。
+- **后续**：完成并验证并发 import 后重新跑完整 local gate，再按安全部署/rollback 门槛重新发布和执行连续 remote E2E。当前 production 只可描述为“已成功回滚到 prior release、服务健康”，不得描述为 r61/0802 新功能已上线或 production GREEN。本条仅追加证据与决策，没有执行命令、代码修改或 commit。

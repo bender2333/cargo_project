@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-06 P1-3c guarded rollback 成功与残余 loader RED
+
+- rollback readiness fix commit `185be95`：focused **29 passed / 102.70s**，`rollback:dry` exit **0**，final reviews **APPROVED**。随后只重试 `npm run rollback -- --backup /root/cargo_project-backup-20260805-154503`；成功，incident `/root/cargo_project-incident.JupqcwjI`。
+- 回滚后 service active、static **200**、API **401**，`ADMIN_PASSWORD` 仍为 **SET**。incident/live DB SHA-256 均为 `6b866b7737084dc44a680310caf4e82a5a35cf9adce45ef8a67251d64b9b8066` 且两者 `quick_check=ok`；static 与 backend 对 target backup 的 manifest diff 均为空。`db.mjs` old backup/live hash prefix 均为 `8c07e2…`，`index.html` 均为 `fefa327…`，证明 production 已恢复 prior release，而不是新功能 release。
+- production 当前稳定但**不声明新功能 GREEN**。此前 attempted release 的 remote run 3 仍有 **1/128** post-login loader failure；fresh bundle inspection 显示生成入口 dynamic import 的 preload deps 为空，Workbench 的约 **383.98 kB** chunk 到达后才开始导入 Three，仍是 waterfall。
+- 下一步以该既有 remote RED 作为 TDD 证据，最小修改 default loader：并发启动 Workbench 与 `three` dynamic imports，同时保留独立 chunks 和现有 error boundary；随后重新跑本地 gate 并部署验证。不得把成功 rollback 写成新功能已上线。
+
+
 ## 2026-08-05 P1-3c 生产发布 RED 与 rollback readiness incident
 
 - 部署后所有远程门禁均经安全 SSH loopback：run 1 process status **0**，但 child output 未保留，**不得推断测试数量或把它计作明确 128/128**；run 2 明确 **128/128**（**12.9 min**）；run 3 为 **127/128**（**13.0 min**），唯一失败是 `container-calc.spec.ts:845` 登录后在未改的 **5s** 门槛内没有 `report-panel`，页面仍为「工作台加载中…」。因此连续两次明确 128/128 gate 未满足，production release 为 RED。
