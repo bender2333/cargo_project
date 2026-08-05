@@ -2350,3 +2350,20 @@
 - RED after `185be95`: concurrent `npm test` execution let the rollback shell integration contend with **92** unit suites; the **full-success** fixture reached **26.022s** and the persistent-502 fixture **20.059s**, the shared child **20s** guard fired, fields became undefined, and the aggregate reported **2 failed / 92 passed**. The timeout/assertions were not weakened.
 - Package fix: `test:unit` now excludes `scripts/rollback.test.mjs`; new `test:rollback` runs `vitest run scripts/rollback.test.mjs --pool=threads --maxWorkers=1`; `npm test` runs `test:unit && test:rollback && test:packing-performance` in that order.
 - GREEN: `npm test` passed unit **92 files / 805 tests**, rollback **1 file / 29 tests**, and packing performance **2 files / 7 tests**; command wall time was **170.97s**. Standalone `npm run test:rollback` passed **1 file / 29 tests** in **101.37s**. `npm run lint` exited **0**. No full E2E, deployment, production rollback, or commit was run for this orchestration fix.
+
+## 2026-08-06 P1-3 redeploy local preflight 与授权门槛
+
+- **Combined-run evidence boundary**：串行 combined `lint && npm test && build && e2e` 中，lint exit **0**；unit **92 files / 805 tests**；isolated rollback **1 file / 29 tests**；packing performance **2 files / 7 tests**；build exit **0**。Playwright 的 128 个 browser case 均逐项打印 passed，但 outer harness 在 **3600s** 时先 timeout，未保留 Playwright summary/exit。因此不能从 case lines 推断 combined command exit 0，也不能把 combined command 标为 GREEN。
+- **Fresh standalone E2E**：随后单独运行 `npm run test:e2e`，exit **0**，明确 **128/128**，耗时 **7.5 min**，观测 utilization **80.3%**。由此 required local gates 分别有 fresh zero exit：lint；unit + isolated rollback + packing；build；standalone E2E。combined harness timeout 仍作为证据边界保留，不被后续 standalone success 抹去。
+- **Release content**：本次待发布集合包含 concurrent ContainerScene preload commit `0763616` 与 isolated rollback test gate commit `ffb751c`。production 当前仍是 guarded rollback 恢复后的 prior healthy release；这些新变更尚未上线，不能声明 production feature GREEN。
+- **选项**：
+  1. 把 combined 中逐项 128 passed 当作完整命令 GREEN，直接发布且复用旧 DB backup。
+  2. 以 standalone 128/128 补齐 E2E exit evidence，并在每次新 deploy 前建立新的独立 DB recovery point，再按完整发布/回滚门槛执行。
+  3. 因 outer timeout 放弃已获得的所有独立 gate evidence，重复整个 combined harness。
+- **决策**：选择选项 2。不得称 combined command GREEN；只按每个 required gate 的 fresh zero exit判断本地门槛。下一次 production mutation 的授权顺序是：
+  1. 创建 fresh independent SQLite `.backup`，记录 path、owner/mode、size、SHA-256 与 `PRAGMA quick_check = ok`，同时记录 live DB hash/check。
+  2. 运行 deploy dry-run 并核对 target/site/app/service/backup/health，再 actual deploy；记录新打印的 deploy backup。
+  3. 部署后核对 service/static/API health、static/backend manifests 与 live DB hash/`quick_check`，不得把 logical backup/live byte hash 不同误判为损坏。
+  4. 继续经安全 SSH loopback、零 retry/无凭据 trace 运行 remote full E2E，只有连续两次都有明确 summary **128/128** 才通过；process status 或逐项 lines 不能替代 summary。
+  5. 任一 deploy/health/manifest/DB/E2E failure，只能对本次 deploy 新打印的 backup 使用 guarded `npm run rollback -- --backup <path>`，不得复用过时 backup 或手工 rsync。
+- **当前状态**：本记录只完成 redeploy preflight 文档化；尚未创建本轮 fresh DB backup、dry-run、deploy、remote E2E 或 production rollback。production 保持 prior healthy release，未宣称新功能上线。本条未执行命令、production change 或 commit。

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-06 P1-3 redeploy preflight（尚未生产变更）
+
+- combined `lint && npm test && build && e2e` 观察到 lint exit **0**；unit **92 files / 805 tests**；isolated rollback **1 file / 29 tests**；packing performance **2 files / 7 tests**；build exit **0**；128 个 browser case 都逐项打印 passed。但 outer harness 在 **3600s**、Playwright summary/exit 返回前 timeout，因此**不得把该 combined command 称为 GREEN**。
+- 随后 standalone `npm run test:e2e` exit **0**，明确 **128/128**（**7.5 min**），utilization **80.3%**。结合前述各阶段 exit，lint、unit + isolated rollback + packing、build、E2E 每个 required local gate 都有各自 fresh zero exit。
+- redeploy 内容包含 concurrent ContainerScene preload commit `0763616` 与 isolated rollback test gate commit `ffb751c`。production 仍是 guarded rollback 后的 prior healthy release，新功能尚未重新部署，不声明 production GREEN。
+- 下一步已授权但尚未执行：创建 fresh independent SQLite `.backup` 并记录 hash/`quick_check` → deploy dry-run → actual deploy → health/manifests/DB 核验 → 通过既有 SSH tunnel 运行 remote full E2E，直到连续两次都有明确 **128/128** 输出。任一失败只能对本次 deploy 新打印的 backup 使用 guarded rollback。
+
+
 ## 2026-08-06 P1-3c guarded rollback 成功与残余 loader RED
 
 - rollback readiness fix commit `185be95`：focused **29 passed / 102.70s**，`rollback:dry` exit **0**，final reviews **APPROVED**。随后只重试 `npm run rollback -- --backup /root/cargo_project-backup-20260805-154503`；成功，incident `/root/cargo_project-incident.JupqcwjI`。
