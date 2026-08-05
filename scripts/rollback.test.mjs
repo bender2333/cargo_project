@@ -52,6 +52,8 @@ function executeGeneratedHashVerifier(incidentHash, liveHash) {
     execFileSync('bash', ['-c', shellScript], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 20_000,
+      killSignal: 'SIGKILL',
     })
     return { status: 0, stderr: '' }
   } catch (error) {
@@ -77,6 +79,8 @@ function offlineFixture({
   lockKind = '',
   insecureParent = false,
   nestedBackup = false,
+  api502Attempts = 0,
+  apiAlways502 = false,
 } = {}) {
   const base = `/tmp/cargo-rollback-offline-${process.pid}-${offlineCase++}`
   const offlineConfig = {
@@ -118,6 +122,7 @@ function offlineFixture({
     'state="$base/state"',
     'printf active > "$state"',
     'rsync_count="$base/rsync.count"',
+    'api_count="$base/api.count"',
     'metadata_log="$base/metadata.log"',
     'metadata_violation="$base/metadata.violation"',
     ...fake('flock', ['#!/bin/sh', 'exit 0']),
@@ -223,9 +228,17 @@ function offlineFixture({
       'printf \'%s\\n\' "${FAKE_SQLITE_OUTPUT:-ok}"',
     ]),
     ...fake('timeout', ['#!/bin/sh', 'shift', 'exec "$@"']),
+    ...fake('sleep', ['#!/bin/sh', 'exit 0']),
     ...fake('curl', [
       '#!/bin/sh',
-      'case "$*" in *api/import-templates*) printf 401 ;; *) printf 200 ;; esac',
+      'case "$*" in',
+      '  *api/import-templates*)',
+      '    [ -f "$FAKE_API_COUNT" ] && api_attempt=$(cat "$FAKE_API_COUNT")',
+      '    api_attempt=$((api_attempt + 1))',
+      '    printf \'%s\\n\' "$api_attempt" > "$FAKE_API_COUNT"',
+      '    if [ "${FAKE_API_ALWAYS_502:-0}" = 1 ] || [ "$api_attempt" -le "${FAKE_API_502_ATTEMPTS:-0}" ]; then printf 502; else printf 401; fi ;;',
+      '  *) printf 200 ;;',
+      'esac',
     ]),
     'printf BACKUP > "$backup_fixture_root/index.html"',
     'printf BACKUP > "$backup_fixture_root/assets/app.js"',
@@ -241,7 +254,7 @@ function offlineFixture({
     'printf PACKAGE_OLD > "$base/app/package.json"',
     'for db_name in database.db database.db-wal database.db-shm database.db-journal database.db-extra; do printf "LIVE_$db_name" > "$base/app/server/$db_name"; done',
     'export PATH="$fake_bin:$PATH"',
-    `export FAKE_STATE="$state" FAKE_RSYNC_COUNT="$rsync_count" FAKE_METADATA_LOG="$metadata_log" FAKE_METADATA_VIOLATION="$metadata_violation" FAKE_RSYNC_FAIL_ON=${failRsyncOn} FAKE_START_FAIL=${failStart ? 1 : 0} FAKE_SQLITE_FAIL=${failSqlite ? 1 : 0} FAKE_RUN_TWICE=${runTwice ? 1 : 0} FAKE_STATIC_CORRUPT=${corruptStatic ? 1 : 0} FAKE_INSECURE_ENTRY=${insecureEntry ? 1 : 0} FAKE_INSECURE_PARENT=${insecureParent ? 1 : 0} FAKE_INSECURE_PARENT_PATH="$base" FAKE_NESTED_PARENT=${nestedBackup ? 1 : 0} FAKE_NESTED_PARENT_PATH="$base/backup-prefix-001/intermediate" FAKE_CHOWN_FAIL=${failChown ? 1 : 0} FAKE_INSECURE_PATH="$base/backup-prefix-001/server/a.mjs"`, 
+    `export FAKE_STATE="$state" FAKE_RSYNC_COUNT="$rsync_count" FAKE_API_COUNT="$api_count" FAKE_API_502_ATTEMPTS=${api502Attempts} FAKE_API_ALWAYS_502=${apiAlways502 ? 1 : 0} FAKE_METADATA_LOG="$metadata_log" FAKE_METADATA_VIOLATION="$metadata_violation" FAKE_RSYNC_FAIL_ON=${failRsyncOn} FAKE_START_FAIL=${failStart ? 1 : 0} FAKE_SQLITE_FAIL=${failSqlite ? 1 : 0} FAKE_RUN_TWICE=${runTwice ? 1 : 0} FAKE_STATIC_CORRUPT=${corruptStatic ? 1 : 0} FAKE_INSECURE_ENTRY=${insecureEntry ? 1 : 0} FAKE_INSECURE_PARENT=${insecureParent ? 1 : 0} FAKE_INSECURE_PARENT_PATH="$base" FAKE_NESTED_PARENT=${nestedBackup ? 1 : 0} FAKE_NESTED_PARENT_PATH="$base/backup-prefix-001/intermediate" FAKE_CHOWN_FAIL=${failChown ? 1 : 0} FAKE_INSECURE_PATH="$base/backup-prefix-001/server/a.mjs"`,
     'set +e',
     '(',
     generated,
@@ -267,6 +280,7 @@ function offlineFixture({
     'printf \'MODULE_A=%s\\n\' "$(cat "$base/app/server/a.mjs" 2>/dev/null || true)"',
     'printf \'MODULE_B=%s\\n\' "$(cat "$base/app/server/b.mjs" 2>/dev/null || true)"',
     'printf \'MODULE_DB_EXTRA=%s\\n\' "$(cat "$base/app/server/database.db-extra.mjs" 2>/dev/null || true)"',
+    'printf \'API_ATTEMPTS=%s\\n\' "$(cat "$api_count" 2>/dev/null || true)"',
     'if [ -f "$base/lock/cargo-project-rollback.lock" ]; then printf \'LOCK_CONTENT=%s\\n\' "$(cat "$base/lock/cargo-project-rollback.lock")"; fi',
     'printf \'INCIDENT_MANIFESTS=%s\\n\' "$(test -n "$(find "$base" -path \'*/incident.*/*.manifest\' -type f -print -quit)" && echo yes || echo no)"',
     'printf \'STATIC_STALE=%s\\n\' "$(test ! -e "$base/site/server/stale.js" && echo yes || echo no)"',
@@ -280,6 +294,8 @@ function offlineFixture({
       input: shellScript,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 20_000,
+      killSignal: 'SIGKILL',
     })
   } catch (error) {
     result = `${String(error.stdout ?? '')}\n${String(error.stderr ?? '')}`
@@ -383,8 +399,8 @@ describe('rollback remote script', () => {
     const activeAfter = position('systemctl is-active --quiet -- "$service_name"', restart)
     const hash = position('if ! compare_main_database_hash; then', activeAfter)
     const quickAfter = position('quick_check_after="$(timeout 15s sqlite3', hash)
-    const staticHealth = position('static_status="$(curl --connect-timeout 5', quickAfter)
-    const apiHealth = position('api_status="$(curl --connect-timeout 5', staticHealth)
+    const staticHealth = position('wait_for_http_status "$healthcheck_url" 200 "Static health"', quickAfter)
+    const apiHealth = position('wait_for_http_status "$api_healthcheck_url" 401 "API health"', staticHealth)
     const clearTrap = position('trap - EXIT', apiHealth)
 
     expect([
@@ -511,6 +527,24 @@ describe('rollback remote script', () => {
     expect(result.output).not.toContain('ROLLBACK FATAL')
   }, 30000)
 
+  it('retries transient API 502 responses until the expected 401', () => {
+    const result = offlineFixture({ api502Attempts: 2 })
+
+    expect(result.fields.RUN_STATUS).toBe('0')
+    expect(result.fields.RUN_STATE).toBe('active')
+    expect(result.fields.API_ATTEMPTS).toBe('3')
+    expect(result.fields.RUN_STDERR).toBe('')
+  }, 30000)
+
+  it('bounds persistent API 502 responses and reports the last status', () => {
+    const result = offlineFixture({ apiAlways502: true })
+
+    expect(result.fields.RUN_STATUS).not.toBe('0')
+    expect(result.fields.RUN_STATE).toBe('active')
+    expect(result.fields.API_ATTEMPTS).toBe('10')
+    expect(result.fields.RUN_STDERR).toContain('API health status was 502, expected 401')
+  }, 30000)
+
   it('preserves an existing regular lock sentinel without truncation', () => {
     const result = offlineFixture({ prepopulateLock: true })
 
@@ -632,9 +666,13 @@ describe('rollback remote script', () => {
     expect(script).toContain('chmod -R a+rX -- "$site_root"')
     expect(script).not.toContain('module_file')
     expect(script).not.toMatch(/(?:chown|chmod)[^\n]*(?:server_root|database\.db)/)
-    expect(script).toContain('for required_command in cmp chmod chown curl find flock mkdir mktemp realpath rsync sha256sum sort sqlite3 stat systemctl timeout dirname basename; do')
-    expect(script).toContain("--filter='protect /database.db*'")
-    expect(script).toContain('curl --connect-timeout 5 --max-time 15')
+    expect(script).toContain('for required_command in cmp chmod chown curl find flock mkdir mktemp realpath rsync sha256sum sleep sort sqlite3 stat systemctl timeout dirname basename; do')
+    expect(script).toContain('wait_for_http_status() {')
+    expect(script).toContain('while [ "$wait_attempt" -le 10 ]')
+    expect(script).toContain('curl --connect-timeout 2 --max-time 3')
+    expect(script).toContain('sleep 1')
+    expect(script).toContain('wait_for_http_status "$healthcheck_url" 200 "Static health"')
+    expect(script).toContain('wait_for_http_status "$api_healthcheck_url" 401 "API health"')
     expect(script).toContain("sqlite3 \"$server_root/database.db\" 'PRAGMA quick_check;'")
     expect(script).not.toMatch(/package(?:-lock)?\.json/)
   })
