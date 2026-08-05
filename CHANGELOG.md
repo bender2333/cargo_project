@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-05 r61 0802 装箱与可靠性修正
+
+- Vietnam 40HQ 自动装箱现可装入 **877/877** 箱，同时保留必须落地、堆叠、几何等约束。
+- 同一 SKU 连续快捷放置会优先首个正立箱体的朝向，并在空间与约束允许时复用；该朝向不合法时仍沿用现有的其他正立朝向回退。
+- 登录界面显示期间预加载独立 Workbench chunk，以减少登录后的等待。
+- 延迟完成的历史保存不再覆盖保存开始后的用户导航。
+- 本条只记录已在本地验证的变更；未部署，不声明生产环境已生效。
+
 ## 2026-08-05 P1-3a 远程 E2E 失败诊断（docs-only）
 
 - 所有生产凭据运行均经 SSH loopback `127.0.0.1:18080`，未使用公网 HTTP。三次完整 remote E2E：**104/125**（21 failures：18 loader + Vietnam 877 + orientation + history detach）、**117/125**（8 failures：5 loader + 同 3 项）、**122/125**（仅同 3 项）。loader phenomenon 为 **2/3 runs / 23 test instances**；history detach **3/3**；两个未部署 0802 验收均 **3/3 RED**。

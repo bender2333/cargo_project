@@ -14,6 +14,25 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-08-05-r61-0802-packing-and-reliability',
+    date: '2026-08-05',
+    title: { en: 'Packing and reliability fixes', zh: '装箱与可靠性修正' },
+    items: {
+      en: [
+        'Vietnam 40HQ automatic packing now places 877/877 boxes while preserving ground-only, stacking, geometry, and other packing constraints.',
+        'Repeated Quick Place for the same SKU now prefers the first upright box orientation and reuses it when space and constraints permit; the existing alternate-upright fallback remains when that orientation is not legal.',
+        'The Workbench chunk now preloads while the login screen is visible to reduce the wait after sign-in.',
+        'Delayed history saves no longer override navigation that happens after the save starts.',
+      ],
+      zh: [
+        '越南 40HQ 自动装箱现可装入 877/877 箱，并继续遵守必须落地、堆叠、几何等装箱约束。',
+        '同一 SKU 连续使用「快捷放置」时，现在优先首个正立箱体的朝向，并在空间与约束允许时复用；该朝向不合法时仍沿用现有的其他正立朝向回退。',
+        '登录界面显示期间现会预加载工作台 chunk，以减少登录后的等待。',
+        '延迟完成的历史保存不再覆盖保存开始后发生的导航。',
+      ],
+    },
+  },
+  {
     version: '2026-07-30-r60-plan-integrity-and-history-snapshots',
     date: '2026-07-30',
     title: {
