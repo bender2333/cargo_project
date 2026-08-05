@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-05 P1-3a 远程 E2E 失败诊断（docs-only）
+
+- 所有生产凭据运行均经 SSH loopback `127.0.0.1:18080`，未使用公网 HTTP。三次完整 remote E2E：**104/125**（21 failures：18 loader + Vietnam 877 + orientation + history detach）、**117/125**（8 failures：5 loader + 同 3 项）、**122/125**（仅同 3 项）。loader phenomenon 为 **2/3 runs / 23 test instances**；history detach **3/3**；两个未部署 0802 验收均 **3/3 RED**。
+- history artifact 显示 Workbench header active 但 HistoryPage 仍渲染；源码 `saveCurrentPlan` 在 `await saveHistory` 后无条件 `setActiveNav('history')`，延迟完成可覆盖更新的导航。决策：先加 deterministic delayed-save regression，再删陈旧 post-await navigation；不改 locator、timeout 或断言。
+- loader artifacts 显示认证成功后停在 Suspense fallback，并非认证/load-error。fresh-cache 样本：`Workbench-Dvs3cuNT.js` **382478 B / 1402 ms**，随后 `three.module` **544062 B / 1522 ms**，report 登录后 **3965 ms** ready；当前动态 import 只在 post-auth render 启动。决策：测试先行，在登录页可见时预加载同一个独立 Workbench chunk，保留错误/重试边界；不延长 timeout、不静态合包。
+- 本条仅记录诊断与下一步，不改产品代码/测试、不部署、不修改生产。修正后仍须通过本地门禁，并经安全 tunnel 连续两次完整 remote E2E **125/125**，再验证 Vietnam **877/877** 与手动同型号朝向一致。
+
 ## 2026-08-05 P1-2b README 运行架构与安全部署修正
 
 - 初始 RED literal 检查 `纯前端|没有后端 API|localStorage|historyPlans\.ts|暂不包含账号` 精确命中旧 README 五处冲突：原 `:5`「暂不包含账号、多用户、权限」、`:16`「历史方案保存在浏览器 `localStorage`」、`:85`「本项目目前是纯前端静态站点，不依赖后端服务」、`:118`「当前应用没有后端 API，历史方案保存在用户浏览器的 `localStorage` 中」、`:269` `historyPlans.ts # localStorage 历史方案`。

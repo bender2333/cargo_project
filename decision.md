@@ -2239,3 +2239,14 @@
 - Final targeted ESLint exited **0**. The local release checks also passed: `npm test` unit **93 files / 831 tests** plus packing performance **2 files / 7 tests**; `npm run build` exited **0** with the existing **>500 kB** chunk warning.
 - Local `npm run test:e2e` passed **125** tests in **6.8 minutes**; observed volume utilization was **80.3%**. Expected negative-path console errors were present, with no test failures.
 - Final spec, code, TypeScript, React, and security reviews were **APPROVED**. The nonblocking medium trace caveat remains: disable or redact credential-bearing Playwright traces before enabling retries for production-secret E2E.
+
+## 2026-08-05 P1-3a 远程 E2E 失败诊断与修正方向
+
+- **背景**：所有带生产凭据的运行均通过 SSH 本地转发 `127.0.0.1:18080` 访问生产，没有把凭据发送到公网 HTTP。三次完整 remote E2E 结果依次为：第 1 次 **104/125**，21 failures（18 个登录后 5 秒仍停在「工作台加载中…」，以及 Vietnam 877、手动同型号朝向、历史按钮 detach 各 1）；第 2 次 **117/125**，8 failures（5 个 loader symptom 加同样 3 项）；第 3 次 **122/125**，仅剩同样 3 项。loader phenomenon 出现在 **2/3** 次完整运行，共影响但不固定复现于 **23** 个测试实例；history detach 为 **3/3**；两个尚未部署的 0802 产品验收均为 **3/3 RED**。本阶段没有修改生产。
+- **选项**：
+  1. 对 history detach 改 locator、增加 timeout，或删除/放宽断言；对 loader 统一增加 5 秒等待、把 Workbench 合并回首包。
+  2. 保持现有业务断言和超时：history 用可控延迟保存构造确定性竞态并修复陈旧导航；loader 在登录页可见期间预加载同一个独立 Workbench chunk，同时保留 lazy-load 错误/重试边界。
+  3. 将三类失败一概视作偶发网络问题，不改代码直接重跑/发布。
+- **决策**：选择选项 2。history 修正先写 deterministic delayed-save regression：用户发起保存后若已从 History 切回 Workbench，延迟完成的保存不得把导航改回 History；随后移除 `saveCurrentPlan` 中 `await saveHistory(...)` 后冗余的 `setActiveNav('history')`，不改 locator、timeout 或业务断言。loader 修正先写登录页预加载回归，再在登录页可见期间启动现有 `loadWorkbench`，复用同一个 promise 给 `React.lazy`；仍保持独立 Workbench chunk、现有加载失败/重试/退出登录行为，不延长 5 秒门槛，也不静态合并 Workbench。
+- **影响**：history 失败 artifact snapshot 同时显示 Workbench header 已 active、HistoryPage 仍渲染；当前源码 `src/Workbench.tsx:1341-1347` 先 `await saveHistory` 再无条件 `setActiveNav('history')`，因此较晚完成的保存可覆盖用户更新的导航，具备可确定复现的竞态。loader artifacts 显示认证已完成且页面停在 Suspense fallback，不是认证错误或 load-error。fresh-cache 样本中 `Workbench-Dvs3cuNT.js` 为 **382478 B / 1402 ms**，随后 `three.module` 为 **544062 B / 1522 ms**，report 在登录后 **3965 ms** ready；`src/App.tsx` 当前只在认证成功、开始渲染 lazy Workbench 后触发动态 import，因此慢链路会把全部下载时间压进登录后的 5 秒窗口。以上结论不把未部署的 0802 RED 误归因于本地修复失效。
+- **后续**：P1-3b 按上述两个 seam 分别执行 RED → 修正 → GREEN，并跑原始远程路径；不得用 timeout、retry、skip、弱化断言或静态合包换绿。通过本地 gate 和安全部署门槛后，仍经 `127.0.0.1` SSH tunnel 运行完整 remote E2E，至少连续 2 次 **125/125**，再验证 Vietnam 40HQ **877/877** 与手动同型号连续快速放置方向一致。任何远程失败都按受保护 rollback 流程处理；生产凭据运行保持零 retry/无可泄密 trace。
