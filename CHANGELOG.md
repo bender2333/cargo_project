@@ -1,14 +1,17 @@
 # Changelog
 
-## 2026-08-05 P1-3c 生产变更前记录（尚未 mutation）
+## 2026-08-05 P1-3c 生产变更准备记录
 
 - 完整本地 gate：lint exit **0**；unit **93 files / 832 tests**；packing performance **2 files / 7 tests**；build exit **0**，保留既有 `>500 kB` warning；本地 E2E **128/128**（**7.2 min**），utilization **80.3%**。
 - 经既有 SSH tunnel 的生产只读 preflight：static **200**、API **401**、service active；DB SHA-256 `c7a84e2767e3ecbb3839a485ff7c193cc2fde51e900fef6aaa71d90ada6cd97f`，`quick_check=ok`；`JWT_SECRET=SET`、`ADMIN_PASSWORD=UNSET`。env 为 `root:root 0600`，systemd `User`/`Group` 为空且服务以 root 运行，live `.mjs` ownership 混有 `root`/`lighthouse`。
 - rollback-source trust addendum（只读）：static non-root count **0**，但 group/world-writable count **1**，精确项为 `/usr/share/nginx/html/assets`、mode `drwxr-xrwx`、`root:root`；modules non-root count **4**、group/world-writable count **2**；远端 `openssl` 可用。guarded rollback 会拒绝保留这些 metadata 的 deploy backup。
 - mutation 前决策扩展：在既定 module `root:root 0644` 归一前置之外，先把当前 static tree 归一为 `root:root` 并执行 `chmod -R go-w`（只移除 group/world write，保留现有 read/execute），然后重新统计 static/modules 的 non-root 与 group/world-writable count，四项都必须为 **0** 才能 deploy。上述归一尚未执行，生产仍无变更。
+- UTC `20260805-154156` pre-deploy mutation evidence：env 备份 `/root/cargo-server.env-20260805-154156`；原 env SHA-256 `42f0bb681549ed588c27caf16b88d1fc0424314d9169f6dc8ede79b1c35b4f78`，追加未打印/未回传的生成 `ADMIN_PASSWORD` 后为 `16c84c4cde7aaaca7019c2d69f2d980f3f1aae7528e8737fa45b4e89fc64ff33`，仍为 `root:root 0600`。
+- static non-root/writable 已为 **0/0**，modules non-root/writable 已为 **0/0**。独立 SQLite backup `/root/cargo-database-20260805-154156.db` 为 `root:root 0600`、**598016 B**、SHA-256 `ad67687854e40e97ebd48fc6108c3711a66fec78b8a560fcc5e80da21dea3ede`，`quick_check=ok`。
+- 操作后 service active、static **200**、API **401**；live DB SHA-256 `38772a334458d112bba8672a0c1277eb7a654de359dd8a43a006cd6c650c9ee4`，`quick_check=ok`。最初记录的 `c7a84e…` hash 位于三次 diagnostic E2E 的登录/审计写入之前；SQLite `.backup` 是已校验的逻辑备份，不声明其文件字节 hash 必须等于仍在运行并可写的 live DB。
 
-- 已授权但尚未执行的顺序：备份 env → 远端无打印生成并追加 64-hex `ADMIN_PASSWORD`（deploy 前不单独 restart）→ live `.mjs` 归一为 `root:root 0644` → 以 `umask 077` 建独立 SQLite `.backup` 并核对 hash/quick_check → deploy dry-run → deploy → manifests/health/DB 验证 → 经原 SSH loopback 连续两次 remote E2E **128/128**。
-- 任一失败只能对 deploy 打印的 backup 使用 `npm run rollback -- --backup <path>`。当前 root service identity 是已披露的 out-of-scope debt，未声称已修复；本条落盘时没有 env 写入、权限修改、DB backup、restart、deploy、remote E2E 或其他生产 mutation。
+- 已完成 env backup/secret append、static/module metadata 归一与独立 SQLite backup；下一步仍是 deploy dry-run → deploy → manifests/health/DB 验证 → 经原 SSH loopback 连续两次 remote E2E **128/128**。
+- 任一失败只能对 deploy 打印的 backup 使用 `npm run rollback -- --backup <path>`。当前 root service identity 仍是已披露的 out-of-scope debt，未声称已修复；尚未执行 deploy、release restart、remote E2E 或 rollback。
 
 ## 2026-08-05 r61 0802 装箱与可靠性修正
 
