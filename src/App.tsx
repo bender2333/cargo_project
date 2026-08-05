@@ -15,7 +15,13 @@ type WorkbenchModule = { default: ComponentType<WorkbenchProps> }
 type WorkbenchLoader = () => Promise<WorkbenchModule>
 
 // Keep Workbench in a separate deployment chunk; a static import would defeat lazy loading.
-const loadWorkbench: WorkbenchLoader = () => import('./Workbench')
+const loadWorkbench: WorkbenchLoader = async () => {
+  const [workbenchModule] = await Promise.all([
+    import('./Workbench'),
+    import('./components/ContainerScene'),
+  ])
+  return workbenchModule
+}
 
 type WorkbenchAttempt = {
   Component: LazyExoticComponent<ComponentType<WorkbenchProps>>
