@@ -1761,3 +1761,9 @@ Implements REVIEW.md「第三十三轮」points 1-4 (scope A+B per decision.md 2
 - Final local checks: `npm test` passed unit **93 files / 831 tests** plus packing performance **2 files / 7 tests**; `npm run build` exited **0** with the existing **>500 kB** chunk warning.
 - Local `npm run test:e2e` passed **125** tests in **6.8 minutes**; observed volume utilization was **80.3%** and expected negative-path console errors occurred without failures.
 - Final spec, code, TypeScript, React, and security reviews were **APPROVED**. The medium trace caveat remains: disable or redact credential-bearing Playwright traces before enabling retries for production-secret E2E.
+
+## 2026-08-05 P1-3 Workbench login-page preload
+
+- TDD RED: `npx vitest run src/App.test.tsx` reported `❯ src/App.test.tsx (12 tests | 1 failed) 1518ms`; the new `starts the Workbench loader while login is visible and reuses its pending promise after login` test failed with `expected "vi.fn()" to be called 1 times, but got 0 times` at `src/App.test.tsx:87:47`.
+- TDD GREEN: the same command reported `Test Files 1 passed (1)` and `Tests 12 passed (12)`; Vitest duration was `2.96s (transform 131ms, setup 0ms, import 462ms, tests 598ms, environment 1.64s)` (wall time `5.19s`).
+- Targeted ESLint: `npx eslint src/App.tsx src/App.test.tsx` exited `0` with no output. The loader now starts during the unauthenticated login/register view, reuses its one attempt promise after auth, and creates fresh retry/logout attempts while retaining the separate dynamic chunk and existing error boundary. No full gates, timeout/retry/assertion changes, production changes, or commit were made.

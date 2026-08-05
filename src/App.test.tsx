@@ -70,6 +70,33 @@ describe('App authentication shell', () => {
     fireEvent.click(view.getByRole('button', { name: '已有账号？立即登录' }))
     expect(view.getByRole('button', { name: '登录' })).toBeTruthy()
   })
+  it('starts the Workbench loader while login is visible and reuses its pending promise after login', async () => {
+    const PreloadedWorkbench = () => <section data-testid="preloaded-workbench">Preloaded workbench</section>
+    let resolveWorkbench!: (module: { default: typeof PreloadedWorkbench }) => void
+    const workbenchImport = new Promise<{ default: typeof PreloadedWorkbench }>((resolve) => {
+      resolveWorkbench = resolve
+    })
+    const loadWorkbench = vi.fn<WorkbenchTestLoader>().mockReturnValue(workbenchImport)
+    const view = render(
+      <StrictMode>
+        <App loadWorkbench={loadWorkbench} />
+      </StrictMode>,
+    )
+
+    expect(view.getByRole('button', { name: '登录' })).toBeTruthy()
+    await waitFor(() => expect(loadWorkbench).toHaveBeenCalledTimes(1))
+    expect(view.getByRole('button', { name: '登录' })).toBeTruthy()
+
+    mockedLogin.mockResolvedValue({ token: 'preloaded-login-token', user })
+    fireEvent.change(view.getByLabelText('用户名'), { target: { value: user.username } })
+    fireEvent.change(view.getByLabelText('密码'), { target: { value: 'secret123' } })
+    fireEvent.click(view.getByRole('button', { name: '登录' }))
+    await waitFor(() => expect(mockedLogin).toHaveBeenCalledWith({ username: user.username, password: 'secret123' }))
+
+    resolveWorkbench({ default: PreloadedWorkbench })
+    expect(await view.findByTestId('preloaded-workbench')).toBeTruthy()
+    expect(loadWorkbench).toHaveBeenCalledTimes(1)
+  })
 
   it('uses the authentication API and passes its user to Workbench after login succeeds', async () => {
     mockedLogin.mockResolvedValue({ token: 'opaque-login-token', user })

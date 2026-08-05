@@ -1,5 +1,5 @@
-import { Component, lazy, Suspense, useState } from 'react'
-import type { ComponentType, ReactNode } from 'react'
+import { Component, lazy, Suspense, useEffect, useState } from 'react'
+import type { ComponentType, LazyExoticComponent, ReactNode } from 'react'
 import { LoginPage } from './components/LoginPage'
 import { RegisterPage } from './components/RegisterPage'
 import { getCurrentUser, getToken, removeToken } from './lib/auth'
@@ -10,10 +10,33 @@ type WorkbenchProps = {
   onLogout: () => void
 }
 
-type WorkbenchLoader = () => Promise<{ default: ComponentType<WorkbenchProps> }>
+type WorkbenchModule = { default: ComponentType<WorkbenchProps> }
+
+type WorkbenchLoader = () => Promise<WorkbenchModule>
 
 // Keep Workbench in a separate deployment chunk; a static import would defeat lazy loading.
 const loadWorkbench: WorkbenchLoader = () => import('./Workbench')
+
+type WorkbenchAttempt = {
+  Component: LazyExoticComponent<ComponentType<WorkbenchProps>>
+  load: () => Promise<WorkbenchModule>
+}
+
+function createWorkbenchAttempt(loader: WorkbenchLoader): WorkbenchAttempt {
+  let promise: Promise<WorkbenchModule> | null = null
+  const load = () => {
+    if (!promise) {
+      try {
+        promise = loader()
+      } catch (error) {
+        promise = Promise.reject(error)
+      }
+      void promise.catch(() => undefined)
+    }
+    return promise
+  }
+  return { Component: lazy(load), load }
+}
 
 
 function WorkbenchFallback({ locale }: { locale: 'zh' | 'en' }) {
@@ -73,9 +96,17 @@ class WorkbenchErrorBoundary extends Component<
 export default function App({ loadWorkbench: loader = loadWorkbench }: { loadWorkbench?: WorkbenchLoader }) {
   const [session, setSession] = useState<User | null | false>(() => (getToken() ? getCurrentUser() : false))
   const [showRegister, setShowRegister] = useState(false)
-  const [Workbench, setWorkbench] = useState(() => lazy(loader))
+  const [workbenchAttempt, setWorkbenchAttempt] = useState(() => createWorkbenchAttempt(loader))
   const [workbenchFailed, setWorkbenchFailed] = useState(false)
+  const Workbench = workbenchAttempt.Component
+  useEffect(() => {
+    void workbenchAttempt.load()
+  }, [workbenchAttempt])
   const locale = (typeof window !== 'undefined' && window.localStorage.getItem('locale') === 'en') ? 'en' : 'zh'
+  const resetWorkbench = () => {
+    setWorkbenchAttempt(createWorkbenchAttempt(loader))
+    setWorkbenchFailed(false)
+  }
 
   const handleAuthSuccess = (user: User) => {
     setWorkbenchFailed(false)
@@ -86,8 +117,7 @@ export default function App({ loadWorkbench: loader = loadWorkbench }: { loadWor
     removeToken()
     setSession(false)
     setShowRegister(false)
-    setWorkbenchFailed(false)
-    setWorkbench(() => lazy(loader))
+    resetWorkbench()
   }
 
   if (session === false) {
@@ -109,8 +139,7 @@ export default function App({ loadWorkbench: loader = loadWorkbench }: { loadWor
       <WorkbenchLoadError
         locale={locale}
         onRetry={() => {
-          setWorkbenchFailed(false)
-          setWorkbench(() => lazy(loader))
+          resetWorkbench()
         }}
         onLogout={handleLogout}
       />

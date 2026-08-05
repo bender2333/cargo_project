@@ -2249,4 +2249,12 @@
   3. 将三类失败一概视作偶发网络问题，不改代码直接重跑/发布。
 - **决策**：选择选项 2。history 修正先写 deterministic delayed-save regression：用户发起保存后若已从 History 切回 Workbench，延迟完成的保存不得把导航改回 History；随后移除 `saveCurrentPlan` 中 `await saveHistory(...)` 后冗余的 `setActiveNav('history')`，不改 locator、timeout 或业务断言。loader 修正先写登录页预加载回归，再在登录页可见期间启动现有 `loadWorkbench`，复用同一个 promise 给 `React.lazy`；仍保持独立 Workbench chunk、现有加载失败/重试/退出登录行为，不延长 5 秒门槛，也不静态合并 Workbench。
 - **影响**：history 失败 artifact snapshot 同时显示 Workbench header 已 active、HistoryPage 仍渲染；当前源码 `src/Workbench.tsx:1341-1347` 先 `await saveHistory` 再无条件 `setActiveNav('history')`，因此较晚完成的保存可覆盖用户更新的导航，具备可确定复现的竞态。loader artifacts 显示认证已完成且页面停在 Suspense fallback，不是认证错误或 load-error。fresh-cache 样本中 `Workbench-Dvs3cuNT.js` 为 **382478 B / 1402 ms**，随后 `three.module` 为 **544062 B / 1522 ms**，report 在登录后 **3965 ms** ready；`src/App.tsx` 当前只在认证成功、开始渲染 lazy Workbench 后触发动态 import，因此慢链路会把全部下载时间压进登录后的 5 秒窗口。以上结论不把未部署的 0802 RED 误归因于本地修复失效。
+
 - **后续**：P1-3b 按上述两个 seam 分别执行 RED → 修正 → GREEN，并跑原始远程路径；不得用 timeout、retry、skip、弱化断言或静态合包换绿。通过本地 gate 和安全部署门槛后，仍经 `127.0.0.1` SSH tunnel 运行完整 remote E2E，至少连续 2 次 **125/125**，再验证 Vietnam 40HQ **877/877** 与手动同型号连续快速放置方向一致。任何远程失败都按受保护 rollback 流程处理；生产凭据运行保持零 retry/无可泄密 trace。
+
+## 2026-08-05 P1-3b Workbench login-page preload
+
+- TDD RED command: `npx vitest run src/App.test.tsx`. Exact focused result: `❯ src/App.test.tsx (12 tests | 1 failed) 1518ms`; failed test `starts the Workbench loader while login is visible and reuses its pending promise after login`; exact assertion: `expected "vi.fn()" to be called 1 times, but got 0 times` at `src/App.test.tsx:87:47`.
+- TDD GREEN command: `npx vitest run src/App.test.tsx`. Exact focused result: `Test Files 1 passed (1)` and `Tests 12 passed (12)`; Vitest reported `Duration 2.96s (transform 131ms, setup 0ms, import 462ms, tests 598ms, environment 1.64s)` and command wall time was `5.19s`.
+- Targeted static check: `npx eslint src/App.tsx src/App.test.tsx` exited `0` with no output.
+- The fix starts each injected Workbench attempt from an effect while login/register remains rendered, memoizes that attempt's promise for `React.lazy`, and creates a fresh attempt for retry/logout. The Workbench remains a separate dynamic chunk and the existing Suspense/error boundary is unchanged; no timeout, retry, assertion, production, full-gate, or commit change was made.
