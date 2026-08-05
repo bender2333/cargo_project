@@ -2367,3 +2367,7 @@
   4. 继续经安全 SSH loopback、零 retry/无凭据 trace 运行 remote full E2E，只有连续两次都有明确 summary **128/128** 才通过；process status 或逐项 lines 不能替代 summary。
   5. 任一 deploy/health/manifest/DB/E2E failure，只能对本次 deploy 新打印的 backup 使用 guarded `npm run rollback -- --backup <path>`，不得复用过时 backup 或手工 rsync。
 - **当前状态**：本记录只完成 redeploy preflight 文档化；尚未创建本轮 fresh DB backup、dry-run、deploy、remote E2E 或 production rollback。production 保持 prior healthy release，未宣称新功能上线。本条未执行命令、production change 或 commit。
+
+- **Fresh DB recovery point addendum**：deploy 前重新读取 live SQLite，SHA-256 `6b866b7737084dc44a680310caf4e82a5a35cf9adce45ef8a67251d64b9b8066`，`PRAGMA quick_check = ok`。创建本轮独立 backup `/root/cargo-database-20260805-191122.db`，metadata `root:root 0600`，size **704512 B**，SHA-256 `7a14b735361742db52f5282fe42ec1c97153ba3ebe75954e9ed1b32958183330`，`PRAGMA quick_check = ok`。
+- **Hash interpretation**：SQLite online `.backup` 产出逻辑一致快照，文件布局可与仍在线的 live DB 不同，因此 backup/live byte SHA-256 不相等是预期且不构成损坏。这里分别记录两者 hash 并要求两者 quick_check 为 ok，不建立 byte-hash equality gate。
+- **Updated state**：fresh DB backup 前置已完成；尚未运行 deploy dry-run、actual deploy、post-deploy verification、remote E2E 或 rollback。production 仍为 prior healthy release，新功能未上线。本 addendum 只记录已提供的 post-operation evidence，没有执行命令或 commit。
