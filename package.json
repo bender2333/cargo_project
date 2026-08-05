@@ -16,7 +16,9 @@
     "benchmark": "node scripts/frontendBenchmark.mjs",
     "benchmark:update": "node scripts/frontendBenchmark.mjs --update",
     "start:server": "node server/index.mjs",
-    "deploy": "node scripts/deploy.mjs"
+    "deploy": "node scripts/deploy.mjs",
+    "rollback": "node scripts/rollback.mjs",
+    "rollback:dry": "node scripts/rollback.mjs --backup /root/cargo_project-backup-DRY-RUN --dry-run"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.0",
