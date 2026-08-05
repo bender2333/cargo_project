@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-05 P1-3c 生产变更前记录（尚未 mutation）
+
+- 完整本地 gate：lint exit **0**；unit **93 files / 832 tests**；packing performance **2 files / 7 tests**；build exit **0**，保留既有 `>500 kB` warning；本地 E2E **128/128**（**7.2 min**），utilization **80.3%**。
+- 经既有 SSH tunnel 的生产只读 preflight：static **200**、API **401**、service active；DB SHA-256 `c7a84e2767e3ecbb3839a485ff7c193cc2fde51e900fef6aaa71d90ada6cd97f`，`quick_check=ok`；`JWT_SECRET=SET`、`ADMIN_PASSWORD=UNSET`。env 为 `root:root 0600`，systemd `User`/`Group` 为空且服务以 root 运行，live `.mjs` ownership 混有 `root`/`lighthouse`。
+- 已授权但尚未执行的顺序：备份 env → 远端无打印生成并追加 64-hex `ADMIN_PASSWORD`（deploy 前不单独 restart）→ live `.mjs` 归一为 `root:root 0644` → 以 `umask 077` 建独立 SQLite `.backup` 并核对 hash/quick_check → deploy dry-run → deploy → manifests/health/DB 验证 → 经原 SSH loopback 连续两次 remote E2E **128/128**。
+- 任一失败只能对 deploy 打印的 backup 使用 `npm run rollback -- --backup <path>`。当前 root service identity 是已披露的 out-of-scope debt，未声称已修复；本条落盘时没有 env 写入、权限修改、DB backup、restart、deploy、remote E2E 或其他生产 mutation。
+
 ## 2026-08-05 r61 0802 装箱与可靠性修正
 
 - Vietnam 40HQ 自动装箱现可装入 **877/877** 箱，同时保留必须落地、堆叠、几何等约束。

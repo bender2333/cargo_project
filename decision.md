@@ -2269,3 +2269,23 @@
 - No timeout, retry, locator, assertion weakening, deployment, full gate, or commit was made; no production-environment operation was performed.
 
 - Final orchestrator verification: `npx playwright test e2e/manual-3d.spec.ts --grep "延迟历史保存|概览保存期间|概览报告保存|手动历史快照"` passed **4 tests** (`4 passed (23.3s)`); `npx vitest run src/components/HistoryPage.test.tsx src/hooks/useHistoryPlans.test.ts` passed **2 files / 10 tests** in **3.02s**; targeted ESLint exited **0**. Final spec, React, TypeScript, and code reviews were **APPROVED**. This rerun made no code, test, or commit changes.
+
+## 2026-08-05 P1-3c 生产变更前门槛与授权步骤
+
+- **背景**：P1-3b 后完整本地 gate 已通过：`npm run lint` exit **0**；`npm test` 为 unit **93 files / 832 tests** 加 packing performance **2 files / 7 tests**；`npm run build` exit **0**，只有既有 `>500 kB` warning；本地 E2E **128/128**，耗时 **7.2 min**，观测 utilization **80.3%**。
+- **生产只读 preflight**：经既有 SSH loopback 检查，static **200**、未认证 API **401**、`cargo-server.service` active；live SQLite SHA-256 为 `c7a84e2767e3ecbb3839a485ff7c193cc2fde51e900fef6aaa71d90ada6cd97f`，`PRAGMA quick_check` 为 `ok`。`JWT_SECRET` 为 **SET**，但 `ADMIN_PASSWORD` 为 **UNSET**，当前不得重启/部署。`/etc/cargo-server.env` 为 `root:root 0600`；systemd unit 的 `User`/`Group` 均为空，服务实际以 root 运行；live `.mjs` ownership 混有 `root` 与 `lighthouse`。
+- **选项**：
+  1. 忽略 `ADMIN_PASSWORD` 与 ownership 缺口直接 deploy，依赖失败后回滚。
+  2. 在任何服务重启前按受控顺序完成 secret、模块 metadata 与独立 DB backup 前置，再 dry-run/deploy/验证。
+  3. 将服务账号迁移、env owner/group 和部署一并重构后再上线。
+- **决策**：选择选项 2；选项 1 会触发 production fail-fast 或让 guarded rollback 因不可信模块 metadata 拒绝工作。选项 3 的 dedicated service identity 是真实安全债务，但超出本次 0802 发布范围，必须披露而不能假称已修复。本次授权的下一步仅为：
+  1. 先备份 `/etc/cargo-server.env`，保留 owner/mode，并记录备份路径。
+  2. 在远端生成 **64-hex** `ADMIN_PASSWORD`，不得打印、回传或进入 shell history；追加到 env 后只验证变量为 SET，不输出值。此时仍不单独重启，待 deploy 统一重启。
+  3. 在服务运行身份不变的前提下，把 live `.mjs` 统一为 `root:root 0644`，使 deploy backup 满足 guarded rollback 的 root-owned/non-writable trust checks；不得把 root service identity 描述为已整改。
+  4. 使用 `umask 077` 创建独立 SQLite `.backup`，记录其路径与 SHA-256，并要求备份 `PRAGMA quick_check = ok`；同时保留变更前 live DB hash。
+  5. 运行 deploy dry-run，核对 target/site/app/service/backup/health，再执行 deploy。
+  6. 部署后核对 static/backend manifests、service/static/API health、live DB SHA-256 与 `quick_check`，确认数据库未被意外替换或损坏。
+  7. 继续通过既有 SSH loopback、零 retry/无凭据 trace 连续运行两次完整 remote E2E；两次均须 **128/128**，并包含 Vietnam **877/877** 与手动同型号朝向验收。
+  8. 任一部署/健康/manifest/DB/E2E 验证失败，只能对 deploy 打印的 backup 使用 `npm run rollback -- --backup <path>`；不得手工拼 backend rsync。
+- **影响**：上述授权允许在不扩大代码范围的情况下解除当前 `ADMIN_PASSWORD` 阻塞并建立可验证的 DB/rollback 恢复点，但不会改变服务仍以 root 运行的事实。env `root:root 0600`、空 `User`/`Group` 和 root service identity 作为披露的 out-of-scope debt 保留；本条记录时尚未执行 env 写入、metadata normalization、DB backup、dry-run、deploy、restart、remote E2E 或 rollback，生产没有 mutation。
+- **后续**：执行者必须逐步把实际路径、hash、backup、manifest、health 和两次 remote E2E 结果追加到 `CHANGELOG.md`/本决策；不得把本 preflight 或本地 GREEN 写成生产已上线。发布完成后另立任务迁移 dedicated non-login service user/group，并重新设计 code/state 权限边界。
