@@ -15,13 +15,19 @@
 import { readFileSync } from 'node:fs'
 import { dirname, resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import * as XLSX from 'xlsx'
 import type { ContainerSpec, CargoItem, LoadingMode, PackingResult, PlacedBox } from '../types'
-import { containers } from '../data/containers'
+import { containers, effectiveContainer } from '../data/containers'
 import { parseCargoRows } from './importCargo'
 import { finalizePlacementGeometry } from './finalizePackingResult'
+import type { finalizePlacementGeometry as FinalizePlacementGeometry } from './finalizePackingResult'
 import { calculatePacking } from './packing'
+
+vi.mock('./finalizePackingResult', async (importOriginal) => {
+  const original = await importOriginal<{ finalizePlacementGeometry: typeof FinalizePlacementGeometry }>()
+  return { ...original, finalizePlacementGeometry: vi.fn(original.finalizePlacementGeometry) }
+})
 
 const moduleDir = dirname(fileURLToPath(import.meta.url))
 const dataDir = resolve(moduleDir, '../../test-data')
@@ -106,6 +112,37 @@ function verticalSupportersOf(box: PlacedBox, placed: PlacedBox[]): string[] {
 function describeFew<T>(items: T[], render: (item: T) => string, limit = 3): string {
   const shown = items.slice(0, limit).map(render).join('; ')
   return items.length > limit ? `${shown}; ... (+${items.length - limit} more)` : shown
+}
+
+const GEOMETRY_EPSILON = 0.001
+
+function boundaryViolations(box: PlacedBox, container: ContainerSpec): string[] {
+  const effective = effectiveContainer(container)
+  const axes = [
+    ['x', box.x, box.x + box.length, effective.length],
+    ['y', box.y, box.y + box.width, effective.width],
+    ['z', box.z, box.z + box.height, effective.height],
+  ] as const
+  return axes
+    .filter(([, start, end, limit]) => start < -GEOMETRY_EPSILON || end > limit + GEOMETRY_EPSILON)
+    .map(([axis, start, end, limit]) => `${box.id} ${axis}=[${start}, ${end}] outside [0, ${limit}]`)
+}
+
+function overlapViolations(placed: PlacedBox[]): string[] {
+  const violations: string[] = []
+  for (let firstIndex = 0; firstIndex < placed.length; firstIndex += 1) {
+    const first = placed[firstIndex]
+    for (let secondIndex = firstIndex + 1; secondIndex < placed.length; secondIndex += 1) {
+      const second = placed[secondIndex]
+      const overlapX = Math.min(first.x + first.length, second.x + second.length) - Math.max(first.x, second.x)
+      const overlapY = Math.min(first.y + first.width, second.y + second.width) - Math.max(first.y, second.y)
+      const overlapZ = Math.min(first.z + first.height, second.z + second.height) - Math.max(first.z, second.z)
+      if (overlapX > GEOMETRY_EPSILON && overlapY > GEOMETRY_EPSILON && overlapZ > GEOMETRY_EPSILON) {
+        violations.push(`${first.id}/${second.id} overlap=${overlapX}x${overlapY}x${overlapZ}mm`)
+      }
+    }
+  }
+  return violations
 }
 
 describe('PackingResult layering invariants (PRD 9.3)', () => {
@@ -316,11 +353,66 @@ describe('PackingResult geometry is unchanged by the layering fix', () => {
   })
 
   it('keeps every placed box inside the effective container and free of overlap', () => {
-    for (const { name, result } of cases) {
-      const boundary = result.diagnostics.find((d) => d.id === 'boundary-check')
-      const overlap = result.diagnostics.find((d) => d.id === 'overlap-check')
-      expect(boundary?.severity, `${name}: boundary check regressed`).not.toBe('error')
-      expect(overlap?.severity, `${name}: overlap check regressed`).not.toBe('error')
+    for (const { name, container, result } of cases) {
+      const boundaryOffenders = result.placed.flatMap((box) => boundaryViolations(box, container))
+      const overlapOffenders = overlapViolations(result.placed)
+      expect(
+        boundaryOffenders,
+        `${name}: placed boxes exceed the effective container — ${describeFew(boundaryOffenders, (entry) => entry)}`,
+      ).toEqual([])
+      expect(
+        overlapOffenders,
+        `${name}: placed box pairs overlap — ${describeFew(overlapOffenders, (entry) => entry)}`,
+      ).toEqual([])
     }
+  })
+
+  it('reports an error diagnostic for a known placed-box boundary violation', () => {
+    const container: ContainerSpec = {
+      id: 'diagnostic-boundary',
+      label: 'Diagnostic boundary',
+      description: 'Diagnostic boundary fixture',
+      length: 100,
+      width: 100,
+      height: 100,
+      maxWeight: 1_000,
+      doorGap: 0,
+      topGap: 0,
+      sideGap: 0,
+    }
+    const cargo: CargoItem = {
+      id: 'boundary-cargo',
+      name: 'Boundary cargo',
+      label: 'B',
+      length: 10,
+      width: 10,
+      height: 10,
+      weight: 1,
+      quantity: 1,
+      color: '#000000',
+      canRotate: false,
+      stackable: true,
+    }
+    const mockedFinalizer = vi.mocked(finalizePlacementGeometry)
+    const productionFinalizer = mockedFinalizer.getMockImplementation()
+    if (!productionFinalizer) throw new Error('Expected finalizePlacementGeometry to retain its production implementation')
+    mockedFinalizer.mockImplementationOnce((placed, effective) => {
+      const finalized = productionFinalizer(placed, effective)
+      return {
+        ...finalized,
+        placed: finalized.placed.map((box, index) => index === 0 ? { ...box, x: effective.length } : box),
+      }
+    })
+
+    const result = calculatePacking(container, [cargo])
+    const violatingBox = result.placed[0]
+    expect(
+      violatingBox.x + violatingBox.length,
+      'fixture must place the box beyond the effective container before exercising diagnostics',
+    ).toBeGreaterThan(effectiveContainer(container).length)
+    expect(
+      result.diagnostics.find((diagnostic) => diagnostic.id === 'boundary-check')?.severity,
+      'production boundary diagnostics must reject the known out-of-bounds placed box',
+    ).toBe('error')
   })
 })

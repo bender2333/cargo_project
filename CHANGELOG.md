@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-06 P2-2 独立几何重算
+
+- `packingInvariants` 不再读取生产 diagnostics 自证边界/重叠；测试独立重算 effective container 的三轴边界与所有 box pair 的三轴交叠，并保留独立的真实 boundary diagnostic 契约。
+- 反向证明：局部 detector tolerance=100 且临时注入超界 60mm 时，旧 diagnostics-only oracle **1/1 GREEN**；同一条件下最终独立 oracle **RED**，报告 `x=[13450,13460] outside [0,13400]`。所有 mutation 已恢复，`packing.ts` hash 与修改前一致。
+- 针对性验证：`packingInvariants.test.ts` **15/15**，targeted ESLint exit **0**；最终无算法、fixture、baseline 或阈值变化。
+
 ## 2026-08-06 P2-1 unplaced 数量守恒门禁
 
 - 在两个既有 packing 验证 helper 中增加整批 `placed + unplaced = planned` 守恒；新增按 `cargoId` 的 per-SKU helper，显式覆盖 0629 两模式与 Russia/Vietnam 五个 canonical 夹具，重复 label 不会合并。

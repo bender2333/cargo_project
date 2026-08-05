@@ -2388,3 +2388,11 @@
 - **GREEN**：`npx vitest run src/lib/packing.test.ts src/lib/packing.31pallet.test.ts src/lib/packing.blockEngine.test.ts --pool=threads --maxWorkers=1` 为 **3 files / 52 tests passed**；聚焦 0629 恢复后为 **1 passed / 46 skipped**；对应四个测试文件 `npm exec eslint -- ...` exit **0**。
 - **反向证明 RED**：临时移除 `packing.ts:1187` quantity-path `NO_SPACE` 的 `markUnplaced` 调用后，0629 聚焦测试失败于守恒断言：`expected 188 to be 283`（`expectValidLargePacking`），说明未记录 unplaced 会被明确捕获，而非只靠数量下界。该临时修改已还原；恢复后的 `packing.ts` hash 与 mutation 前完全相同，0629 聚焦测试重新 GREEN。
 - **决策**：按计划保留整批守恒在既有 helper、per-SKU 守恒在显式夹具用例；不把 planned quantity 塞入 helper 签名，不改产品算法。下一步为 P2-2 独立几何重算。本条待独立 commit。
+
+## 2026-08-06 P2-2 independent geometry oracle
+
+- **Problem**：原「inside container / no overlap」用例只读取 `calculatePacking` 自己生成的 `boundary-check` / `overlap-check` diagnostics，检测器与被测结果同源；现在测试以独立 helper 对 effective container 的 X/Y/Z 上下界和每一对 placed boxes 的三轴交叠重新计算，失败信息包含 case、box/axis 或 pair/overlap dimensions。diagnostics 契约另用一次性 production-finalizer seam 注入已独立确认的越界箱，再断言真实 `buildDiagnostics` 返回 `boundary-check=error`，不手写被断言的 diagnostic。
+- **旧 oracle GREEN**：按计划只把 `hasBoundaryViolation` 的局部 detector tolerance 临时设为 **100**，并在测试 seam 临时让首箱完全位于柜外但只超出 **60 mm**（`x=effective.length+50, length=10`，不与其他箱交叠）。原 diagnostics-only oracle 的聚焦命令仍为 **1 passed / 14 skipped**，证明 detector 沉默时旧用例假绿。
+- **新 oracle RED**：保持同一 detector mutation 与同一临时越界 fixture，仅切换为最终独立重算 oracle；聚焦命令按预期 **1 failed / 14 skipped**，明确报告 `russia-pallet-29-1 x=[13450, 13460] outside [0, 13400]`，失败位于独立 `boundaryOffenders` 的空数组契约。
+- **Restoration/GREEN**：所有临时 product/test mutations 均还原；`src/lib/packing.ts` SHA-256 回到 `78ba8068bcea628cc82c6b823d13ec5da401c2d354a07236cc2d1622d08ff14d`，最终 `packingInvariants.test.ts` SHA-256 `3fdc7c34ef8a90937e37c098747e964200c6c89fd53693da1ac33ab284c23044`。`npx vitest run src/lib/packingInvariants.test.ts` 为 **1 file / 15 tests passed**，targeted ESLint exit **0**。最终只保留测试文件修改，无算法、fixture、baseline 或阈值变化。
+- **决策**：几何正确性与 diagnostics 正确性分层测试；P2-2 完成后进入 P2-3，完整阶段 gate 仍留到 P2-7。
