@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from '../data/containers'
 import type { CargoItem, ContainerSpec, PackingResult, PlacedBox } from '../types'
 import { UNPLACED_REASON_CODES, calculatePacking, orientations } from './packing'
+import { expectQuantityConservation } from './packingContract.testSupport'
 import { violatesStackChain } from './stackCapacity'
 
 const cargo = (overrides: Partial<CargoItem> = {}): CargoItem => ({
@@ -79,6 +80,7 @@ function expectValidPacking(container: ContainerSpec, result: PackingResult) {
   expect(result.usedVolume).toBe(usedVolume)
   expect(result.usedWeight).toBe(usedWeight)
   expect(result.usedWeight).toBeLessThanOrEqual(container.maxWeight)
+  expect(result.placedCount + result.unplaced.reduce((sum, entry) => sum + entry.quantity, 0)).toBe(result.totalCargoCount)
 
   const placedIds = new Set(result.placed.map((box) => box.id))
   for (const box of result.placed) {
@@ -127,6 +129,7 @@ function expectValidLargePacking(container: ContainerSpec, result: PackingResult
   expect(result.usedVolume).toBe(usedVolume)
   expect(result.usedWeight).toBe(usedWeight)
   expect(result.usedWeight).toBeLessThanOrEqual(container.maxWeight)
+  expect(result.placedCount + result.unplaced.reduce((sum, entry) => sum + entry.quantity, 0)).toBe(result.totalCargoCount)
 }
 
 function maxSupportedDistance(box: PlacedBox, graph: Map<string, PlacedBox>) {
@@ -591,7 +594,12 @@ describe('calculatePacking', () => {
       const cBoxes = result.placed.filter((box) => box.label === 'C')
 
       expectValidLargePacking(container, result)
-      expect(result.placedCount).toBeGreaterThanOrEqual(loadingMode === 'quantity' ? 188 : 156)
+      expectQuantityConservation(constrainedItems, result)
+      expect(result.placedCount).toBe(loadingMode === 'quantity' ? 188 : 156)
+      expect(result.unplaced).toContainEqual(expect.objectContaining({
+        label: 'C',
+        reasonCode: UNPLACED_REASON_CODES.NO_SPACE,
+      }))
       expect(cBoxes.length).toBeGreaterThan(0)
       expect(cBoxes.every((box) => box.z === 0)).toBe(true)
       expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])

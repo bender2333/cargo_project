@@ -4,6 +4,7 @@ import { containers, effectiveContainer } from '../data/containers'
 import type { ContainerSpec, CargoItem, LoadingMode, PlacedBox } from '../types'
 import { calculatePacking, shouldUseBlockEngine } from './packing'
 import { expectPackingResultContract } from './packingContract.testSupport'
+import { expectQuantityConservation } from './packingContract.testSupport'
 import { isGapFillBox } from './placementSource'
 import { violatesStackChain } from './stackCapacity'
 
@@ -216,6 +217,7 @@ describe('block-building packing engine', () => {
       expectNoOverlapOrBounds(fixture.container, result.placed)
       expect(elapsedMs).toBeLessThan(5000)
       expectPackingResultContract(`vietnam-20gp-${mode}`, result)
+      expectQuantityConservation(fixture.items, result)
     }
 
     const [quantity, volume] = outcomes
@@ -243,6 +245,7 @@ describe('block-building packing engine', () => {
       expectNoOverlapOrBounds(container, result.placed)
       expect(elapsedMs).toBeLessThan(20_000)
       expectPackingResultContract(`vietnam-40hq-${mode}`, result)
+      expectQuantityConservation(fixture.items, result)
     }
   }, 25_000)
 })

@@ -2381,3 +2381,10 @@
 - **决策 / acceptance**：r61/0802 release 接受并保持 live。P1 completion criteria 已满足；计划时 suite 为 125，现为 **128**，增量来自三个新增 regression cases，未 skip、未减少范围。production GREEN 只覆盖本阶段约定的 release/health/manifest/DB/E2E/0802 acceptance，不扩张到未验收的运维重构。
 - **Remaining out-of-scope debt**：systemd service 仍以 root 运行；live DB ownership/mode 为 legacy `lighthouse:lighthouse 0664`；OpenSSH 仍报告 PQ warning。这三项只记录为后续安全/运维债务，明确**未修复**，不得从本次 release acceptance 推断其关闭。
 - **后续**：另立任务迁移 dedicated non-login service identity 与受限 DB state ownership/mode，并评估 OpenSSH PQ 配置；继续保留 deploy backup `/root/cargo_project-backup-20260805-191341` 与 fresh DB backup `/root/cargo-database-20260805-191122.db` 的审计记录。本条只追加已提供的生产证据，没有执行新命令或 commit。
+
+## 2026-08-06 P2-1 unplaced conservation contract
+- **Scope**：只修改测试支持与测试调用点；`src/lib/packing.ts` 最终 SHA-256 `78ba8068bcea628cc82c6b823d13ec5da401c2d354a07236cc2d1622d08ff14d` 与 mutation 前一致，fixtures、算法和 golden 未改。两个既有 packing helper 现在都断言 `placedCount + Σunplaced.quantity === totalCargoCount`，另有按 `cargoId` 的 per-SKU 守恒 helper；label 正规化是独立契约，不与原始可选 label 比较，0629 的 C label 则由场景断言锁定。
+- **Contracts**：0629 quantity 精确 `placedCount=188`、volume 精确 `156`；两种模式均要求 label `C` 的 `NO_SPACE` unplaced 行，且 C 箱全部 `z=0`。per-SKU helper 显式覆盖 0629 两模式、Russia 31 pallets volume、Vietnam 20GP quantity/volume、Vietnam 40HQ quantity/volume，共五个既有夹具；没有修改输入或阈值。
+- **GREEN**：`npx vitest run src/lib/packing.test.ts src/lib/packing.31pallet.test.ts src/lib/packing.blockEngine.test.ts --pool=threads --maxWorkers=1` 为 **3 files / 52 tests passed**；聚焦 0629 恢复后为 **1 passed / 46 skipped**；对应四个测试文件 `npm exec eslint -- ...` exit **0**。
+- **反向证明 RED**：临时移除 `packing.ts:1187` quantity-path `NO_SPACE` 的 `markUnplaced` 调用后，0629 聚焦测试失败于守恒断言：`expected 188 to be 283`（`expectValidLargePacking`），说明未记录 unplaced 会被明确捕获，而非只靠数量下界。该临时修改已还原；恢复后的 `packing.ts` hash 与 mutation 前完全相同，0629 聚焦测试重新 GREEN。
+- **决策**：按计划保留整批守恒在既有 helper、per-SKU 守恒在显式夹具用例；不把 planned quantity 塞入 helper 签名，不改产品算法。下一步为 P2-2 独立几何重算。本条待独立 commit。

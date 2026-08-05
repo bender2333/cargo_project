@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-06 P2-1 unplaced 数量守恒门禁
+
+- 在两个既有 packing 验证 helper 中增加整批 `placed + unplaced = planned` 守恒；新增按 `cargoId` 的 per-SKU helper，显式覆盖 0629 两模式与 Russia/Vietnam 五个 canonical 夹具，重复 label 不会合并。
+- 补回 0629 label C 的 `NO_SPACE` 契约，并固定 quantity/volume 的 `placedCount` 为 **188/156**；未修改 fixture、算法、golden 或既有阈值。
+- 反向 mutation 暂时移除 quantity path 的 `markUnplaced` 后，0629 聚焦用例按守恒失败 `expected 188 to be 283`；恢复后 source hash 与 mutation 前相同，聚焦用例 GREEN。
+- 针对性验证：三个 packing test files **52/52**，0629 聚焦 **1/1**，四个改动测试文件 ESLint exit **0**。完整阶段 gate 留到 P2-7 后执行。
+
 ## 2026-08-06 P1-3c production release accepted
 
 - `deploy --dry-run` exit **0**，随后 actual deploy exit **0**；新 deploy backup `/root/cargo_project-backup-20260805-191341`。即时验证：service active、static **200**、API **401**；static/backend 本地与远端 `sha256sum -b` manifest diff 均为空；deploy backup trust 的 non-root / group-world-writable / symlink / DB-family counts 全部 **0**。DB SHA-256 保持 predeploy `6b866b7737084dc44a680310caf4e82a5a35cf9adce45ef8a67251d64b9b8066`，`quick_check=ok`。
