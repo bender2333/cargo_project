@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-08-06 P1-3c production release accepted
+
+- `deploy --dry-run` exit **0**，随后 actual deploy exit **0**；新 deploy backup `/root/cargo_project-backup-20260805-191341`。即时验证：service active、static **200**、API **401**；static/backend 本地与远端 `sha256sum -b` manifest diff 均为空；deploy backup trust 的 non-root / group-world-writable / symlink / DB-family counts 全部 **0**。DB SHA-256 保持 predeploy `6b866b7737084dc44a680310caf4e82a5a35cf9adce45ef8a67251d64b9b8066`，`quick_check=ok`。
+- 经安全 SSH tunnel 的两次连续完整 remote E2E 都有明确 summary、exit **0**、无 skip：第 1 次 **128/128**（**13.5 min**），第 2 次 **128/128**（**13.6 min**）。每次关键验收依次通过：Vietnam **877/877**（**11.6s / 12.1s**）、同 SKU quick-place 朝向（**8.2s / 8.8s**）、此前 loader-failing 3D label（**10.7s / 11.2s**）、延迟历史导航（**6.5s / 6.7s**）。
+- post-E2E service active、static **200**、API **401**，static/backend manifest diff 仍为空。live DB SHA-256 `5b42f0329887804720f05935d59441ae898419509c62a280a59163719fb63c54`，`lighthouse:lighthouse 0664`，**770048 B**，`quick_check=ok`；enabled `testuser`/`admin` counts 为 **1/1**。hash/size 改变来自已认证 E2E 的登录审计/历史写入，不是 rollback；本次不需要 rollback。
+- r61/0802 release 已验收并 live。`ADMIN_PASSWORD` 生成值从未打印，仍只存在 `/etc/cargo-server.env`；existing `testuser` 按计划未删除。fresh recovery backup 为 `/root/cargo-database-20260805-191122.db`。明确仍未修复的 out-of-scope debt：systemd 继续以 root 运行、DB owner/mode 仍是 legacy、OpenSSH PQ warning；不得把它们写成已整改。
+- P1 completion criteria 已满足；remote suite 从计划中的 **125** 增至 **128**，原因是新增三项回归用例，不是跳过或缩减门禁。
+
+
 ## 2026-08-06 P1-3 redeploy preflight 与 fresh DB recovery point
 
 - combined `lint && npm test && build && e2e` 观察到 lint exit **0**；unit **92 files / 805 tests**；isolated rollback **1 file / 29 tests**；packing performance **2 files / 7 tests**；build exit **0**；128 个 browser case 都逐项打印 passed。但 outer harness 在 **3600s**、Playwright summary/exit 返回前 timeout，因此**不得把该 combined command 称为 GREEN**。
