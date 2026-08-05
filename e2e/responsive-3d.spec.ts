@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { e2eCredentials } from './credentials'
 
 /**
  * 9th-review phase 2 regression: verify that the 3D workspace canvas scales
@@ -11,13 +12,11 @@ import { expect, test } from '@playwright/test'
  * an in-memory SQLite database and the Vite server that proxies /api to it.
  */
 
-const adminUsername = 'admin'
-const adminPassword = 'admin123'
 
 async function loginAsAdmin(page: import('@playwright/test').Page) {
   await page.goto('/')
-  await page.fill('#username', adminUsername)
-  await page.fill('#password', adminPassword)
+  await page.fill('#username', e2eCredentials.admin.username)
+  await page.fill('#password', e2eCredentials.admin.password)
   await page.click('button[type="submit"]')
   await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible({ timeout: 15_000 })
 }

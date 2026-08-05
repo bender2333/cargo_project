@@ -3,12 +3,13 @@ import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import * as XLSX from 'xlsx'
 import { releaseNotes } from '../src/data/releaseNotes'
+import { e2eCredentials } from './credentials'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
   if (await page.locator('#username').isVisible()) {
-    await page.fill('#username', 'testuser')
-    await page.fill('#password', 'testuser123')
+    await page.fill('#username', e2eCredentials.user.username)
+    await page.fill('#password', e2eCredentials.user.password)
     await page.click('button[type="submit"]')
     await expect(page.getByTestId('report-panel')).toBeVisible()
     await page.evaluate(async () => {
@@ -538,7 +539,7 @@ test('手动历史快照在当前货物切换后恢复货物 A 身份和数量',
 test('?debug=1 显示调试面板并展示当前状态', async ({ page }) => {
   await page.goto('/?debug=1')
   await expect(page.getByTestId('debug-panel')).toBeVisible()
-  await expect(page.getByTestId('debug-panel')).toContainText('testuser')
+  await expect(page.getByTestId('debug-panel')).toContainText(e2eCredentials.user.username)
   await expect(page.getByTestId('debug-panel')).toContainText('Container')
 })
 
@@ -572,14 +573,17 @@ test('调试面板可下载手动排布复现场景快照', async ({ page }) => 
 })
 
 test('调试面板 admin 可拉取服务器日志', async ({ page }) => {
-  await page.evaluate(async () => {
+  await page.evaluate(async ({ username, password }) => {
     await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+      body: JSON.stringify({ username, password }),
     }).then((r) => r.json()).then((data) => {
       window.localStorage.setItem('cargo_token', data.token)
     })
+  }, {
+    username: e2eCredentials.admin.username,
+    password: e2eCredentials.admin.password,
   })
   await page.goto('/?debug=1')
   await expect(page.getByTestId('debug-panel')).toBeVisible()
@@ -1016,15 +1020,18 @@ test('通知栏按钮显示未读红点，点击后已读', async ({ page }) => 
 })
 
 test('管理员主导航包含用户管理入口', async ({ page }) => {
-  // beforeEach logged in as testuser; switch to admin.
-  await page.evaluate(async () => {
+  // beforeEach logged in as the E2E user; switch to admin.
+  await page.evaluate(async ({ username, password }) => {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+      body: JSON.stringify({ username, password }),
     }).then((r) => r.json())
     window.localStorage.setItem('cargo_token', res.token)
     window.localStorage.setItem('cargo_user', JSON.stringify(res.user))
+  }, {
+    username: e2eCredentials.admin.username,
+    password: e2eCredentials.admin.password,
   })
   await page.goto('/')
   await expect(page.getByTestId('nav-users')).toBeVisible()

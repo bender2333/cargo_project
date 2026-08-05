@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { expect, test } from '@playwright/test'
-
+import { e2eCredentials } from './credentials'
 function importTemplateDto(id: string, name: string) {
   return {
     id,
@@ -69,8 +69,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
 
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
@@ -116,8 +116,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
 
@@ -200,8 +200,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
 
@@ -257,8 +257,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
 
@@ -330,8 +330,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
     await page.getByTestId('nav-cargo-library').click()
@@ -392,8 +392,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
     await page.getByTestId('nav-cargo-library').click()
@@ -442,8 +442,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
 
@@ -514,8 +514,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
     await page.getByTestId('nav-template-manager').click()
@@ -557,8 +557,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
 
@@ -615,8 +615,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
     await expect.poll(() => reads).toBe(1)
@@ -681,8 +681,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
     await page.getByTestId('nav-template-manager').click()
@@ -732,8 +732,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
 
@@ -793,8 +793,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
     await page.getByTestId('nav-template-manager').click()
@@ -848,8 +848,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
     await page.getByTestId('nav-template-manager').click()
@@ -915,8 +915,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
     await expect.poll(() => reads).toBe(1)
@@ -991,8 +991,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
     await page.getByTestId('nav-template-manager').click()
@@ -1041,8 +1041,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await page.route(modulePattern, (route) => route.abort())
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
 
@@ -1062,8 +1062,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await page.route(modulePattern, (route) => route.abort())
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
 
@@ -1088,8 +1088,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await page.route(modulePattern, (route) => route.abort())
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
 
@@ -1305,8 +1305,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     })
 
     await page.goto('/')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible()
 
@@ -1342,8 +1342,8 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await page.click('text=退出')
 
     // Log in as seeded default administrator
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'admin123')
+    await page.fill('#username', e2eCredentials.admin.username)
+    await page.fill('#password', e2eCredentials.admin.password)
     await page.click('button[type="submit"]')
     await expect(page.getByText('货柜排箱装柜工作台')).toBeVisible({ timeout: 15_000 })
 

@@ -4,6 +4,7 @@ import path from 'node:path'
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import * as XLSX from 'xlsx'
+import { e2eCredentials } from './credentials'
 
 async function createWorkbookFile() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cargo-calc-'))
@@ -213,8 +214,8 @@ async function expectCanvasHasRenderedPixels(page: Page) {
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
   if (await page.locator('#username').isVisible()) {
-    await page.fill('#username', 'testuser')
-    await page.fill('#password', 'testuser123')
+    await page.fill('#username', e2eCredentials.user.username)
+    await page.fill('#password', e2eCredentials.user.password)
     await page.click('button[type="submit"]')
     await expect(page.getByTestId('report-panel')).toBeVisible()
     await page.evaluate(async () => {

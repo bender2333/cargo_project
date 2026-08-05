@@ -1699,3 +1699,41 @@ Implements REVIEW.md「第三十三轮」points 1-4 (scope A+B per decision.md 2
 - Current local release gates: `npm run lint` exited **0**; `npm test` passed unit **92 files / 819 tests** plus packing performance **2 files / 7 tests**; `npm run build` exited **0** with the existing **>500 kB chunk warning**.
 - Current E2E: `npm run test:e2e` passed **125 tests** in **6.8 minutes**. Observed volume utilization was **80.3%**; expected negative-path console errors occurred, with no test failures.
 - Final spec, code, and security reviews were **APPROVED**. Previously documented nonblocking medium follow-ups remain tracked and are not P1/P2 blockers.
+
+## 2026-08-05 P1-2 production credential guard and env-backed E2E
+
+- Production seed safety changed: `testuser` is never seeded when `NODE_ENV=production`; missing `ADMIN_PASSWORD` now throws for both new and existing production databases. Nonproduction retains default admin/testuser convenience and `SKIP_TESTUSER=1`.
+- Added isolated `scripts/dbSeed.test.mjs` contracts for all seven P1-2 cases. RED command `npx vitest run scripts/dbSeed.test.mjs --pool=threads --maxWorkers=1`: **1 file, 7 tests; 3 failed / 4 passed** (production testuser still seeded, new production missing `ADMIN_PASSWORD` resolved, existing-admin contract lacked exported `initAdmin`). GREEN with the same command: **1 file / 7 tests passed**; Vitest duration **4.21s**.
+- Added `e2e/credentials.ts`; all scoped user/admin credentials and the manual debug username assertion now use `E2E_USERNAME`, `E2E_PASSWORD`, `E2E_ADMIN_USERNAME`, and `E2E_ADMIN_PASSWORD` with nonproduction defaults. Targeted known-literal scan across the four scoped specs returned no matches. No assertion, timeout, retry, remote user, full gate, deployment, or production change was made.
+- Deployment prerequisite: confirm a non-empty `ADMIN_PASSWORD` in `/etc/cargo-server.env` before any production restart; existing production `testuser` remains for an operator-directed cleanup.
+
+## 2026-08-05 P1-2 secure external E2E credential boundary
+
+- Security hardening now rejects any explicit public HTTP `PLAYWRIGHT_BASE_URL` before E2E specs load. HTTPS and loopback HTTP (`127.0.0.1`, `localhost`, `::1`) are allowed; allowed external runs require all four nonempty `E2E_*` values, while no-baseURL local runs retain defaults. Errors name only the missing variable or URL policy and never log credential values.
+- Stronger focused RED: `npx vitest run scripts/dbSeed.test.mjs --pool=threads --maxWorkers=1` reported **11 tests, 2 failed / 9 passed** (`rejects every missing external credential by environment variable name`; `rejects public HTTP external runs before using credentials`). GREEN: the same command reported **1 file / 11 tests passed**; Vitest duration **4.10s**.
+- Required P1-3 deployment deviation: run credentialized remote E2E through SSH local port forwarding with a loopback `PLAYWRIGHT_BASE_URL`; do **not** send credentials to the observed plaintext `http://101.33.232.150/` target directly. No full gates, deployment, production E2E, or commit was performed.
+
+## 2026-08-05 P1-2 final focused verification
+
+- Final focused seed/helper run: `npx vitest run scripts/dbSeed.test.mjs --pool=threads --maxWorkers=1` → **1 file / 11 tests passed**, Vitest duration **5.17s** (wall time **7.22s**).
+- Final targeted lint: `npx eslint server/db.mjs scripts/dbSeed.test.mjs e2e/credentials.ts e2e/container-calc.spec.ts e2e/manual-3d.spec.ts e2e/auth-isolation.spec.ts e2e/responsive-3d.spec.ts` exited **0** with no output. Final known-credential literal scan across the four scoped specs returned **No matches found**.
+- Production-secret E2E release prerequisite is SSH local port forwarding to an allowed loopback HTTP URL or an HTTPS origin; do not use plaintext `http://101.33.232.150/` directly. Playwright traces may capture raw credential-bearing `fill`/`evaluate` arguments; with `trace: 'on-first-retry'` and zero retries this is latent, so disable/redact traces before enabling retries for production-secret E2E.
+- No full release gates, deployment, production E2E, or commit was run.
+
+## 2026-08-05 P1-2 credential byte and IPv6 addendum
+
+- Added focused contracts for IPv6 loopback (`http://[::1]:5176`) and exact nonblank E2E credential-byte preservation. RED: **12 tests, 2 failed** (IPv6 hostname policy and trimmed configured credential values). GREEN after the helper fix: **1 file / 12 tests passed**, Vitest duration **4.37s** (wall time **6.24s**).
+- External validation trims only to reject blank values and returns the original configured strings, preserving E2E password bytes; URL policy accepts HTTPS plus `127.0.0.1`, `localhost`, and parsed IPv6 loopback.
+- Final post-review targeted ESLint rerun exited **0** with no output; the four-spec known-literal scan again returned **No matches found**. No full gate or deployment was run.
+
+## 2026-08-05 P1-2 username normalization and password-byte addendum
+
+- TDD RED for the cross-boundary whitespace contract: **12 tests, 1 failed** because helper usernames retained surrounding spaces. GREEN after explicit username normalization and raw password returns: **1 file / 12 tests passed**, Vitest duration **3.95s** (wall time **5.73s**).
+- `readCredential(..., normalize=true)` is used only for user/admin usernames; both password values remain byte-exact after nonblank validation. No secret values are logged or asserted.
+
+## 2026-08-05 P1-2 final verification record
+
+- Final focused seed/helper run passed **1 file / 12 tests** in **4.05s**. Targeted ESLint exited **0**.
+- Final local checks: `npm test` passed unit **93 files / 831 tests** plus packing performance **2 files / 7 tests**; `npm run build` exited **0** with the existing **>500 kB** chunk warning.
+- Local `npm run test:e2e` passed **125** tests in **6.8 minutes**; observed volume utilization was **80.3%** and expected negative-path console errors occurred without failures.
+- Final spec, code, TypeScript, React, and security reviews were **APPROVED**. The medium trace caveat remains: disable or redact credential-bearing Playwright traces before enabling retries for production-secret E2E.

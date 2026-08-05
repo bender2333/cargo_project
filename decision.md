@@ -2193,3 +2193,49 @@
 - Current local release gates: `npm run lint` exited **0**; `npm test` passed unit **92 files / 819 tests** plus packing performance **2 files / 7 tests**; `npm run build` exited **0** with the existing **>500 kB chunk warning**.
 - Current E2E: `npm run test:e2e` passed **125 tests** in **6.8 minutes**. Observed volume utilization was **80.3%**; expected negative-path console errors occurred, with no test failures.
 - Final spec, code, and security reviews were **APPROVED**. Previously documented nonblocking medium follow-ups remain tracked and are not P1/P2 blockers.
+
+## 2026-08-05 P1-2 production credential guard and env-backed E2E
+
+- 部署前置（必须在生产重启前确认）：`/etc/cargo-server.env` 必须提供非空 `ADMIN_PASSWORD`。生产缺失时 `server/db.mjs` 现在直接抛错并阻断启动；这条不是部署后的补救项。
+- 背景：旧 seed 在 `NODE_ENV=production` 仍创建 `testuser/testuser123`，且新库/已有 admin 缺少 `ADMIN_PASSWORD` 时只 warning。保留非生产默认账号便利，但生产不再种 testuser，并对 admin 配置 fail-fast。
+- 决策：`initAdmin` 和 `initTestUser` 导出以支持隔离动态导入测试；`CARGO_DB_PATH=:memory:` 下每个 seed case 通过 `vi.resetModules()`、环境快照恢复和 database close 隔离。生产 `initTestUser` 无条件跳过；生产缺 `ADMIN_PASSWORD`（新库和已有 admin）抛出包含该变量名的错误；非生产继续使用 `admin123`、`testuser123` 默认并保留 `SKIP_TESTUSER=1`。
+- TDD RED：命令 `npx vitest run scripts/dbSeed.test.mjs --pool=threads --maxWorkers=1` 输出 `scripts/dbSeed.test.mjs (7 tests | 3 failed)`、`Tests 3 failed | 4 passed (7)`。三个失败分别是生产仍返回一行 `username: "testuser"`（应为空）、生产新库缺 `ADMIN_PASSWORD` 的导入 promise 意外 resolved、以及已有 admin case 的当前模块缺少 `initAdmin` 导出（`databaseModule.initAdmin is not a function`）。其余四项通过。
+- TDD GREEN：同一 focused 命令输出 `Test Files 1 passed (1)`、`Tests 7 passed (7)`，耗时 `4.21s`（Vitest duration；命令 wall time `6.15s`）。
+- E2E：新增 `e2e/credentials.ts`，四个 scoped spec 的 user/admin 登录和 debug username assertion 均读取 `E2E_USERNAME`/`E2E_PASSWORD`/`E2E_ADMIN_USERNAME`/`E2E_ADMIN_PASSWORD`，默认值仅在该 helper 的非生产便利路径中定义。针对四个 spec 的已知 literal 扫描无匹配；未改断言、超时、重试或远程用户。
+- 未执行全量 lint/test/build/E2E、部署或生产操作；不删除生产上已有的 testuser 行，须由运维另行决定清理时机。
+
+## 2026-08-05 P1-2 secure external E2E credential boundary
+
+- Security review found that the historically documented production target `http://101.33.232.150/` is plaintext. Env-backed user/admin passwords must not be sent to that public origin.
+- Decision: `e2e/credentials.ts` parses every explicit `PLAYWRIGHT_BASE_URL` before exporting credentials. External runs are allowed only for `https:` URLs or loopback HTTP (`127.0.0.1`, `localhost`, `::1`); allowed external runs require all four nonempty `E2E_USERNAME`, `E2E_PASSWORD`, `E2E_ADMIN_USERNAME`, and `E2E_ADMIN_PASSWORD`, trimming values and never including values in errors. No-baseURL local runs retain defaults.
+- Required P1-3 deviation: remote credentialized E2E must use SSH local port forwarding and a loopback `PLAYWRIGHT_BASE_URL` (for example `http://127.0.0.1:<forwarded-port>/`), not `http://101.33.232.150/` directly. This is a release prerequisite because the observed public origin has no TLS.
+- Stronger TDD RED: after adding missing-variable, public-HTTP, loopback-HTTP, and HTTPS contracts, `npx vitest run scripts/dbSeed.test.mjs --pool=threads --maxWorkers=1` output `scripts/dbSeed.test.mjs (11 tests | 2 failed)`, `rejects every missing external credential by environment variable name`, `rejects public HTTP external runs before using credentials`, and `Tests 2 failed | 9 passed (11)`. The missing-variable failure received all four names (`E2E_USERNAME`, `E2E_PASSWORD`, `E2E_ADMIN_USERNAME`, `E2E_ADMIN_PASSWORD`); public HTTP unexpectedly resolved.
+- Stronger TDD GREEN: the same focused command output `Test Files 1 passed (1)`, `Tests 11 passed (11)`, and Vitest duration `4.10s` (wall time `6.09s`).
+- Scope remains P1-2 only: no full gates, deployment, production E2E, or commit was performed.
+
+## 2026-08-05 P1-2 final focused verification
+
+- Final focused command: `npx vitest run scripts/dbSeed.test.mjs --pool=threads --maxWorkers=1` → `Test Files 1 passed (1)`, `Tests 11 passed (11)`, Vitest duration `5.17s` (command wall time `7.22s`). This includes all seven seed contracts plus local-default, missing-variable, public-HTTP rejection, loopback-HTTP acceptance, and HTTPS acceptance contracts.
+- Final targeted static command: `npx eslint server/db.mjs scripts/dbSeed.test.mjs e2e/credentials.ts e2e/container-calc.spec.ts e2e/manual-3d.spec.ts e2e/auth-isolation.spec.ts e2e/responsive-3d.spec.ts` exited `0` with no output. Final known-literal scan across the four scoped specs returned `No matches found`.
+- Production-secret E2E must use SSH local port forwarding to an allowed loopback HTTP URL or an HTTPS origin; never use the observed public `http://101.33.232.150/` directly. Review warning: Playwright traces can capture raw `fill`/`evaluate` credential arguments; the current `trace: 'on-first-retry'` with zero retries is latent, so before enabling retries for production-secret E2E, disable or redact credential-bearing traces.
+- No full release gates, deployment, production E2E, or commit was run.
+
+## 2026-08-05 P1-2 credential byte and IPv6 addendum
+
+- TDD RED after adding explicit IPv6 loopback and whitespace-preservation contracts: `npx vitest run scripts/dbSeed.test.mjs --pool=threads --maxWorkers=1` output `scripts/dbSeed.test.mjs (12 tests | 2 failed)`. Failures were `uses all configured credentials for HTTPS and loopback HTTP` (`PLAYWRIGHT_BASE_URL must use HTTPS or loopback HTTP` for `http://[::1]:5176`) and `preserves nonblank credential bytes for external runs` (configured leading/trailing spaces were stripped).
+- GREEN after normalizing Node URL IPv6 brackets (`[::1]`) and validating with `.trim()` while returning raw values: same command output `Test Files 1 passed (1)`, `Tests 12 passed (12)`, Vitest duration `4.37s` (wall time `6.24s`).
+- This preserves exact configured password bytes for both E2E password variables while still rejecting whitespace-only external values; no secret value is logged or included in errors.
+- Final post-review static rerun: the targeted ESLint command listed above exited `0` with no output, and the four-spec known-literal scan again returned `No matches found`; no full gate or deployment was run.
+
+## 2026-08-05 P1-2 username normalization and password-byte addendum
+
+- TDD RED: changing the whitespace contract to normalize both usernames while preserving exact password bytes made `npx vitest run scripts/dbSeed.test.mjs --pool=threads --maxWorkers=1` report `scripts/dbSeed.test.mjs (12 tests | 1 failed)`, failure `normalizes usernames while preserving nonblank password bytes`; helper returned leading/trailing spaces in usernames.
+- GREEN: `readCredential(name, fallback, normalize = false)` now uses the explicit `normalize=true` option only for `E2E_USERNAME` and `E2E_ADMIN_USERNAME`; password calls retain raw nonblank bytes and use trim only for validation. The same command returned `Test Files 1 passed (1)`, `Tests 12 passed (12)`, Vitest duration `3.95s` (wall time `5.73s`).
+- This keeps the authenticated username contract aligned with the server while avoiding password mutation; no secret values are logged or asserted.
+
+## 2026-08-05 P1-2 final verification record
+
+- Final focused seed/helper run: `npx vitest run scripts/dbSeed.test.mjs --pool=threads --maxWorkers=1` passed **1 file / 12 tests** in **4.05s**.
+- Final targeted ESLint exited **0**. The local release checks also passed: `npm test` unit **93 files / 831 tests** plus packing performance **2 files / 7 tests**; `npm run build` exited **0** with the existing **>500 kB** chunk warning.
+- Local `npm run test:e2e` passed **125** tests in **6.8 minutes**; observed volume utilization was **80.3%**. Expected negative-path console errors were present, with no test failures.
+- Final spec, code, TypeScript, React, and security reviews were **APPROVED**. The nonblocking medium trace caveat remains: disable or redact credential-bearing Playwright traces before enabling retries for production-secret E2E.
