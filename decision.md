@@ -2542,3 +2542,9 @@
 - Rejected move/drop operations forward validation issues into `notifyManualRejected`, so scene rejections share the manual issues channel instead of toast-only silence.
 - Knife5 deferred state from P3-11 remains shared for layer/label/result tabs.
 
+## 2026-08-06 P3-13 remaining audit findings deferred
+
+- P3-12 只完成 **12a**（custom container payload validation）。**12b** 每用户行数上限、**12c** dependencies 卫生与写操作 i18n alert 本地化未做。
+- P3-11 knife5（`activeLayerId` / `activeLabelId` / `activeResultTab` 双向共享状态）按计划可推迟，仍留 Workbench。
+- 上述项记为后续 backlog，不阻塞本轮 P1-P3 主线收口。
+

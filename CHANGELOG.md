@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-06 P3-13 deferred residual audit items
+
+- Deferred: per-user row caps, dependency hygiene/dead cookie-parser, localized write-error alerts, and Workbench layer/label/result-tab ownership (P3-11 knife5).
+- P3-12a container payload validation shipped; remaining P3-12b/c tracked as backlog.
+
 ## 2026-08-06 P3-10 unify scene placement validity
 
 - 3D manual move/drop validity now delegates to `lib/manualPlacement.validateBox` with the shared support policy.
