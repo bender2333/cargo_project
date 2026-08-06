@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-06 refresh packing goldens for blockingInvalid
+
+- Regenerated `packing-results.json` after canonical `blockingInvalid` field; all five cases kept the same placedCount (no quantity regression).
+
 ## 2026-08-06 P3-13 deferred residual audit items
 
 - Deferred: per-user row caps, dependency hygiene/dead cookie-parser, localized write-error alerts, and Workbench layer/label/result-tab ownership (P3-11 knife5).

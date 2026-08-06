@@ -2548,3 +2548,8 @@
 - P3-11 knife5（`activeLayerId` / `activeLabelId` / `activeResultTab` 双向共享状态）按计划可推迟，仍留 Workbench。
 - 上述项记为后续 backlog，不阻塞本轮 P1-P3 主线收口。
 
+## 2026-08-06 golden refresh after blockingInvalid field
+
+- P3-8 为 canonical placement 增加 `blockingInvalid`（合法箱为 false）。`placedCount` 五夹具均未下降（31/463/462/839/823 不变），仅 hash 变化。
+- 按 P2-4 门禁：`npm run test:contracts:update` exit 0，delta 全 +0、hash changed yes；随后 contracts/31pallet/blockEngine 与 updater 集成测试 GREEN。
+
