@@ -2423,3 +2423,10 @@
 - **Controlled benchmark run 2**：`npm run benchmark` exit **1**，Playwright **1 passed**，但 hard gate 拒绝 `algorithm.vietnam-20gp-quantity.p95Ms exceeded 20%`；首像素 samples `[44.125, 48.875, 41.075, 42.55, 38.925]`，median/P95 **42.55/48.875 ms**。不能作为 GREEN 或 baseline update 证据。
 - **Controlled benchmark run 3**：`npm run benchmark` exit **1**，Playwright **1 passed**，hard gate 拒绝 `algorithm.vietnam-40hq-quantity.p95Ms exceeded 20%`；首像素 samples `[35.325, 35.125, 31.975, 37.35, 37.425]`，median/P95 **35.325/37.425 ms**。不能作为 GREEN 或 baseline update 证据。
 - **决策**：三个 run 中只有首个完整 exit 0，且后两个失败原因分别是算法 P95 硬门禁，不是 first-pixel 指标。按计划不修改 `test-data/baselines/frontend-architecture.json` 的任何字段，不放宽阈值、不使用 allow flag、不把 Playwright 单测通过冒充 benchmark GREEN。P2-5 的代码门禁完成；first-pixel baseline 收紧保持 BLOCKED，待后续空载 benchmark 在所有 hard gates 均零退出后再更新。
+
+## 2026-08-06 P2-6 placebo E2E and camera framing contracts
+
+- **E2E contract**：`adds cargo and recalculates utilization` 不再用正则格式/删除按钮文案自证。现断言 Loaded placed==planned、Volume/Weight utilization 解析后数值下界，并用 cargo-list-item 定位 Tall crate；Details 表中 Tall crate 的 planned/placed=3，physical layers 仅为 `1`，覆盖 ground-only 必须落地。
+- **Camera contract**：`cameraPositionForMode` 锁定 distance=max*1.25、iso 0.72/0.48/0.82、front/side height 0.55 与 top z=0.01。
+- **Mutation RED**：临时让 `calculatePacking` 只返回 1 箱后，E2E 失败于 `expected 21 to be 1`（placed==planned）；恢复后 packing.ts SHA 回到 `1ea84bb2d2089d5285ca66d35ec9095ad926bf574736af89bae238a157669122` 且 E2E GREEN。临时把相机 distance 系数 1.25→12.5 后，四个 framing 用例 RED；恢复后 rendering.ts SHA `139395407f259f4b7b4e0d63ad3e3e967ca7a240861a95e23054eeae42de4150`，camera suite GREEN。
+- **GREEN**：focused E2E 1/1；`rendering.test.ts` 27/27；targeted ESLint exit 0。未改 playwright config、未新增 E2E 文件、未放宽断言。

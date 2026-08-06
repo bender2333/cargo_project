@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-06 P2-6 安慰剂 E2E 与相机取景契约
+
+- 利用率 E2E 改为解析数值下界，并断言 Loaded placed==planned；Tall crate 不再匹配删除按钮文案。
+- ground-only Tall crate 在 Details 中必须全部位于 physical layer 1。
+- 相机测试锁定 distance 1.25、iso 0.72/0.48/0.82、front/side 0.55、top z=0.01。
+- 反向证明：只装 1 箱时 E2E RED；相机系数 *10 时 framing 用例 RED。恢复后 focused E2E 1/1、rendering 27/27。
+
 ## 2026-08-06 P2-5 首像素基线门禁收紧
 
 - 新增 `benchmark:update` timing regression 显式批准门槛：无 `--allow-timing-regression` 不写入超过 20% 的 timing widening；baseline=0 且 actual>0 也拒绝。frontend baseline `contractHashes` 明确为 metadata，权威仍是 `packing-results.json`。

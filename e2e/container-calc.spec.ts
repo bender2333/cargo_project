@@ -348,6 +348,7 @@ test('adds cargo and recalculates utilization', async ({ page }) => {
   await openEnglish(page)
   const cargoForm = page.locator('form')
   await cargoForm.getByLabel('Name', { exact: true }).fill('Tall crate')
+  await cargoForm.getByLabel('Label', { exact: true }).fill('TC')
   await cargoForm.getByLabel('Length mm').fill('1200')
   await cargoForm.getByLabel('Width mm').fill('800')
   await cargoForm.getByLabel('Height mm').fill('600')
@@ -358,11 +359,34 @@ test('adds cargo and recalculates utilization', async ({ page }) => {
   await expect(page.getByTestId('cargo-list-item').filter({ hasText: 'Tall crate' })).toContainText('Ground only')
   await page.getByRole('button', { name: 'Load', exact: true }).click()
 
-  await expect(page.getByRole('button', { name: /Tall crate/ }).first()).toBeVisible()
-  await expect(page.getByText(/Volume utilization: \d+\.\d%/)).toBeVisible()
-  await expect(page.getByText(/Weight utilization: \d+\.\d%/)).toBeVisible()
+  // Avoid matching the delete-button aria-label "Delete cargo: Tall crate".
+  await expect(page.getByTestId('cargo-list-item').filter({ hasText: 'Tall crate' })).toBeVisible()
+  await expect(page.getByText(/Loaded: \d+ \/ \d+/)).toBeVisible()
+  const loadedText = await page.getByText(/Loaded: \d+ \/ \d+/).textContent()
+  const loadedMatch = (loadedText ?? '').match(/Loaded:\s*(\d+)\s*\/\s*(\d+)/)
+  expect(loadedMatch, `unexpected loaded summary: ${loadedText}`).not.toBeNull()
+  const placedCount = Number(loadedMatch?.[1] ?? 0)
+  const plannedCount = Number(loadedMatch?.[2] ?? 0)
+  expect(plannedCount).toBeGreaterThanOrEqual(4)
+  expect(placedCount).toBe(plannedCount)
+
+  const volumeText = await page.getByText(/Volume utilization: \d+\.\d%/).textContent()
+  const volumePct = parseFloat((volumeText ?? '0%').match(/[\d.]+/)?.[0] ?? '0')
+  expect(volumePct).toBeGreaterThan(1)
+
+  const weightText = await page.getByText(/Weight utilization: \d+\.\d%/).textContent()
+  const weightPct = parseFloat((weightText ?? '0%').match(/[\d.]+/)?.[0] ?? '0')
+  expect(weightPct).toBeGreaterThan(0)
+
   await expect(page.getByText('Cargo types: 2')).toBeVisible()
   await expect(page.getByText('Layer view')).toBeVisible()
+
+  // Ground-only cargo must remain on physical layer 1 / floor after packing.
+  await page.getByRole('button', { name: 'Details' }).click()
+  const tallRow = page.getByRole('row').filter({ hasText: 'Tall crate' })
+  await expect(tallRow.getByRole('cell').nth(5)).toHaveText('3')
+  await expect(tallRow.getByRole('cell').nth(6)).toHaveText('3')
+  await expect(tallRow.getByRole('cell').nth(8)).toHaveText('1')
 })
 
 test('applies global max stack layers to cargo without per-item limits', async ({ page }) => {

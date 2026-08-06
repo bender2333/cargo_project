@@ -237,41 +237,48 @@ describe('overlapAreaXY', () => {
 // cameraPositionForMode
 // ---------------------------------------------------------------------------
 describe('cameraPositionForMode', () => {
-  const L = 6; const W = 2.4; const H = 2.6
+  // Coefficients come from rendering.ts cameraPositionForMode:
+  // distance = max(L,W,H) * 1.25; iso uses 0.72/0.48/0.82; front/side height uses 0.55.
+  const L = 6
+  const W = 2.4
+  const H = 2.6
+  const distance = Math.max(L, W, H) * 1.25
 
-  it('iso mode returns a position with non-zero x, y, z', () => {
+  it('iso mode locks the diagonal framing coefficients', () => {
     const v = cameraPositionForMode('iso', L, W, H)
-    expect(v.x).toBeGreaterThan(0)
-    expect(v.y).toBeGreaterThan(0)
-    expect(v.z).toBeGreaterThan(0)
+    expect(v.x).toBeCloseTo(distance * 0.72, 10)
+    expect(v.y).toBeCloseTo(distance * 0.48, 10)
+    expect(v.z).toBeCloseTo(distance * 0.82, 10)
   })
 
-  it('top mode has z ≈ 0.01 (near-zero) to avoid gimbal lock', () => {
+  it('top mode locks the overhead distance and gimbal-safe z offset', () => {
     const v = cameraPositionForMode('top', L, W, H)
-    expect(Math.abs(v.z)).toBeCloseTo(0.01, 3)
-    expect(v.y).toBeGreaterThan(0)
-  })
-
-  it('front mode has positive z, near-zero x', () => {
-    const v = cameraPositionForMode('front', L, W, H)
-    expect(v.z).toBeGreaterThan(0)
     expect(v.x).toBe(0)
+    expect(v.y).toBeCloseTo(distance, 10)
+    expect(v.z).toBeCloseTo(0.01, 10)
   })
 
-  it('side mode has positive x, near-zero z', () => {
+  it('front mode locks the forward distance and height coefficient', () => {
+    const v = cameraPositionForMode('front', L, W, H)
+    expect(v.x).toBe(0)
+    expect(v.y).toBeCloseTo(H * 0.55, 10)
+    expect(v.z).toBeCloseTo(distance, 10)
+  })
+
+  it('side mode locks the lateral distance and height coefficient', () => {
     const v = cameraPositionForMode('side', L, W, H)
-    expect(v.x).toBeGreaterThan(0)
+    expect(v.x).toBeCloseTo(distance, 10)
+    expect(v.y).toBeCloseTo(H * 0.55, 10)
     expect(v.z).toBe(0)
   })
 
   it('all four modes return distinct positions', () => {
-    const positions = (['iso', 'top', 'front', 'side'] as const).map(m =>
-      cameraPositionForMode(m, L, W, H)
+    const positions = (['iso', 'top', 'front', 'side'] as const).map((mode) =>
+      cameraPositionForMode(mode, L, W, H),
     )
-    for (let i = 0; i < positions.length; i++) {
-      for (let j = i + 1; j < positions.length; j++) {
-        const same = positions[i].distanceTo(positions[j]) < 0.001
-        expect(same).toBe(false)
+    for (let i = 0; i < positions.length; i += 1) {
+      for (let j = i + 1; j < positions.length; j += 1) {
+        expect(positions[i].distanceTo(positions[j])).toBeGreaterThan(0.001)
       }
     }
   })
