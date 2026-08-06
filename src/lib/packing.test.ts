@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from '../data/containers'
 import type { CargoItem, ContainerSpec, PackingResult, PlacedBox } from '../types'
-import { UNPLACED_REASON_CODES, calculatePacking, isSupportRatioAccepted, orientations, supportDetails } from './packing'
+import { UNPLACED_REASON_CODES, calculatePacking, isSupportRatioAccepted, orientations, placementScore, supportDetails } from './packing'
 import { expectQuantityConservation } from './packingContract.testSupport'
 import { violatesStackChain } from './stackCapacity'
 
@@ -822,6 +822,171 @@ describe('calculatePacking', () => {
     expect(capped.placed.some((box) => box.orientationKey === 'LHW' && box.z >= 1800)).toBe(false)
     expect(capped.unplaced[0]).toMatchObject({ cargoId: 'dense-top-fill', reasonCode: UNPLACED_REASON_CODES.NO_SPACE })
   }, 30_000)
+
+  it('treats non-binding maxStackLayers like unlimited in placement scoring', () => {
+    // Container can physically reach 13 layers of 200mm; msl=99 is not binding.
+    const container = testContainer({ length: 2000, width: 1000, height: 2600 })
+    const baseItem = cargo({
+      id: 'base',
+      label: 'B',
+      length: 1000,
+      width: 1000,
+      height: 200,
+      canRotate: false,
+    })
+    const unlimitedItem = cargo({
+      id: 'rider',
+      label: 'R',
+      length: 1000,
+      width: 1000,
+      height: 200,
+      canRotate: false,
+    })
+    const nonBindingItem = cargo({
+      ...unlimitedItem,
+      maxStackLayers: 99,
+    })
+    const box = orientations(unlimitedItem)[0]
+    const floorBox: PlacedBox = {
+      id: 'floor-1',
+      cargoId: baseItem.id,
+      name: baseItem.name,
+      label: baseItem.label,
+      index: 1,
+      x: 0,
+      y: 0,
+      z: 0,
+      length: 1000,
+      width: 1000,
+      height: 200,
+      orientationKey: 'LWH',
+      labelRotationDeg: 0,
+      weight: baseItem.weight,
+      color: baseItem.color,
+      canRotate: false,
+      stackable: true,
+      physicalLayer: 1,
+      depthLayer: 1,
+      workStep: 1,
+      supportType: 'floor',
+      supportedBy: [],
+    }
+    // Same x/y isolates the z-primary branch difference between finite and unlimited.
+    const floorPoint = { x: 0, y: 0, z: 0 }
+    const stackedPoint = { x: 0, y: 0, z: 200 }
+
+    const unlimitedFloor = placementScore(unlimitedItem, box, floorPoint, [floorBox], container)
+    const unlimitedStacked = placementScore(unlimitedItem, box, stackedPoint, [floorBox], container)
+    const nonBindingFloor = placementScore(nonBindingItem, box, floorPoint, [floorBox], container)
+    const nonBindingStacked = placementScore(nonBindingItem, box, stackedPoint, [floorBox], container)
+
+    // Unlimited prefers low-z primary order; non-binding msl must share that branch.
+    expect(unlimitedFloor).toBeLessThan(unlimitedStacked)
+    expect(nonBindingFloor).toBeLessThan(nonBindingStacked)
+    expect(nonBindingFloor).toBe(unlimitedFloor)
+    expect(nonBindingStacked).toBe(unlimitedStacked)
+
+    // Control: a truly binding limit still prefers the finite high-z branch.
+    const bindingItem = cargo({ ...unlimitedItem, maxStackLayers: 2 })
+    const bindingFloor = placementScore(bindingItem, box, floorPoint, [floorBox], container)
+    const bindingStacked = placementScore(bindingItem, box, stackedPoint, [floorBox], container)
+    expect(bindingStacked).toBeLessThan(bindingFloor)
+  })
+
+  it('keeps binding maxStackLayers on the finite scoring branch and enforces the limit', () => {
+    // Physical reach is ceil(2600/200)=13; msl=2 is binding and must stay finite.
+    const container = testContainer({ length: 1000, width: 1000, height: 2600 })
+    const item = cargo({
+      id: 'binding-stack',
+      label: 'S',
+      length: 1000,
+      width: 1000,
+      height: 200,
+      quantity: 13,
+      canRotate: false,
+      maxStackLayers: 2,
+    })
+    const box = orientations(item)[0]
+    const floorBox: PlacedBox = {
+      id: 'floor-1',
+      cargoId: item.id,
+      name: item.name,
+      label: item.label,
+      index: 1,
+      x: 0,
+      y: 0,
+      z: 0,
+      length: 1000,
+      width: 1000,
+      height: 200,
+      orientationKey: 'LWH',
+      labelRotationDeg: 0,
+      weight: item.weight,
+      color: item.color,
+      canRotate: false,
+      stackable: true,
+      maxStackLayers: 2,
+      physicalLayer: 1,
+      depthLayer: 1,
+      workStep: 1,
+      supportType: 'floor',
+      supportedBy: [],
+    }
+    const floorPoint = { x: 0, y: 0, z: 0 }
+    const stackedPoint = { x: 0, y: 0, z: 200 }
+
+    const floorScore = placementScore(item, box, floorPoint, [floorBox], container)
+    const stackedScore = placementScore(item, box, stackedPoint, [floorBox], container)
+    // Finite branch prefers higher z (and penalizes later floor fills).
+    expect(stackedScore).toBeLessThan(floorScore)
+
+    const result = calculatePacking(container, [item], { loadingMode: 'quantity' })
+    expectValidPacking(container, result)
+    expect(result.placedCount).toBe(2)
+    expect(result.placed.every((placedBox) => placedBox.maxStackLayers === 2)).toBe(true)
+    expect(Math.max(...result.placed.map((placedBox) => placedBox.physicalLayer))).toBeLessThanOrEqual(2)
+    expect(result.unplaced[0]).toMatchObject({
+      cargoId: 'binding-stack',
+      quantity: 11,
+      reasonCode: UNPLACED_REASON_CODES.NO_SPACE,
+    })
+  })
+
+  it('matches placedCount for non-binding maxStackLayers=99 and unlimited on the same input', () => {
+    const container = testContainer({ length: 4000, width: 2000, height: 2600 })
+    const makeItems = (maxStackLayers?: number) => [
+      cargo({
+        id: 'sku-a',
+        label: 'A',
+        length: 1000,
+        width: 1000,
+        height: 200,
+        quantity: 40,
+        canRotate: false,
+        ...(maxStackLayers === undefined ? {} : { maxStackLayers }),
+      }),
+      cargo({
+        id: 'sku-b',
+        label: 'B',
+        length: 800,
+        width: 600,
+        height: 200,
+        quantity: 30,
+        canRotate: false,
+        ...(maxStackLayers === undefined ? {} : { maxStackLayers }),
+      }),
+    ]
+
+    const withNinetyNine = calculatePacking(container, makeItems(99), { loadingMode: 'quantity' })
+    const unlimited = calculatePacking(container, makeItems(undefined), { loadingMode: 'quantity' })
+
+    expectValidPacking(container, withNinetyNine)
+    expectValidPacking(container, unlimited)
+    expect(withNinetyNine.placedCount).toBe(unlimited.placedCount)
+    expect(withNinetyNine.placed.every((box) => box.maxStackLayers === 99)).toBe(true)
+    expect(unlimited.placed.every((box) => box.maxStackLayers === undefined)).toBe(true)
+  })
+
 
   it('rejects boxes that exceed dimensions', () => {
     const result = calculatePacking(containers[0], [cargo({ length: 9000 })])

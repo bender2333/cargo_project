@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-06 P3-2 non-binding stack limits
+
+- Automatic placement scoring now treats non-binding finite `maxStackLayers` (e.g. 99) like unlimited, while still enforcing truly binding limits (e.g. 2).
+- TDD: RED on high-z preference for msl=99; GREEN with binding criterion via `minimumFittingHeight`. Golden placedCount unchanged.
+
 ## 2026-08-06 P3-1 0802 block-route sensitivity baseline
 
 - Read-only baseline for P3 packing root-cause work: measured `test-data/json/0802/input.json` (28 SKU / 877 boxes) across original, all-`maxStackLayers` undefined, one-SKU msl 10/12/13, and one-SKU exceeds-container-dims variants.

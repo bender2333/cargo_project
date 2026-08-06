@@ -2481,3 +2481,11 @@
 - **P3-2 note**：本 fixture 上 `msl=99` 与全 `undefined` 的 `placedCount` 差值已为 **0**（均为 877，且 gate 均为 true）。后续「99≡undefined」断言在本夹具上起点已对齐；仍需用更小有限值用例证明 binding 分支。
 - **P3-3 note**：E3/E7 的整批二元开关在本表上可复现，修复后应重跑本脚本：`msl=12` 行不应再仅因单 SKU 而整批退出；超尺寸行应只让该 SKU `exceeds-dimensions`，其余仍可走块路径。
 - **Non-goals this task**：无算法 diff、无 fixture/golden 变更、未跑 full gates、未 commit（parent 提交 docs）。
+
+## 2026-08-06 P3-2 non-binding stack limits
+
+- **Defect RED**：`placementScore` 用 `Number.isFinite(stackCapacity)` 选有限容量分支，用户 `maxStackLayers=99` 被当 binding，走高 z 优先路径。聚焦测试在修复前失败：`nonBindingFloor < nonBindingStacked` 期望低 z 更优，实际有限分支给出更高分。
+- **Fix**：分支判据改为 binding only：`capacity < ceil(container.height / minimumFittingHeight(item, container))`；分支内评分公式不变；`stackCapacity`/`canPlace`/`blocks` 仍消费原始 maxStackLayers。
+- **GREEN**：`npx vitest run src/lib/packing.test.ts -t "non-binding|binding maxStackLayers|matches placedCount for non-binding"` 3/3；contracts+31pallet 9/9；focused packing suites earlier 71+16 passed；golden placedCount 无回退。
+- **P3-1 link**：0802 上 99 vs undefined 本已同为 877；本任务补上评分路径与 binding=2 强制用例。
+

@@ -439,6 +439,13 @@ export function placementScore(
     : 0
 
   const capacity = stackCapacity(item)
+  // Branch on whether the stack limit is binding in this container, not merely finite.
+  // Non-binding values (e.g. user "99") must share the unlimited low-z scoring path.
+  const minimumHeight = minimumFittingHeight(item, container)
+  const maxPhysicalLayers = minimumHeight > EPSILON
+    ? Math.ceil(container.height / minimumHeight)
+    : 0
+  const capacityIsBinding = Number.isFinite(capacity) && capacity < maxPhysicalLayers
   // Same-label adjacency bonus: prefer placing cargo near existing boxes
   // with the same label, so same-product groups stay together in the container.
   let sameLabelBonus = 0
@@ -467,7 +474,7 @@ export function placementScore(
     }
   }
 
-  if (Number.isFinite(capacity)) {
+  if (capacityIsBinding) {
     const limitedCapacityFloorPenalty = placed.length > 0 && point.z <= EPSILON
       ? container.length * container.width * container.height
       : 0
