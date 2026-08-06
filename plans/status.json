@@ -1,0 +1,223 @@
+{
+  "schemaVersion": 1,
+  "round": "2026-08-04-refactor-review-full-audit-round-5",
+  "updatedAt": "2026-08-06",
+  "tasks": [
+    {
+      "id": "P1-1",
+      "plan": "plans/2026-08-04-p1-production-safety-and-0802-redeploy.md",
+      "status": "deployed",
+      "commit": "aecb1ee",
+      "verification": {
+        "commands": [
+          "npm run test:rollback",
+          "npm run rollback:dry"
+        ],
+        "result": "rollback script and dry-run green; production rollback later used this path"
+      }
+    },
+    {
+      "id": "P1-2",
+      "plan": "plans/2026-08-04-p1-production-safety-and-0802-redeploy.md",
+      "status": "deployed",
+      "commit": "b620584",
+      "verification": {
+        "commands": [
+          "npm test",
+          "npm run build"
+        ],
+        "result": "production no longer seeds known credentials"
+      }
+    },
+    {
+      "id": "P1-2b",
+      "plan": "plans/2026-08-04-p1-production-safety-and-0802-redeploy.md",
+      "status": "committed",
+      "commit": "85090fb",
+      "verification": {
+        "commands": [
+          "rg -n \"纯前端|localStorage\" README.md"
+        ],
+        "result": "README architecture/security claims corrected"
+      }
+    },
+    {
+      "id": "P1-3",
+      "plan": "plans/2026-08-04-p1-production-safety-and-0802-redeploy.md",
+      "status": "deployed",
+      "commit": "94f4b7f",
+      "verification": {
+        "commands": [
+          "npm run deploy",
+          "remote e2e x2"
+        ],
+        "result": "two consecutive remote 128/128; 0802 acceptance live"
+      }
+    },
+    {
+      "id": "P2-1",
+      "plan": "plans/2026-08-05-p2-test-and-gate-integrity.md",
+      "status": "committed",
+      "commit": "244cf28",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/packing.test.ts src/lib/packing.31pallet.test.ts src/lib/packing.blockEngine.test.ts --pool=threads --maxWorkers=1"
+        ],
+        "result": "3 files / 52 tests; unplaced conservation restored"
+      }
+    },
+    {
+      "id": "P2-2",
+      "plan": "plans/2026-08-05-p2-test-and-gate-integrity.md",
+      "status": "committed",
+      "commit": "015ae5a",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/packingInvariants.test.ts"
+        ],
+        "result": "15/15; geometry recomputed independently of diagnostics"
+      }
+    },
+    {
+      "id": "P2-3",
+      "plan": "plans/2026-08-05-p2-test-and-gate-integrity.md",
+      "status": "committed",
+      "commit": "139acc5",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/packing.test.ts"
+        ],
+        "result": "51/51; named 0.5 support-ratio and warning contracts"
+      }
+    },
+    {
+      "id": "P2-4",
+      "plan": "plans/2026-08-05-p2-test-and-gate-integrity.md",
+      "status": "committed",
+      "commit": "2067009",
+      "verification": {
+        "commands": [
+          "npx vitest run scripts/updatePackingContracts.test.mjs",
+          "npm run test:contracts:update"
+        ],
+        "result": "1/1; golden update refuses silent regressions; baseline hash unchanged"
+      }
+    },
+    {
+      "id": "P2-5",
+      "plan": "plans/2026-08-05-p2-test-and-gate-integrity.md",
+      "status": "committed",
+      "commit": "c17039e",
+      "verification": {
+        "commands": [
+          "npx vitest run scripts/frontendBenchmark.test.mjs",
+          "npm run benchmark"
+        ],
+        "result": "26/26 gate tests; first-pixel baseline still BLOCKED after mixed benchmark hard-gate REDs"
+      }
+    },
+    {
+      "id": "P2-6",
+      "plan": "plans/2026-08-05-p2-test-and-gate-integrity.md",
+      "status": "committed",
+      "commit": "46d5943",
+      "verification": {
+        "commands": [
+          "npx playwright test e2e/container-calc.spec.ts -g \"adds cargo and recalculates utilization\"",
+          "npx vitest run src/components/containerScene/rendering.test.ts"
+        ],
+        "result": "E2E 1/1 and rendering 27/27; placebo utilization/camera assertions replaced"
+      }
+    },
+    {
+      "id": "P2-7",
+      "plan": "plans/2026-08-05-p2-test-and-gate-integrity.md",
+      "status": "verified",
+      "verification": {
+        "commands": [
+          "node scripts/check-round-status.mjs"
+        ],
+        "result": "RED then GREEN after supersede notes and release notes; commit pending"
+      }
+    },
+    {
+      "id": "P3-1",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "open"
+    },
+    {
+      "id": "P3-2",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "open"
+    },
+    {
+      "id": "P3-3",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "open"
+    },
+    {
+      "id": "P3-4",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "open"
+    },
+    {
+      "id": "P3-5",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "open"
+    },
+    {
+      "id": "P3-6",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "open"
+    },
+    {
+      "id": "P3-7",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "open"
+    },
+    {
+      "id": "P3-8",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "open"
+    },
+    {
+      "id": "P3-9",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "open"
+    },
+    {
+      "id": "P3-10",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "open"
+    },
+    {
+      "id": "P3-11",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "open"
+    },
+    {
+      "id": "P3-12",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "open"
+    },
+    {
+      "id": "P3-13",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "open"
+    },
+    {
+      "id": "round4-P2-7",
+      "plan": "CHANGELOG.md#2026-07-31-第四轮复审整改",
+      "status": "superseded",
+      "supersededBy": "P2-5",
+      "note": "Stale open checkbox under a completed heading; first-pixel/contract-hash work continued in current P2-5"
+    },
+    {
+      "id": "decision-2026-07-08-no-widen-gates",
+      "plan": "decision.md#2026-07-08-块引擎适用范围扩展",
+      "status": "superseded",
+      "supersededBy": "d037df0",
+      "note": "Historical 'do not keep widening gates' note was later reversed by d037df0 without inline supersede; documented here"
+    }
+  ]
+}

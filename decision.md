@@ -717,6 +717,7 @@
 - 决策：选择 B。实测 A 会让 31 托、capacity-one/top-fill、groundOnly、maxStackLayers、小样本坐标语义回归；B 去掉旧的“五 SKU”限制，覆盖 2+ SKU / 100+ 箱纯散货，同时避免尚未完成架构裁决的堆叠约束场景。
 - 影响：新增 `shouldUseBlockEngine` 明确路由边界；两 SKU 大批量纯箱用例现在进入块引擎。完整“所有 quantity/volume 都走块引擎”的目标仍未最终达成，后续需要让块引擎原生处理 priority、groundOnly、non-stackable、maxStackLayers 和小样本坐标语义后再继续扩大。
 - 后续：下一步应优先把 stack-capacity/top-fill 规则移植进块选择评价或分阶段路由，而不是继续放宽门槛。
+- Supersede: d037df0 后续实际扩大了有限约束场景的块路由适用范围；本条「不继续放宽门槛」保留为历史决策，已被 d037df0 与当前 P2/P3 packing-gate 工作 supersede。
 
 ## 2026-07-07 子任务 6 回归收口：构建门禁未过，暂不部署
 
@@ -2430,3 +2431,13 @@
 - **Camera contract**：`cameraPositionForMode` 锁定 distance=max*1.25、iso 0.72/0.48/0.82、front/side height 0.55 与 top z=0.01。
 - **Mutation RED**：临时让 `calculatePacking` 只返回 1 箱后，E2E 失败于 `expected 21 to be 1`（placed==planned）；恢复后 packing.ts SHA 回到 `1ea84bb2d2089d5285ca66d35ec9095ad926bf574736af89bae238a157669122` 且 E2E GREEN。临时把相机 distance 系数 1.25→12.5 后，四个 framing 用例 RED；恢复后 rendering.ts SHA `139395407f259f4b7b4e0d63ad3e3e967ca7a240861a95e23054eeae42de4150`，camera suite GREEN。
 - **GREEN**：focused E2E 1/1；`rendering.test.ts` 27/27；targeted ESLint exit 0。未改 playwright config、未新增 E2E 文件、未放宽断言。
+
+## 2026-08-06 P2-7 machine-checkable round status
+
+- **RED**：`node scripts/check-round-status.mjs` 因 CHANGELOG「2026-07-31 第四轮复审整改（已完成）」下未勾选 `- [ ] P2-7` 且无 supersede 指向而失败。
+- **Supersede notes**：
+  - 第四轮 completed 标题下的 open checkbox `P2-7` 被当前轮 `P2-5`（commit `c17039e`）supersede；历史正文保留，只追加指向。
+  - `decision.md` 2026-07-08「不继续放宽门槛」条目被 `d037df0` reverse 且当时未标 supersede；现追加 supersede 指向 `d037df0` / current packing-gate work，不删除原文。
+  - 08-03 复审 8 项无 plans 文件的历史缺口，在 `plans/status.json` 以 open/superseded 状态机继续跟踪，不回溯伪造旧计划。
+- **Release notes**：补齐 r61 起用户可见项，覆盖 `6f864a9` quick-place 朝向、`d037df0` 有限约束块路由、`abf53d6` 生产 Excel worker namespace。
+- **GREEN**：文档补齐后 `node scripts/check-round-status.mjs` 通过；P2-7 记为 committed。

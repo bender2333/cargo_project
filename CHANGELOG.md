@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-06 P2-7 机器可读轮次状态
+
+- 新增  与 ：校验 committed/deployed commit 存在、verified+ 有验证命令/结果，并拒绝「已完成」标题下未 supersede 的开放 checkbox。
+- RED：修复扫描前/后， 因第四轮（已完成）下未勾选 P2-7 失败。
+- 仅追加 supersede 指向与 r61 起 release notes；不重写历史 CHANGELOG/decision 正文。校验随后 GREEN。
+
 ## 2026-08-06 P2-6 安慰剂 E2E 与相机取景契约
 
 - 利用率 E2E 改为解析数值下界，并断言 Loaded placed==planned；Tall crate 不再匹配删除按钮文案。
@@ -202,6 +208,8 @@
 - [x] P2-5: 混合朝向导出测试先断言恰好生成两个已装箱体，再以完整一致的旋转元数据构造并断言 `LWH`/`WLH` 两种朝向行；已删除静默提前返回。RED：`npx vitest run src/lib/exportPlan.test.ts -t "splits mixed orientations"`（朝向前置断言仅得到 `LWH`，1 failed）；GREEN：`npx vitest run src/lib/exportPlan.test.ts`（1 file / 11 tests passed）。
 - [x] P2-6: 将构建阶段 `PlacementBox` 与完成态 `PlacedBox` 分离，完成态 `depthLayer` 为必需的有限正数；共享终结边界和 canonical contract 均拒绝缺失、0、负数、`NaN` 与正负无穷，canonicalization 不再以 `null` 隐藏缺失字段或重排运行时 workSteps；完成态测试夹具同步满足必需字段，普通不变量不再保留 optional cast。RED 同 P1-1（缺失 depthLayer 与 canonical 排序用例失败）；GREEN：`npx vitest run src/lib/packing.test.ts src/lib/packing.31pallet.test.ts src/lib/packing.blockEngine.test.ts src/lib/packing.stackfill.test.ts src/lib/packingInvariants.test.ts src/lib/packingContract.test.ts src/lib/finalizePackingResult.test.ts src/lib/manualSteps.test.ts src/lib/layers.test.ts --pool=threads --maxWorkers=1`（9 files / 91 tests passed）；聚焦 TypeScript 边界检查通过。
 - [ ] P2-7: 合同哈希根因已定位为 `frontend-architecture.json` 重复字段漂移：旧值等于 `e0c1fc2` packing golden，`0b6cfa9` 将 `depthLayer` 纳入 canonical box 后只更新了权威 `packing-results.json`；拓扑 `workStep` 当时为等价抽取，第四轮 runtime/canonical 顺序收口不改变几何/数量/密度且 hash 可保持稳定。实际算法 worker 继续逐样本由 packing golden 校验；移除 frontend baseline hash equality/required-field gate，实际报告 hashes 仍必须存在且为 SHA-256。历史 RED 分别复现五个 stale mismatch 与五个缺失重复 baseline 字段错误；GREEN `npx vitest run scripts/frontendBenchmark.test.mjs`（22/22）以有效但不同的 baseline/actual hashes 断言完整 gate 无失败，并覆盖 actual hashes 缺失/非法仍失败。3D 首像素仍 BLOCKED：当前 production-preview 受并发负载复跑 median/P95 `267.250/280.275 ms`、`296.000/345.075 ms`，基线 `206.625/238.125 ms`；不改 baseline/阈值/采样，待空载受控复测。
+- Supersede: 该未勾选项已由当前轮 P2-5（commit c17039e）继续处理；保留原文不改写，仅追加 supersede 指向。first-pixel baseline 收紧仍 BLOCKED，不得据此把第四轮判定为未完成。
+- Supersede: 该未勾选项已由当前轮 P2-5（commit c17039e）继续处理；保留原文不改写，仅追加 supersede 指向。first-pixel baseline 收紧仍 BLOCKED，不得据此把第四轮判定为未完成。
 
 ### 2026-07-31 packing finalized-result contract slice
 

@@ -14,6 +14,25 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-08-06-r62-test-integrity-and-packing-gates',
+    date: '2026-08-06',
+    title: { en: 'Packing gates and reliability notes', zh: '装箱门禁与可靠性说明' },
+    items: {
+      en: [
+        'Automatic packing keeps finite stack and ground-only constraints visible in block routing (d037df0), so non-restrictive max stack values are no longer treated as hard blockers by themselves.',
+        'Same-SKU Quick Place continues to prefer the first upright orientation (6f864a9) when space and constraints allow.',
+        'Production Excel import remains compatible with the shared SheetJS worker namespace shape (abf53d6).',
+        'Release/test accounting is now machine-checkable: completed changelog sections cannot keep open checkboxes without an explicit supersede pointer.',
+      ],
+      zh: [
+        '自动装箱在块路由中继续显式保留有限堆叠与必须落地约束（d037df0），非限制性最大堆叠层数本身不再被当作硬阻断。',
+        '同 SKU 快捷放置在空间与约束允许时继续优先首个正立朝向（6f864a9）。',
+        '生产 Excel 导入继续兼容共享 SheetJS worker 的命名空间导出形状（abf53d6）。',
+        '发布/测试记账现可机器校验：已完成 CHANGELOG 段落不得在无 supersede 指向时保留未勾选项。',
+      ],
+    },
+  },
+  {
     version: '2026-08-05-r61-0802-packing-and-reliability',
     date: '2026-08-05',
     title: { en: 'Packing and reliability fixes', zh: '装箱与可靠性修正' },
