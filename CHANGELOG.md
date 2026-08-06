@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-06 P3-5 share support policy auto/manual
+
+- Automatic packing now accepts the same `supportPolicy.minSupportRatio` as manual mode (default 0.5).
+- `draftFromAutomaticResult` moved into `src/lib` for testable auto→manual continuity.
+- Focused packing/manual draft/golden spot checks green.
+
 ## 2026-08-06 P3-4 groundOnly across quick-place and block fallback
 
 - Quick Place now carries `groundOnly` into candidate boxes so stacked ground-only placements cannot validate as success.

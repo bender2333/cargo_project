@@ -214,6 +214,28 @@ describe('automatic support-ratio rule', () => {
   })
 })
 
+
+describe('shared supportPolicy between automatic and manual paths', () => {
+  it('keeps default 0.5 goldens unchanged when supportPolicy is omitted', () => {
+    // Spot-check one small packing path; full five-fixture contracts remain the authority.
+    const container = testContainer({ length: 2000, width: 1000, height: 1000 })
+    const items = [cargo({ id: 'a', quantity: 2, canRotate: false, length: 1000, width: 1000, height: 500 })]
+    const baseline = calculatePacking(container, items)
+    const explicit = calculatePacking(container, items, { supportPolicy: { minSupportRatio: 0.5 } })
+    expect(explicit.placedCount).toBe(baseline.placedCount)
+    expect(explicit.placed.map((box) => [box.x, box.y, box.z])).toEqual(
+      baseline.placed.map((box) => [box.x, box.y, box.z]),
+    )
+  })
+
+  it('rejects automatic placements below a raised minSupportRatio', () => {
+    const support = supportGeometry(600) // 0.6
+    expect(support.supportRatio).toBeCloseTo(0.6, 10)
+    expect(isSupportRatioAccepted(support.supportRatio, 0.5)).toBe(true)
+    expect(isSupportRatioAccepted(support.supportRatio, 0.8)).toBe(false)
+  })
+})
+
 describe('container specs', () => {
   it('matches EasyCargo captured container dimensions', () => {
     expect(containers.map((container) => container.label)).toEqual(["Container 20'", "Container 40'", "Container 40' HC", "Container 45' HC"])
@@ -876,7 +898,7 @@ describe('calculatePacking', () => {
       id: 'floor-1',
       cargoId: baseItem.id,
       name: baseItem.name,
-      label: baseItem.label,
+      label: baseItem.label ?? 'B',
       index: 1,
       x: 0,
       y: 0,
@@ -936,7 +958,7 @@ describe('calculatePacking', () => {
       id: 'floor-1',
       cargoId: item.id,
       name: item.name,
-      label: item.label,
+      label: item.label ?? 'S',
       index: 1,
       x: 0,
       y: 0,

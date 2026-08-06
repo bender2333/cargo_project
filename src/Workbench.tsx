@@ -265,6 +265,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     selectedContainerId: containers[0].id,
     loadingMode: 'quantity',
     defaultMaxStackLayers: placementSettings.defaultMaxStackLayers,
+    supportPolicy: placementSettings.supportPolicy,
   })
   const {
     projectName,

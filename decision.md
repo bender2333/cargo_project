@@ -2507,3 +2507,9 @@
 - **block fallback**：`calculatePacking` 块引擎后的 extreme-point fallback 不再 `filter(!groundOnly)`，改为所有 `remaining>0` 状态；合法性仍由 `canPlace` 强制地面。
 - **Regression**：新增 block-path residual GO 用例；0629 C/NO_SPACE 与 0802 GO 28/28 z=0、placed 877 仍成立。未改 `MAX_BLOCK_REJECTIONS_PER_STEP`。
 
+## 2026-08-06 P3-5 shared support policy
+
+- **Change**：`CalculatePackingOptions.supportPolicy` 接入自动路径；`isSupportRatioAccepted`/`canPlace`/`bestPlacement` 使用同一 `minSupportRatio`，默认 0.5。`usePackingSession`/`Workbench` 传入 `placementSettings.supportPolicy`。
+- **draft helper**：`draftFromAutomaticResult` 下移到 `src/lib/manualDraftFromAutomatic.ts`，hook 反向 import。
+- **Tests**：default 0.5 与显式 0.5 同位；0.6 geometry 在 0.8 阈值下拒绝；auto→manual draft 同 policy 零 blocking error。contracts/31pallet 仍绿。
+

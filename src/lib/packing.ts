@@ -36,6 +36,8 @@ type StackLimitCarrier = {
 export type CalculatePackingOptions = {
   loadingMode?: LoadingMode
   defaultMaxStackLayers?: number
+  /** Shared with manual placement; default 0.5 keeps existing goldens. */
+  supportPolicy?: { minSupportRatio: number }
 }
 
 type OrientationKey = PlacedBox['orientationKey']
@@ -71,8 +73,8 @@ export type PackingPoint = {
 const EPSILON = 0.001
 export const MINIMUM_SUPPORT_RATIO = 0.5
 
-export function isSupportRatioAccepted(supportRatio: number) {
-  return !(supportRatio < MINIMUM_SUPPORT_RATIO)
+export function isSupportRatioAccepted(supportRatio: number, minimumSupportRatio = MINIMUM_SUPPORT_RATIO) {
+  return !(supportRatio < minimumSupportRatio)
 }
 const MAX_BLOCK_CATALOG_SIZE = 120
 const MAX_BLOCK_REJECTIONS_PER_STEP = 40
@@ -341,13 +343,14 @@ function canPlace(
   item: StackLimitCarrier,
   reservedTopPassengerHeight = 0,
   reserveTopPassengerStackSlot = false,
+  minSupportRatio = MINIMUM_SUPPORT_RATIO,
 ) {
   if (!fitsInsideContainer(point, box, container)) return false
   if (reservedTopPassengerHeight > 0 && stackCapacity(item) > 1 && point.z + box.height + reservedTopPassengerHeight > container.height + EPSILON) return false
   if (!placed.every((candidate) => !overlaps(candidate, point, box))) return false
 
   const support = supportDetails(point, box, placed)
-  if (!isSupportRatioAccepted(support.supportRatio)) return false
+  if (!isSupportRatioAccepted(support.supportRatio, minSupportRatio)) return false
   if (reserveTopPassengerStackSlot && !preservesReservedTopPassengerStackSlot(support, placedById)) return false
   if (!respectsMaxStackLayers(support, placedById, item)) return false
   return respectsStackCapacityWithUpwardRiders(point, box, item, support, placed, placedById)
@@ -523,6 +526,7 @@ function bestPlacement(
   reserveTopPassengerStackSlot = false,
   deferCapacityOneFloorFallback = false,
   committedOrientation?: OrientationKey,
+  minSupportRatio = MINIMUM_SUPPORT_RATIO,
 ) {
   const placedById = new Map<string, StackChainNode>(placed.map((placedBox) => [placedBox.id, placedBox]))
   const bestFromPoints = (candidatePoints: PackingPoint[]) => orientations(item)
@@ -543,6 +547,7 @@ function bestPlacement(
           item,
           reservedTopPassengerHeight,
           reserveTopPassengerStackSlot,
+          minSupportRatio,
         ))
         .map((point) => ({
           box,
@@ -908,6 +913,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   let totalCargoCount = 0
 
   const loadingMode = options.loadingMode ?? 'quantity'
+  const minSupportRatio = options.supportPolicy?.minSupportRatio ?? MINIMUM_SUPPORT_RATIO
   const defaultMaxStackLayers = normalizeDefaultMaxStackLayers(options.defaultMaxStackLayers)
   const expanded = cargoItems
     .flatMap((item, itemIndex) => {
@@ -1082,7 +1088,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     const staged = [...placed]
     for (const unit of blockUnitPlacements(choice)) {
       const stagedById = new Map<string, StackChainNode>(staged.map((placedBox) => [placedBox.id, placedBox]))
-      if (!canPlace(unit.placement.point, unit.placement.box, effective, staged, stagedById, unit.entry.item)) {
+      if (!canPlace(unit.placement.point, unit.placement.box, effective, staged, stagedById, unit.entry.item, 0, false, minSupportRatio)) {
         return false
       }
       staged.push(buildPlacedBox(unit.entry, unit.placement, staged, staged.length + 1))
@@ -1178,7 +1184,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
           false,
           false,
           committedOrientations.get(state.item.id),
-        )
+          minSupportRatio)
         if (!placement) break
         placeEntry({
           item: state.item,
@@ -1228,7 +1234,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
           const candidatePointSets = topPassengerPoints.length > 0 ? [topPassengerPoints, extremePoints] : [extremePoints]
           for (const candidatePoints of candidatePointSets) {
             for (const point of candidatePoints) {
-              if (!canPlace(point, box, effective, placed, placedById, item)) continue
+              if (!canPlace(point, box, effective, placed, placedById, item, 0, false, minSupportRatio)) continue
               const score = placementScore(item, box, point, placed, effective, committedOrientations.get(item.id))
               if (
                 best === undefined ||
@@ -1297,7 +1303,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         reserveTopPassengerStackSlot,
         loadingMode === 'quantity',
         committedOrientations.get(item.id),
-      )
+          minSupportRatio)
       if (!placement) {
         markUnplaced(item, entry.label, UNPLACED_REASON_CODES.NO_SPACE)
         noSpaceEntries.push(entry)
@@ -1318,7 +1324,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         false,
         false,
         committedOrientations.get(entry.item.id),
-      )
+          minSupportRatio)
       if (!placement) continue
       placeEntry(entry, placement)
       const current = unplacedMap.get(entry.item.id)

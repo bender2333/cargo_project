@@ -32,13 +32,13 @@ import type {
   ManualPlacementSessionState,
 } from '../lib/manualPlacementSession'
 import { buildManualPackingResult } from '../lib/manualSteps'
-import { baseDimensionsFromPlaced } from '../lib/orientationTransform'
 import {
   DEFAULT_PLACEMENT_SETTINGS,
   type SupportPolicy,
 } from '../lib/placementSettings'
 import { quickPlaceCargo } from '../lib/quickPlace'
 import type { CargoItem, ContainerSpec, PackingResult } from '../types'
+import { draftFromAutomaticResult } from '../lib/manualDraftFromAutomatic'
 
 export type ManualPlacementOperation =
   | 'set-mode'
@@ -157,47 +157,7 @@ function rotateDraft(draft: ManualDraft, boxId: string, direction: ManualRotatio
   return rotateBoxRight90(draft, boxId)
 }
 
-function draftFromAutomaticResult(
-  automaticDisplayResult: PackingResult,
-  cargoItems: CargoItem[],
-  createId: CreateManualPlacementId,
-): ManualDraft {
-  const cargoById = new Map(cargoItems.map((cargo) => [cargo.id, cargo]))
-  return {
-    boxes: automaticDisplayResult.placed.map((box) => {
-      const cargo = cargoById.get(box.cargoId)
-      const base = baseDimensionsFromPlaced(box)
-      return {
-        ...makeManualBox({
-          id: createId(box.id),
-          cargoId: box.cargoId,
-          label: box.label,
-          color: box.color,
-          length: base.length,
-          width: base.width,
-          height: base.height,
-          weight: box.weight,
-          canRotate: cargo?.canRotate ?? box.canRotate,
-          stackable: cargo?.stackable ?? box.stackable,
-          maxStackLayers: cargo?.maxStackLayers ?? box.maxStackLayers,
-          groundOnly: cargo?.groundOnly ?? box.groundOnly,
-          x: box.x,
-          y: box.y,
-          z: box.z,
-        }),
-        length: box.length,
-        width: box.width,
-        height: box.height,
-        orientationKey: box.orientationKey,
-        labelRotationDeg: box.labelRotationDeg,
-        yawQuarterTurn: box.yawQuarterTurn,
-        pitchQuarterTurn: box.pitchQuarterTurn,
-        orientationAxes: box.orientationAxes ? { ...box.orientationAxes } : undefined,
-        orientationLabel: box.orientationLabel,
-      }
-    }),
-  }
-}
+
 
 function buildManualCargoPlan(items: CargoItem[], defaultMaxStackLayers: number | undefined) {
   return items.map(({ id, quantity, weight, length, width, height, canRotate, stackable, maxStackLayers, groundOnly }) => ({

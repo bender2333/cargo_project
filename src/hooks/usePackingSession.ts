@@ -13,8 +13,11 @@ import type {
   PackingSessionRestoreInput,
   PackingSessionState,
 } from '../lib/packingSession'
+import type { SupportPolicy } from '../lib/placementSettings'
 
-type PackingSessionOptions = Omit<PackingSessionInitialState, 'automaticResult'>
+type PackingSessionOptions = Omit<PackingSessionInitialState, 'automaticResult'> & {
+  supportPolicy?: SupportPolicy
+}
 
 type PackingSessionController = {
   state: PackingSessionState
@@ -31,6 +34,7 @@ function initializePackingSession(options: PackingSessionOptions): PackingSessio
     {
       loadingMode: state.loadingMode,
       defaultMaxStackLayers: state.defaultMaxStackLayers,
+      supportPolicy: options.supportPolicy,
     },
   )
   return { ...state, automaticResult: result }
@@ -69,10 +73,11 @@ export function usePackingSession(options: PackingSessionOptions): PackingSessio
         {
           loadingMode: state.loadingMode,
           defaultMaxStackLayers: state.defaultMaxStackLayers,
+          supportPolicy: options.supportPolicy,
         },
       ),
     })
-  }, [state])
+  }, [state, options.supportPolicy])
 
   const calculate = useCallback(() => {
     reducerDispatch({ type: 'calculationRequested' })
@@ -90,13 +95,14 @@ export function usePackingSession(options: PackingSessionOptions): PackingSessio
       {
         loadingMode: ownedSnapshot.loadingMode,
         defaultMaxStackLayers: ownedSnapshot.defaultMaxStackLayers,
+        supportPolicy: options.supportPolicy,
       },
     )
     reducerDispatch({
       type: 'historyRestored',
       snapshot: { ...ownedSnapshot, result },
     })
-  }, [])
+  }, [options.supportPolicy])
 
   return { state, dispatch, calculate, restoreHistory }
 }
