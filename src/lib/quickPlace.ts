@@ -104,6 +104,7 @@ function makeCandidateBox(input: QuickPlaceInput, point: PackingPoint, box: BoxO
     canRotate: input.cargo.canRotate,
     stackable: input.cargo.stackable,
     maxStackLayers: input.cargo.maxStackLayers,
+    groundOnly: input.cargo.groundOnly,
     x: point.x,
     y: point.y,
     z: point.z,

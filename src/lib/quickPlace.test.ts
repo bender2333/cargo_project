@@ -268,6 +268,52 @@ describe('quickPlaceCargo', () => {
     expect(validateDraft(result.nextDraft, container()).filter((issue) => issue.boxId === 'quick-stack')).toEqual([])
   })
 
+  it('never claims success for a stacked ground-only cargo placement', () => {
+    const floor = [
+      { id: 'a', x: 0, y: 0 },
+      { id: 'b', x: 500, y: 0 },
+      { id: 'c', x: 0, y: 500 },
+      { id: 'd', x: 500, y: 500 },
+    ].reduce(
+      (draft, item) => addBox(draft, makeManualBox({
+        id: item.id,
+        cargoId: 'floor-filler',
+        label: 'F',
+        color: '#64748b',
+        length: 500,
+        width: 500,
+        height: 400,
+        x: item.x,
+        y: item.y,
+      })),
+      emptyDraft(),
+    )
+
+    const result = quickPlaceCargo({
+      cargo: cargo({
+        id: 'ground-only',
+        label: 'G',
+        quantity: 1,
+        groundOnly: true,
+        stackable: true,
+      }),
+      draft: floor,
+      container: container(),
+      createId: () => 'quick-ground-only',
+    })
+
+    // Branched: success must carry groundOnly and stay on the floor;
+    // failure must be no-space. Pre-fix wrong form is ok:true with z>0.
+    if (result.ok) {
+      expect(result.box.groundOnly).toBe(true)
+      expect(result.box.z).toBe(0)
+    } else {
+      expect(result.reason).toBe('no-space')
+      expect(result.box).toBeNull()
+    }
+  })
+
+
   it('fails loudly when the cargo quantity has already been fully placed', () => {
     const draft = addBox(emptyDraft(), makeManualBox({
       id: 'existing',
