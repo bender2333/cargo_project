@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { ContainerSpec, PlacedBox } from '../types'
-import { MIN_SUPPORT_OVERLAP_RATIO, type ManualRotationDirection } from '../lib/manualPlacement'
+import { type ManualRotationDirection } from '../lib/manualPlacement'
 import { snapToGrid } from '../lib/snap'
 import { resolveDropTarget } from '../lib/sceneDrop'
 import { snapToEdges } from '../lib/snapEdges'
 import { applyManualPlacementSnap } from '../lib/manualPlacementSnap'
+import { isBlockingManualIssue, validateBox, type ManualDraft, type ManualPlacedBox, type ValidationIssue } from '../lib/manualPlacement'
 import type { CogOverlay } from '../lib/cogVisual'
 import { DEFAULT_PLACEMENT_SETTINGS, type PlacementSettings } from '../lib/placementSettings'
 import { manualMoveCommitArgs } from '../lib/manualMoveCommit'
@@ -17,7 +18,7 @@ import {
   syncLabelFaceSampleAttribute, applyBoxVisualState, getCachedBoxMaterials,
   boxOrientationQuaternion,
   boxGeometryForPlaced, sameBoxGeometry, applyBoxTransform,
-  cameraPositionForMode, rectsOverlap, isOutOfBounds, overlapAreaXY,
+  cameraPositionForMode,
   disposeSceneCaches,
   type MeshEntry,
 } from './containerScene/rendering'
@@ -68,7 +69,7 @@ type ContainerSceneProps = {
   onManualDropFromPool?: (cargoId: string, x: number, y: number, z?: number) => void
   onManualRotate?: (boxId: string, direction?: ManualRotationDirection) => void
   onManualDelete?: (boxId: string) => void
-  onManualOperationRejected?: (operation: 'move' | 'drop', boxId?: string, cargoId?: string) => void
+  onManualOperationRejected?: (operation: 'move' | 'drop', boxId?: string, cargoId?: string, issues?: ValidationIssue[]) => void
   selectedManualBoxId?: string | null
   onClearSelection?: () => void
   onHoverBox?: (info: HoverBoxInfo | null) => void
@@ -424,6 +425,49 @@ export function ContainerScene({
     let dragState: DragState | null = null
     const Z_PIXELS_PER_MM = 0.5 // 1mm = 0.5 px → 1000mm = 500px vertical drag
 
+    const evaluateManualGeometry = (
+      boxId: string | null,
+      x: number,
+      y: number,
+      z: number,
+      l: number,
+      w: number,
+      h: number,
+      cargoMeta?: Partial<ManualPlacedBox> & { cargoId?: string },
+    ) => {
+      const settings = placementSettingsRef.current
+      const candidateId = boxId ?? '__scene-candidate__'
+      const others: ManualPlacedBox[] = []
+      for (const entry of sceneState.meshEntries.values()) {
+        if (boxId && entry.box.id === boxId) continue
+        others.push(entry.box as ManualPlacedBox)
+      }
+      const baseBox = boxId ? sceneState.meshEntries.get(boxId)?.box : undefined
+      const candidate = {
+        ...(baseBox as object | undefined),
+        id: candidateId,
+        cargoId: cargoMeta?.cargoId ?? baseBox?.cargoId ?? 'candidate',
+        label: cargoMeta?.label ?? baseBox?.label ?? 'C',
+        color: cargoMeta?.color ?? baseBox?.color ?? '#888888',
+        weight: cargoMeta?.weight ?? baseBox?.weight ?? 1,
+        canRotate: cargoMeta?.canRotate ?? baseBox?.canRotate ?? true,
+        stackable: cargoMeta?.stackable ?? baseBox?.stackable ?? true,
+        maxStackLayers: cargoMeta?.maxStackLayers ?? baseBox?.maxStackLayers,
+        groundOnly: cargoMeta?.groundOnly ?? baseBox?.groundOnly,
+        orientationKey: baseBox?.orientationKey ?? 'LWH',
+        labelRotationDeg: baseBox?.labelRotationDeg ?? 0,
+        x,
+        y,
+        z,
+        length: l,
+        width: w,
+        height: h,
+      } as ManualPlacedBox
+      const draft: ManualDraft = { boxes: [...others, candidate] }
+      const issues = validateBox(draft, candidateId, container, settings.supportPolicy).filter(isBlockingManualIssue)
+      return { invalid: issues.length > 0, issues }
+    }
+
     const computeInvalidByGeometry = (
       boxId: string | null,
       x: number,
@@ -432,32 +476,8 @@ export function ContainerScene({
       l: number,
       w: number,
       h: number,
-    ) => {
-      const settings = placementSettingsRef.current
-      if (isOutOfBounds(x, y, l, w, container)) return true
-      if (z < -0.01 || z + h > container.height + 0.01) return true
-      let supportedArea = z <= 0.01 ? l * w : 0
-      const baseArea = l * w
-      for (const other of sceneState.meshEntries.values()) {
-        if (boxId && other.box.id === boxId) continue
-        if (other.box.z >= z + h || z >= other.box.z + other.box.height) continue
-        if (rectsOverlap(x, y, l, w, other.box.x, other.box.y, other.box.length, other.box.width)) {
-          return true
-        }
-      }
-      if (z > 0.01) {
-        for (const other of sceneState.meshEntries.values()) {
-          if (boxId && other.box.id === boxId) continue
-          if (Math.abs(other.box.z + other.box.height - z) > 0.01) continue
-          supportedArea += overlapAreaXY(x, y, l, w, other.box.x, other.box.y, other.box.length, other.box.width)
-        }
-      }
-      const minSupportRatio = settings.supportPolicy.allowPartialOverhang
-        ? settings.supportPolicy.minSupportRatio
-        : MIN_SUPPORT_OVERLAP_RATIO
-      if (baseArea <= 0 || supportedArea / baseArea < minSupportRatio) return true
-      return false
-    }
+      cargoMeta?: Partial<ManualPlacedBox> & { cargoId?: string },
+    ) => evaluateManualGeometry(boxId, x, y, z, l, w, h, cargoMeta).invalid
 
     const computeDragInvalid = (entry: MeshEntry, x: number, y: number, z: number) =>
       computeInvalidByGeometry(entry.box.id, x, y, z, entry.box.length, entry.box.width, entry.box.height)
@@ -696,7 +716,10 @@ export function ContainerScene({
             finalZ: finalZmm,
           }))
         } else {
-          onManualOperationRejectedRef.current?.('move', boxId)
+          {
+            const { issues } = evaluateManualGeometry(boxId, finalXmm, finalYmm, finalZmm, entry.box.length, entry.box.width, entry.box.height)
+            onManualOperationRejectedRef.current?.('move', boxId, entry.box.cargoId, issues)
+          }
           applyBoxTransform(entry, scale, length, width)
         }
         renderer.domElement.releasePointerCapture?.(event.pointerId)
@@ -817,7 +840,13 @@ export function ContainerScene({
       sceneState.poolDrop = null
       if (!cargoId) return
       if (!finalDrop || finalDrop.invalid) {
-        onManualOperationRejectedRef.current?.('drop', undefined, cargoId)
+        {
+          const info = poolDragInfoRef.current
+          const evaluated = info && finalDrop
+            ? evaluateManualGeometry(null, finalDrop.x, finalDrop.y, finalDrop.z, info.length, info.width, info.height, { cargoId })
+            : { issues: [] as ValidationIssue[] }
+          onManualOperationRejectedRef.current?.('drop', undefined, cargoId, evaluated.issues)
+        }
         return
       }
       const poolInfo = poolDragInfoRef.current

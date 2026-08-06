@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-06 P3-10 unify scene placement validity
+
+- 3D manual move/drop validity now delegates to `lib/manualPlacement.validateBox` with the shared support policy.
+- Scene rejections pass validation issues into the manual notice/issues path.
+
 ## 2026-08-06 P3-11 visual state ownership and 2D/3D opacity parity
 
 - VisualizationWorkspace owns pure visual chrome; Workbench mirrors via onChromeChange.

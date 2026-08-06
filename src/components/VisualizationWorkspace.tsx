@@ -631,7 +631,7 @@ export function VisualizationWorkspace({
                       onManualDelete={handleManualDeleteBox}
                       onManualDropFromPool={handleManualDropFromPool}
                       onManualMove={handleManualMoveBox}
-                      onManualOperationRejected={(operation, boxId, cargoId) => notifyManualRejected(operation, boxId, cargoId)}
+                      onManualOperationRejected={(operation, boxId, cargoId, issues) => notifyManualRejected(operation, boxId, cargoId, issues)}
                       onManualRotate={handleManualRotateBox}
                       clearanceEnabled={clearanceEnabled}
                       clearanceAnnotations={clearanceAnnotations}

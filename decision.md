@@ -2536,3 +2536,9 @@
 - **sessionBoundary**: export assertion updated (`onExportView={runPlanExport}` + 3D reject in VW); visual/placementMode guards added; existing packing/manual/history guards kept.
 - **Tests**: focused suite 26/26 (`visibleWorkspaceBoxes`, `boxVisualState`, `ContainerPlan2D`, VW ownership, sessionBoundary); `tsc --noEmit` clean. No full e2e/benchmark this agent. No commits (parent splits).
 
+## 2026-08-06 P3-10 scene placement validity delegation
+
+- `ContainerScene` no longer uses a partial geometry-only invalid checker. Move/drop invalidation builds a temporary manual draft and calls `validateBox` / `isBlockingManualIssue` with the active `supportPolicy`.
+- Rejected move/drop operations forward validation issues into `notifyManualRejected`, so scene rejections share the manual issues channel instead of toast-only silence.
+- Knife5 deferred state from P3-11 remains shared for layer/label/result tabs.
+
