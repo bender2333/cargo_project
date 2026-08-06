@@ -2525,3 +2525,14 @@
 - Added `server/customContainers.mjs` `parseCustomContainerPayload` (positiveNumber-style). POST/PUT reject length -5000 / 0 / 1e400 and bad gaps with 400; names truncated to 120; valid payloads normalize.
 - Tests: `scripts/customContainers.test.mjs` with customCargo suite 7/7.
 
+
+## 2026-08-06 P3-11 visual state knives 1-4
+
+- **Knife 1**: pure visual chrome (`workspaceView`, `sceneViewMode`, `planViewMode`, `clearanceEnabled`, `workspaceMaximized`, `resetViewTick`) owned by `VisualizationWorkspace`. Workbench mirrors via `onChromeChange` for header/sidebar/debug/clearance annotations. Keyboard clearance uses `clearanceToggleToken`. `showCogOverlay` stays in Workbench (ResultsPanel cross-consumer; knife 5 territory).
+- **Knife 2**: `ContainerPlan2D` now calls `boxVisualState` (active=1 / specific-layer fade≤0.1 / general fade ~0.22). 2D/3D tier parity locked by component tests.
+- **Knife 3**: `deriveVisibleWorkspaceBoxes` in `src/lib/visibleWorkspaceBoxes.ts`. VW derives scene lists from playback inputs; Workbench reuses the same helper for CoG/clearance/debug (no second algorithm).
+- **Knife 4**: `placementMode` already sole-sourced from `useManualPlacementSession` (`mode: placementMode` / `setMode`). Session-boundary guard forbids a second `useState` mode.
+- **Knife 5 deferred**: `activeLayerId` / `activeLabelId` / `activeResultTab` still shared by ResultsPanel + scene + CoG/compare. Leave until props pressure after 1-4 warrants the bidirectional move.
+- **sessionBoundary**: export assertion updated (`onExportView={runPlanExport}` + 3D reject in VW); visual/placementMode guards added; existing packing/manual/history guards kept.
+- **Tests**: focused suite 26/26 (`visibleWorkspaceBoxes`, `boxVisualState`, `ContainerPlan2D`, VW ownership, sessionBoundary); `tsc --noEmit` clean. No full e2e/benchmark this agent. No commits (parent splits).
+

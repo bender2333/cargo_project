@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { DragEvent as ReactDragEvent } from 'react'
 import { ContainerScene } from './ContainerScene'
 import type { SceneViewMode } from './ContainerScene'
@@ -11,9 +11,19 @@ import type { ManualOperationNotice } from '../lib/manualFeedback'
 import type { PlacementSettings } from '../lib/placementSettings'
 import type { ClearanceAnnotation } from '../lib/measurement'
 import type { CogOverlay } from '../lib/cogVisual'
+import type { PlaybackSequence } from '../lib/playback'
+import { deriveVisibleWorkspaceBoxes } from '../lib/visibleWorkspaceBoxes'
 
-type WorkspaceView = '3d' | '2d'
+export type WorkspaceView = '3d' | '2d'
 type PlacementMode = 'auto' | 'manual'
+
+export type VisualizationChrome = {
+  workspaceMaximized: boolean
+  workspaceView: WorkspaceView
+  sceneViewMode: SceneViewMode
+  planViewMode: PlanViewMode
+  clearanceEnabled: boolean
+}
 
 type HoverInfo = {
   id: string
@@ -80,28 +90,19 @@ type TranslationKeys = {
 }
 
 export type VisualizationWorkspaceProps = {
-  workspaceMaximized: boolean
-  setWorkspaceMaximized: (fn: (current: boolean) => boolean) => void
   activeResult: PackingResult
   formatCubicMeters: (volume: number) => string
   t: TranslationKeys
+  /** Single source: useManualPlacementSession state.mode */
   placementMode: PlacementMode
   manualKeyboardEnabled: boolean
   setPlacementMode: (mode: PlacementMode) => void
   hasCalculated: boolean
   handleContinueManually: () => void
-  workspaceView: WorkspaceView
-  setWorkspaceView: (view: WorkspaceView) => void
-  planViewMode: PlanViewMode
-  setPlanViewMode: (mode: PlanViewMode) => void
-  sceneViewMode: SceneViewMode
-  selectSceneView: (mode: SceneViewMode) => void
-  resetSceneView: () => void
-  clearanceEnabled: boolean
-  setClearanceEnabled: (fn: (enabled: boolean) => boolean) => void
-  exportCurrentView: () => void
   exportCurrentViewDisabled: boolean
   exportCurrentViewDisabledReason?: string | null
+  exportShipmentName: string
+  onExportView: (operation: () => Promise<void> | void) => Promise<void>
   containerChangeNotice: string
   customContainerLoadFailed: boolean
   locale: Locale
@@ -117,7 +118,11 @@ export type VisualizationWorkspaceProps = {
   handleQuickPlaceCargo: (cargoId: string) => void
   manualHelpOpen: boolean
   setManualHelpOpen: (fn: (current: boolean) => boolean) => void
-  visibleManualBoxes: PlacedBox[]
+  automaticPlaced: readonly PlacedBox[]
+  manualPlacedBoxes: readonly PlacedBox[]
+  playbackActive: boolean
+  playbackSequence: PlaybackSequence
+  playbackCursor: number
   renderingContainer: ContainerSpec
   gridSnap: boolean
   edgeSnap: boolean
@@ -126,7 +131,6 @@ export type VisualizationWorkspaceProps = {
   poolDragInfo: PoolDragInfo | null
   loadingStepsActive: boolean
   activeLoadingGroupBoxIds: Set<string> | undefined
-  resetViewTick: number
   manualSelectedId: string | null
   selectManualBox: (id: string | null) => void
   setHoverInfo: (info: HoverInfo | null) => void
@@ -145,7 +149,6 @@ export type VisualizationWorkspaceProps = {
   manualDraft: ManualDraft
   autoHelpOpen: boolean
   setAutoHelpOpen: (fn: (current: boolean) => boolean) => void
-  visibleAutoBoxes: PlacedBox[]
   activeLabelId: string
   activeLayerId: string
   cogViewState: { boxOpacity: number | null; showOverlay: boolean }
@@ -154,10 +157,30 @@ export type VisualizationWorkspaceProps = {
   setSelectedBoxId: (id: string | null) => void
   calculateAndShowPlacement: () => void
   hoverInfo: HoverInfo | null
+  /** Lift pure visual chrome for Workbench consumers (header/sidebar/debug). */
+  onChromeChange?: (chrome: VisualizationChrome) => void
+  /** External clearance toggle (Workbench keyboard shortcut). */
+  clearanceToggleToken?: number
 }
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function filenameSlug(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
 export function VisualizationWorkspace({
-  workspaceMaximized,
-  setWorkspaceMaximized,
   activeResult,
   formatCubicMeters,
   t,
@@ -166,18 +189,10 @@ export function VisualizationWorkspace({
   setPlacementMode,
   hasCalculated,
   handleContinueManually,
-  workspaceView,
-  setWorkspaceView,
-  planViewMode,
-  setPlanViewMode,
-  sceneViewMode,
-  selectSceneView,
-  resetSceneView,
-  clearanceEnabled,
-  setClearanceEnabled,
-  exportCurrentView,
   exportCurrentViewDisabled,
   exportCurrentViewDisabledReason,
+  exportShipmentName,
+  onExportView,
   containerChangeNotice,
   customContainerLoadFailed,
   locale,
@@ -193,7 +208,11 @@ export function VisualizationWorkspace({
   handleQuickPlaceCargo,
   manualHelpOpen,
   setManualHelpOpen,
-  visibleManualBoxes,
+  automaticPlaced,
+  manualPlacedBoxes,
+  playbackActive,
+  playbackSequence,
+  playbackCursor,
   renderingContainer,
   gridSnap,
   edgeSnap,
@@ -202,7 +221,6 @@ export function VisualizationWorkspace({
   poolDragInfo,
   loadingStepsActive,
   activeLoadingGroupBoxIds,
-  resetViewTick,
   manualSelectedId,
   selectManualBox,
   setHoverInfo,
@@ -215,7 +233,6 @@ export function VisualizationWorkspace({
   manualDraft,
   autoHelpOpen,
   setAutoHelpOpen,
-  visibleAutoBoxes,
   activeLabelId,
   activeLayerId,
   cogViewState,
@@ -224,7 +241,116 @@ export function VisualizationWorkspace({
   setSelectedBoxId,
   calculateAndShowPlacement,
   hoverInfo,
+  onChromeChange,
+  clearanceToggleToken = 0,
 }: VisualizationWorkspaceProps) {
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
+  const [sceneViewMode, setSceneViewMode] = useState<SceneViewMode>('iso')
+  const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
+  const [clearanceEnabled, setClearanceEnabled] = useState(false)
+  const [workspaceMaximized, setWorkspaceMaximized] = useState(false)
+  const [resetViewTick, setResetViewTick] = useState(0)
+
+  const { visibleAutoBoxes, visibleManualBoxes } = useMemo(
+    () => deriveVisibleWorkspaceBoxes({
+      placementMode,
+      playbackActive,
+      playbackSequence,
+      playbackCursor,
+      hasCalculated,
+      automaticPlaced,
+      manualPlacedBoxes,
+    }),
+    [
+      automaticPlaced,
+      hasCalculated,
+      manualPlacedBoxes,
+      placementMode,
+      playbackActive,
+      playbackCursor,
+      playbackSequence,
+    ],
+  )
+
+  useEffect(() => {
+    onChromeChange?.({
+      workspaceMaximized,
+      workspaceView,
+      sceneViewMode,
+      planViewMode,
+      clearanceEnabled,
+    })
+  }, [
+    clearanceEnabled,
+    onChromeChange,
+    planViewMode,
+    sceneViewMode,
+    workspaceMaximized,
+    workspaceView,
+  ])
+
+  useEffect(() => {
+    if (!clearanceToggleToken) return
+    setClearanceEnabled((enabled) => !enabled)
+  }, [clearanceToggleToken])
+
+  useEffect(() => {
+    if (!workspaceMaximized) return
+    const handle = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setWorkspaceMaximized(false)
+    }
+    window.addEventListener('keydown', handle)
+    return () => window.removeEventListener('keydown', handle)
+  }, [workspaceMaximized])
+
+  const selectSceneView = (view: SceneViewMode) => {
+    setSceneViewMode(view)
+  }
+
+  const resetSceneView = () => {
+    setSceneViewMode('iso')
+    setWorkspaceView('3d')
+    setResetViewTick((tick) => tick + 1)
+  }
+
+  const exportCurrentView = () => onExportView(async () => {
+    if (workspaceView === '2d') {
+      const selector = placementMode === 'manual'
+        ? '[data-testid="manual-placement-2d"]'
+        : '[data-testid="container-plan-2d"]'
+      const root = document.querySelector('[data-testid="visual-workspace"]')
+      const svg = root?.querySelector(selector)
+      if (!(svg instanceof SVGSVGElement)) {
+        throw new Error('2D plan is not available for export')
+      }
+      const source = new XMLSerializer().serializeToString(svg)
+      const prefix = filenameSlug(exportShipmentName)
+      downloadBlob(new Blob([source], { type: 'image/svg+xml;charset=utf-8' }), `${prefix ? `${prefix}-` : ''}packing-plan-${planViewMode}.svg`)
+      return
+    }
+
+    const root = document.querySelector('[data-testid="visual-workspace"]')
+    const canvas = root?.querySelector('canvas')
+    if (!(canvas instanceof HTMLCanvasElement)) {
+      throw new Error('3D canvas is not available for export')
+    }
+    await new Promise<void>((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('3D canvas export failed'))
+          return
+        }
+        try {
+          const prefix = filenameSlug(exportShipmentName)
+          downloadBlob(blob, `${prefix ? `${prefix}-` : ''}packing-plan-${sceneViewMode}.png`)
+          resolve()
+        } catch (error) {
+          reject(error)
+        }
+      }, 'image/png')
+    })
+  })
+
   const [hasMounted3d, setHasMounted3d] = useState(workspaceView === '3d')
   useEffect(() => {
     if (workspaceView === '3d') setHasMounted3d(true)

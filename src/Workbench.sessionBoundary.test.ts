@@ -160,12 +160,13 @@ describe('Workbench packing-session boundary', () => {
   })
   it('routes every plan export through one visible error boundary', () => {
     const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+    const workspaceSource = readFileSync(path.resolve(process.cwd(), 'src/components/VisualizationWorkspace.tsx'), 'utf8')
 
     expect(source).toContain('const runPlanExport = async')
     expect(source).toContain('await operation()')
     expect(source).toContain("console.error('[plan-export]'")
     expect(source).toContain("alert(message || (locale === 'zh' ? '导出失败' : 'Export failed'))")
-    expect(source).toContain("reject(new Error('3D canvas export failed'))")
+    expect(workspaceSource).toContain("reject(new Error('3D canvas export failed'))")
     expect(source).toContain('try {')
     expect(source).toContain('catch (error)')
     for (const handler of [
@@ -174,10 +175,41 @@ describe('Workbench packing-session boundary', () => {
       'exportLoadingSheet = () => runPlanExport',
       'exportReviewChecklistJson = () => runPlanExport',
       'exportReviewChecklistExcel = () => runPlanExport',
-      'exportCurrentView = () => runPlanExport',
+      'onExportView={runPlanExport}',
     ]) {
       expect(source).toContain(handler)
     }
+  })
+
+  it('keeps pure visual chrome and visible-box derivation inside VisualizationWorkspace', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+    const workspaceSource = readFileSync(path.resolve(process.cwd(), 'src/components/VisualizationWorkspace.tsx'), 'utf8')
+
+    expect(source).not.toMatch(/const \[workspaceView, setWorkspaceView\]/)
+    expect(source).not.toMatch(/const \[sceneViewMode, setSceneViewMode\]/)
+    expect(source).not.toMatch(/const \[planViewMode, setPlanViewMode\]/)
+    expect(source).not.toMatch(/const \[clearanceEnabled, setClearanceEnabled\]/)
+    expect(source).not.toMatch(/const \[workspaceMaximized, setWorkspaceMaximized\]/)
+    expect(source).not.toMatch(/const \[resetViewTick, setResetViewTick\]/)
+    expect(source).toContain('deriveVisibleWorkspaceBoxes')
+    expect(source).toContain('onChromeChange={setVisualizationChrome}')
+    expect(workspaceSource).toContain('deriveVisibleWorkspaceBoxes')
+    expect(workspaceSource).toMatch(/const \[workspaceView, setWorkspaceView\]/)
+    expect(workspaceSource).toMatch(/const \[sceneViewMode, setSceneViewMode\]/)
+    expect(workspaceSource).toMatch(/const \[planViewMode, setPlanViewMode\]/)
+    expect(workspaceSource).toMatch(/const \[clearanceEnabled, setClearanceEnabled\]/)
+    expect(workspaceSource).toMatch(/const \[workspaceMaximized, setWorkspaceMaximized\]/)
+    expect(workspaceSource).toMatch(/const \[resetViewTick, setResetViewTick\]/)
+  })
+
+  it('uses useManualPlacementSession state.mode as the only placementMode source', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+
+    expect(source).toContain('mode: placementMode')
+    expect(source).toContain('setMode: setPlacementMode')
+    expect(source).not.toMatch(/const \[placementMode,\s*setPlacementMode\]/)
+    expect(source).not.toMatch(/useState<\s*['"]auto['"]\s*\|\s*['"]manual['"]\s*>/)
+    expect(source).toContain('placementMode={placementMode}')
   })
 
   it('scopes manual keyboard commands to the focused overview workspace', () => {

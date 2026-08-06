@@ -93,3 +93,50 @@ describe('ContainerPlan2D label deconfliction', () => {
     expect(layerFiltered.container.querySelector('[data-box-id="box-a"]')?.getAttribute('data-label-mode')).toBe('full')
   })
 })
+
+describe('ContainerPlan2D opacity parity with boxVisualState', () => {
+  it('uses the three-tier opacity scale when a specific layer is selected', () => {
+    const boxes = [
+      box({ id: 'box-a', label: 'A', physicalLayer: 1 }),
+      box({ id: 'box-b', label: 'B', physicalLayer: 2, color: '#2563eb' }),
+    ]
+
+    const { container: dom } = render(
+      <ContainerPlan2D
+        activeLabelId="all"
+        activeLayerId="2"
+        boxes={boxes}
+        container={container}
+        mode="top"
+      />,
+    )
+
+    const activeOpacity = Number(dom.querySelector('[data-box-id="box-b"]')?.getAttribute('opacity'))
+    const fadedOpacity = Number(dom.querySelector('[data-box-id="box-a"]')?.getAttribute('opacity'))
+    expect(activeOpacity).toBe(1)
+    expect(fadedOpacity).toBeLessThanOrEqual(0.1)
+  })
+
+  it('uses the general fade when no specific layer is selected and a label filters boxes', () => {
+    const boxes = [
+      box({ id: 'box-a', label: 'A', physicalLayer: 1 }),
+      box({ id: 'box-b', label: 'B', physicalLayer: 1, color: '#2563eb' }),
+    ]
+
+    const { container: dom } = render(
+      <ContainerPlan2D
+        activeLabelId="A"
+        activeLayerId="all"
+        boxes={boxes}
+        container={container}
+        mode="top"
+      />,
+    )
+
+    const activeOpacity = Number(dom.querySelector('[data-box-id="box-a"]')?.getAttribute('opacity'))
+    const generalFade = Number(dom.querySelector('[data-box-id="box-b"]')?.getAttribute('opacity'))
+    expect(activeOpacity).toBe(1)
+    expect(generalFade).toBeGreaterThan(0.1)
+    expect(generalFade).toBeLessThan(0.5)
+  })
+})

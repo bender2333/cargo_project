@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
 import type { FormEvent, DragEvent as ReactDragEvent } from 'react'
 import { CargoImportDialog } from './components/CargoImportDialog'
-import { buildPlaybackSequence, visibleBoxesAt } from './lib/playback'
+import { buildPlaybackSequence } from './lib/playback'
+import { deriveVisibleWorkspaceBoxes } from './lib/visibleWorkspaceBoxes'
 import { buildLoadingTaskGroups } from './lib/loadingTaskGroups'
 import { buildLoadingSheetModel } from './lib/loadingSheet'
 import { usePlaybackController } from './hooks/usePlaybackController'
@@ -29,8 +30,8 @@ import {
 } from './lib/manualPlacement'
 import type { ManualRotationDirection, OrientationKey, ValidationIssue } from './lib/manualPlacement'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from './data/containers'
-import type { SceneViewMode } from './components/ContainerScene'
-import type { PlanViewMode } from './components/ContainerPlan2D'
+import type { VisualizationChrome } from './components/VisualizationWorkspace'
+import { VisualizationWorkspace } from './components/VisualizationWorkspace'
 import { buildExportPlanRows, buildExportRowsFromTemplate } from './lib/exportPlan'
 import { createClientId } from './lib/clientId'
 import { MAX_IMPORT_CELLS, MAX_IMPORT_COLUMNS, MAX_IMPORT_FILE_BYTES, MAX_IMPORT_ROWS } from './lib/importCargo'
@@ -64,7 +65,6 @@ import { PackingSidebar } from './components/PackingSidebar'
 import { DebugPanel } from './components/DebugPanel'
 import { excelStyleLabel } from './lib/excelStyleLabel'
 import { buildCargoDebugSnapshot } from './lib/debugSnapshot'
-import { VisualizationWorkspace } from './components/VisualizationWorkspace'
 import { ResultsPanel } from './components/ResultsPanel'
 import { workbenchCopy as copy } from './data/workbenchCopy'
 
@@ -105,7 +105,6 @@ const customContainerDefaults = {
 }
 
 type CargoForm = Omit<CargoItem, 'id'>
-type WorkspaceView = '3d' | '2d'
 type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback' | 'loadingSteps' | 'cog' | 'compare' | 'fill' | 'reviewChecklist'
 type NavTarget = 'overview' | 'report' | 'cargo' | 'container' | 'history' | 'cargo-library' | 'template-manager' | 'users'
 
@@ -282,21 +281,15 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const hasCalculated = automaticResult !== null
   const [activeLayerId, setActiveLayerId] = useState('all')
   const [activeLabelId, setActiveLabelId] = useState('all')
-  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
-  const [sceneViewMode, setSceneViewMode] = useState<SceneViewMode>('iso')
   const [placementSettingsOpen, setPlacementSettingsOpen] = useState(false)
   const [snapSettingsOpen, setSnapSettingsOpen] = useState(false)
   const gridSnap = placementSettings.snapEnabled && placementSettings.gridSnapEnabled
   const edgeSnap = placementSettings.snapEnabled && placementSettings.edgeSnapEnabled
-  const [clearanceEnabled, setClearanceEnabled] = useState(false)
   const [hoverInfo, setHoverInfo] = useState<{ id: string; label: string; length: number; width: number; height: number; orientationKey: OrientationKey; x: number; y: number; z: number; clientX: number; clientY: number } | null>(null)
   const [poolDragInfo, setPoolDragInfo] = useState<{ cargoId: string; length: number; width: number; height: number; color: string } | null>(null)
-  const [workspaceMaximized, setWorkspaceMaximized] = useState(false)
-  const [resetViewTick, setResetViewTick] = useState(0)
   const [compareSelection, setCompareSelection] = useState<string[]>(() => containers.slice(0, 3).map((c) => c.id))
   const [showCogOverlay, setShowCogOverlay] = useState(false)
   const [vehicleProfile, setVehicleProfile] = useState<VehicleProfileId>(DEFAULT_VEHICLE_PROFILE)
-  const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
   const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
   const [activeLoadingGroupIndex, setActiveLoadingGroupIndex] = useState(0)
   const [loadingGroupsPlaying, setLoadingGroupsPlaying] = useState(false)
@@ -306,7 +299,21 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [containerChangeNotice, setContainerChangeNotice] = useState('')
   const [customContainerLoadFailed, setCustomContainerLoadFailed] = useState(false)
   const [rotationNotice, setRotationNotice] = useState('')
-  
+  const [visualizationChrome, setVisualizationChrome] = useState<VisualizationChrome>({
+    workspaceMaximized: false,
+    workspaceView: '3d',
+    sceneViewMode: 'iso',
+    planViewMode: 'top',
+    clearanceEnabled: false,
+  })
+  const [clearanceToggleToken, setClearanceToggleToken] = useState(0)
+  const {
+    workspaceMaximized,
+    workspaceView,
+    sceneViewMode,
+    planViewMode,
+    clearanceEnabled,
+  } = visualizationChrome
   // Backend integrated states
   const [customContainers, setCustomContainers] = useState<ContainerSpec[]>([])
   const [showCustomContainerDialog, setShowCustomContainerDialog] = useState(false)
@@ -676,14 +683,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     setRotationNotice('')
   }
 
-  useEffect(() => {
-    if (!workspaceMaximized) return
-    const handle = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setWorkspaceMaximized(false)
-    }
-    window.addEventListener('keydown', handle)
-    return () => window.removeEventListener('keydown', handle)
-  }, [workspaceMaximized])
 
   useEffect(() => {
     setHoverInfo(null)
@@ -751,7 +750,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
       if (event.key === 'm' || event.key === 'M') {
         event.preventDefault()
-        setClearanceEnabled((enabled) => !enabled)
+        setClearanceToggleToken((token) => token + 1)
         return
       }
 
@@ -781,14 +780,26 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const activeLoadingGroup = loadingTaskGroups[Math.max(0, Math.min(activeLoadingGroupIndex, loadingTaskGroups.length - 1))] ?? null
   const activeLoadingGroupBoxIds = useMemo(() => activeLoadingGroup ? new Set(activeLoadingGroup.boxIds) : undefined, [activeLoadingGroup])
   const loadingStepsActive = loadingStepsAvailable && activeResultTab === 'loadingSteps'
-  const visibleAutoBoxes = useMemo(() => {
-    if (placementMode === 'auto' && playbackActive) return visibleBoxesAt(playbackSequence, playback.cursor)
-    return hasCalculated ? automaticDisplayResult.placed : []
-  }, [automaticDisplayResult.placed, hasCalculated, placementMode, playback.cursor, playbackActive, playbackSequence])
-  const visibleManualBoxes = useMemo(() => {
-    if (placementMode === 'manual' && playbackActive) return visibleBoxesAt(playbackSequence, playback.cursor)
-    return manualPlacedBoxes
-  }, [manualPlacedBoxes, placementMode, playback.cursor, playbackActive, playbackSequence])
+  const { visibleAutoBoxes, visibleManualBoxes } = useMemo(
+    () => deriveVisibleWorkspaceBoxes({
+      placementMode,
+      playbackActive,
+      playbackSequence,
+      playbackCursor: playback.cursor,
+      hasCalculated,
+      automaticPlaced: automaticDisplayResult.placed,
+      manualPlacedBoxes,
+    }),
+    [
+      automaticDisplayResult.placed,
+      hasCalculated,
+      manualPlacedBoxes,
+      placementMode,
+      playback.cursor,
+      playbackActive,
+      playbackSequence,
+    ],
+  )
   const visibleBoxes = activeResult.placed.filter((box) => (
     (activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId)
     && (activeLabelId === 'all' || box.label === activeLabelId)
@@ -1300,41 +1311,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     XLSX.writeFile(workbook, `${prefix ? `${prefix}-` : ''}review-checklist.xlsx`)
   })
 
-  const exportCurrentView = () => runPlanExport(async () => {
-    if (workspaceView === '2d') {
-      const selector = placementMode === 'manual'
-        ? '[data-testid="manual-placement-2d"]'
-        : '[data-testid="container-plan-2d"]'
-      const svg = workspaceRef.current?.querySelector(selector)
-      if (!(svg instanceof SVGSVGElement)) {
-        throw new Error('2D plan is not available for export')
-      }
-      const source = new XMLSerializer().serializeToString(svg)
-      const prefix = filenameSlug(shipmentName)
-      downloadBlob(new Blob([source], { type: 'image/svg+xml;charset=utf-8' }), `${prefix ? `${prefix}-` : ''}packing-plan-${planViewMode}.svg`)
-      return
-    }
 
-    const canvas = workspaceRef.current?.querySelector('canvas')
-    if (!(canvas instanceof HTMLCanvasElement)) {
-      throw new Error('3D canvas is not available for export')
-    }
-    await new Promise<void>((resolve, reject) => {
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          reject(new Error('3D canvas export failed'))
-          return
-        }
-        try {
-          const prefix = filenameSlug(shipmentName)
-          downloadBlob(blob, `${prefix ? `${prefix}-` : ''}packing-plan-${sceneViewMode}.png`)
-          resolve()
-        } catch (error) {
-          reject(error)
-        }
-      }, 'image/png')
-    })
-  })
 
   const saveCurrentPlan = async () => {
     const saveStartNavigationRevision = navigationRevisionRef.current
@@ -1485,15 +1462,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     }
   }
 
-  const selectSceneView = (view: SceneViewMode) => {
-    setSceneViewMode(view)
-  }
 
-  const resetSceneView = () => {
-    setSceneViewMode('iso')
-    setWorkspaceView('3d')
-    setResetViewTick((t) => t + 1)
-  }
 
   const navItems: Array<{ target: NavTarget; label: string }> = [
     { target: 'overview', label: t.nav[0] },
@@ -1683,8 +1652,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         <section className="flex-1 min-w-0 space-y-4">
         <div ref={workspaceRef} tabIndex={activeNav === 'overview' && placementMode === 'manual' ? 0 : undefined}>
         <VisualizationWorkspace
-            workspaceMaximized={workspaceMaximized}
-            setWorkspaceMaximized={setWorkspaceMaximized}
             activeResult={activeResult}
             formatCubicMeters={formatCubicMeters}
             t={t}
@@ -1693,18 +1660,10 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             setPlacementMode={setPlacementMode}
             hasCalculated={hasCalculated}
             handleContinueManually={handleContinueManually}
-            workspaceView={workspaceView}
-            setWorkspaceView={setWorkspaceView}
-            planViewMode={planViewMode}
-            setPlanViewMode={setPlanViewMode}
-            sceneViewMode={sceneViewMode}
-            selectSceneView={selectSceneView}
-            resetSceneView={resetSceneView}
-            clearanceEnabled={clearanceEnabled}
-            setClearanceEnabled={setClearanceEnabled}
-            exportCurrentView={exportCurrentView}
             exportCurrentViewDisabled={!activePlanCompliance.ok}
             exportCurrentViewDisabledReason={planComplianceMessage}
+            exportShipmentName={shipmentName}
+            onExportView={runPlanExport}
             containerChangeNotice={containerChangeNotice}
             customContainerLoadFailed={customContainerLoadFailed}
             locale={locale}
@@ -1720,7 +1679,11 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             handleQuickPlaceCargo={handleQuickPlaceCargo}
             manualHelpOpen={manualHelpOpen}
             setManualHelpOpen={setManualHelpOpen}
-            visibleManualBoxes={visibleManualBoxes}
+            automaticPlaced={automaticDisplayResult.placed}
+            manualPlacedBoxes={manualPlacedBoxes}
+            playbackActive={playbackActive}
+            playbackSequence={playbackSequence}
+            playbackCursor={playback.cursor}
             renderingContainer={renderingContainer}
             gridSnap={gridSnap}
             edgeSnap={edgeSnap}
@@ -1729,7 +1692,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             poolDragInfo={poolDragInfo}
             loadingStepsActive={loadingStepsActive}
             activeLoadingGroupBoxIds={activeLoadingGroupBoxIds}
-            resetViewTick={resetViewTick}
             manualSelectedId={manualSelectedId}
             selectManualBox={selectManualBox}
             setHoverInfo={setHoverInfo}
@@ -1742,7 +1704,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             manualDraft={manualDraft}
             autoHelpOpen={autoHelpOpen}
             setAutoHelpOpen={setAutoHelpOpen}
-            visibleAutoBoxes={visibleAutoBoxes}
             activeLabelId={activeLabelId}
             activeLayerId={activeLayerId}
             cogViewState={cogViewState}
@@ -1751,6 +1712,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             setSelectedBoxId={setSelectedBoxId}
             calculateAndShowPlacement={calculateAndShowPlacement}
             hoverInfo={hoverInfo}
+            onChromeChange={setVisualizationChrome}
+            clearanceToggleToken={clearanceToggleToken}
           />
         </div>
 

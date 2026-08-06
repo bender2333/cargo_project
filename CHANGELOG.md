@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-06 P3-11 visual state ownership and 2D/3D opacity parity
+
+- VisualizationWorkspace owns pure visual chrome; Workbench mirrors via onChromeChange.
+- ContainerPlan2D uses shared `boxVisualState` three-tier opacity.
+- `deriveVisibleWorkspaceBoxes` centralizes playback/layer filtering.
+- placementMode remains sole-sourced from manual session; activeLayer/label/resultTab deferred (knife5).
+
 ## 2026-08-06 P3-12a validate custom container payloads
 
 - Server custom container create/update now rejects non-positive/non-finite dimensions and gaps; reuses cargo-style positive number checks.
