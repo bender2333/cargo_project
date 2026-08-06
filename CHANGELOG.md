@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-06 P1-P3 continuous execution wrap
+
+- P1 production safety + 0802 redeploy accepted earlier; P2 test/gate integrity completed with full local lint/test/build/e2e/benchmark (P2) green.
+- P3 packing root-cause and boundary fixes landed through P3-12a; residual P3-12b/c and visual knife5 deferred.
+- Final local core gates: unit 847, e2e 128/128, build 0. Final benchmark blocked only by algorithm timing hard gates under load; thresholds unchanged.
+
 ## 2026-08-06 align label-filter E2E opacities with boxVisualState
 
 - 2D label-filter E2E now expects shared three-tier opacities (inactive 0.22, active 1) after ContainerPlan2D switched off the old 0.18/0.88 local scale.

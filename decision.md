@@ -2558,3 +2558,10 @@
 - `filters the plan view by cargo label` still asserted legacy ContainerPlan2D opacities 0.18/0.88.
 - Updated to lib `boxVisualState` values 0.22/1. This is a visual-contract sync, not packing-threshold weakening.
 
+## 2026-08-06 P3 phase completion boundary
+
+- **GREEN core gates**：`npm run lint` warning-only (existing hooks dep); `npm test` unit 96/847 + rollback 29 + packing-performance 9; `npm run build` 0; `npm run test:e2e` **128/128**.
+- **Benchmark**：连续两次 `npm run benchmark` 均因 algorithm timing hard gate RED（russia-volume ± vietnam-40hq-volume 超过 20%），Playwright browser sample 本身通过。按 P2-5 纪律**不**放宽阈值、不更新 frontend baseline、不使用 `--allow-timing-regression`。记为环境噪声/负载边界，非功能回归证据；packing goldens 已按 placedCount 守恒刷新。
+- **Deferred backlog**：P3-12b/c（行数上限、deps 卫生、写错误 i18n）、P3-11 knife5（layer/label/resultTab 所有权）。
+- **P1 production** 已在阶段一验收 live；本阶段未再部署。
+
