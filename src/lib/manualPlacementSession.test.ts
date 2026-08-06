@@ -328,3 +328,53 @@ describe('cargo attribute sync on reconcile', () => {
     })
   })
 })
+
+// P3-6 — label/color must sync into draft reconciliation
+
+describe('cargo label and color sync on reconcile', () => {
+  it('updates label and color on placed boxes when cargo label/color change', () => {
+    const draft = addBox(emptyDraft(), box('b1'))
+    const state = createManualPlacementSessionState({
+      mode: 'manual',
+      history: { past: [], present: draft, future: [] },
+    })
+
+    const reconciled = reconcileManualPlacementSessionState(state, [
+      {
+        id: 'cargo-a',
+        quantity: 2,
+        weight: 10,
+        stackable: true,
+        label: 'RELABELED',
+        color: '#00ff00',
+      },
+    ])
+
+    expect(reconciled.history.present.boxes[0]).toMatchObject({
+      label: 'RELABELED',
+      color: '#00ff00',
+    })
+  })
+
+  it('preserves identity when label and color are unchanged', () => {
+    const draft = addBox(emptyDraft(), { ...box('b1'), label: 'A', color: '#f59e0b', weight: 10 })
+    const state = createManualPlacementSessionState({
+      mode: 'manual',
+      history: { past: [], present: draft, future: [] },
+    })
+
+    const reconciled = reconcileManualPlacementSessionState(state, [
+      {
+        id: 'cargo-a',
+        quantity: 2,
+        weight: 10,
+        stackable: true,
+        label: 'A',
+        color: '#f59e0b',
+      },
+    ])
+
+    expect(reconciled).toBe(state)
+  })
+})
+

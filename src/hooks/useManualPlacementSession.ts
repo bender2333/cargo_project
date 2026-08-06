@@ -160,7 +160,7 @@ function rotateDraft(draft: ManualDraft, boxId: string, direction: ManualRotatio
 
 
 function buildManualCargoPlan(items: CargoItem[], defaultMaxStackLayers: number | undefined) {
-  return items.map(({ id, quantity, weight, length, width, height, canRotate, stackable, maxStackLayers, groundOnly }) => ({
+  return items.map(({ id, quantity, weight, length, width, height, canRotate, stackable, maxStackLayers, groundOnly, label, color }) => ({
     id,
     quantity,
     weight,
@@ -171,6 +171,8 @@ function buildManualCargoPlan(items: CargoItem[], defaultMaxStackLayers: number 
     stackable,
     maxStackLayers: maxStackLayers ?? defaultMaxStackLayers,
     groundOnly,
+    label,
+    color,
   }))
 }
 

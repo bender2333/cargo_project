@@ -20,7 +20,10 @@ export type ManualCargoPlanItem = {
   stackable?: boolean
   maxStackLayers?: number
   groundOnly?: boolean
+  label?: string
+  color?: string
 }
+
 
 export type ManualPlacementSessionState = {
   mode: ManualPlacementMode
@@ -59,6 +62,8 @@ function syncBoxGeometry(box: ManualPlacedBox, cargo: ManualCargoPlanItem): Manu
   const nextMaxStackLayers = cargo.maxStackLayers
   const nextGroundOnly = 'groundOnly' in cargo ? cargo.groundOnly : box.groundOnly
   const nextCanRotate = cargo.canRotate ?? box.canRotate
+  const nextLabel = cargo.label ?? box.label
+  const nextColor = cargo.color ?? box.color
   const baseLength = cargo.length ?? box.baseLength ?? box.length
   const baseWidth = cargo.width ?? box.baseWidth ?? box.width
   const baseHeight = cargo.height ?? box.baseHeight ?? box.height
@@ -83,6 +88,8 @@ function syncBoxGeometry(box: ManualPlacedBox, cargo: ManualCargoPlanItem): Manu
     && nextMaxStackLayers === box.maxStackLayers
     && nextGroundOnly === box.groundOnly
     && nextCanRotate === box.canRotate
+    && nextLabel === box.label
+    && nextColor === box.color
     && baseLength === (box.baseLength ?? box.length)
     && baseWidth === (box.baseWidth ?? box.width)
     && baseHeight === (box.baseHeight ?? box.height)
@@ -99,6 +106,8 @@ function syncBoxGeometry(box: ManualPlacedBox, cargo: ManualCargoPlanItem): Manu
     maxStackLayers: nextMaxStackLayers,
     groundOnly: nextGroundOnly,
     canRotate: nextCanRotate,
+    label: nextLabel,
+    color: nextColor,
     baseLength,
     baseWidth,
     baseHeight,
