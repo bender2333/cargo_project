@@ -2513,3 +2513,10 @@
 - **draft helper**：`draftFromAutomaticResult` 下移到 `src/lib/manualDraftFromAutomatic.ts`，hook 反向 import。
 - **Tests**：default 0.5 与显式 0.5 同位；0.6 geometry 在 0.8 阈值下拒绝；auto→manual draft 同 policy 零 blocking error。contracts/31pallet 仍绿。
 
+## 2026-08-06 P3-6/7/8 manual state contracts
+
+- **P3-6**：`ManualCargoPlanItem`/sync 纳入 label/color；改标签后 reconcile 再保存 history 成功；陈旧 draft 仍会因 label mismatch 失败（C2 confirmed）。
+- **P3-7**：`containerSnapshotsSynced` 在选中自定义柜型尺寸变化时 `resultInvalidated`（automaticResult null + inputRevision++）；未选中柜型编辑只更新 snapshots。
+- **P3-8**：`PlacedBox.blockingInvalid` 由 `toPlacedBoxes` 标记；统计/层聚合跳过非法箱但 3D 仍可见；client/server history 校验同步接受并只计非 blocking 箱；悬空箱不再撑大 layer1 maxZ。
+- Focused：11 files / 204 tests green.
+

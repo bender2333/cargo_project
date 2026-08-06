@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-06 P3-6/7/8 manual draft, container invalidate, invalid stats
+
+- Manual draft now reconciles cargo label/color so history save survives sidebar edits.
+- Editing the selected custom container invalidates the automatic result and bumps input revision.
+- Blocking-invalid manual boxes stay visible but drop out of counts/volume/layers; history validators match.
+
 ## 2026-08-06 P3-5 share support policy auto/manual
 
 - Automatic packing now accepts the same `supportPolicy.minSupportRatio` as manual mode (default 0.5).
