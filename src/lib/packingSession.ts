@@ -41,6 +41,7 @@ export type PackingSessionDispatchAction =
   | { type: 'loadingModeChanged'; loadingMode: LoadingMode }
   | { type: 'defaultMaxStackLayersChanged'; defaultMaxStackLayers?: number }
   | { type: 'shipmentNameChanged'; shipmentName: string }
+  | { type: 'containerSnapshotsSynced'; containers: ContainerSpec[] }
   | { type: 'resultInvalidated' }
 
 export type PackingSessionAction = PackingSessionDispatchAction
@@ -225,6 +226,39 @@ export function packingSessionReducer(
         inputRevision: state.inputRevision + 1,
         completedCalculationRequestId: state.calculationRequestId,
       }
+    }
+    case 'containerSnapshotsSynced': {
+      if (action.containers.length === 0) return state
+      let containerSnapshots = state.containerSnapshots
+      let selectedChanged = false
+      for (const container of action.containers) {
+        const previous = containerSnapshots[container.id]
+        const next = copyContainer(container)
+        if (
+          previous
+          && previous.label === next.label
+          && previous.description === next.description
+          && previous.length === next.length
+          && previous.width === next.width
+          && previous.height === next.height
+          && previous.maxWeight === next.maxWeight
+          && previous.doorGap === next.doorGap
+          && previous.topGap === next.topGap
+          && previous.sideGap === next.sideGap
+        ) {
+          continue
+        }
+        if (containerSnapshots === state.containerSnapshots) {
+          containerSnapshots = { ...state.containerSnapshots }
+        }
+        containerSnapshots[container.id] = next
+        if (container.id === state.selectedContainerId) selectedChanged = true
+      }
+      if (containerSnapshots === state.containerSnapshots) return state
+      if (!selectedChanged) {
+        return { ...state, containerSnapshots }
+      }
+      return invalidateResult({ ...state, containerSnapshots })
     }
     case 'resultInvalidated':
       return invalidateResult(state)

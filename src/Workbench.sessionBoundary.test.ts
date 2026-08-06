@@ -24,6 +24,15 @@ describe('Workbench packing-session boundary', () => {
     expect(source).toContain('container.description !== selectedContainer.description')
   })
 
+  it('invalidates packing results when selected custom containers are refreshed', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+
+    expect(source).toContain("type: 'containerSnapshotsSynced'")
+    expect(source).toContain('containers: nextCustomContainers')
+    expect(source).toMatch(/onClose=\{\(\) => \{\s*setShowCustomContainerDialog\(false\)\s*fetchCustomContainers\(\)/)
+  })
+
+
   it('routes manual editing through one session and one active result', () => {
     const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
 

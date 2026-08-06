@@ -409,8 +409,15 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   const fetchCustomContainers = async () => {
     try {
-      setCustomContainers(await readCustomContainers())
+      const nextCustomContainers = await readCustomContainers()
+      setCustomContainers(nextCustomContainers)
       setCustomContainerLoadFailed(false)
+      // Keep packing session snapshots aligned with library edits.
+      // Selected container changes invalidate via containerSnapshotsSynced.
+      dispatchPackingSession({
+        type: 'containerSnapshotsSynced',
+        containers: nextCustomContainers,
+      })
     } catch (err) {
       console.error(err)
       setCustomContainerLoadFailed(true)
