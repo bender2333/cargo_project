@@ -1,9 +1,15 @@
 # Changelog
 
+## 2026-08-06 P2 phase gate
+
+- Full P2 completion gate: lint 0; unit 93 files / 815 tests; rollback 1/29; packing-performance 2/7; build 0; e2e 128/128 (7.5m, observed util 80.3%); benchmark 0 (timings comparable); round-status 26 tasks passed.
+- P2 commits: `244cf28`, `015ae5a`, `139acc5`, `2067009`, `c17039e`, `46d5943`, `d0894c2`/`654d670`.
+- Carry-forward: first-pixel baseline still BLOCKED from mixed hard-gate REDs earlier in P2-5; algorithm thresholds were not widened.
+
 ## 2026-08-06 P2-7 机器可读轮次状态
 
-- 新增  与 ：校验 committed/deployed commit 存在、verified+ 有验证命令/结果，并拒绝「已完成」标题下未 supersede 的开放 checkbox。
-- RED：修复扫描前/后， 因第四轮（已完成）下未勾选 P2-7 失败。
+- 新增 `plans/status.json` 与 `scripts/check-round-status.mjs`：校验 committed/deployed commit 存在、verified+ 有验证命令/结果，并拒绝「已完成」标题下未 supersede 的开放 checkbox。
+- RED：修复扫描前/后，`node scripts/check-round-status.mjs` 因第四轮（已完成）下未勾选 P2-7 失败。
 - 仅追加 supersede 指向与 r61 起 release notes；不重写历史 CHANGELOG/decision 正文。校验随后 GREEN。
 
 ## 2026-08-06 P2-6 安慰剂 E2E 与相机取景契约

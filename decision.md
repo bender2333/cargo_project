@@ -2441,3 +2441,10 @@
   - 08-03 复审 8 项无 plans 文件的历史缺口，在 `plans/status.json` 以 open/superseded 状态机继续跟踪，不回溯伪造旧计划。
 - **Release notes**：补齐 r61 起用户可见项，覆盖 `6f864a9` quick-place 朝向、`d037df0` 有限约束块路由、`abf53d6` 生产 Excel worker namespace。
 - **GREEN**：文档补齐后 `node scripts/check-round-status.mjs` 通过；P2-7 记为 committed。
+
+## 2026-08-06 P2 phase completion gate
+
+- Fresh gate after P2-7: `npm run lint` 0; `npm test` unit 93 files/815, rollback 29, packing-performance 7; `npm run build` 0; `npm run test:e2e` 128/128 in 7.5m; `npm run benchmark` 0 timings comparable; `node scripts/check-round-status.mjs` 26 tasks passed.
+- No algorithm/fixture/baseline content changes in P2 beyond explicit gate code. First-pixel baseline remains BLOCKED pending stable empty-load consecutive green benchmarks.
+- Proceeding to P3 packing root-cause plan.
+
