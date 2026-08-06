@@ -2448,3 +2448,36 @@
 - No algorithm/fixture/baseline content changes in P2 beyond explicit gate code. First-pixel baseline remains BLOCKED pending stable empty-load consecutive green benchmarks.
 - Proceeding to P3 packing root-cause plan.
 
+
+## 2026-08-06 P3-1 0802 block-route sensitivity baseline
+
+- **Scope**：只读测量。不改 `src/lib/packing.ts`、fixtures、golden。可选 helper：`scripts/p3-0802-block-route-baseline.mjs`（Vite SSR 加载现有 `calculatePacking` / `shouldUseBlockEngine`，打印 JSON 对照表）。
+- **Fixture**：`test-data/json/0802/input.json` — 28 SKU / 877 boxes，`loadingMode=quantity`，container `40hq` 12030×2350×2690。原样全 `maxStackLayers=99`，1 个 `groundOnly` SKU（label 27，28 箱）。
+- **Gate math（当前实现）**：`shouldUseBlockEngine` 在 mode∈{quantity,volume}、SKU≥2、总量≥100、全 stackable 之后，取 `min(minimumFittingHeight)`；本批 `minFittingHeight=210` → `conservativeMaxPhysicalLayers=ceil(2690/210)=13`。任一 SKU 的 `maxStackLayers` 有限且 `<13`，或任一项 `minimumFittingHeight<=ε`，整批 gate=false。
+- **Mutated SKU**：
+  - stack-layer rows：label `1` / `cargo-ms2n5q2y-su7natc1`（qty 114，h 360）单独改 `maxStackLayers`，其余保持 99。
+  - exceeds-dims row：label `2` / `cargo-ms2n5q2y-xr8elhih`（qty 12）三边均设为柜外（`L/W/H = container+500`），迫使该 SKU 的 `minimumFittingHeight=0`（仅超长且可旋转时仍可能有朝向可装，故用三轴超界对齐 E7）。
+- **Command**：`node scripts/p3-0802-block-route-baseline.mjs`（2026-08-06T07:40:57Z，wall ~15s）。
+
+### Comparison table
+
+| variant | shouldUseBlockEngine | placedCount | unplaced | reasonCode distribution | gate diagnostics |
+|---|---|---:|---:|---|---|
+| original (all msl=99, 1 groundOnly) | **true** | **877** | **0** | `{}` | minH=210, bound=13, bindingSku=0; GO 28/28 z=0; 2458ms |
+| all maxStackLayers=undefined | **true** | **877** | **0** | `{}` | minH=210, bound=13, bindingSku=0; msl values `[null]`; GO 28/28 z=0; 2311ms |
+| one SKU msl=10 (label 1) | **false** | **827** | **50** | `{ "no-space": 50 }` | bindingSkus=[{label:1,msl:10,fitH:305}]; bound still 13; 2081ms |
+| one SKU msl=12 (label 1) | **false** | **827** | **50** | `{ "no-space": 50 }` | bindingSkus=[{label:1,msl:12,fitH:305}]; 2155ms |
+| one SKU msl=13 (label 1) | **true** | **877** | **0** | `{}` | bindingSku=0 (13≥13); 2157ms |
+| one SKU exceeds container dims (label 2) | **false** | **859** | **18** | `{ "exceeds-dimensions": 12, "no-space": 6 }` | `anyExceedsDimensions=true`（fittingHeights 含 0 → 整批退出）; 1918ms |
+
+### E3 expectation
+
+- **Confirmed.** Setting any one SKU `maxStackLayers` to **12** (also **10**) flips `shouldUseBlockEngine` **true→false** and drops `placedCount` **877→827** (−50, all `no-space`).
+- Boundary at the shared whole-load bound: **msl=13** keeps gate **true** and full **877** placement; **msl=12** does not.
+- E7 precursor also observed: one oversized SKU makes `minimumFittingHeight` 0 for that item → gate false for the **whole** load; unplaced includes the 12 oversized boxes as `exceeds-dimensions` plus 6 collateral `no-space`.
+
+### Interpretation for later P3 tasks
+
+- **P3-2 note**：本 fixture 上 `msl=99` 与全 `undefined` 的 `placedCount` 差值已为 **0**（均为 877，且 gate 均为 true）。后续「99≡undefined」断言在本夹具上起点已对齐；仍需用更小有限值用例证明 binding 分支。
+- **P3-3 note**：E3/E7 的整批二元开关在本表上可复现，修复后应重跑本脚本：`msl=12` 行不应再仅因单 SKU 而整批退出；超尺寸行应只让该 SKU `exceeds-dimensions`，其余仍可走块路径。
+- **Non-goals this task**：无算法 diff、无 fixture/golden 变更、未跑 full gates、未 commit（parent 提交 docs）。

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-06 P3-1 0802 block-route sensitivity baseline
+
+- Read-only baseline for P3 packing root-cause work: measured `test-data/json/0802/input.json` (28 SKU / 877 boxes) across original, all-`maxStackLayers` undefined, one-SKU msl 10/12/13, and one-SKU exceeds-container-dims variants.
+- Recorded `shouldUseBlockEngine`, `placedCount`, unplaced count, reasonCode distribution, and gate diagnostics in `decision.md`.
+- E3 confirmed: one SKU `maxStackLayers=12` flips gate true→false and drops placedCount 877→827 (`no-space`×50); msl=13 stays gate true / 877.
+- Helper only: `scripts/p3-0802-block-route-baseline.mjs`. No packing algorithm, fixture, or golden changes.
+
 ## 2026-08-06 P2 phase gate
 
 - Full P2 completion gate: lint 0; unit 93 files / 815 tests; rollback 1/29; packing-performance 2/7; build 0; e2e 128/128 (7.5m, observed util 80.3%); benchmark 0 (timings comparable); round-status 26 tasks passed.
