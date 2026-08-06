@@ -2406,3 +2406,11 @@
 - **Mutation RED 0.95**：临时改为 **0.95** 后为 **2 failed / 1 passed / 48 skipped**；分别失败「60% must be accepted」与「exactly 50% must be accepted by boundary policy」。最终恢复 **0.5**，所有临时变化均未提交。
 - **Final GREEN**：fresh `npx vitest run src/lib/packing.test.ts` 为 **1 file / 51 tests passed**；targeted ESLint、`npx tsc -b --pretty false`、`git diff --check` 均 exit **0**。最终 `packing.ts` SHA-256 `1ea84bb2d2089d5285ca66d35ec9095ad926bf574736af89bae238a157669122`，`packing.test.ts` SHA-256 `09a7eb751da9771af77da965089e3a9da92054df152402383d6391f810abdd63`；无 fixture、baseline、timeout 或阈值值变化。
 - **决策**：本任务只为自动路径的现有 50% 规则和 diagnostics 命名；自动/手动 support policy 双源留给 P3-5，不在 P2 引入未来配置。
+
+## 2026-08-06 P2-4 guarded golden contract updates
+
+- **Initial RED**：新增 real-CLI temp-directory test 后，旧 `update-packing-contracts.mjs` 对 inflated baseline 仍 exit **0** 并写入，且只打印新 placed/hash；测试明确失败 `expected +0 not to be +0`。修复后又用 baseline 增加 generated 不存在的 case 复测，发现会静默删 case、仍 exit **0**；第二个 RED 记录了这一遗漏。
+- **实现**：脚本先读取目标 golden、在内存生成全部五 case，再逐 case 打印 old/new placed/total、delta、hash changed；缺失 generated case、`placedCount` 下降或 canonical `placements.length` 下降均在写入前拒绝并非零退出。无回退时输出 `Refusing to update packing contracts`；`--allow-regression` 才允许写入，并输出必须记录 decision 的 warning。目标路径由仅测试所需的 `--output` 指定，默认仍为仓库 golden。
+- **GREEN**：`npx vitest run scripts/updatePackingContracts.test.mjs` 为 **1 file / 1 test passed**（最终含三次真实 CLI invocation，Vitest **30.61s**）；覆盖缺失 case、placedCount/boxes 双回退、拒绝时 byte-identical、五 case table、allow warning 与允许后恢复原 golden bytes。测试 subprocess 设有 **30s** child timeout，父测试 timeout **120s**；超时/启动错误会抛出带 error code/message 的明确失败，不会无限挂起清理。
+- **Current updater**：`npm run test:contracts:update` exit **0**，table 为 `31/31 +0`、`463/864 +0`、`462/864 +0`、`839/864 +0`、`823/864 +0`，五项 hash 均 `no`。`git diff --exit-code -- test-data/baselines/packing-results.json` exit **0**；baseline SHA-256 更新前后均为 `b29279819be2cfd5d19f6edccfc70a7727c5dc56b59b368670f2765d67846c2b`。
+- **范围**：未修改算法、fixtures、canonicalizer、golden 内容、package scripts 或现有断言；targeted ESLint 与 diff-check exit **0**。本条待独立 commit。

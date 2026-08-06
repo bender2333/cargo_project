@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-06 P2-4 golden 回退写入门禁
+
+- `update-packing-contracts.mjs` 现在先读取旧 golden、内存生成并打印五 case old/new 对照；placedCount 或 canonical placements 数下降时拒绝写入并非零退出，`--allow-regression` 明确要求记录 decision。
+- TDD 覆盖缺失生成 case、数量/箱数回退、拒绝时 byte-identical、table、allow warning 和成功写入；初始 silent-write RED 与 missing-case silent-delete RED 均已收口。
+- 最终 `npx vitest run scripts/updatePackingContracts.test.mjs` **1/1**；child timeout **30s**、父测试 timeout **120s**，超时/启动错误显式失败。`npm run test:contracts:update` exit **0**，五 case delta 全为 `+0`、hash 全 `no`；baseline diff 为空，SHA-256 保持 `b2927981…`。
+
 ## 2026-08-06 P2-3 自动路径 50% 支撑率契约
 
 - 导出现有 support geometry 与固定 0.5 判定 seam，`canPlace` 以完全等价表达式复用；未增加配置或改变自动装箱行为。
