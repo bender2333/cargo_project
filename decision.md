@@ -2520,3 +2520,8 @@
 - **P3-8**：`PlacedBox.blockingInvalid` 由 `toPlacedBoxes` 标记；统计/层聚合跳过非法箱但 3D 仍可见；client/server history 校验同步接受并只计非 blocking 箱；悬空箱不再撑大 layer1 maxZ。
 - Focused：11 files / 204 tests green.
 
+## 2026-08-06 P3-12a custom container payload validation
+
+- Added `server/customContainers.mjs` `parseCustomContainerPayload` (positiveNumber-style). POST/PUT reject length -5000 / 0 / 1e400 and bad gaps with 400; names truncated to 120; valid payloads normalize.
+- Tests: `scripts/customContainers.test.mjs` with customCargo suite 7/7.
+

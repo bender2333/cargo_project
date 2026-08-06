@@ -8,6 +8,7 @@ import db from './db.mjs'
 import authRouter from './auth.mjs'
 import { authenticate, requireAdmin } from './middleware.mjs'
 import { parseCustomCargoPayload, serializeCustomCargo } from './customCargo.mjs'
+import { parseCustomContainerPayload } from './customContainers.mjs'
 import { createHistoryRouter, HISTORY_JSON_BODY_LIMIT } from './historyRoutes.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -125,8 +126,8 @@ app.get('/api/containers/custom', authenticate, (req, res) => {
 })
 
 app.post('/api/containers/custom', authenticate, (req, res) => {
-  const { name, length, width, height, maxWeight, doorGap, topGap, sideGap } = req.body
-  if (!name || !length || !width || !height || !maxWeight) {
+  const payload = parseCustomContainerPayload(req.body)
+  if (!payload) {
     return res.status(400).json({ error: 'Missing required parameters' })
   }
   const id = randomUUID()
@@ -134,8 +135,20 @@ app.post('/api/containers/custom', authenticate, (req, res) => {
     db.prepare(`
       INSERT INTO custom_containers (id, user_id, name, length, width, height, max_weight, door_gap, top_gap, side_gap, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, req.user.id, name, length, width, height, maxWeight, doorGap ?? 0, topGap ?? 0, sideGap ?? 0, new Date().toISOString())
-    
+    `).run(
+      id,
+      req.user.id,
+      payload.name,
+      payload.length,
+      payload.width,
+      payload.height,
+      payload.maxWeight,
+      payload.doorGap,
+      payload.topGap,
+      payload.sideGap,
+      new Date().toISOString(),
+    )
+
     const created = db.prepare('SELECT * FROM custom_containers WHERE id = ?').get(id)
     res.status(201).json(created)
   } catch (err) {
@@ -145,7 +158,10 @@ app.post('/api/containers/custom', authenticate, (req, res) => {
 
 app.put('/api/containers/custom/:id', authenticate, (req, res) => {
   const { id } = req.params
-  const { name, length, width, height, maxWeight, doorGap, topGap, sideGap } = req.body
+  const payload = parseCustomContainerPayload(req.body)
+  if (!payload) {
+    return res.status(400).json({ error: 'Missing required parameters' })
+  }
   try {
     const existing = db.prepare('SELECT * FROM custom_containers WHERE id = ? AND user_id = ?').get(id, req.user.id)
     if (!existing) {
@@ -156,15 +172,15 @@ app.put('/api/containers/custom/:id', authenticate, (req, res) => {
       SET name = ?, length = ?, width = ?, height = ?, max_weight = ?, door_gap = ?, top_gap = ?, side_gap = ?
       WHERE id = ?
     `).run(
-      name ?? existing.name,
-      length ?? existing.length,
-      width ?? existing.width,
-      height ?? existing.height,
-      maxWeight ?? existing.max_weight,
-      doorGap ?? existing.door_gap,
-      topGap ?? existing.top_gap,
-      sideGap ?? existing.side_gap,
-      id
+      payload.name,
+      payload.length,
+      payload.width,
+      payload.height,
+      payload.maxWeight,
+      payload.doorGap,
+      payload.topGap,
+      payload.sideGap,
+      id,
     )
     const updated = db.prepare('SELECT * FROM custom_containers WHERE id = ?').get(id)
     res.json(updated)

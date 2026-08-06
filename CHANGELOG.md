@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-06 P3-12a validate custom container payloads
+
+- Server custom container create/update now rejects non-positive/non-finite dimensions and gaps; reuses cargo-style positive number checks.
+- Focused server tests 7/7.
+
 ## 2026-08-06 P3-6/7/8 manual draft, container invalidate, invalid stats
 
 - Manual draft now reconciles cargo label/color so history save survives sidebar edits.
