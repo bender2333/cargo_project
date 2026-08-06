@@ -2,19 +2,9 @@ import type { ReactNode } from 'react'
 import { HelpTooltip } from './HelpTooltip'
 import type { ImportTemplateDefaults } from '../types'
 
-export type MappingDimensionUnit = 'auto' | 'mm' | 'cm'
-export type MappingDimensionKey = 'length' | 'width' | 'height'
 
-export type ImportMappingValue = {
-  mapping: Record<string, string>
-  units: Record<MappingDimensionKey, MappingDimensionUnit>
-  headerRow: number
-  startRow: number
-  dimensionMode: 'separate' | 'combined'
-  combinedColumn: string
-  dimensionOrder: MappingDimensionKey[]
-  defaults: ImportTemplateDefaults
-}
+export type { ImportMappingValue, MappingDimensionKey, MappingDimensionUnit } from '../lib/importMapping'
+import type { ImportMappingValue, MappingDimensionKey, MappingDimensionUnit } from '../lib/importMapping'
 
 // Strings the form needs. Workbench's per-locale `t` object structurally
 // satisfies this, so callers pass `labels={t}` without rebuilding a slice.

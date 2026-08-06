@@ -18,11 +18,10 @@ import { allLabelFaces, type LocalBoxFace } from '../../lib/cameraFacingLabels'
 import { faceLabelContent, faceLabelContentSignature, faceLabelLayout, type FaceLabelContent, type FaceLabelIcon } from '../../lib/faceLabelContent'
 import type { Point3D } from '../../lib/measurement'
 import { boxVisualState } from '../../lib/boxVisualState'
-import type { SceneViewMode } from '../ContainerScene'
+export type SceneViewMode = 'iso' | 'top' | 'front' | 'side'
 
 // Re-export so that ContainerScene.tsx (and tests) can import from here once
 // the migration is complete.
-export type { SceneViewMode }
 
 // ---------------------------------------------------------------------------
 // Internal types shared between rendering helpers

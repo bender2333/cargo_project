@@ -1,5 +1,5 @@
 import type { ImportTemplate, Locale } from '../types'
-import type { ImportMappingValue } from '../components/ImportMappingForm'
+import type { ImportMappingValue } from './importMapping'
 import type { ImportCargoRow } from './importCargo'
 
 const TEMPLATE_MAPPING_FIELDS = [

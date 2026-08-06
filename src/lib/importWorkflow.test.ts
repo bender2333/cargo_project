@@ -10,7 +10,7 @@ import {
   type ImportIssue,
 } from './importWorkflow'
 import type { ImportTemplate } from '../types'
-import type { ImportMappingValue } from '../components/ImportMappingForm'
+import type { ImportMappingValue } from './importMapping'
 import { fields } from './importCargo'
 
 describe('canAutoMap', () => {

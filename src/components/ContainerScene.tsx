@@ -30,7 +30,8 @@ import {
   advanceBoxAnimations, ensureGhost, positionGhost, clearGhost,
 } from './containerScene/interactions'
 
-export type SceneViewMode = 'iso' | 'top' | 'front' | 'side'
+import type { SceneViewMode } from './containerScene/rendering'
+export type { SceneViewMode }
 
 export type HoverBoxInfo = {
   id: string
