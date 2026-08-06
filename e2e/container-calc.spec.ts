@@ -775,8 +775,8 @@ test('filters the plan view by cargo label', async ({ page }) => {
 
   await page.getByRole('button', { name: '2D' }).click()
   await page.getByLabel('Label filter', { exact: true }).selectOption('B')
-  await expect(page.locator('rect[aria-label^="A Carton A"]').first().locator('xpath=..')).toHaveAttribute('opacity', '0.18')
-  await expect(page.locator('rect[aria-label^="B Label filtered crate"]').first().locator('xpath=..')).toHaveAttribute('opacity', '0.88')
+  await expect(page.locator('rect[aria-label^="A Carton A"]').first().locator('xpath=..')).toHaveAttribute('opacity', '0.22')
+  await expect(page.locator('rect[aria-label^="B Label filtered crate"]').first().locator('xpath=..')).toHaveAttribute('opacity', '1')
 
   await page.getByRole('button', { name: '3D' }).click()
   await expect(page.getByTestId('container-scene')).toBeVisible()

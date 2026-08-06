@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-06 align label-filter E2E opacities with boxVisualState
+
+- 2D label-filter E2E now expects shared three-tier opacities (inactive 0.22, active 1) after ContainerPlan2D switched off the old 0.18/0.88 local scale.
+
 ## 2026-08-06 refresh packing goldens for blockingInvalid
 
 - Regenerated `packing-results.json` after canonical `blockingInvalid` field; all five cases kept the same placedCount (no quantity regression).

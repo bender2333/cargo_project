@@ -2553,3 +2553,8 @@
 - P3-8 为 canonical placement 增加 `blockingInvalid`（合法箱为 false）。`placedCount` 五夹具均未下降（31/463/462/839/823 不变），仅 hash 变化。
 - 按 P2-4 门禁：`npm run test:contracts:update` exit 0，delta 全 +0、hash changed yes；随后 contracts/31pallet/blockEngine 与 updater 集成测试 GREEN。
 
+## 2026-08-06 E2E opacity expectation update after P3-11
+
+- `filters the plan view by cargo label` still asserted legacy ContainerPlan2D opacities 0.18/0.88.
+- Updated to lib `boxVisualState` values 0.22/1. This is a visual-contract sync, not packing-threshold weakening.
+
