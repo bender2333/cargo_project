@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-06 P2-5 首像素基线门禁收紧
+
+- 新增 `benchmark:update` timing regression 显式批准门槛：无 `--allow-timing-regression` 不写入超过 20% 的 timing widening；baseline=0 且 actual>0 也拒绝。frontend baseline `contractHashes` 明确为 metadata，权威仍是 `packing-results.json`。
+- focused RED→GREEN：初始 25 tests 中 2 个新测试失败；实现后 `frontendBenchmark.test.mjs` **26/26**，targeted ESLint 与 build 通过。
+- 三次 sequential benchmark：第 1 次完整 exit **0**，首像素 median/P95 **39.675/44.675ms**；第 2/3 次 Playwright 各 **1 passed** 但整体分别因 `vietnam-20gp-quantity`、`vietnam-40hq-quantity` P95 硬门禁 exit **1**。因此 frontend baseline **未更新**，first-pixel 收紧保留 BLOCKED，不降低算法门禁。
+
 ## 2026-08-06 P2-4 golden 回退写入门禁
 
 - `update-packing-contracts.mjs` 现在先读取旧 golden、内存生成并打印五 case old/new 对照；placedCount 或 canonical placements 数下降时拒绝写入并非零退出，`--allow-regression` 明确要求记录 decision。

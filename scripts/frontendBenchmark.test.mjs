@@ -250,6 +250,40 @@ describe('frontend architecture benchmark gates', () => {
     // The update itself still succeeds — this is visibility, not a new gate.
     expect(gateBenchmarkUpdate(baseline, slower).failures).toEqual([])
   })
+  it('refuses timing-widening benchmark updates without explicit approval', () => {
+    const baseline = benchmark()
+    const slower = setTiming(benchmark(), 500)
+
+    expect(frontendBenchmark.timingRegressionRefusal).toBeTypeOf('function')
+    const refusal = frontendBenchmark.timingRegressionRefusal?.(baseline, slower, false)
+    expect(refusal).toContain('Refusing to update benchmark baseline timing gates')
+    for (const entry of acceptedTimingRegressions(baseline, slower).entries) {
+      expect(refusal).toContain(
+        `${entry.metric}: ${entry.before.toFixed(3)} ms -> ${entry.after.toFixed(3)} ms`,
+      )
+    }
+    expect(refusal).toContain('--allow-timing-regression')
+  })
+
+  it('allows timing-widening benchmark updates with explicit approval', () => {
+    const baseline = benchmark()
+    const slower = setTiming(benchmark(), 500)
+
+    expect(frontendBenchmark.timingRegressionRefusal).toBeTypeOf('function')
+    expect(frontendBenchmark.timingRegressionRefusal?.(baseline, slower, true)).toBeNull()
+  })
+
+  it('does not compare frontend baseline hashes during benchmark updates', () => {
+    const baseline = benchmark({
+      contractHashes: Object.fromEntries(REQUIRED_ALGORITHM_CASES.map((name) => [name, 'not-authoritative'])),
+    })
+    const actual = benchmark({
+      contractHashes: Object.fromEntries(REQUIRED_ALGORITHM_CASES.map((name) => [name, 'b'.repeat(64)])),
+    })
+
+    expect(gateBenchmarkUpdate(baseline, actual)).toEqual({ failures: [] })
+  })
+
 
   it('refuses to create a baseline implicitly and names the escape hatch', () => {
     const refusal = frontendBenchmark.newBaselineRefusal('/tmp/baseline.json', false)
@@ -266,6 +300,16 @@ describe('frontend architecture benchmark gates', () => {
     const baseline = benchmark()
     const barelySlower = setTiming(benchmark(), 100 * 1.1)
     expect(acceptedTimingRegressions(baseline, barelySlower).entries).toEqual([])
+  })
+
+  it('refuses positive timing updates from a zero baseline', () => {
+    const baseline = benchmark()
+    baseline.browser.metrics.canvasFirstNonEmptyPixelsMs.medianMs = 0
+    const actual = benchmark()
+    actual.browser.metrics.canvasFirstNonEmptyPixelsMs.medianMs = 1
+
+    const refusal = frontendBenchmark.timingRegressionRefusal?.(baseline, actual, false)
+    expect(refusal).toContain('browser.canvasFirstNonEmptyPixelsMs.medianMs: 0.000 ms -> 1.000 ms')
   })
 
   it('does not report timing widenings across incomparable environments', () => {
