@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-06 P3-3 per-SKU block-route eligibility
+
+- `shouldUseBlockEngine` now evaluates stack-layer reachability per SKU; oversized SKUs no longer flip the whole load off the block path.
+- Authorized rewrite: mixed 300mm height case now expects per-SKU eligibility true (bound 4), not whole-load false.
+- TDD covered 0802 one-SKU msl=12 and oversized-only gate behavior. Focused blockEngine 6/6.
+
 ## 2026-08-06 P3-2 non-binding stack limits
 
 - Automatic placement scoring now treats non-binding finite `maxStackLayers` (e.g. 99) like unlimited, while still enforcing truly binding limits (e.g. 2).

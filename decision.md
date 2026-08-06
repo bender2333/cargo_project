@@ -2489,3 +2489,15 @@
 - **GREEN**：`npx vitest run src/lib/packing.test.ts -t "non-binding|binding maxStackLayers|matches placedCount for non-binding"` 3/3；contracts+31pallet 9/9；focused packing suites earlier 71+16 passed；golden placedCount 无回退。
 - **P3-1 link**：0802 上 99 vs undefined 本已同为 877；本任务补上评分路径与 binding=2 强制用例。
 
+
+## 2026-08-06 P3-3 per-SKU block-route eligibility
+
+- **Choice**：pure per-SKU enablement (default). Oversized SKUs are ignored by the gate (`fittingHeight<=ε` → treat as non-blocking for route selection) and still land as `exceeds-dimensions` on the block path; no whole-load silent fallback diagnostic needed.
+- **Old gate**：shared `conservativeMaxPhysicalLayers = ceil(H / min(all fittingHeights))`; any SKU with finite `maxStackLayers < bound`, or any `fittingHeight=0`, flipped whole load off block.
+- **New gate**：each SKU uses `ceil(H / ownFittingHeight)`; undefined msl stays eligible; invalid msl (0/NaN/∞) still ineligible; groundOnly/stackable/SKU-count/total gates unchanged.
+- **Authorized assertion rewrite** (`packing.blockEngine.test.ts` gate table):
+  - Old: `'mixed 300mm height raises whole-load bound to eight'` → `expected: false` (shared bound `ceil(2400/300)=8`, item0 msl=4 < 8).
+  - New: `'mixed 300mm height keeps per-SKU bound eligible at four'` → `expected: true` (item0 own bound `ceil(2400/600)=4`, 4≥4; item1 height 300 has undefined msl).
+- **RED**：3 failures before fix — rewritten mixed-height case, 0802 one-SKU msl=12, oversized-only mix all expected gate true got false.
+- **GREEN**：`npx vitest run src/lib/packing.blockEngine.test.ts --pool=threads --maxWorkers=1` → 6/6 passed. No full gates/commit (parent).
+

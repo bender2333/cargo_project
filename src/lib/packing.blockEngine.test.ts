@@ -145,7 +145,7 @@ describe('block-building packing engine', () => {
       { name: 'infinite maxStackLayers ineligible', cargoItems: [{ ...items[0], maxStackLayers: Number.POSITIVE_INFINITY }, items[1]], loadingMode: 'quantity', expected: false },
       { name: 'stackable ground-only cargo eligible', cargoItems: [{ ...items[0], groundOnly: true }, items[1]], loadingMode: 'quantity', expected: true },
       { name: 'non-stackable ground-only cargo ineligible', cargoItems: [{ ...items[0], groundOnly: true, stackable: false }, items[1]], loadingMode: 'quantity', expected: false },
-      { name: 'mixed 300mm height raises whole-load bound to eight', cargoItems: [{ ...items[0], maxStackLayers: 4 }, { ...items[1], height: 300 }], loadingMode: 'quantity', expected: false },
+      { name: 'mixed 300mm height keeps per-SKU bound eligible at four', cargoItems: [{ ...items[0], maxStackLayers: 4 }, { ...items[1], height: 300 }], loadingMode: 'quantity', expected: true },
     ]
 
     for (const gateCase of gateCases) {
@@ -156,6 +156,110 @@ describe('block-building packing engine', () => {
 
     expect(result.placedCount).toBeGreaterThan(0)
     expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
+  })
+
+  it('scopes stack-layer eligibility to each SKU reachable height, not the shared shortest box', () => {
+    const fixture = JSON.parse(readFileSync('test-data/json/0802/input.json', 'utf8')) as {
+      loadingMode: LoadingMode
+      container: ContainerSpec
+      items: CargoItem[]
+    }
+    const effective = effectiveContainer(fixture.container)
+    // P3-1 baseline: shared shortest fitting height is 210mm → whole-load bound 13.
+    // Mutate one taller SKU to msl=12 (< 13) while others stay 99; per-SKU bound for that
+    // SKU is ceil(height / ownFitH) and must not force the whole batch off block.
+    const items = fixture.items.map((item, index) => (
+      index === 0 ? { ...item, maxStackLayers: 12 } : { ...item, maxStackLayers: 99 }
+    ))
+
+    expect(shouldUseBlockEngine(items, fixture.loadingMode, effective)).toBe(true)
+
+    const limited = items[0]
+    const ownFitHeight = Math.min(
+      ...[
+        [limited.length, limited.width, limited.height],
+        [limited.width, limited.length, limited.height],
+      ]
+        .filter(([length, width, height]) =>
+          length <= effective.length && width <= effective.width && height <= effective.height,
+        )
+        .map(([, , height]) => height),
+    )
+    const ownBound = Math.ceil(effective.height / ownFitHeight)
+    expect(ownBound).toBeLessThan(13)
+    expect(12).toBeGreaterThanOrEqual(ownBound)
+  })
+
+  it('keeps block route when only one SKU exceeds container dimensions', () => {
+    const container: ContainerSpec = {
+      id: 'oversized-mix',
+      label: 'Oversized mix container',
+      description: 'Block-eligible load with one impossible SKU',
+      length: 5000,
+      width: 2400,
+      height: 2400,
+      maxWeight: 50_000,
+      doorGap: 0,
+      topGap: 0,
+      sideGap: 0,
+    }
+    const items: CargoItem[] = [
+      {
+        id: 'fit-a',
+        name: 'Fit A',
+        label: 'A',
+        length: 1000,
+        width: 600,
+        height: 600,
+        weight: 10,
+        quantity: 60,
+        color: '#f59e0b',
+        canRotate: false,
+        stackable: true,
+      },
+      {
+        id: 'fit-b',
+        name: 'Fit B',
+        label: 'B',
+        length: 800,
+        width: 600,
+        height: 600,
+        weight: 10,
+        quantity: 50,
+        color: '#0ea5e9',
+        canRotate: false,
+        stackable: true,
+      },
+      {
+        id: 'oversized',
+        name: 'Oversized',
+        label: 'Z',
+        length: container.length + 500,
+        width: container.width + 500,
+        height: container.height + 500,
+        weight: 10,
+        quantity: 5,
+        color: '#ef4444',
+        canRotate: false,
+        stackable: true,
+      },
+    ]
+
+    expect(shouldUseBlockEngine(items, 'quantity', container)).toBe(true)
+
+    const result = calculatePacking(container, items, { loadingMode: 'quantity' })
+    const oversizedUnplaced = result.unplaced.filter((entry) => entry.cargoId === 'oversized')
+
+    expect(oversizedUnplaced).toEqual([
+      expect.objectContaining({
+        cargoId: 'oversized',
+        quantity: 5,
+        reasonCode: 'exceeds-dimensions',
+      }),
+    ])
+    expect(result.placed.every((box) => box.cargoId !== 'oversized')).toBe(true)
+    expect(result.placedCount).toBeGreaterThan(0)
+    expect(result.placed.some((box) => box.cargoId === 'fit-a' || box.cargoId === 'fit-b')).toBe(true)
   })
 
   it('packs the captured 0802 Vietnam 40HQ quantity load completely with its constraints retained', () => {

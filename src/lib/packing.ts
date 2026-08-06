@@ -882,15 +882,18 @@ export function shouldUseBlockEngine(cargoItems: CargoItem[], loadingMode: Loadi
     || cargoItems.some((item) => !item.stackable)
   ) return false
 
-  const fittingHeights = cargoItems.map((item) => minimumFittingHeight(item, container))
-  if (fittingHeights.some((height) => height <= EPSILON)) return false
+  // Per-SKU reachable layers. Oversized SKUs are skipped here and marked
+  // exceeds-dimensions on the block path; they must not flip the whole load off.
+  return cargoItems.every((item) => {
+    const fittingHeight = minimumFittingHeight(item, container)
+    if (fittingHeight <= EPSILON) return true
 
-  const conservativeMaxPhysicalLayers = Math.ceil(container.height / Math.min(...fittingHeights))
-  return cargoItems.every((item) => item.maxStackLayers === undefined || (
-    Number.isFinite(item.maxStackLayers)
-    && item.maxStackLayers > 0
-    && item.maxStackLayers >= conservativeMaxPhysicalLayers
-  ))
+    if (item.maxStackLayers === undefined) return true
+    if (!Number.isFinite(item.maxStackLayers) || item.maxStackLayers <= 0) return false
+
+    const ownMaxPhysicalLayers = Math.ceil(container.height / fittingHeight)
+    return item.maxStackLayers >= ownMaxPhysicalLayers
+  })
 }
 
 export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[], options: CalculatePackingOptions = {}): PackingResult {
