@@ -1154,10 +1154,12 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     placeBlocks((choice) => choice.state.item.groundOnly === true && choice.point.z <= EPSILON)
     placeBlocks((choice) => !choice.state.item.groundOnly)
 
-    const nonGroundStates = cargoStates.filter((state) => !state.item.groundOnly)
+    // Include residual groundOnly too — canPlace already forces z==0, and EMS/block
+    // exhaustion can leave free floor that only extreme-point singles can fill.
+    const residualStates = cargoStates.filter((state) => state.remaining > 0)
     const fallbackStates = loadingMode === 'quantity'
-      ? nonGroundStates.sort((a, b) => b.remaining - a.remaining || cargoVolume(b.item) - cargoVolume(a.item))
-      : nonGroundStates
+      ? residualStates.sort((a, b) => b.remaining - a.remaining || cargoVolume(b.item) - cargoVolume(a.item))
+      : residualStates
     for (const state of fallbackStates) {
       while (state.remaining > 0) {
         if (usedWeight + state.item.weight > effective.maxWeight + EPSILON) break

@@ -2501,3 +2501,9 @@
 - **RED**：3 failures before fix — rewritten mixed-height case, 0802 one-SKU msl=12, oversized-only mix all expected gate true got false.
 - **GREEN**：`npx vitest run src/lib/packing.blockEngine.test.ts --pool=threads --maxWorkers=1` → 6/6 passed. No full gates/commit (parent).
 
+## 2026-08-06 P3-4 groundOnly path completeness
+
+- **quickPlace (commit 915c059)**：`makeCandidateBox` 现传 `groundOnly`。TDD 分支断言：成功则 `box.groundOnly===true && z===0`，失败则 `no-space`。`quickPlace.test.ts` 10/10。
+- **block fallback**：`calculatePacking` 块引擎后的 extreme-point fallback 不再 `filter(!groundOnly)`，改为所有 `remaining>0` 状态；合法性仍由 `canPlace` 强制地面。
+- **Regression**：新增 block-path residual GO 用例；0629 C/NO_SPACE 与 0802 GO 28/28 z=0、placed 877 仍成立。未改 `MAX_BLOCK_REJECTIONS_PER_STEP`。
+

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-06 P3-4 groundOnly across quick-place and block fallback
+
+- Quick Place now carries `groundOnly` into candidate boxes so stacked ground-only placements cannot validate as success.
+- Block-engine single-box fallback includes residual ground-only cargo; `canPlace` still keeps them on the floor.
+- Focused quickPlace 10/10; packing residual/0629/0802 ground-only regressions green.
+
 ## 2026-08-06 P3-3 per-SKU block-route eligibility
 
 - `shouldUseBlockEngine` now evaluates stack-layer reachability per SKU; oversized SKUs no longer flip the whole load off the block path.

@@ -656,6 +656,31 @@ describe('calculatePacking', () => {
     expect(result.placed.find((box) => box.cargoId === 'top-only')?.z).toBeGreaterThan(0)
   })
 
+  it('includes residual ground-only cargo in block-engine single-box fallback', () => {
+    // Block path (SKU>=2, total>=100). Ground-only must remain floor-only and must not be
+    // skipped by the post-block extreme-point fallback merely because it is groundOnly.
+    const container = testContainer({ length: 4000, width: 2000, height: 2000, maxWeight: 100_000 })
+    const items = [
+      cargo({ id: 'g', label: 'G', length: 500, width: 500, height: 400, weight: 1, quantity: 40, canRotate: false, groundOnly: true }),
+      cargo({ id: 't', label: 'T', length: 500, width: 500, height: 400, weight: 1, quantity: 80, canRotate: false }),
+    ]
+    const result = calculatePacking(container, items, { loadingMode: 'quantity' })
+    const groundPlaced = result.placed.filter((box) => box.cargoId === 'g')
+    const groundUnplaced = result.unplaced
+      .filter((entry) => entry.cargoId === 'g')
+      .reduce((sum, entry) => sum + entry.quantity, 0)
+    const floorCount = result.placed.filter((box) => box.z === 0).length
+    const floorCapacity = Math.floor(container.length / 500) * Math.floor(container.width / 500)
+
+    expect(groundPlaced.length).toBeGreaterThan(0)
+    expect(groundPlaced.every((box) => box.z === 0)).toBe(true)
+    expect(groundPlaced.length + groundUnplaced).toBe(40)
+    // If any ground-only remains unplaced, the floor must already be saturated — not a skipped fallback.
+    if (groundUnplaced > 0) {
+      expect(floorCount).toBeGreaterThanOrEqual(floorCapacity)
+    }
+  })
+
   it('keeps 0629 ground-only cartons on the floor in quantity and volume modes', () => {
     const { container, cargoItems } = load0629Fixture()
     const constrainedItems = cargoItems.map((item) => item.label === 'C' ? { ...item, groundOnly: true } : item)
