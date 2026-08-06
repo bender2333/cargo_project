@@ -78,6 +78,7 @@ export function assignDepthLayers(placed: PlacementBox[]): PlacementBox[] {
 export function buildPackingLayers(placed: PlacedBox[]): PackingLayer[] {
   const groups = new Map<number, PlacedBox[]>()
   placed.forEach((box) => {
+    if (box.blockingInvalid) return
     groups.set(box.physicalLayer, [...(groups.get(box.physicalLayer) ?? []), box])
   })
 

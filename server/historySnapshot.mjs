@@ -207,14 +207,15 @@ function validatePackingResult(value, cargoIds, path, container, placementMode, 
     string(box.name, `${boxPath}.name`)
     string(box.label, `${boxPath}.label`)
     integer(box.index, `${boxPath}.index`, 1)
-    placedCargoCounts.set(cargoId, (placedCargoCounts.get(cargoId) ?? 0) + 1)
     const x = nonNegative(box.x, `${boxPath}.x`)
     const y = nonNegative(box.y, `${boxPath}.y`)
     const z = nonNegative(box.z, `${boxPath}.z`)
     const length = positive(box.length, `${boxPath}.length`)
     const width = positive(box.width, `${boxPath}.width`)
     const height = positive(box.height, `${boxPath}.height`)
-    if (x + length > effectiveLength || y + width > effectiveWidth || z + height > effectiveHeight) {
+    if (box.blockingInvalid !== undefined) boolean(box.blockingInvalid, `${boxPath}.blockingInvalid`)
+    const blockingInvalid = box.blockingInvalid === true
+    if (!blockingInvalid && (x + length > effectiveLength || y + width > effectiveWidth || z + height > effectiveHeight)) {
       throw new Error(`${boxPath} must fit inside the effective container`)
     }
     enumeration(box.orientationKey, ORIENTATION_KEYS, `${boxPath}.orientationKey`)
@@ -234,10 +235,13 @@ function validatePackingResult(value, cargoIds, path, container, placementMode, 
     const workStep = integer(box.workStep, `${boxPath}.workStep`, 1)
     const supportType = enumeration(box.supportType, SUPPORT_TYPES, `${boxPath}.supportType`)
     const supportedBy = array(box.supportedBy, `${boxPath}.supportedBy`).map((id, supporterIndex) => string(id, `${boxPath}.supportedBy[${supporterIndex}]`))
-    const cargoLayers = placedCargoLayers.get(cargoId) ?? new Set()
-    cargoLayers.add(physicalLayer)
-    placedCargoLayers.set(cargoId, cargoLayers)
-    placedLayerCounts.set(physicalLayer, (placedLayerCounts.get(physicalLayer) ?? 0) + 1)
+    if (!blockingInvalid) {
+      placedCargoCounts.set(cargoId, (placedCargoCounts.get(cargoId) ?? 0) + 1)
+      const cargoLayers = placedCargoLayers.get(cargoId) ?? new Set()
+      cargoLayers.add(physicalLayer)
+      placedCargoLayers.set(cargoId, cargoLayers)
+      placedLayerCounts.set(physicalLayer, (placedLayerCounts.get(physicalLayer) ?? 0) + 1)
+    }
     boxes.set(id, { cargoId, workStep, physicalLayer, supportType, supportedBy, value: box })
   })
 
@@ -408,7 +412,11 @@ function validatePackingResult(value, cargoIds, path, container, placementMode, 
 
   const totalCargoCount = integer(result.totalCargoCount, `${path}.totalCargoCount`)
   const placedCount = integer(result.placedCount, `${path}.placedCount`)
-  if (placedCount !== placed.length) throw new Error(`${path}.placedCount must match placed.length`)
+  const countedPlaced = placed.filter((value) => {
+    const box = record(value, `${path}.placed`)
+    return box.blockingInvalid !== true
+  }).length
+  if (placedCount !== countedPlaced) throw new Error(`${path}.placedCount must match non-blocking placed boxes`)
   nonNegative(result.usedVolume, `${path}.usedVolume`)
   positive(result.containerVolume, `${path}.containerVolume`)
   nonNegative(result.volumeUtilization, `${path}.volumeUtilization`)

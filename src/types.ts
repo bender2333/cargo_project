@@ -56,6 +56,11 @@ export type PlacementBox = {
   stackable: boolean
   maxStackLayers?: number
   groundOnly?: boolean
+  /**
+   * Manual-only marker: box remains in `placed` for visibility, but statistics
+   * (placedCount/usedVolume/labelStats/layers) exclude it.
+   */
+  blockingInvalid?: boolean
   /** Vertical stacking depth. A box on the floor is layer 1 (PRD 9.3). */
   physicalLayer: number
   /** Loading wave along the container depth axis, once finalization assigns it. */

@@ -95,6 +95,7 @@ export function canonicalizePackingResult(result: PackingResult) {
         stackable: box.stackable,
         maxStackLayers: box.maxStackLayers ?? null,
         groundOnly: box.groundOnly ?? null,
+        blockingInvalid: box.blockingInvalid === true,
         physicalLayer: box.physicalLayer,
         depthLayer: roundNumber(box.depthLayer),
         workStep: box.workStep,

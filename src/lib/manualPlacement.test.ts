@@ -1204,10 +1204,9 @@ describe('validateDraft overweight check', () => {
 })
 
 describe('toPlacedBoxes invalidBoxIds filtering', () => {
-  it('includes invalid boxes in placed output so the 3D renderer can highlight them', () => {
-    // Architecture: invalidBoxIds are passed to ContainerScene for red-highlight rendering.
-    // toPlacedBoxes must include ALL boxes (valid and invalid) so the scene can show them.
-    // The invalid ids are a rendering hint, not a filter.
+  it('includes invalid boxes in placed output and marks them blockingInvalid', () => {
+    // Invalid boxes stay visible for 3D highlight, but are explicitly marked so
+    // statistics and history aggregates can skip them.
     let draft = emptyDraft()
     draft = addBox(draft, makeManualBox({
       id: 'valid', cargoId: 'cargo-a', label: 'A', color: '#f59e0b',
@@ -1223,6 +1222,8 @@ describe('toPlacedBoxes invalidBoxIds filtering', () => {
     expect(placed).toHaveLength(2)
     expect(placed.map((b) => b.id)).toContain('valid')
     expect(placed.map((b) => b.id)).toContain('invalid')
+    expect(placed.find((b) => b.id === 'invalid')?.blockingInvalid).toBe(true)
+    expect(placed.find((b) => b.id === 'valid')?.blockingInvalid).toBeUndefined()
   })
 
   it('returns all boxes when invalidBoxIds is empty', () => {
@@ -1239,5 +1240,6 @@ describe('toPlacedBoxes invalidBoxIds filtering', () => {
     const placed = toPlacedBoxes(draft, new Set())
 
     expect(placed).toHaveLength(2)
+    expect(placed.every((box) => box.blockingInvalid === undefined)).toBe(true)
   })
 })

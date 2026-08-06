@@ -89,11 +89,12 @@ export function buildManualPackingResult(
   const inputBoxes = cargoItems ? enrichPlacedBoxes(boxes, cargoItems) : boxes
   const { placed, layers, workSteps } = finalizePlacementGeometry(inputBoxes, container)
 
-  const usedVolume = placed.reduce((sum, box) => sum + box.length * box.width * box.height, 0)
+  const counted = placed.filter((box) => !box.blockingInvalid)
+  const usedVolume = counted.reduce((sum, box) => sum + box.length * box.width * box.height, 0)
   const containerVolume = container.length * container.width * container.height
-  const usedWeight = placed.reduce((sum, box) => sum + box.weight, 0)
+  const usedWeight = counted.reduce((sum, box) => sum + box.weight, 0)
   const placedByCargoId = new Map<string, number>()
-  for (const box of placed) {
+  for (const box of counted) {
     placedByCargoId.set(box.cargoId, (placedByCargoId.get(box.cargoId) ?? 0) + 1)
   }
   const unplaced = (cargoItems ?? []).flatMap((cargo) => {
@@ -113,14 +114,14 @@ export function buildManualPackingResult(
   return {
     placed,
     unplaced,
-    layers,
+    layers: layers.filter((layer) => layer.count > 0),
     workSteps,
-    labelStats: buildLabelStats(cargoItems ?? [], placed),
+    labelStats: buildLabelStats(cargoItems ?? [], counted),
     diagnostics: buildManualDiagnostics(placed, container, validationIssues),
     totalCargoCount: cargoItems
       ? cargoItems.reduce((sum, cargo) => sum + cargo.quantity, 0)
-      : placed.length,
-    placedCount: placed.length,
+      : counted.length,
+    placedCount: counted.length,
     usedVolume,
     containerVolume,
     volumeUtilization: containerVolume ? (usedVolume / containerVolume) * 100 : 0,

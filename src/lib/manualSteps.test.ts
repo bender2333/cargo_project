@@ -36,6 +36,7 @@ function makeBox(overrides: Partial<PlacementBox> & Pick<PlacementBox, 'id'>): P
     color: overrides.color ?? '#f59e0b',
     canRotate: overrides.canRotate ?? true,
     stackable: overrides.stackable ?? true,
+    ...(overrides.blockingInvalid ? { blockingInvalid: true as const } : {}),
     physicalLayer: overrides.physicalLayer ?? 1,
     workStep: overrides.workStep ?? 1,
     supportType: overrides.supportType ?? 'floor',
@@ -302,3 +303,149 @@ describe('buildManualPackingResult diagnostics', () => {
     expect(weightDiag?.severity ?? 'info').not.toBe('error')
   })
 })
+
+// P3-8 — blocking-invalid boxes stay visible but leave statistics
+
+describe('buildManualPackingResult blocking-invalid statistics', () => {
+  it('keeps blocking-invalid boxes in placed while excluding them from aggregates', () => {
+    const valid = makeBox({
+      id: 'valid',
+      cargoId: 'cargo-a',
+      label: 'A',
+      x: 0,
+      y: 0,
+      z: 0,
+      length: 600,
+      width: 500,
+      height: 400,
+    })
+    const invalid = makeBox({
+      id: 'invalid',
+      cargoId: 'cargo-b',
+      label: 'B',
+      x: 0,
+      y: 0,
+      z: 0,
+      length: 600,
+      width: 500,
+      height: 400,
+      blockingInvalid: true,
+    })
+    const cargoItems: CargoItem[] = [
+      {
+        id: 'cargo-a',
+        name: 'Valid cargo',
+        label: 'A',
+        length: 600,
+        width: 500,
+        height: 400,
+        weight: 10,
+        quantity: 1,
+        color: '#f59e0b',
+        canRotate: true,
+        stackable: true,
+      },
+      {
+        id: 'cargo-b',
+        name: 'Invalid cargo',
+        label: 'B',
+        length: 600,
+        width: 500,
+        height: 400,
+        weight: 10,
+        quantity: 1,
+        color: '#0ea5e9',
+        canRotate: true,
+        stackable: true,
+      },
+    ]
+
+    const result = buildManualPackingResult([valid, invalid], container, cargoItems)
+
+    expect(result.placed.map((box) => box.id).sort()).toEqual(['invalid', 'valid'])
+    expect(result.placed.find((box) => box.id === 'invalid')?.blockingInvalid).toBe(true)
+    expect(result.placedCount).toBe(1)
+    expect(result.usedVolume).toBe(valid.length * valid.width * valid.height)
+    expect(result.usedWeight).toBe(valid.weight)
+    expect(result.labelStats).toEqual([
+      expect.objectContaining({ label: 'A', planned: 1, placed: 1, unplaced: 0 }),
+      expect.objectContaining({ label: 'B', planned: 1, placed: 0, unplaced: 1 }),
+    ])
+    expect(result.unplaced).toEqual([
+      expect.objectContaining({ cargoId: 'cargo-b', quantity: 1 }),
+    ])
+    expect(result.layers).toHaveLength(1)
+    expect(result.layers[0]).toMatchObject({ count: 1, physicalLayer: 1 })
+    expect(result.layers[0].labels).toEqual([
+      expect.objectContaining({ label: 'A', count: 1 }),
+    ])
+  })
+
+  it('does not pollute layer 1 maxZ with unsupported floating boxes', () => {
+    const floor = makeBox({
+      id: 'floor',
+      cargoId: 'cargo-a',
+      label: 'A',
+      x: 0,
+      y: 0,
+      z: 0,
+      length: 600,
+      width: 500,
+      height: 400,
+    })
+    const floating = makeBox({
+      id: 'floating',
+      cargoId: 'cargo-b',
+      label: 'B',
+      x: 700,
+      y: 0,
+      z: 800,
+      length: 600,
+      width: 500,
+      height: 400,
+      blockingInvalid: true,
+    })
+    const cargoItems: CargoItem[] = [
+      {
+        id: 'cargo-a',
+        name: 'Floor',
+        label: 'A',
+        length: 600,
+        width: 500,
+        height: 400,
+        weight: 10,
+        quantity: 1,
+        color: '#f59e0b',
+        canRotate: true,
+        stackable: true,
+      },
+      {
+        id: 'cargo-b',
+        name: 'Float',
+        label: 'B',
+        length: 600,
+        width: 500,
+        height: 400,
+        weight: 10,
+        quantity: 1,
+        color: '#0ea5e9',
+        canRotate: true,
+        stackable: true,
+      },
+    ]
+
+    const result = buildManualPackingResult([floor, floating], container, cargoItems)
+
+    expect(result.placed).toHaveLength(2)
+    expect(result.placedCount).toBe(1)
+    expect(result.layers).toHaveLength(1)
+    expect(result.layers[0]).toMatchObject({
+      physicalLayer: 1,
+      count: 1,
+      minZ: 0,
+      maxZ: 400,
+    })
+    expect(result.layers[0].labels.map((entry) => entry.label)).toEqual(['A'])
+  })
+})
+

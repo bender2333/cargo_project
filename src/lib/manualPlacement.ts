@@ -834,14 +834,13 @@ export function makeManualBox(params: {
  * the 3D scene and the layered plan view. Fills in safe defaults for fields
  * the manual editor does not track yet (work step, layer, support, weight).
  *
- * The set of invalid box ids is passed alongside so the renderer can apply
- * a red highlight without polluting PlacedBox with a manual-only flag.
+ * Invalid boxes stay visible for highlight, and are explicitly marked so
+ * result statistics can exclude them without removing them from `placed`.
  */
 export function toPlacedBoxes(
   draft: ManualDraft,
   invalidBoxIds: Set<string>,
 ): PlacementBox[] {
-  void invalidBoxIds
   return draft.boxes.map((box) => ({
     id: box.id,
     cargoId: box.cargoId,
@@ -866,6 +865,7 @@ export function toPlacedBoxes(
     stackable: box.stackable ?? true,
     maxStackLayers: box.maxStackLayers,
     groundOnly: box.groundOnly,
+    ...(invalidBoxIds.has(box.id) ? { blockingInvalid: true as const } : {}),
     physicalLayer: 1,
     workStep: 1,
     supportType: 'floor',

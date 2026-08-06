@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CargoItem, ContainerSpec, PackingResult } from '../types'
 import type { ManualDraft } from './manualPlacement'
+import { toPlacedBoxes } from './manualPlacement'
 import type { HistorySnapshotV2 } from './historySnapshot'
 import {
   assertHistorySnapshotSize,
@@ -12,6 +13,12 @@ import {
   isHistorySnapshotV2,
   measureHistorySnapshotBytes,
 } from './historySnapshot'
+import {
+  createManualPlacementSessionState,
+  reconcileManualPlacementSessionState,
+} from './manualPlacementSession'
+import { buildManualPackingResult } from './manualSteps'
+
 
 const container: ContainerSpec = {
   id: 'c1',
@@ -170,6 +177,139 @@ describe('buildHistorySnapshot', () => {
     })
     expect(auto.manualDraft).toBeUndefined()
   })
+
+  it('saves a manual plan after cargo label/color edits when the draft was reconciled', () => {
+    const draft: ManualDraft = {
+      boxes: [{
+        id: 'box-1',
+        cargoId: 'a',
+        label: 'OLD',
+        color: '#111',
+        baseLength: 500,
+        baseWidth: 400,
+        baseHeight: 300,
+        x: 10,
+        y: 20,
+        z: 0,
+        length: 500,
+        width: 400,
+        height: 300,
+        orientationKey: 'LWH',
+        labelRotationDeg: 0,
+        yawQuarterTurn: 0,
+        pitchQuarterTurn: 0,
+        orientationAxes: { x: 'L+', y: 'W+', z: 'H+' },
+        orientationLabel: 'X:L+ Y:W+ Z:T+',
+        weight: 10,
+        canRotate: true,
+        stackable: true,
+      }],
+    }
+    const editedCargo: CargoItem = { ...cargo, label: 'NEW', color: '#abcdef' }
+
+    // Stale draft label must fail history reconciliation (documents C2).
+    expect(() => buildHistorySnapshot({
+      container,
+      cargoItems: [editedCargo],
+      packingResult: {
+        ...packingResult,
+        placed: [{ ...packingResult.placed[0], label: 'NEW', color: '#abcdef', name: 'Alpha' }],
+        labelStats: [{ label: 'NEW', name: 'Alpha', color: '#abcdef', planned: 1, placed: 1, unplaced: 0, layers: [1] }],
+      },
+      placementMode: 'manual',
+      manualDraft: draft,
+      draftInitialized: true,
+    })).toThrow(/label/)
+
+
+    const reconciled = reconcileManualPlacementSessionState(
+      createManualPlacementSessionState({
+        mode: 'manual',
+        history: { past: [], present: draft, future: [] },
+        draftInitialized: true,
+      }),
+      [{
+        id: editedCargo.id,
+        quantity: editedCargo.quantity,
+        weight: editedCargo.weight,
+        length: editedCargo.length,
+        width: editedCargo.width,
+        height: editedCargo.height,
+        canRotate: editedCargo.canRotate,
+        stackable: editedCargo.stackable,
+        label: editedCargo.label,
+        color: editedCargo.color,
+      }],
+    )
+
+    const result = buildManualPackingResult(
+      toPlacedBoxes(reconciled.history.present, new Set()),
+      container,
+      [editedCargo],
+    )
+
+    const saved = buildHistorySnapshot({
+      container,
+      cargoItems: [editedCargo],
+      packingResult: result,
+      placementMode: 'manual',
+      manualDraft: reconciled.history.present,
+      draftInitialized: true,
+    })
+
+    expect(saved.manualDraft?.boxes[0]).toMatchObject({ label: 'NEW', color: '#abcdef' })
+    expect(saved.packingResult.placed[0]).toMatchObject({ label: 'NEW', color: '#abcdef' })
+  })
+
+  it('accepts blockingInvalid placed boxes while counting only valid ones', () => {
+    const valid = packingResult.placed[0]
+    const invalid = {
+      ...valid,
+      id: 'box-invalid',
+      index: 2,
+      x: 0,
+      y: 0,
+      z: 0,
+      length: 600,
+      width: 500,
+      height: 400,
+      blockingInvalid: true as const,
+      cargoId: 'a',
+      label: 'A',
+      color: '#111',
+      workStep: 2,
+    }
+    const result: PackingResult = {
+      ...packingResult,
+      placed: [valid, invalid],
+      workSteps: [
+        packingResult.workSteps[0],
+        {
+          step: 2,
+          boxId: 'box-invalid',
+          cargoId: 'a',
+          label: 'A',
+          physicalLayer: 1,
+          supportType: 'floor',
+        },
+      ],
+      placedCount: 1,
+      totalCargoCount: 1,
+      usedVolume: packingResult.usedVolume,
+      usedWeight: packingResult.usedWeight,
+      labelStats: packingResult.labelStats,
+      layers: packingResult.layers,
+    }
+
+    expect(() => buildHistorySnapshot({
+      container,
+      cargoItems: [cargo],
+      packingResult: result,
+      placementMode: 'auto',
+    })).not.toThrow()
+  })
+
+
 })
 
 describe('classifyHistoryRestore', () => {
