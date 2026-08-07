@@ -14,6 +14,29 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-08-07-r64-visual-selection-ownership',
+    date: '2026-08-07',
+    title: {
+      en: 'Report panel now owns layer, label, and tab selection',
+      zh: '报告面板收口层级、标签与页签选择状态',
+    },
+    items: {
+      en: [
+        'Layer, label, and result-tab selection states now live inside the Results Panel instead of the main Workbench, reducing cross-component wiring.',
+        'Keyboard layer navigation and step-box selection are handled locally in the Results Panel without Workbench needing to track these states.',
+        'Import failures and navigation shortcuts still trigger the correct report tabs as before — just through a cleaner internal path.',
+        'Spatial grid index (SpatialGrid) added to the packing library as a foundation for future placed-box query performance improvements.',
+      ],
+      zh: [
+        '层级、标签和结果页签的选择状态现由报告面板自行管理，不再由主工作台持有，减少跨组件接线。',
+        '键盘层级导航和步骤选箱在报告面板内部处理，工作台不再需要追踪这些状态。',
+        '导入失败和导航快捷键照常触发正确的报告页签，仅通过更清晰的内路径完成。',
+        '空间网格索引（SpatialGrid）已加入装箱算法库，为后续已装箱查询性能优化打底。',
+      ],
+    },
+  },
+
+  {
     version: '2026-08-06-r63-packing-root-cause-and-boundaries',
     date: '2026-08-06',
     title: {
