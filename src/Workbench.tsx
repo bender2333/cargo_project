@@ -14,7 +14,6 @@ import { useCustomCargoLibrary } from './hooks/useCustomCargoLibrary'
 import { shouldClearTemplateReference, useTemplateCatalogs } from './hooks/useTemplateCatalogs'
 import { selectPackingContainer } from './lib/packingSession'
 import { computeCenterOfGravity } from './lib/centerOfGravity'
-import { compareContainers } from './lib/containerCompare'
 import { computeRemainingCapacity } from './lib/remainingCapacity'
 import { suggestFillItems } from './lib/fillSuggestion'
 import { buildStandardCargoItem, STANDARD_BOXES, STANDARD_BOX_MAX_PER_CLICK } from './data/standardBoxes'
@@ -22,12 +21,12 @@ import { HistoryPage } from './components/HistoryPage'
 import { CargoLibraryPage } from './components/CargoLibraryPage'
 import { WorkbenchHeader } from './components/WorkbenchHeader'
 import { buildCogOverlay } from './lib/cogVisual'
-import { deriveCogOverlayState } from './lib/cogView'
-import { DEFAULT_VEHICLE_PROFILE } from './data/vehicleProfiles'
-import type { VehicleProfileId } from './data/vehicleProfiles'
+import { DEFAULT_VEHICLE_PROFILE, type VehicleProfileId } from './data/vehicleProfiles'
 import {
   dryRunRotation as manualDryRunRotation,
 } from './lib/manualPlacement'
+import type { ResultsPanelHandle, ResultsPanelState } from './components/ResultsPanel'
+
 import type { ManualRotationDirection, OrientationKey, ValidationIssue } from './lib/manualPlacement'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from './data/containers'
 import type { VisualizationChrome } from './components/VisualizationWorkspace'
@@ -105,7 +104,6 @@ const customContainerDefaults = {
 }
 
 type CargoForm = Omit<CargoItem, 'id'>
-type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback' | 'loadingSteps' | 'cog' | 'compare' | 'fill' | 'reviewChecklist'
 type NavTarget = 'overview' | 'report' | 'cargo' | 'container' | 'history' | 'cargo-library' | 'template-manager' | 'users'
 
 function buildRotationNotice(
@@ -279,9 +277,19 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [editingCargo, setEditingCargo] = useState<CargoItem | null>(null)
   const [editForm, setEditForm] = useState<CargoForm>(emptyForm)
   const hasCalculated = automaticResult !== null
-  const [activeLayerId, setActiveLayerId] = useState('all')
-  const [activeLabelId, setActiveLabelId] = useState('all')
-  const [placementSettingsOpen, setPlacementSettingsOpen] = useState(false)
+  // --- ResultsPanel owns layer/label/tab selection (Knife 5) ---
+  // Workbench reads current values via onStateChange and triggers actions via ref.
+  const resultsPanelRef = useRef<ResultsPanelHandle>(null)
+  const [resultsPanelState, setResultsPanelState] = useState<ResultsPanelState>({
+    activeLayerId: 'all',
+    activeLabelId: 'all',
+    activeResultTab: 'layers',
+    cogViewState: { showOverlay: false, boxOpacity: null },
+  })
+  const activeLayerId = resultsPanelState.activeLayerId
+  const activeLabelId = resultsPanelState.activeLabelId
+  const activeResultTab = resultsPanelState.activeResultTab
+  const cogViewState = resultsPanelState.cogViewState
   const [snapSettingsOpen, setSnapSettingsOpen] = useState(false)
   const gridSnap = placementSettings.snapEnabled && placementSettings.gridSnapEnabled
   const edgeSnap = placementSettings.snapEnabled && placementSettings.edgeSnapEnabled
@@ -290,7 +298,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
   const [compareSelection, setCompareSelection] = useState<string[]>(() => containers.slice(0, 3).map((c) => c.id))
   const [showCogOverlay, setShowCogOverlay] = useState(false)
   const [vehicleProfile, setVehicleProfile] = useState<VehicleProfileId>(DEFAULT_VEHICLE_PROFILE)
-  const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
+  const [placementSettingsOpen, setPlacementSettingsOpen] = useState(false)
   const [activeLoadingGroupIndex, setActiveLoadingGroupIndex] = useState(0)
   const [loadingGroupsPlaying, setLoadingGroupsPlaying] = useState(false)
   const [manualHelpOpen, setManualHelpOpen] = useState(false)
@@ -556,8 +564,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     } else {
       setContainerChangeNotice('')
     }
-    setSelectedBoxId(null)
-    setActiveLayerId('all')
+    resultsPanelRef.current?.resetFilters()
     dispatchPackingSession({ type: 'containerChanged', container })
   }
 
@@ -683,11 +690,9 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     setRotationNotice('')
   }
 
-
   useEffect(() => {
+    resultsPanelRef.current?.resetFilters()
     setHoverInfo(null)
-    setActiveLayerId('all')
-    setActiveLabelId('all')
   }, [placementMode])
 
   useEffect(() => {
@@ -770,7 +775,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     return () => window.clearTimeout(timer)
   }, [manualNotice])
 
-  const activeLayer = activeResult.layers.find((layer) => layer.id === activeLayerId)
   const playbackSequence = useMemo(() => buildPlaybackSequence(activeResult), [activeResult])
   const playbackAvailable = playbackSequence.total > 0
   const playback = usePlaybackController(playbackSequence)
@@ -800,10 +804,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       playbackSequence,
     ],
   )
-  const visibleBoxes = activeResult.placed.filter((box) => (
-    (activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId)
-    && (activeLabelId === 'all' || box.label === activeLabelId)
-  ))
 
   useEffect(() => {
     setActiveLoadingGroupIndex(0)
@@ -834,14 +834,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     () => computeCenterOfGravity(visibleActiveBoxes.length > 0 ? visibleActiveBoxes : activeResult.placed, renderingContainer),
     [activeResult.placed, renderingContainer, visibleActiveBoxes],
   )
-  const cogViewState = useMemo(
-    () => deriveCogOverlayState({
-      activeResultTab,
-      placementMode,
-      overlayEnabled: showCogOverlay,
-    }),
-    [activeResultTab, placementMode, showCogOverlay],
-  )
   const cogOverlay = useMemo(
     () => (cogViewState.showOverlay && placementMode === 'auto'
       ? buildCogOverlay(cogResult, renderingContainer, vehicleProfile)
@@ -856,12 +848,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     const allCustom = customContainers.filter((c) => !!c)
     return [...containers, ...allCustom]
   }, [customContainers])
-  const compareRows = useMemo(() => {
-    if (activeResultTab !== 'compare' || !hasCalculated) return []
-    if (compareSelection.length === 0) return []
-    const chosen = compareCandidates.filter((c) => compareSelection.includes(c.id))
-    return compareContainers(chosen, displayCargoItems, loadingMode, defaultMaxStackLayers)
-  }, [activeResultTab, compareSelection, compareCandidates, defaultMaxStackLayers, displayCargoItems, hasCalculated, loadingMode])
   const fillSuggestions = useMemo(
     () => suggestFillItems(hasCalculated ? automaticDisplayResult : null, selectedContainer),
     [automaticDisplayResult, hasCalculated, selectedContainer],
@@ -1020,7 +1006,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     dispatchPackingSession({ type: 'cargoAdded', items: additions })
   }
   const labelOptions = [...new Set(activeResult.labelStats.map((item) => item.label))]
-  const activeLayerIndex = activeResult.layers.findIndex((layer) => layer.id === activeLayerId)
   const activeSelectedBoxId = placementMode === 'manual' ? manualSelectedId : selectedBoxId
   const selectCargoResultBox = (cargoId: string) => {
     const boxId = activeResult.placed.find((box) => box.cargoId === cargoId)?.id ?? null
@@ -1072,8 +1057,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     } else {
       setContainerChangeNotice('')
     }
-    setSelectedBoxId(null)
-    setActiveLayerId('all')
+    resultsPanelRef.current?.resetFilters()
     dispatchPackingSession({ type: 'containerUpdated', field, value: nextValue })
   }
 
@@ -1165,7 +1149,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     if (!file) return
     if (file.size > MAX_IMPORT_FILE_BYTES) {
       setImportMessages([`${t.importIssue}: ${t.importFileTooLarge}`])
-      setActiveResultTab('importLog')
+      resultsPanelRef.current?.showImportLog()
       navigateTo('report')
       return
     }
@@ -1183,21 +1167,21 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           ? (locale === 'zh' ? '工作簿解析超时，已安全终止' : 'Workbook parsing timed out and was safely stopped')
           : t.importFileUnreadable
       setImportMessages([`${workerError?.code === 'limit' ? t.importIssue : t.importParseFailed}: ${detail}`])
-      setActiveResultTab('importLog')
+      resultsPanelRef.current?.showImportLog()
       navigateTo('report')
       return
     }
 
     if (rows.length === 0) {
       setImportMessages([`${t.importIssue}: ${t.importNoData}`])
-      setActiveResultTab('importLog')
+      resultsPanelRef.current?.showImportLog()
       navigateTo('report')
       return
     }
 
     if (importPreviewRows(rows, 1, 2).length === 0) {
       setImportMessages([`${t.importIssue}: ${t.importNoData}`])
-      setActiveResultTab('importLog')
+      resultsPanelRef.current?.showImportLog()
       navigateTo('report')
       return
     }
@@ -1395,20 +1379,10 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       })
     }
 
+    resultsPanelRef.current?.resetFilters()
     setContainerChangeNotice('')
-    setActiveLayerId('all')
-    setActiveLabelId('all')
     setSelectedBoxId(null)
-    setActiveResultTab('layers')
     navigateTo('overview')
-  }
-
-  const deleteCargo = (cargoId: string) => {
-    dispatchPackingSession({ type: 'cargoDeleted', cargoId })
-    setSelectedBoxId((current) => {
-      const selectedBox = automaticDisplayResult.placed.find((box) => box.id === current)
-      return selectedBox?.cargoId === cargoId ? null : current
-    })
   }
 
   const reorderCargo = (targetCargoId: string) => {
@@ -1426,34 +1400,20 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     setDraggedCargoId(null)
   }
 
-  const selectLayerByOffset = (offset: -1 | 1) => {
-    if (!activeResult.layers.length) {
-      return
-    }
-
-    if (activeLayerId === 'all') {
-      setActiveLayerId(activeResult.layers[0].id)
-      return
-    }
-
-    const nextIndex = Math.min(activeResult.layers.length - 1, Math.max(0, activeLayerIndex + offset))
-    setActiveLayerId(activeResult.layers[nextIndex]?.id ?? 'all')
+  const deleteCargo = (cargoId: string) => {
+    dispatchPackingSession({ type: 'cargoDeleted', cargoId })
+    setSelectedBoxId((current) => {
+      const selectedBox = automaticDisplayResult.placed.find((box) => box.id === current)
+      return selectedBox?.cargoId === cargoId ? null : current
+    })
   }
 
-  const selectStepBox = (boxId: string, layerId: string) => {
-    if (placementMode === 'manual') {
-      selectManualBox(boxId)
-    } else {
-      setSelectedBoxId(boxId)
-    }
-    setActiveLayerId(layerId)
-  }
 
   const activateNav = (target: NavTarget) => {
     navigateTo(target)
     setMenuOpen(false)
     if (target === 'report') {
-      setActiveResultTab('layers')
+      resultsPanelRef.current?.activateReport()
       reportRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     } else if (target === 'cargo') {
       cargoRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
@@ -1718,21 +1678,14 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         </div>
 
           <ResultsPanel
+            ref={resultsPanelRef}
             reportRef={reportRef}
             workspaceMaximized={workspaceMaximized}
             locale={locale}
             t={t}
-            activeResultTab={activeResultTab}
-            setActiveResultTab={setActiveResultTab}
             activeResult={activeResult}
             selectedContainer={selectedContainer}
-            activeLayerId={activeLayerId}
-            setActiveLayerId={setActiveLayerId}
-            activeLabelId={activeLabelId}
-            setActiveLabelId={setActiveLabelId}
             labelOptions={labelOptions}
-            activeLayer={activeLayer}
-            visibleBoxes={visibleBoxes}
             activeSelectedBoxId={activeSelectedBoxId}
             detailRows={detailRows}
             importMessages={importMessages}
@@ -1756,7 +1709,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             toggleCogOverlay={toggleCogOverlay}
             setVehicleProfile={setVehicleProfile}
             compareCandidates={compareCandidates}
-            compareRows={compareRows}
             compareSelection={compareSelection}
             setCompareSelection={setCompareSelection}
             selectContainerById={selectContainerById}
@@ -1767,8 +1719,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             reviewChecklist={reviewChecklist}
             exportReviewChecklistJson={exportReviewChecklistJson}
             exportReviewChecklistExcel={exportReviewChecklistExcel}
-            selectLayerByOffset={selectLayerByOffset}
-            selectStepBox={selectStepBox}
             importExcel={importExcel}
             downloadImportTemplate={downloadImportTemplate}
             exportExcel={exportExcel}
@@ -1780,6 +1730,10 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             planCompliance={activePlanCompliance}
             selectManualBox={selectManualBox}
             setSelectedBoxId={setSelectedBoxId}
+            onStateChange={setResultsPanelState}
+            displayCargoItems={displayCargoItems}
+            loadingMode={loadingMode}
+            defaultMaxStackLayers={defaultMaxStackLayers}
           />
         </section>
         </section>
@@ -1799,7 +1753,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
                 dispatchPackingSession({ type: 'cargoImported', items })
                 setSelectedBoxId(null)
               }
-              setActiveResultTab('importLog')
+              resultsPanelRef.current?.showImportLog()
               setShowMappingModal(false)
               navigateTo('report')
             }}

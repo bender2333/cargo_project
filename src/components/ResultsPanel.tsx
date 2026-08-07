@@ -1,4 +1,4 @@
-import type { Ref } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react'
 import { PlaybackPanel } from './PlaybackPanel'
 import { LoadingStepsPanel } from './LoadingStepsPanel'
 import { CenterOfGravityPanel } from './CenterOfGravityPanel'
@@ -12,7 +12,6 @@ import type { LoadingTaskGroup } from '../lib/loadingTaskGroups'
 import type { ExportPlanRow } from '../lib/exportPlan'
 import type { ReviewChecklist } from '../lib/reviewChecklist'
 import type { CogResult } from '../lib/centerOfGravity'
-import type { ContainerComparisonRow } from '../lib/containerCompare'
 import type { FillSuggestion } from '../lib/fillSuggestion'
 import type { ExportTemplate } from '../types'
 import type { VehicleProfileId } from '../data/vehicleProfiles'
@@ -20,6 +19,10 @@ import { formatPlanComplianceMessage, localizePlanComplianceBlocker, type Active
 import { formatCubicMeters, getContainerVolume } from '../data/containers'
 import { countDistinctLabels } from '../lib/labels'
 import { isGapFillBox } from '../lib/placementSource'
+import { deriveCogOverlayState } from '../lib/cogView'
+import { compareContainers } from '../lib/containerCompare'
+import type { CargoItem, LoadingMode } from '../types'
+import type { CogViewState } from '../lib/cogView'
 
 type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback' | 'loadingSteps' | 'cog' | 'compare' | 'fill' | 'reviewChecklist'
 
@@ -163,22 +166,21 @@ type ResultsPanelTranslations = {
   reviewChecklistExportExcel: string
 }
 
+export interface ResultsPanelState {
+  activeLayerId: string
+  activeLabelId: string
+  activeResultTab: ResultTab
+  cogViewState: CogViewState
+}
+
 export type ResultsPanelProps = {
   reportRef: Ref<HTMLElement>
   workspaceMaximized: boolean
   locale: Locale
   t: ResultsPanelTranslations
-  activeResultTab: ResultTab
-  setActiveResultTab: (tab: ResultTab) => void
   activeResult: PackingResult
   selectedContainer: ContainerSpec
-  activeLayerId: string
-  setActiveLayerId: (id: string) => void
-  activeLabelId: string
-  setActiveLabelId: (id: string) => void
   labelOptions: string[]
-  activeLayer: PackingLayer | undefined
-  visibleBoxes: ReturnType<PackingResult['placed']['filter']>
   activeSelectedBoxId: string | null
   detailRows: ExportPlanRow[]
   importMessages: string[]
@@ -202,7 +204,6 @@ export type ResultsPanelProps = {
   toggleCogOverlay: (show: boolean) => void
   setVehicleProfile: (id: VehicleProfileId) => void
   compareCandidates: ContainerSpec[]
-  compareRows: ContainerComparisonRow[]
   compareSelection: string[]
   setCompareSelection: (fn: (current: string[]) => string[]) => void
   selectContainerById: (id: string) => void
@@ -213,8 +214,6 @@ export type ResultsPanelProps = {
   reviewChecklist: ReviewChecklist
   exportReviewChecklistJson: () => void
   exportReviewChecklistExcel: () => void
-  selectLayerByOffset: (offset: -1 | 1) => void
-  selectStepBox: (boxId: string, layerId: string) => void
   importExcel: (file: File | null) => void
   downloadImportTemplate: () => void
   exportExcel: () => void
@@ -226,24 +225,28 @@ export type ResultsPanelProps = {
   planCompliance: ActivePlanCompliance
   selectManualBox: (id: string | null) => void
   setSelectedBoxId: (id: string | null) => void
+  /** Pushes owned selection state upward to Workbench for workspace consumption */
+  onStateChange?: (state: ResultsPanelState) => void
+  /** Cargo items for compareRows computation (owned by ResultsPanel for compare tab) */
+  displayCargoItems?: CargoItem[]
+  loadingMode?: LoadingMode
+  defaultMaxStackLayers?: number
 }
 
-export function ResultsPanel({
+export interface ResultsPanelHandle {
+  showImportLog(): void
+  activateReport(): void
+  resetFilters(): void
+}
+
+export const ResultsPanel = forwardRef<ResultsPanelHandle, ResultsPanelProps>(function ResultsPanel({
   reportRef,
   workspaceMaximized,
   locale,
   t,
-  activeResultTab,
-  setActiveResultTab,
   activeResult,
   selectedContainer,
-  activeLayerId,
-  setActiveLayerId,
-  activeLabelId,
-  setActiveLabelId,
   labelOptions,
-  activeLayer,
-  visibleBoxes,
   activeSelectedBoxId,
   detailRows,
   importMessages,
@@ -267,7 +270,6 @@ export function ResultsPanel({
   toggleCogOverlay,
   setVehicleProfile,
   compareCandidates,
-  compareRows,
   compareSelection,
   setCompareSelection,
   selectContainerById,
@@ -278,8 +280,6 @@ export function ResultsPanel({
   reviewChecklist,
   exportReviewChecklistJson,
   exportReviewChecklistExcel,
-  selectLayerByOffset,
-  selectStepBox,
   importExcel,
   downloadImportTemplate,
   exportExcel,
@@ -291,7 +291,75 @@ export function ResultsPanel({
   planCompliance,
   selectManualBox,
   setSelectedBoxId,
-}: ResultsPanelProps) {
+  onStateChange,
+  displayCargoItems,
+  loadingMode,
+  defaultMaxStackLayers,
+}, ref) {
+  // --- Owned state (moved from Workbench, Knife 5) ---
+  const [activeLayerId, setActiveLayerId] = useState('all')
+  const [activeLabelId, setActiveLabelId] = useState('all')
+  const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
+
+  // --- Derived values ---
+  const visibleBoxes = useMemo(() => activeResult.placed.filter((box) => (
+    (activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId)
+    && (activeLabelId === 'all' || box.label === activeLabelId)
+  )), [activeResult.placed, activeLayerId, activeLabelId])
+
+  const activeLayer = useMemo(() => activeResult.layers.find((layer) => layer.id === activeLayerId), [activeResult.layers, activeLayerId])
+  const activeLayerIndex = useMemo(() => activeResult.layers.findIndex((layer) => layer.id === activeLayerId), [activeResult.layers, activeLayerId])
+
+  const cogViewState = useMemo(
+    () => deriveCogOverlayState({ activeResultTab, placementMode, overlayEnabled: showCogOverlay }),
+    [activeResultTab, placementMode, showCogOverlay],
+  )
+
+  const compareRows = useMemo(() => {
+    if (activeResultTab !== 'compare' || !hasCalculated) return []
+    if (compareSelection.length === 0) return []
+    const chosen = compareCandidates.filter((c) => compareSelection.includes(c.id))
+    return compareContainers(chosen, displayCargoItems ?? [], loadingMode ?? 'quantity', defaultMaxStackLayers)
+  }, [activeResultTab, compareSelection, compareCandidates, defaultMaxStackLayers, displayCargoItems, hasCalculated, loadingMode])
+
+  // --- Imperative handle for Workbench to trigger actions ---
+  useImperativeHandle(ref, () => ({
+    showImportLog() { setActiveResultTab('importLog') },
+    activateReport() { setActiveResultTab('layers') },
+    resetFilters() {
+      setActiveLayerId('all')
+      setActiveLabelId('all')
+      setActiveResultTab('layers')
+    },
+  }))
+
+  // --- Push state upward to Workbench for workspace consumption ---
+  const onStateChangeRef = useRef(onStateChange)
+  onStateChangeRef.current = onStateChange
+  useEffect(() => {
+    onStateChangeRef.current?.({ activeLayerId, activeLabelId, activeResultTab, cogViewState })
+  }, [activeLayerId, activeLabelId, activeResultTab, cogViewState])
+
+  // --- Internal keyboard/shortcut handlers ---
+  const selectLayerByOffset = useCallback((offset: -1 | 1) => {
+    if (!activeResult.layers.length) return
+    if (activeLayerId === 'all') {
+      setActiveLayerId(activeResult.layers[0].id)
+      return
+    }
+    const nextIndex = Math.min(activeResult.layers.length - 1, Math.max(0, activeLayerIndex + offset))
+    setActiveLayerId(activeResult.layers[nextIndex]?.id ?? 'all')
+  }, [activeResult.layers, activeLayerId, activeLayerIndex])
+
+  const selectStepBox = useCallback((boxId: string, layerId: string) => {
+    if (placementMode === 'manual') {
+      selectManualBox(boxId)
+    } else {
+      setSelectedBoxId(boxId)
+    }
+    setActiveLayerId(layerId)
+  }, [placementMode, selectManualBox, setSelectedBoxId])
+
   const layerHasGapFill = (physicalLayer: number) => activeResult.placed.some((box) => box.physicalLayer === physicalLayer && isGapFillBox(box))
   const hasBlockingComplianceIssues = !planCompliance.ok
   const planComplianceMessage = formatPlanComplianceMessage(planCompliance, locale) ?? ''
@@ -646,4 +714,4 @@ export function ResultsPanel({
       </div>
     </section>
   )
-}
+})

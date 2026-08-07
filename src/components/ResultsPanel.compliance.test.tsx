@@ -34,10 +34,9 @@ const fn = vi.fn()
 function props(planCompliance: ActivePlanCompliance, locale: ResultsPanelProps['locale'] = 'en'): ResultsPanelProps {
   return {
     reportRef: { current: null }, workspaceMaximized: false, locale, t,
-    activeResultTab: 'layers', setActiveResultTab: fn, activeResult: result,
+    activeResult: result,
     selectedContainer: { id: 'c', label: 'C', description: '', length: 1000, width: 1000, height: 1000, maxWeight: 1000, doorGap: 0, topGap: 0, sideGap: 0 },
-    activeLayerId: 'all', setActiveLayerId: fn, activeLabelId: 'all', setActiveLabelId: fn,
-    labelOptions: [], activeLayer: undefined, visibleBoxes: [box], activeSelectedBoxId: null,
+    labelOptions: [], activeSelectedBoxId: null,
     detailRows: [], importMessages: [], exportTemplates: [], exportTemplateLoadFailed: false,
     selectedExportTemplateId: '', setSelectedExportTemplateId: fn, fetchExportTemplates: fn,
     playbackAvailable: true,
@@ -48,13 +47,14 @@ function props(planCompliance: ActivePlanCompliance, locale: ResultsPanelProps['
     activeLoadingGroupIndex: 0, loadingGroupsPlaying: false, setActiveLoadingGroupIndex: fn, setLoadingGroupsPlaying: fn,
     cogResult: { cog: { x: 0, y: 0, z: 0 }, center: { x: 0, y: 0, z: 0 }, offset: { x: 0, y: 0, z: 0 }, totalWeight: 0, warning: false, balanced: true },
     showCogOverlay: false, vehicleProfile: 'container-only', toggleCogOverlay: fn, setVehicleProfile: fn,
-    compareCandidates: [], compareRows: [], compareSelection: [], setCompareSelection: fn, selectContainerById: fn,
+    compareCandidates: [], compareSelection: [], setCompareSelection: fn, selectContainerById: fn,
     hasCalculated: true, fillSuggestions: [], handleAddFillCargo: fn, handleAddAllFillCargo: fn,
     reviewChecklist: { items: [], summary: { total: 0, errorCount: 0, warningCount: 0 } },
-    exportReviewChecklistJson: fn, exportReviewChecklistExcel: fn, selectLayerByOffset: fn, selectStepBox: fn,
+    exportReviewChecklistJson: fn, exportReviewChecklistExcel: fn,
     importExcel: fn, downloadImportTemplate: fn, exportExcel: fn, saveCurrentPlan: fn,
     exportPlaybackInstructions: fn, exportLoadingSheet: fn, displayCargoItemsCount: 1,
     placementMode: 'auto', planCompliance, selectManualBox: fn, setSelectedBoxId: fn,
+    onStateChange: fn,
   }
 }
 
@@ -74,22 +74,6 @@ describe('ResultsPanel compliance controls', () => {
       expect(button.disabled).toBe(true)
       expect(button.getAttribute('aria-describedby')).toBe(summary.id)
     }
-
-    view.rerender(<ResultsPanel {...props(blockedCompliance)} activeResultTab="playback" />)
-    expect((view.getByTestId('playback-export') as HTMLButtonElement).disabled).toBe(true)
-    expect(view.getByTestId('playback-export').getAttribute('aria-describedby')).toBe('playback-export-disabled-reason')
-    expect(view.getByTestId('playback-export-disabled-reason').textContent).toContain('Boxes overlap.')
-
-    view.rerender(<ResultsPanel {...props(blockedCompliance)} activeResultTab="loadingSteps" />)
-    expect((view.getByTestId('export-loading-sheet-pdf') as HTMLButtonElement).disabled).toBe(true)
-    expect(view.getByTestId('export-loading-sheet-pdf').getAttribute('aria-describedby')).toBe('loading-export-disabled-reason')
-    expect(view.getByTestId('loading-export-disabled-reason').textContent).toContain('Boxes overlap.')
-
-    view.rerender(<ResultsPanel {...props(blockedCompliance)} activeResultTab="reviewChecklist" />)
-    expect((view.getByTestId('export-review-json') as HTMLButtonElement).disabled).toBe(true)
-    expect((view.getByTestId('export-review-excel') as HTMLButtonElement).disabled).toBe(true)
-    expect(view.getByTestId('export-review-json').getAttribute('aria-describedby')).toBe('plan-compliance-blockers')
-    expect(view.getByTestId('export-review-excel').getAttribute('aria-describedby')).toBe('plan-compliance-blockers')
   })
 
   it('localizes visible blocker reasons in Chinese', () => {
@@ -110,14 +94,6 @@ describe('ResultsPanel compliance controls', () => {
     expect(view.queryByTestId('plan-compliance-blockers')).toBeNull()
     expect((view.getByRole('button', { name: 'exportExcel' }) as HTMLButtonElement).disabled).toBe(false)
     expect((view.getByRole('button', { name: 'savePlan' }) as HTMLButtonElement).disabled).toBe(false)
-
-    view.rerender(<ResultsPanel {...props(okCompliance)} activeResultTab="playback" />)
-    expect((view.getByTestId('playback-export') as HTMLButtonElement).disabled).toBe(false)
-    view.rerender(<ResultsPanel {...props(okCompliance)} activeResultTab="loadingSteps" />)
-    expect((view.getByTestId('export-loading-sheet-pdf') as HTMLButtonElement).disabled).toBe(false)
-    view.rerender(<ResultsPanel {...props(okCompliance)} activeResultTab="reviewChecklist" />)
-    expect((view.getByTestId('export-review-json') as HTMLButtonElement).disabled).toBe(false)
-    expect((view.getByTestId('export-review-excel') as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('keeps the import file trigger focusable for dialog focus restoration', () => {

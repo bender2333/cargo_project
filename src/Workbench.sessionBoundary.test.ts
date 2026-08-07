@@ -227,4 +227,23 @@ describe('Workbench packing-session boundary', () => {
     expect(sceneSource).toContain('renderer.domElement.tabIndex = manualKeyboardEnabled ? 0 : -1')
     expect(sceneSource).toContain('onManualDeleteRef.current?.(boxId)')
   })
+
+  it('delegates activeResultTab, activeLayerId, and activeLabelId ownership to ResultsPanel', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+    const resultsSource = readFileSync(path.resolve(process.cwd(), 'src/components/ResultsPanel.tsx'), 'utf8')
+
+    // Workbench must not own these states
+    expect(source).not.toMatch(/useState.*activeLayerId/)
+    expect(source).not.toMatch(/useState.*activeLabelId/)
+    expect(source).not.toMatch(/useState.*activeResultTab/)
+    // Workbench reads them from ResultsPanel via onStateChange
+    expect(source).toContain('resultsPanelRef')
+    expect(source).toContain('setResultsPanelState')
+    expect(source).toContain('resultsPanelState.activeLayerId')
+
+    // ResultsPanel owns the three states
+    expect(resultsSource).toMatch(/activeLayerId.*useState\('all'\)/)
+    expect(resultsSource).toMatch(/activeLabelId.*useState\('all'\)/)
+    expect(resultsSource).toMatch(/activeResultTab.*useState<ResultTab>\('layers'\)/)
+  })
 })
