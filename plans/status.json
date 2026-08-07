@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "round": "2026-08-04-refactor-review-full-audit-round-5",
-  "updatedAt": "2026-08-06",
+  "round": "2026-08-07-refactor-review-round-6-recap",
+  "updatedAt": "2026-08-07",
   "tasks": [
     {
       "id": "P1-1",
@@ -144,67 +144,83 @@
     {
       "id": "P3-1",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
-      "status": "open"
+      "status": "committed",
+      "commit": "0784e76"
     },
     {
       "id": "P3-2",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
-      "status": "open"
+      "status": "committed",
+      "commit": "562eced"
     },
     {
       "id": "P3-3",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
-      "status": "open"
+      "status": "committed",
+      "commit": "ae50646"
     },
     {
       "id": "P3-4",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
-      "status": "open"
+      "status": "committed",
+      "commit": "ad13419 / 915c059"
     },
     {
       "id": "P3-5",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
-      "status": "open"
+      "status": "committed",
+      "commit": "93c2f23"
     },
     {
       "id": "P3-6",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
-      "status": "open"
+      "status": "committed",
+      "commit": "673d835"
     },
     {
       "id": "P3-7",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
-      "status": "open"
+      "status": "committed",
+      "commit": "5d1d492"
     },
     {
       "id": "P3-8",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
-      "status": "open"
+      "status": "committed",
+      "commit": "1056c95"
     },
     {
       "id": "P3-9",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
-      "status": "open"
+      "status": "committed",
+      "commit": "41c7027"
     },
     {
       "id": "P3-10",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
-      "status": "open"
+      "status": "committed",
+      "commit": "3b9878e"
     },
     {
       "id": "P3-11",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
-      "status": "open"
+      "status": "committed",
+      "commit": "916db8d (knife5 complete)",
+      "note": "All five knives landed: 1/2 blockEngine baseline, 3 visibleWorkspaceBoxes, 4 groundOnly/quickPlace, 5 ResultsPanel owns layer/label/tab state"
     },
     {
       "id": "P3-12",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
-      "status": "open"
+      "status": "partial",
+      "commit": "9ed13cf (12a only)",
+      "note": "12a container payload validation landed; 12b i18n alerts + 12c quotas/deps remain backlog"
     },
     {
       "id": "P3-13",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
-      "status": "open"
+      "status": "partial",
+      "commit": "66ecb35 (13a history atomic)",
+      "note": "13a landed; 13b scene stateful tests + 13c 0802 fixture provenance test remain"
     },
     {
       "id": "round4-P2-7",
@@ -219,6 +235,46 @@
       "status": "superseded",
       "supersededBy": "d037df0",
       "note": "Historical 'do not keep widening gates' note was later reversed by d037df0 without inline supersede; documented here"
-    }
+    },
+    {
+      "id": "R6-review",
+      "plan": "issues/2026-08-07-refactor-review-round-6-recap.md",
+      "status": "recorded",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/packingInvariants.test.ts --pool=threads --maxWorkers=1",
+          "npx vitest run src/lib/packing.blockEngine.test.ts --pool=threads --maxWorkers=1",
+          "npx vitest run --exclude scripts/rollback.test.mjs"
+        ],
+        "result": "15/15, 6/6, 98 files / 856 tests / 0 failed; benchmark compared against 2026-07-28 baseline"
+      },
+      "note": "Architecture B+; root-cause fixes A-; 0802 A (877/877 in production); perf B (vietnam-40hq-volume +38%, load pollution + real regression)"
+    },
+    {
+      "id": "P4-1-knife5",
+      "plan": "plans/2026-08-07-knife5-visual-selection-ownership.md",
+      "status": "committed",
+      "commit": "916db8d",
+      "verification": {
+        "commands": [
+          "npm run lint (0 warn)",
+          "npm test (847/848, 1 pre-existing contention timeout)",
+          "npm run build (0)",
+          "npm run test:e2e (128/128, 9.7min)"
+        ],
+        "result": "lint 0 warn; unit 847/848; build 0; e2e 128/128; benchmark not run (no algorithm changes)"
+      },
+      "note": "Closed round-5 M-7: Workbench no longer holds activeLayerId/activeLabelId/activeResultTab useState"
+    },
+    {
+      "id": "P4-2-spatial-index",
+      "plan": "plans/2026-08-07-packing-spatial-index.md",
+      "status": "partial",
+      "commit": "9e471d7 (spatialGrid.ts only)",
+      "verification": {
+        "commands": []
+      },
+      "note": "P-B (spatialGrid.ts) created; P-C (packing.ts integration) deferred pending golden-hash verification"
+    },
   ]
 }

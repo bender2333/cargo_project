@@ -2565,3 +2565,28 @@
 - **Deferred backlog**：P3-12b/c（行数上限、deps 卫生、写错误 i18n）、P3-11 knife5（layer/label/resultTab 所有权）。
 - **P1 production** 已在阶段一验收 live；本阶段未再部署。
 
+
+## 2026-08-07 第六轮回溯审查结论与两个立项（架构师）
+
+- **结论记录**：`issues/2026-08-07-refactor-review-round-6-recap.md`。架构/可维护性 B+（Workbench 1908 / workspace props ~68 / ContainerScene 1380，M-7 与 m2 半达成为主）；根因修复 A-；0802 issue A（生产 877/877 已验收，两次 remote 128/128）；性能 B——vietnam-40hq-volume median +38%（基线 5194→当前 7195）部分为混杂 benchmark 负载污染、部分为 P3-4 groundOnly 两阶段块路径带来真实回退，未有独立归因。
+- **结构事实（本轮定点核对复验）**：`src/lib/` 无反向依赖；`packing.ts` 热路径 5 处全量 placed 线性扫（`:350 canPlace`、`:352 supportDetails`、`:252 upwardRiders`、`:268 dependents`、`:423/:455/:472 placementScore`）；`commitBlock:1101-1116` 逐 unit 调 `placeEntry:1025` 重复 `buildPlacedBox` 的 support 查询。这就是 877 箱时 volume 模式被放大的机制。
+- **刀 5 机制（新证据，作为下一轮计划的根因）**：`activeResultTab`（`Workbench.tsx:293`）同时驱动 3D 重心 overlay（`:837-843 cogViewState`）与柜型对比（`:859-864 compareRows`）；`activeLayerId` 还被 `:1023 activeLayerIndex` 与 `:1429-1441 selectLayerByOffset` 键盘导航消费。这是 props 停在 68 的具体耦合链。
+- **拍板**：立项两个独立计划，不合并为一轮。`plans/2026-08-07-knife5-visual-selection-ownership.md`（收口 P3-11 刀 5，关闭 round-5 M-7）；`plans/2026-08-07-packing-spatial-index.md`（先归因、再 uniform grid 索引 placed，五个 golden hash 不变为硬约束，40HQ-volume 回落到 ≤1.2× 基线为性能验收）。
+- **顺序**：刀 5 先行（用户面可见的模块化收益、风险低、验收是接口数字 + E2E）；空间索引次之（改动只触 `packing.ts`+一个新文件，但属行为敏感度最高的算法域，需独立空载窗口跑 benchmark）。
+- **不做**：不把 vietnam-40hq-volume 的负载污染当成功能回归；不趁机收紧 3D 首像素基线（m6，另行处理）；不动 ContainerScene 的 600 行线（m2，待 P3-13b 单测补齐后再评估）；不把 `SpatialGrid` 扩大到 EMS/blocks 查询。
+
+
+## 2026-08-07 Knife 5 落地：三个选择状态归入 ResultsPanel（P3-11 刀 5 闭合）
+
+- 背景：P3-11 刀 5（`plans/2026-08-07-knife5-visual-selection-ownership.md`）将 activeResultTab / activeLayerId / activeLabelId 三个 useState 从 Workbench 移入 ResultsPanel，以关闭 round-5 M-7 "Workbench ≤1500 / props ≤25" 中唯一仍挂起的 "props ~68" 线路。
+- 实施：ResultsPanel 通过 forwardRef + useImperativeHandle 暴露 showImportLog() / activateReport() / resetFilters()；Workbench 以 ref 触发动作、以 onStateChange 回调接收当前值用于透传 workspace。派生值（visibleBoxes、activeLayer、activeLayerIndex、cogViewState、compareRows、selectLayerByOffset、selectStepBox）随之下沉 ResultsPanel。
+- 验证：lint 0 warn；unit 847/848（仅预存的 contracts-updater contention timeout）；build 0；E2E 128/128（9.7min）。
+- 影响：P3-11 最后一块已闭合；VisualizationWorkspaceProps 的减少额（~68→现状）未在本轮精确统计，但 Workbench 不再持有这三状态的 setter。
+- 后续：round-5 M-7 的完整收口以 status.json 标记为准；空间索引（spatial grid）`src/lib/spatialGrid.ts` 已就绪但尚未接入 packing.ts，待受控空载 benchmark 验证 golden hash 不变后再完成 P-C/P-D。
+
+## 2026-08-07 空间索引：spatialGrid.ts 已创建，packing.ts 集成待完成
+
+- 背景：`plans/2026-08-07-packing-spatial-index.md` 要求先创建 uniform grid 空间索引（P-B），再接入 packing.ts 五处热路径（P-C）。
+- 实施：`src/lib/spatialGrid.ts` 已实现（#private fields, insert/query/count, EPSILON 扩张 AABB 交并集）。测试文件尚未创建。
+- 决策：P-C 接入推迟至下一轮，因编辑工具在 packing.ts 上的多次误写入已由 git checkout 恢复为干净 HEAD；golden hash 不变为硬约束，必须在新 session 中仔细验证后再提交。
+- 影响：空间索引文件保留为 preparatory commit；本轮部署不包含 packing.ts 修改。

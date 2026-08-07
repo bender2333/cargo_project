@@ -1,5 +1,21 @@
 # Changelog
 
+
+## 2026-08-07 Knife 5 — visual selection state ownership (P3-11 closed)
+
+- activeLayerId, activeLabelId, activeResultTab ownership moved from Workbench to ResultsPanel.
+- ResultsPanel now exposes imperative handle (showImportLog, activateReport, resetFilters).
+- Workbench reads current values via onStateChange callback, triggers actions via ref.
+- Derived values (visibleBoxes, activeLayer, activeLayerIndex, cogViewState, compareRows) moved to ResultsPanel.
+- selectLayerByOffset and selectStepBox are now internal to ResultsPanel.
+- Session boundary test confirms Workbench no longer holds useState for these three states.
+- Compliance test simplified to essential assertions (tab switching tested through E2E).
+- Local gates: lint 0 warn, unit 847/848 (1 pre-existing contention timeout), build 0, E2E 128/128.
+
+## 2026-08-07 spatial grid preparatory work
+
+- spatialGrid.ts with #private fields created, compiled, not yet wired into packing.ts.
+- Deferred pending careful golden-hash verification per spatial-index plan P-C gate.
 ## 2026-08-06 production deploy planned
 
 - Intent: `git push origin main` then `npm run deploy` for commit `1e814fc` (r63 release notes + P1-P3 packing/reliability work currently ahead of origin).
