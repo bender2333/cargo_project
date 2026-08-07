@@ -14,6 +14,31 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-08-06-r63-packing-root-cause-and-boundaries',
+    date: '2026-08-06',
+    title: {
+      en: 'Packing root-cause fixes and safer plan boundaries',
+      zh: '装箱根因修复与更安全的方案边界',
+    },
+    items: {
+      en: [
+        'Automatic packing no longer treats non-restrictive stack limits like 99 as hard constraints, and block routing decides eligibility per SKU instead of flipping the whole load off one short box.',
+        'Ground-only cargo stays enforced in Quick Place and in the automatic block-engine fallback, so floor-only goods are not silently stacked or skipped.',
+        'Automatic and manual packing now share the same minimum support-ratio setting, so raising support stability in settings applies consistently across both modes.',
+        'Editing a cargo label/color or the selected custom container no longer leaves a stale manual/automatic plan that cannot be saved or still uses old dimensions.',
+        'Invalid manual boxes remain visible for editing but are excluded from loaded counts, volume, and layer summaries; custom container create/update now rejects impossible dimensions on the server.',
+      ],
+      zh: [
+        '自动装箱不再把 99 这类非限制性堆叠上限当成硬约束；块路由按 SKU 判断资格，不会因为一只矮箱就把整批切出块引擎。',
+        '必须落地货物在快捷放置和自动块引擎补装路径中都会继续强制落地，不会被静默上堆或跳过。',
+        '自动与手动装箱共用同一套最小支撑率设置，在设置里提高稳定性后两种模式行为一致。',
+        '修改货物标签/颜色或当前选中的自定义柜型后，不再留下无法保存的陈旧手动方案，也不会继续使用旧柜尺寸计算结果。',
+        '违规手动箱体仍可见可改，但不再计入已装件数、体积和分层汇总；服务端创建/更新自定义柜型时会拒绝不可能的尺寸。',
+      ],
+    },
+  },
+
+  {
     version: '2026-08-06-r62-test-integrity-and-packing-gates',
     date: '2026-08-06',
     title: { en: 'Packing gates and reliability notes', zh: '装箱门禁与可靠性说明' },

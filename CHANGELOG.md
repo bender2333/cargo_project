@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-06 r63 release notes
+
+- Added user-facing release note `2026-08-06-r63-packing-root-cause-and-boundaries` covering packing root-cause fixes, shared support policy, draft/container invalidation, invalid-box stats, and custom-container payload validation.
+
 ## 2026-08-06 P1-P3 continuous execution wrap
 
 - P1 production safety + 0802 redeploy accepted earlier; P2 test/gate integrity completed with full local lint/test/build/e2e/benchmark (P2) green.
