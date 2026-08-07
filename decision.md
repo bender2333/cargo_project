@@ -2590,3 +2590,21 @@
 - 实施：`src/lib/spatialGrid.ts` 已实现（#private fields, insert/query/count, EPSILON 扩张 AABB 交并集）。测试文件尚未创建。
 - 决策：P-C 接入推迟至下一轮，因编辑工具在 packing.ts 上的多次误写入已由 git checkout 恢复为干净 HEAD；golden hash 不变为硬约束，必须在新 session 中仔细验证后再提交。
 - 影响：空间索引文件保留为 preparatory commit；本轮部署不包含 packing.ts 修改。
+## 2026-08-07 P4 工作确认（架构师复核 Codex 交付）
+
+### P4-1 Knife 5 — 视觉选择状态归属（916db8d）— **功能达成、量化验收未达成、记账已披露**
+
+- **完成度核实**：`src/Workbench.tsx` 中三状态 `useState` 已删除（grep 复核为空），`src/components/ResultsPanel.tsx:300-302` 持有唯一源；`activeLayerId/Label/Tab` 经 `onStateChange` 回调以只读方式回传 Workbench 做透传；`selectLayerByOffset` / `selectStepBox` 下沉为 ResultsPanel 内部函数；`compareRows` 与 `deriveCogOverlayState` 输入随状态下沉（Workbench.tsx 不再 import `compareContainers` / `deriveCogOverlayState`）。CHANGELOG 自报测试通过（E2E 128/128）。
+- **量化验收严格对照**：计划 `plans/2026-08-07-knife5-visual-selection-ownership.md` 要求 `VisualizationWorkspaceProps ≤30`、`Workbench.tsx` 降至接近 1500 行量级、M-7 关闭。实测 Codex 报 `VisualizationWorkspaceProps` 仍为 **67**（仅 −1，因源从 Workbench state 换成 resultsPanelState），`Workbench.tsx` 由 1908 → **1862** 行（−46，2.4%），CHANGELOG 自己写明 `Impact: visualizationWorkspaceProps unchanged`。round-5 M-7 的 ≤1500/≤25 验收线**仍未达成**。
+- **定性结论**：Knife 5 的「行为」达成了——三状态有了唯一 owner、compare/cog 派生不再跨区驱动、符合「接口可见化」意图；但只拆开了状态与派生，没有缩小【组件接口面积】。**round-5 M-7 挂靠的指标与本计划的 acceptance 仍 open**，remaining 工作是「props 聚合/消减」（把 60+ 个 prop 域对象化、消去透传），不是再搬状态。状态已按既定方向收口，这是 P4-1 的真实前移。
+
+### P4-2 packed 空间索引（9e471d7 + c22c963）— **不满足 acceptance、行为等价成立、须记为部分回退**
+
+- **行为等价**：五点 golden hash 全部不变（`09d1533e4b2134f2` 等五项）、0802 fixture 行为逐项相等、30/31 pallet/0629 回归组通过、`src/lib/spatialGrid.test.ts` 77 条用例覆盖空查询/边界/EPSILON 扩张/跨格。
+- **性能验收**：计划要求 40HQ-volume median ≤ `5194*1.2 = 6233ms`。**实测（同一机、同一 Node、空载、5-sample median）**：
+  - 基线 (9e471d7，grid 未接线)：`5641.944` 与 `5104.766`（两次）
+  - 当前 (c22c963，grid 接线)：`5879.072` 与 `6192.202/6237.502`（两次）
+  - **新方案慢 ~4-13%**，且样本呈双峰（~5800 与 ~7300）。
+- **机制分析（复核 diff 后得出）**：Codex 只接线了 `bestPlacement` 的 `canPlace` 与 `placementScore` 两处；`respectsStackCapacityWithUpwardRiders` 的 `directRiders = placed.filter`（`packing.ts:253`）、dependents 反转（`:269`）、`buildPlacedBox → supportDetails(point, box, supportPlaced)`（`:1009`）仍是全量。等价性保证来自「grid 命中子集替代全量」，但**小批量下 `grid.query` 的 cellKeys 枚举 + `seen` Set + `expand` 开销 ≈ 单纯扫 placed**，当近邻占比不低时是净负担。这是「接线 2/5 处 + 索引自身开销」叠加的结果：**等价已是事实，加速未发生**。
+- **处置**：**不**把 `c22c963` 记为达成；保留 grid 代码与测试（9e471d7 本身是干净的），下一步必须（a）把剩余的 3 处热路径接线、`buildPlacedBox` 复用整块支撑子集，（b）确认接线后空载 benchmark 才允许回写 baseline。在做到之前，40HQ-volume 的 +38% 回退**仍然未被消除**，按计划仍在 `planned`。
+- **纪律确认**：Codex 没有改 benchmark 基线/阈值；没有把 perf 未达标写成已修；commit 与 CHANGELOG 的表达（含 self-reported "All five golden hashes unchanged"）与独立复核一致。

@@ -145,82 +145,153 @@
       "id": "P3-1",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
       "status": "committed",
-      "commit": "0784e76"
+      "commit": "0784e76",
+      "verification": {
+        "commands": [
+          "node scripts/p3-0802-block-route-baseline.mjs"
+        ],
+        "result": "Read-only baseline fixed 0802 fixture; sensitivity matrix recorded in decision.md"
+      }
     },
     {
       "id": "P3-2",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
       "status": "committed",
-      "commit": "562eced"
+      "commit": "562eced",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/packing.test.ts src/lib/packing.blockEngine.test.ts"
+        ],
+        "result": "RED before, GREEN after; non-binding maxStackLayers=99 now shares unlimited path; golden placedCount unchanged"
+      }
     },
     {
       "id": "P3-3",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
       "status": "committed",
-      "commit": "ae50646"
+      "commit": "ae50646",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/packing.blockEngine.test.ts src/lib/packingInvariants.test.ts"
+        ],
+        "result": "Per-SKU gate; mixed-height case rewritten by authorization; 0802 one-SKU msl=12 no longer flips load; focused 6/6"
+      }
     },
     {
       "id": "P3-4",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
       "status": "committed",
-      "commit": "ad13419 / 915c059"
+      "commit": "ad13419",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/quickPlace.test.ts src/lib/packing.blockEngine.test.ts src/lib/packing.test.ts"
+        ],
+        "result": "quickPlace 10/10; 0802 groundOnly 28/28 z=0; 0629 regression green; focused packing 5 golden hashes unchanged"
+      },
+      "note": "quickPlace groundOnly + block fallback groundOnly; second commit 915c059"
     },
     {
       "id": "P3-5",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
       "status": "committed",
-      "commit": "93c2f23"
+      "commit": "93c2f23",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/packing.test.ts src/lib/manualDraftFromAutomatic.test.ts"
+        ],
+        "result": "Auto accepts shared supportPolicy.minSupportRatio; default 0.5 golden hash unchanged; focused green"
+      }
     },
     {
       "id": "P3-6",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
       "status": "committed",
-      "commit": "673d835"
+      "commit": "673d835",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/manualPlacementSession.test.ts src/lib/historySnapshot.test.ts"
+        ],
+        "result": "Manual draft reconciles label/color; save after sidebar edit no longer throws; focused green"
+      }
     },
     {
       "id": "P3-7",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
       "status": "committed",
-      "commit": "5d1d492"
+      "commit": "5d1d492",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/packingSession.test.ts"
+        ],
+        "result": "Editing selected custom container dispatches resultInvalidated; reducer test green"
+      }
     },
     {
       "id": "P3-8",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
       "status": "committed",
-      "commit": "1056c95"
+      "commit": "1056c95",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/historySnapshot.test.ts && npm run test:contracts:update"
+        ],
+        "result": "blockingInvalid excluded from counts/volume/layers; goldens refreshed, placedCount unchanged 31/463/462/839/823"
+      }
     },
     {
       "id": "P3-9",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
       "status": "committed",
-      "commit": "41c7027"
+      "commit": "41c7027",
+      "verification": {
+        "commands": [
+          "npx tsc --noEmit",
+          "grep -r \"from .*/components/\" src/lib --include=\"*.ts\" (empty)"
+        ],
+        "result": "ImportMappingValue/SceneViewMode moved to lib; no lib->components imports remain"
+      }
     },
     {
       "id": "P3-10",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
       "status": "committed",
-      "commit": "3b9878e"
+      "commit": "3b9878e",
+      "verification": {
+        "commands": [
+          "npx vitest run src/components/containerScene",
+          "npm run test:e2e -- e2e/manual-3d.spec.ts"
+        ],
+        "result": "Scene validity delegates to manualPlacement.validateBox; rejections flow to manual issues; e2e manual-3d green"
+      }
     },
     {
       "id": "P3-11",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
       "status": "committed",
-      "commit": "916db8d (knife5 complete)",
-      "note": "All five knives landed: 1/2 blockEngine baseline, 3 visibleWorkspaceBoxes, 4 groundOnly/quickPlace, 5 ResultsPanel owns layer/label/tab state"
+      "commit": "916db8d",
+      "note": "Knives 1-4 landed 2026-08-06 (67377e1); knife5 (916db8d) moved state ownership; interface-area targets tracked in P4-1-knife5",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/visibleWorkspaceBoxes.test.ts src/lib/boxVisualState.test.ts",
+          "node scripts/check-round-status.mjs",
+          "architect review 2026-08-07"
+        ],
+        "result": "Knives 1-4 landed 2026-08-06; knife5 (916db8d) moved state ownership; remaining interface-area targets tracked in P4-1-knife5"
+      }
     },
     {
       "id": "P3-12",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
-      "status": "partial",
-      "commit": "9ed13cf (12a only)",
-      "note": "12a container payload validation landed; 12b i18n alerts + 12c quotas/deps remain backlog"
+      "status": "in-progress",
+      "commit": "9ed13cf",
+      "note": "12a validated custom container payloads; 12b i18n alerts + 12c quotas/deps remain backlog"
     },
     {
       "id": "P3-13",
       "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
-      "status": "partial",
+      "status": "in-progress",
       "commit": "66ecb35 (13a history atomic)",
-      "note": "13a landed; 13b scene stateful tests + 13c 0802 fixture provenance test remain"
+      "note": "13a landed; 13b scene stateful tests + 13c 0802 fixture provenance test remain | 2026-08-07 partial: 13a landed (66ecb35); 13b/13c outstanding"
     },
     {
       "id": "round4-P2-7",
@@ -239,7 +310,7 @@
     {
       "id": "R6-review",
       "plan": "issues/2026-08-07-refactor-review-round-6-recap.md",
-      "status": "recorded",
+      "status": "verified",
       "verification": {
         "commands": [
           "npx vitest run src/lib/packingInvariants.test.ts --pool=threads --maxWorkers=1",
@@ -253,28 +324,32 @@
     {
       "id": "P4-1-knife5",
       "plan": "plans/2026-08-07-knife5-visual-selection-ownership.md",
-      "status": "committed",
+      "status": "in-progress",
       "commit": "916db8d",
       "verification": {
         "commands": [
-          "npm run lint (0 warn)",
-          "npm test (847/848, 1 pre-existing contention timeout)",
-          "npm run build (0)",
-          "npm run test:e2e (128/128, 9.7min)"
+          "architect review 2026-08-07: grep state owners in Workbench.tsx/ResultsPanel.tsx, count props, measure workbench lines"
         ],
-        "result": "lint 0 warn; unit 847/848; build 0; e2e 128/128; benchmark not run (no algorithm changes)"
+        "result": "state ownership moved to ResultsPanel (Workbensh.tsx contains zero setState for the three); derived compare/cog inputs sunk; codex e2e 128/128. BUT VisualizationWorkspaceProps still 67 (target <=30) and Workbench.tsx 1862 lines (target <=1500)"
       },
-      "note": "Closed round-5 M-7: Workbench no longer holds activeLayerId/activeLabelId/activeResultTab useState"
+      "acceptance": "NOT met as written. Functional ownership goal met; quantitative interface-area targets (props<=30, Workbench<=1500) still open. M-7 not closed.",
+      "note": "Landed knife-5 state ownership in 916db8d (state move complete); acceptance targets props<=30/Workbench<=1500 still open -> remaining work is prop aggregation"
     },
     {
       "id": "P4-2-spatial-index",
       "plan": "plans/2026-08-07-packing-spatial-index.md",
-      "status": "partial",
-      "commit": "9e471d7 (spatialGrid.ts only)",
+      "status": "in-progress",
+      "commit": "9e471d7 + c22c963",
       "verification": {
-        "commands": []
+        "commands": [
+          "node scripts/p3-0802-block-route-baseline.mjs",
+          "node --expose-gc scripts/frontendBenchmark.mjs --algorithm-case vietnam-40hq-volume (idle; current HEAD vs 9e471d7 worktree baseline, 2 runs each)",
+          "npx vitest run src/lib/spatialGrid.test.ts src/lib/packing.blockEngine.test.ts src/lib/visibleWorkspaceBoxes.test.ts src/Workbench.sessionBoundary.test.ts --pool=threads --maxWorkers=1"
+        ],
+        "result": "5 golden hashes unchanged; 0802 877/877 identical; 32/32 focused tests green. Idle median: baseline 5105/5642 vs grid 5879/6192 -> grid ~+4-13% slower. Only 2/5 hot paths wired (canPlace, placementScore via bestPlacement); directRiders packing.ts:253 / dependents :269 / buildPlacedBox :1009 unswitched"
       },
-      "note": "P-B (spatialGrid.ts) created; P-C (packing.ts integration) deferred pending golden-hash verification"
-    },
+      "acceptance": "NOT met: behavior equivalence yes (all contract hashes unchanged), 40HQ-volume target <=6233ms no (~5879-6238 observed); P-D wiring of remaining paths plus block-commit support sharing must land before any baseline write",
+      "note": "Grid landed and wired to 2/5 hot paths (9e471d7+c22c963); behavior equivalence verified (5 golden hashes unchanged); 40HQ-volume target not met (grid ~+4-13% slower idle) -> P-D remaining wiring + support-sharing required before baseline write"
+    }
   ]
 }
