@@ -6,6 +6,7 @@ import { generateBlockCandidates, type BlockCandidate } from './blocks'
 import { initEMS, splitEMS, type EmptyMaximalSpace } from './emsSpace'
 import { GAP_FILL_SOURCE } from './placementSource'
 import { buildLabelStats } from './labels'
+import { SpatialGrid, type SpatialAabb } from './spatialGrid'
 
 export const UNPLACED_REASON_CODES = {
   EXCEEDS_DIMENSIONS: 'exceeds-dimensions',
@@ -515,7 +516,6 @@ export function placementScore(
     box.width * 0.01
   )
 }
-
 function bestPlacement(
   item: CargoItem,
   container: ContainerSpec,
@@ -527,8 +527,16 @@ function bestPlacement(
   deferCapacityOneFloorFallback = false,
   committedOrientation?: OrientationKey,
   minSupportRatio = MINIMUM_SUPPORT_RATIO,
+  placedNearby?: (aabb: SpatialAabb) => PlacementBox[],
 ) {
   const placedById = new Map<string, StackChainNode>(placed.map((placedBox) => [placedBox.id, placedBox]))
+  const nearbyFor = (point: PackingPoint, box: BoxOrientation): PlacementBox[] => {
+    if (!placedNearby) return placed
+    return placedNearby({
+      minX: point.x - EPSILON, minY: point.y - EPSILON, minZ: point.z - EPSILON,
+      maxX: point.x + box.length + EPSILON, maxY: point.y + box.width + EPSILON, maxZ: point.z + box.height + EPSILON,
+    })
+  }
   const bestFromPoints = (candidatePoints: PackingPoint[]) => orientations(item)
     .filter(
       (option) =>
@@ -542,7 +550,7 @@ function bestPlacement(
           point,
           box,
           container,
-          placed,
+          nearbyFor(point, box),
           placedById,
           item,
           reservedTopPassengerHeight,
@@ -552,7 +560,7 @@ function bestPlacement(
         .map((point) => ({
           box,
           point,
-          score: placementScore(item, box, point, placed, container, committedOrientation),
+          score: placementScore(item, box, point, nearbyFor(point, box), container, committedOrientation),
         })),
     )
     .sort((a, b) => a.score - b.score || b.box.width - a.box.width || b.box.length * b.box.width - a.box.length * a.box.width)[0]
@@ -904,8 +912,16 @@ export function shouldUseBlockEngine(cargoItems: CargoItem[], loadingMode: Loadi
 export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[], options: CalculatePackingOptions = {}): PackingResult {
   const effective = effectiveContainer(container)
   const placed: PlacementBox[] = []
-  // Each cargo commits to the orientation of its first upright placement; later boxes of the
-  // same cargo reuse it so rows share a pitch and stop leaving alternating side gaps.
+  // --- Spatial grid for placed-box queries (uniform 3D grid, EPSILON expansion) ---
+  const cellSize = (() => {
+    if (cargoItems.length === 0) return 100
+    const dims = cargoItems.map((item) => Math.max(item.length, item.width, item.height)).sort((a, b) => a - b)
+    return Math.max(100, dims[Math.floor(dims.length / 2)])
+  })()
+  const gridBounds: SpatialAabb = { minX: 0, minY: 0, minZ: 0, maxX: effective.length, maxY: effective.width, maxZ: effective.height }
+  const placedGrid = new SpatialGrid<PlacementBox>(gridBounds, cellSize)
+  const placedNearby = (aabb: SpatialAabb): PlacementBox[] => placedGrid.query(aabb)
+  // ------
   const committedOrientations = new Map<string, OrientationKey>()
   let extremePoints: PackingPoint[] = [{ x: 0, y: 0, z: 0 }]
   const unplacedMap = new Map<string, UnplacedCargo>()
@@ -1032,6 +1048,11 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       committedOrientations.set(entry.item.id, box.orientationKey)
     }
     placed.push(buildPlacedBox(entry, placement, placed, placed.length + 1, placementSource))
+    const justPlaced = placed[placed.length - 1]
+    placedGrid.insert(justPlaced.id, {
+      minX: justPlaced.x, minY: justPlaced.y, minZ: justPlaced.z,
+      maxX: justPlaced.x + justPlaced.length, maxY: justPlaced.y + justPlaced.width, maxZ: justPlaced.z + justPlaced.height,
+    }, justPlaced)
 
     extremePoints = normalizePoints(
       [
@@ -1184,7 +1205,9 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
           false,
           false,
           committedOrientations.get(state.item.id),
-          minSupportRatio)
+          minSupportRatio,
+          placedNearby,
+        )
         if (!placement) break
         placeEntry({
           item: state.item,
@@ -1303,7 +1326,9 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         reserveTopPassengerStackSlot,
         loadingMode === 'quantity',
         committedOrientations.get(item.id),
-          minSupportRatio)
+        minSupportRatio,
+        placedNearby,
+      )
       if (!placement) {
         markUnplaced(item, entry.label, UNPLACED_REASON_CODES.NO_SPACE)
         noSpaceEntries.push(entry)
@@ -1324,7 +1349,9 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         false,
         false,
         committedOrientations.get(entry.item.id),
-          minSupportRatio)
+        minSupportRatio,
+        placedNearby,
+      )
       if (!placement) continue
       placeEntry(entry, placement)
       const current = unplacedMap.get(entry.item.id)
