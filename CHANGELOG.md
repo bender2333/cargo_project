@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-06 production deploy planned
+
+- Intent: `git push origin main` then `npm run deploy` for commit `1e814fc` (r63 release notes + P1-P3 packing/reliability work currently ahead of origin).
+- Scope: frontend static assets + backend `.mjs` modules; preserve live SQLite (`database.db*`) per deploy/rollback policy.
+- Post-deploy required evidence: service active, static HTTP 200, unauthenticated API 401, local/remote asset hashes, optional remote E2E if deploy script/time allows.
+
 ## 2026-08-06 r63 release notes
 
 - Added user-facing release note `2026-08-06-r63-packing-root-cause-and-boundaries` covering packing root-cause fixes, shared support policy, draft/container invalidation, invalid-box stats, and custom-container payload validation.
