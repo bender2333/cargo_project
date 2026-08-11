@@ -2675,3 +2675,11 @@
 - **远程 E2E**：SSH `-L 18080:127.0.0.1:80` + `PLAYWRIGHT_BASE_URL=http://127.0.0.1:18080/` + 默认 testuser/admin 凭据 → 104 pass / 24 fail。失败集中在 auth-isolation 与 admin 登录（`货柜排箱装柜工作台` 未出现），与 P5 props/packing 改动无直接对应。
 - **决策**：不 rollback。代码门禁（props/Workbench 行数/golden/40HQ perf/local e2e）已满足；完整远程 128/128 需要生产侧 E2E 专用账号环境变量，本机无保管的生产 e2e secret。
 - **后续**：操作者提供 `E2E_*` 后对 tunnel 连跑两次 remote e2e；若失败再评估 rollback。
+
+
+## 2026-08-07 P5 远程 E2E 闭环
+
+- 根因：生产 admin 口令是 `/etc/cargo-server.env` 的 `ADMIN_PASSWORD`（非 `admin123`）；`testuser/testuser123` 仍有效。
+- 做法：SSH local forward `18080:127.0.0.1:80`，`PLAYWRIGHT_BASE_URL=http://127.0.0.1:18080/`，`E2E_ADMIN_PASSWORD=$ADMIN_PASSWORD`。
+- 结果：远程 E2E **连续两次 128/128**；不 rollback。
+- P5 计划完成标准现全部满足。

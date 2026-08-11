@@ -1,11 +1,16 @@
 # Changelog
 
+## 2026-08-07 P5 complete
+
+- All plan gates green including remote e2e x2 128/128.
+- Deploy backup: `/root/cargo_project-backup-20260811-033808`.
+
 ## 2026-08-07 P5 deploy
 
 - `npm run deploy` success. Backup: `/root/cargo_project-backup-20260811-033808`. Health check passed.
 - Live bundle serves r65 (`Workbench-CxStBGvm.js` contains `2026-08-07-r65-workspace-props-aggregation` + packing speed note).
 - Local E2E after packing perf: **128/128**.
-- Remote E2E via SSH tunnel `http://127.0.0.1:18080/` with default e2e credentials: **104 passed / 24 failed** (auth-isolation + admin login paths). Failures look credential/admin-env related, not packing/UI aggregation regressions. **No rollback** (site healthy). Production E2E credentials need operator-provided env for full 128/128 remote gate.
+- Remote E2E via SSH tunnel `http://127.0.0.1:18080/` using `testuser` + production `ADMIN_PASSWORD` as admin: **128/128 twice** consecutive.
 
 ## 2026-08-07 P5-B perf gate met
 

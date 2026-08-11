@@ -363,7 +363,7 @@
           "npm run test:e2e",
           "npm run build"
         ],
-        "result": "Workbench 1495 lines; VisualizationWorkspaceProps=19; ResultsPanelProps=23; e2e 128/128; build 0; deploy backup /root/cargo_project-backup-20260811-033808; local e2e 128/128; remote tunnel e2e 104/24 fail auth-env"
+        "result": "Workbench 1495 lines; VisualizationWorkspaceProps=19; ResultsPanelProps=23; e2e 128/128; build 0; deploy backup /root/cargo_project-backup-20260811-033808; local e2e 128/128; remote tunnel e2e 104/24 fail auth-env; remote e2e x2 128/128 via tunnel with ADMIN_PASSWORD"
       },
       "acceptance": "props<=30 met; Workbench.tsx=1495<=1500 met; e2e 128/128; no Context",
       "commit": "c463daf"
@@ -378,7 +378,7 @@
           "node --expose-gc scripts/frontendBenchmark.mjs --algorithm-case vietnam-40hq-volume x2",
           "npx vitest run src/lib/packing*.test.ts"
         ],
-        "result": "hashes unchanged; dual medians 6158.463/5137.822; 9e471d7=7333.771; current confirm 5833.981; packing tests 91/91; deploy backup /root/cargo_project-backup-20260811-033808; local e2e 128/128; remote tunnel e2e 104/24 fail auth-env"
+        "result": "hashes unchanged; dual medians 6158.463/5137.822; 9e471d7=7333.771; current confirm 5833.981; packing tests 91/91; deploy backup /root/cargo_project-backup-20260811-033808; local e2e 128/128; remote tunnel e2e 104/24 fail auth-env; remote e2e x2 128/128 via tunnel with ADMIN_PASSWORD"
       },
       "acceptance": "5 golden hashes unchanged; official idle vietnam-40hq-volume better-of dual medians 5137.822<=6233 and faster than 9e471d7 7333; e2e previously 128/128",
       "commit": "a405c6a"
