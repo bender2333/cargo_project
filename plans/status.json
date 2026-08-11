@@ -367,7 +367,8 @@
         ],
         "result": "VisualizationWorkspaceProps=19, ResultsPanelProps=23; Workbench.tsx=1884 (line target missed, documented); lint 0 err; build 0; focused tests green"
       },
-      "acceptance": "props<=30 met; Workbench<=1500 NOT met (residual business logic, see decision.md); no Context introduced"
+      "acceptance": "props<=30 met; Workbench<=1500 NOT met (residual business logic, see decision.md); no Context introduced",
+      "commit": "c463daf"
     },
     {
       "id": "P5-B-spatial-full-wiring",

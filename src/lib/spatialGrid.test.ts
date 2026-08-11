@@ -66,6 +66,46 @@ describe('SpatialGrid', () => {
     expect(grid.query(aabb(-100, -100, -100, -1, -1, -1))).toEqual([])
   })
 
+
+  it('query equals full AABB filter (including EPSILON expansion) for dense fixture boxes', () => {
+    const bounds = aabb(0, 0, 0, 12000, 2400, 2700)
+    const grid = new SpatialGrid<{ id: string; box: SpatialAabb }>(bounds, 400)
+    const boxes: Array<{ id: string; box: SpatialAabb }> = []
+    let id = 0
+    for (let x = 0; x < 10000; x += 1000) {
+      for (let y = 0; y < 2000; y += 500) {
+        for (let z = 0; z < 2000; z += 500) {
+          const box = aabb(x, y, z, x + 900, y + 400, z + 400)
+          const payload = { id: `b${id++}`, box }
+          boxes.push(payload)
+          grid.insert(payload.id, box, payload)
+        }
+      }
+    }
+
+    const intersects = (a: SpatialAabb, b: SpatialAabb) => !(
+      a.maxX + 0.001 < b.minX || b.maxX + 0.001 < a.minX ||
+      a.maxY + 0.001 < b.minY || b.maxY + 0.001 < a.minY ||
+      a.maxZ + 0.001 < b.minZ || b.maxZ + 0.001 < a.minZ
+    )
+
+    const queries = [
+      aabb(0, 0, 0, 1000, 1000, 1000),
+      aabb(2500, 100, 100, 3500, 900, 900),
+      aabb(8000, 0, 1500, 9500, 2000, 2500),
+      aabb(100, 100, 100, 200, 200, 200),
+    ]
+    for (const q of queries) {
+      const fromGrid = grid.query(q).map((p) => p.id).sort()
+      const expanded = {
+        minX: q.minX - 0.001, minY: q.minY - 0.001, minZ: q.minZ - 0.001,
+        maxX: q.maxX + 0.001, maxY: q.maxY + 0.001, maxZ: q.maxZ + 0.001,
+      }
+      const full = boxes.filter((b) => intersects(expanded, b.box)).map((b) => b.id).sort()
+      expect(fromGrid).toEqual(full)
+    }
+  })
+
   it('count 正确追踪插入数', () => {
     const grid = new SpatialGrid<string>(aabb(0, 0, 0, 1000, 1000, 1000), 100)
     expect(grid.count).toBe(0)

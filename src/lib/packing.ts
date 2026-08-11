@@ -248,9 +248,23 @@ function respectsStackCapacityWithUpwardRiders(
   support: ReturnType<typeof supportDetails>,
   placed: PlacementBox[],
   placedById: Map<string, StackChainNode>,
+  placedNearby?: (aabb: SpatialAabb) => PlacementBox[],
+  containerHeight = Number.MAX_SAFE_INTEGER,
 ) {
   const candidateTop = point.z + box.height
-  const directRiders = placed.filter((candidate) => {
+  // Nearby-only candidate set: same AABB intersection as full-scan filter, restricted to the
+  // vertical column above the candidate (grid query is a pure recall narrow).
+  const riderNeighborhood = placedNearby
+    ? placedNearby({
+        minX: point.x - EPSILON,
+        minY: point.y - EPSILON,
+        minZ: candidateTop - EPSILON,
+        maxX: point.x + box.length + EPSILON,
+        maxY: point.y + box.width + EPSILON,
+        maxZ: containerHeight + EPSILON,
+      })
+    : placed
+  const directRiders = riderNeighborhood.filter((candidate) => {
     if (Math.abs(candidate.z - candidateTop) > EPSILON) return false
     const overlapX = Math.max(
       0,
@@ -264,9 +278,30 @@ function respectsStackCapacityWithUpwardRiders(
   })
   if (directRiders.length === 0) return true
 
-  // Invert existing support edges so we can walk the stacks already above each rider.
+  // Dependents may sit on a rider outside the candidate column footprint; expand to the
+  // union of direct-rider AABBs upward before inverting support edges.
+  let depMinX = point.x
+  let depMinY = point.y
+  let depMaxX = point.x + box.length
+  let depMaxY = point.y + box.width
+  for (const rider of directRiders) {
+    depMinX = Math.min(depMinX, rider.x)
+    depMinY = Math.min(depMinY, rider.y)
+    depMaxX = Math.max(depMaxX, rider.x + rider.length)
+    depMaxY = Math.max(depMaxY, rider.y + rider.width)
+  }
+  const dependentNeighborhood = placedNearby
+    ? placedNearby({
+        minX: depMinX - EPSILON,
+        minY: depMinY - EPSILON,
+        minZ: candidateTop - EPSILON,
+        maxX: depMaxX + EPSILON,
+        maxY: depMaxY + EPSILON,
+        maxZ: containerHeight + EPSILON,
+      })
+    : placed
   const dependents = new Map<string, PlacementBox[]>()
-  for (const existing of placed) {
+  for (const existing of dependentNeighborhood) {
     for (const supportId of existing.supportedBy) {
       const list = dependents.get(supportId)
       if (list) list.push(existing)
@@ -345,16 +380,18 @@ function canPlace(
   reservedTopPassengerHeight = 0,
   reserveTopPassengerStackSlot = false,
   minSupportRatio = MINIMUM_SUPPORT_RATIO,
+  placedNearby?: (aabb: SpatialAabb) => PlacementBox[],
 ) {
   if (!fitsInsideContainer(point, box, container)) return false
   if (reservedTopPassengerHeight > 0 && stackCapacity(item) > 1 && point.z + box.height + reservedTopPassengerHeight > container.height + EPSILON) return false
+  // `placed` is expected to already be a nearby subset when called from hot paths.
   if (!placed.every((candidate) => !overlaps(candidate, point, box))) return false
 
   const support = supportDetails(point, box, placed)
   if (!isSupportRatioAccepted(support.supportRatio, minSupportRatio)) return false
   if (reserveTopPassengerStackSlot && !preservesReservedTopPassengerStackSlot(support, placedById)) return false
   if (!respectsMaxStackLayers(support, placedById, item)) return false
-  return respectsStackCapacityWithUpwardRiders(point, box, item, support, placed, placedById)
+  return respectsStackCapacityWithUpwardRiders(point, box, item, support, placed, placedById, placedNearby, container.height)
 }
 
 function pointKey(point: PackingPoint) {
@@ -556,6 +593,7 @@ function bestPlacement(
           reservedTopPassengerHeight,
           reserveTopPassengerStackSlot,
           minSupportRatio,
+          placedNearby,
         ))
         .map((point) => ({
           box,
@@ -1047,7 +1085,11 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     if (box.height === entry.item.height && !committedOrientations.has(entry.item.id)) {
       committedOrientations.set(entry.item.id, box.orientationKey)
     }
-    placed.push(buildPlacedBox(entry, placement, placed, placed.length + 1, placementSource))
+    const nearbySupport = placedNearby({
+      minX: point.x - EPSILON, minY: point.y - EPSILON, minZ: point.z - EPSILON,
+      maxX: point.x + box.length + EPSILON, maxY: point.y + box.width + EPSILON, maxZ: point.z + box.height + EPSILON,
+    })
+    placed.push(buildPlacedBox(entry, placement, nearbySupport, placed.length + 1, placementSource))
     const justPlaced = placed[placed.length - 1]
     placedGrid.insert(justPlaced.id, {
       minX: justPlaced.x, minY: justPlaced.y, minZ: justPlaced.z,
@@ -1107,12 +1149,27 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   const canStageBlock = (choice: BlockPlacementChoice) => {
     if (usedWeight + choice.block.weight > effective.maxWeight + EPSILON) return false
     const staged = [...placed]
+    // Shared outer neighborhood for the whole block AABB; units only add same-block peers.
+    // Block-local units are mutually non-overlapping and share the same outer placed set.
+    const blockNearbyBase = placedNearby({
+      minX: choice.point.x - EPSILON,
+      minY: choice.point.y - EPSILON,
+      minZ: choice.point.z - EPSILON,
+      maxX: choice.point.x + choice.block.length + EPSILON,
+      maxY: choice.point.y + choice.block.width + EPSILON,
+      maxZ: choice.point.z + choice.block.height + EPSILON,
+    })
+    const stagedExtra: PlacementBox[] = []
     for (const unit of blockUnitPlacements(choice)) {
-      const stagedById = new Map<string, StackChainNode>(staged.map((placedBox) => [placedBox.id, placedBox]))
-      if (!canPlace(unit.placement.point, unit.placement.box, effective, staged, stagedById, unit.entry.item, 0, false, minSupportRatio)) {
+      const stagedById = new Map<string, StackChainNode>([
+        ...staged.map((placedBox) => [placedBox.id, placedBox] as const),
+        ...stagedExtra.map((placedBox) => [placedBox.id, placedBox] as const),
+      ])
+      const supportSet = [...blockNearbyBase, ...stagedExtra]
+      if (!canPlace(unit.placement.point, unit.placement.box, effective, supportSet, stagedById, unit.entry.item, 0, false, minSupportRatio, placedNearby)) {
         return false
       }
-      staged.push(buildPlacedBox(unit.entry, unit.placement, staged, staged.length + 1))
+      stagedExtra.push(buildPlacedBox(unit.entry, unit.placement, supportSet, staged.length + stagedExtra.length + 1))
     }
     return true
   }
@@ -1257,8 +1314,12 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
           const candidatePointSets = topPassengerPoints.length > 0 ? [topPassengerPoints, extremePoints] : [extremePoints]
           for (const candidatePoints of candidatePointSets) {
             for (const point of candidatePoints) {
-              if (!canPlace(point, box, effective, placed, placedById, item, 0, false, minSupportRatio)) continue
-              const score = placementScore(item, box, point, placed, effective, committedOrientations.get(item.id))
+              const nearby = placedNearby({
+                minX: point.x - EPSILON, minY: point.y - EPSILON, minZ: point.z - EPSILON,
+                maxX: point.x + box.length + EPSILON, maxY: point.y + box.width + EPSILON, maxZ: point.z + box.height + EPSILON,
+              })
+              if (!canPlace(point, box, effective, nearby, placedById, item, 0, false, minSupportRatio, placedNearby)) continue
+              const score = placementScore(item, box, point, nearby, effective, committedOrientations.get(item.id))
               if (
                 best === undefined ||
                 score < best.score ||
