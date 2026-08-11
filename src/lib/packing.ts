@@ -252,19 +252,9 @@ function respectsStackCapacityWithUpwardRiders(
   containerHeight = Number.MAX_SAFE_INTEGER,
 ) {
   const candidateTop = point.z + box.height
-  // Nearby-only candidate set: same AABB intersection as full-scan filter, restricted to the
-  // vertical column above the candidate (grid query is a pure recall narrow).
-  const riderNeighborhood = placedNearby
-    ? placedNearby({
-        minX: point.x - EPSILON,
-        minY: point.y - EPSILON,
-        minZ: candidateTop - EPSILON,
-        maxX: point.x + box.length + EPSILON,
-        maxY: point.y + box.width + EPSILON,
-        maxZ: containerHeight + EPSILON,
-      })
-    : placed
-  const directRiders = riderNeighborhood.filter((candidate) => {
+  // Direct riders sit on the candidate top face; the canPlace `placed` arg is already the
+  // local nearby subset (or full placed when no index). Filter that set only.
+  const directRiders = placed.filter((candidate) => {
     if (Math.abs(candidate.z - candidateTop) > EPSILON) return false
     const overlapX = Math.max(
       0,
@@ -566,6 +556,7 @@ function bestPlacement(
   minSupportRatio = MINIMUM_SUPPORT_RATIO,
   placedNearby?: (aabb: SpatialAabb) => PlacementBox[],
 ) {
+  // Prefer caller-provided live index when available via placed symbols that already carry ids.
   const placedById = new Map<string, StackChainNode>(placed.map((placedBox) => [placedBox.id, placedBox]))
   const nearbyFor = (point: PackingPoint, box: BoxOrientation): PlacementBox[] => {
     if (!placedNearby) return placed
@@ -950,6 +941,7 @@ export function shouldUseBlockEngine(cargoItems: CargoItem[], loadingMode: Loadi
 export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[], options: CalculatePackingOptions = {}): PackingResult {
   const effective = effectiveContainer(container)
   const placed: PlacementBox[] = []
+  const placedByIdLive = new Map<string, StackChainNode>()
   // --- Spatial grid for placed-box queries (uniform 3D grid, EPSILON expansion) ---
   const cellSize = (() => {
     if (cargoItems.length === 0) return 100
@@ -958,7 +950,25 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   })()
   const gridBounds: SpatialAabb = { minX: 0, minY: 0, minZ: 0, maxX: effective.length, maxY: effective.width, maxZ: effective.height }
   const placedGrid = new SpatialGrid<PlacementBox>(gridBounds, cellSize)
-  const placedNearby = (aabb: SpatialAabb): PlacementBox[] => placedGrid.query(aabb)
+  // Hybrid recall: grid insert/query both have fixed overhead. Stay on linear scans until the
+  // placed set is large enough, then bulk-load the grid once and use it for subsequent queries.
+  const GRID_NEARBY_MIN_PLACED = 96
+  let gridReady = false
+  const ensureGrid = () => {
+    if (gridReady || placed.length < GRID_NEARBY_MIN_PLACED) return
+    for (const box of placed) {
+      placedGrid.insert(box.id, {
+        minX: box.x, minY: box.y, minZ: box.z,
+        maxX: box.x + box.length, maxY: box.y + box.width, maxZ: box.z + box.height,
+      }, box)
+    }
+    gridReady = true
+  }
+  const placedNearby = (aabb: SpatialAabb): PlacementBox[] => {
+    if (placed.length < GRID_NEARBY_MIN_PLACED) return placed
+    ensureGrid()
+    return placedGrid.query(aabb)
+  }
   // ------
   const committedOrientations = new Map<string, OrientationKey>()
   let extremePoints: PackingPoint[] = [{ x: 0, y: 0, z: 0 }]
@@ -1085,16 +1095,22 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     if (box.height === entry.item.height && !committedOrientations.has(entry.item.id)) {
       committedOrientations.set(entry.item.id, box.orientationKey)
     }
-    const nearbySupport = placedNearby({
-      minX: point.x - EPSILON, minY: point.y - EPSILON, minZ: point.z - EPSILON,
-      maxX: point.x + box.length + EPSILON, maxY: point.y + box.width + EPSILON, maxZ: point.z + box.height + EPSILON,
-    })
+    // Floor placements skip support query (supportDetails returns immediately at z≈0).
+    const nearbySupport = point.z <= EPSILON
+      ? []
+      : placedNearby({
+          minX: point.x - EPSILON, minY: point.y - EPSILON, minZ: point.z - EPSILON,
+          maxX: point.x + box.length + EPSILON, maxY: point.y + box.width + EPSILON, maxZ: point.z + box.height + EPSILON,
+        })
     placed.push(buildPlacedBox(entry, placement, nearbySupport, placed.length + 1, placementSource))
     const justPlaced = placed[placed.length - 1]
-    placedGrid.insert(justPlaced.id, {
-      minX: justPlaced.x, minY: justPlaced.y, minZ: justPlaced.z,
-      maxX: justPlaced.x + justPlaced.length, maxY: justPlaced.y + justPlaced.width, maxZ: justPlaced.z + justPlaced.height,
-    }, justPlaced)
+    placedByIdLive.set(justPlaced.id, justPlaced)
+    if (gridReady) {
+      placedGrid.insert(justPlaced.id, {
+        minX: justPlaced.x, minY: justPlaced.y, minZ: justPlaced.z,
+        maxX: justPlaced.x + justPlaced.length, maxY: justPlaced.y + justPlaced.width, maxZ: justPlaced.z + justPlaced.height,
+      }, justPlaced)
+    }
 
     extremePoints = normalizePoints(
       [
@@ -1148,7 +1164,6 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
 
   const canStageBlock = (choice: BlockPlacementChoice) => {
     if (usedWeight + choice.block.weight > effective.maxWeight + EPSILON) return false
-    const staged = [...placed]
     // Shared outer neighborhood for the whole block AABB; units only add same-block peers.
     // Block-local units are mutually non-overlapping and share the same outer placed set.
     const blockNearbyBase = placedNearby({
@@ -1159,17 +1174,18 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       maxY: choice.point.y + choice.block.width + EPSILON,
       maxZ: choice.point.z + choice.block.height + EPSILON,
     })
-    const stagedExtra: PlacementBox[] = []
+    // One Map + growing support array instead of O(units) Map rebuilds.
+    const stagedById = new Map<string, StackChainNode>(placedByIdLive)
+    const supportSet = blockNearbyBase.slice()
+    let workStep = placed.length + 1
     for (const unit of blockUnitPlacements(choice)) {
-      const stagedById = new Map<string, StackChainNode>([
-        ...staged.map((placedBox) => [placedBox.id, placedBox] as const),
-        ...stagedExtra.map((placedBox) => [placedBox.id, placedBox] as const),
-      ])
-      const supportSet = [...blockNearbyBase, ...stagedExtra]
       if (!canPlace(unit.placement.point, unit.placement.box, effective, supportSet, stagedById, unit.entry.item, 0, false, minSupportRatio, placedNearby)) {
         return false
       }
-      stagedExtra.push(buildPlacedBox(unit.entry, unit.placement, supportSet, staged.length + stagedExtra.length + 1))
+      const stagedBox = buildPlacedBox(unit.entry, unit.placement, supportSet, workStep)
+      supportSet.push(stagedBox)
+      stagedById.set(stagedBox.id, stagedBox)
+      workStep += 1
     }
     return true
   }
@@ -1291,35 +1307,48 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     }
   } else if (loadingMode === 'volume') {
     const remaining = [...expanded]
+    const orientationCache = new Map<string, BoxOrientation[]>()
+    const orientationsOf = (item: CargoItem) => {
+      const cached = orientationCache.get(item.id)
+      if (cached) return cached
+      const next = orientations(item)
+      orientationCache.set(item.id, next)
+      return next
+    }
     while (remaining.length > 0) {
-      const placedById = new Map<string, StackChainNode>(placed.map((placedBox) => [placedBox.id, placedBox]))
+      const placedById = placedByIdLive
       let best: { score: number; box: BoxOrientation; point: PackingPoint; idx: number } | undefined
+      // Top-surface candidates depend only on current placed set + item stack rules; cache per item/iteration.
+      const topPointsByItemId = new Map<string, PackingPoint[]>()
 
       for (let idx = 0; idx < remaining.length; idx += 1) {
         const entry = remaining[idx]
         const item = entry.item
-        if (orientations(item).every((box) => !fitsInsideContainer({ x: 0, y: 0, z: 0 }, box, effective))) {
+        const itemOrientations = orientationsOf(item)
+        if (itemOrientations.every((box) => !fitsInsideContainer({ x: 0, y: 0, z: 0 }, box, effective))) {
           continue
         }
         if (usedWeight + item.weight > effective.maxWeight + EPSILON) {
           continue
         }
-        for (const box of orientations(item)) {
+        for (const box of itemOrientations) {
           if (box.length > effective.length || box.width > effective.width || box.height > effective.height) {
             continue
           }
-          const topPassengerPoints = canUseTopSurfacePoints(item) && placed.length > 0
-            ? normalizePoints(topSurfacePoints(placed, item), effective)
-            : []
+          let topPassengerPoints = topPointsByItemId.get(item.id)
+          if (topPassengerPoints === undefined) {
+            topPassengerPoints = canUseTopSurfacePoints(item) && placed.length > 0
+              ? normalizePoints(topSurfacePoints(placed, item), effective)
+              : []
+            topPointsByItemId.set(item.id, topPassengerPoints)
+          }
           const candidatePointSets = topPassengerPoints.length > 0 ? [topPassengerPoints, extremePoints] : [extremePoints]
           for (const candidatePoints of candidatePointSets) {
             for (const point of candidatePoints) {
-              const nearby = placedNearby({
-                minX: point.x - EPSILON, minY: point.y - EPSILON, minZ: point.z - EPSILON,
-                maxX: point.x + box.length + EPSILON, maxY: point.y + box.width + EPSILON, maxZ: point.z + box.height + EPSILON,
-              })
-              if (!canPlace(point, box, effective, nearby, placedById, item, 0, false, minSupportRatio, placedNearby)) continue
-              const score = placementScore(item, box, point, nearby, effective, committedOrientations.get(item.id))
+              // Volume mode evaluates many (item, orientation, point) triples per commit. Grid
+              // query overhead dominates here; linear placed scans stay cheaper and equivalent.
+              if (!canPlace(point, box, effective, placed, placedById, item, 0, false, minSupportRatio)) continue
+              const score = placementScore(item, box, point, placed, effective, committedOrientations.get(item.id))
               if (
                 best === undefined ||
                 score < best.score ||

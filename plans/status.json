@@ -382,7 +382,7 @@
           "node --expose-gc scripts/frontendBenchmark.mjs --algorithm-case vietnam-40hq-volume",
           "npm run test:e2e"
         ],
-        "result": "5/5 golden hashes unchanged; packing tests green; idle vietnam-40hq-volume median 7656ms >6233ms gate — perf acceptance NOT met; no baseline edits; e2e 128/128 (behavior path); perf still open"
+        "result": "5/5 golden unchanged; packing tests green; same-machine 9e471d7 also ~7-9s under load; frontendBenchmark idle medians 10550/9105ms still >6233; hybrid lazy-grid opts landed; remains in-progress"
       },
       "acceptance": "behavior equivalence met; performance NOT met; remains in-progress for P6 profiling",
       "commit": "a405c6a"

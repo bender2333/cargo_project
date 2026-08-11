@@ -2635,3 +2635,15 @@
 - **剩余 hot path 形态**：源码仍可见 `supportDetails`/`canPlace`/`placementScore` 内的 `placed.filter|every|for…of placed`，但热路径传入的 `placed` 已是 `placedNearby` 子集；真正全量扫只剩 finalize 的 unplaced 整理。
 - **后续 P6 方向**：对 40HQ-volume 做 `node --prof` / 0x profile（产出放 `test-results/`）；重点看 `grid.query` cellKeys 枚举、块引擎 `canStageBlock` 重复 nearby、volume 模式 extreme-point 双重循环是否仍主导；考虑块 commit 后避免 stagedExtra 线性拷贝、或对 score 邻接查询用更紧 AABB。
 - **发布**：r65 只写 P5-A 界面收口，不写 40HQ-volume 提速；P5-B 保持 in-progress，合并部署等 perf 门禁或明确降级决策后再做。
+
+
+## 2026-08-07 P5-B 同机对照与优化尝试
+
+- **同机对照（非空载理想态，Vitest 单测 3-sample）**：
+  - `9e471d7` packing.ts（grid 未接线时代码）：median 带约 **7.2–9.4s**
+  - P5-B 接线后 / 优化后：约 **7.0–8.6s**
+  - 权威 `frontendBenchmark.mjs --algorithm-case vietnam-40hq-volume` 本轮两次 median **10550ms / 9105ms**，均 >6233ms。
+- **结论**：当前机器负载下 40HQ-volume 的绝对时间高于计划写作时的 5.1–5.6s 空载带；相对 9e471d7 同机对照**未证明** P5-B 接线引入了新的算法级回归，但**也不能**宣称达到 ≤6233ms 空载门禁。
+- **已做优化（保持 golden 不变）**：lazy grid bulk-load（`GRID_NEARBY_MIN_PLACED=96`）、`placedByIdLive` 增量 Map、`canStageBlock` 单 Map 复用、地板 `buildPlacedBox` 跳过 support 查询、volume 路径避免 per-point grid query、riders 直接使用已收窄的 `placed` 参数。
+- **仍未做**：`node --prof`/`0x` 正式 profile 产物入库；块引擎 residual `bestPlacement` 的 topSurface 全量扫；EMS 选择循环本身。
+- **纪律**：未改 baseline/阈值/case/iterations；P5-B 保持 in-progress；不部署。
