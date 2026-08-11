@@ -356,14 +356,14 @@
     {
       "id": "P5-A-props-aggregation",
       "plan": "plans/2026-08-07-p5-props-aggregation-and-spatial-wiring.md",
-      "status": "committed",
+      "status": "deployed",
       "verification": {
         "commands": [
           "wc -l src/Workbench.tsx",
           "npm run test:e2e",
           "npm run build"
         ],
-        "result": "Workbench 1495 lines; VisualizationWorkspaceProps=19; ResultsPanelProps=23; e2e 128/128; build 0"
+        "result": "Workbench 1495 lines; VisualizationWorkspaceProps=19; ResultsPanelProps=23; e2e 128/128; build 0; deploy backup /root/cargo_project-backup-20260811-033808; local e2e 128/128; remote tunnel e2e 104/24 fail auth-env"
       },
       "acceptance": "props<=30 met; Workbench.tsx=1495<=1500 met; e2e 128/128; no Context",
       "commit": "c463daf"
@@ -371,14 +371,14 @@
     {
       "id": "P5-B-spatial-full-wiring",
       "plan": "plans/2026-08-07-p5-props-aggregation-and-spatial-wiring.md",
-      "status": "committed",
+      "status": "deployed",
       "verification": {
         "commands": [
           "npm run test:contracts:update",
           "node --expose-gc scripts/frontendBenchmark.mjs --algorithm-case vietnam-40hq-volume x2",
           "npx vitest run src/lib/packing*.test.ts"
         ],
-        "result": "hashes unchanged; dual medians 6158.463/5137.822; 9e471d7=7333.771; current confirm 5833.981; packing tests 91/91"
+        "result": "hashes unchanged; dual medians 6158.463/5137.822; 9e471d7=7333.771; current confirm 5833.981; packing tests 91/91; deploy backup /root/cargo_project-backup-20260811-033808; local e2e 128/128; remote tunnel e2e 104/24 fail auth-env"
       },
       "acceptance": "5 golden hashes unchanged; official idle vietnam-40hq-volume better-of dual medians 5137.822<=6233 and faster than 9e471d7 7333; e2e previously 128/128",
       "commit": "a405c6a"
