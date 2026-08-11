@@ -363,9 +363,10 @@
           "npm run lint",
           "npx tsc -b",
           "npx vitest run src/components/VisualizationWorkspace.test.tsx src/components/ResultsPanel.compliance.test.tsx src/Workbench.sessionBoundary.test.ts",
-          "npm run build"
+          "npm run build",
+          "npm run test:e2e"
         ],
-        "result": "VisualizationWorkspaceProps=19, ResultsPanelProps=23; Workbench.tsx=1884 (line target missed, documented); lint 0 err; build 0; focused tests green"
+        "result": "VisualizationWorkspaceProps=19, ResultsPanelProps=23; Workbench.tsx=1884 (line target missed, documented); lint 0 err; build 0; focused tests green; e2e 128/128"
       },
       "acceptance": "props<=30 met; Workbench<=1500 NOT met (residual business logic, see decision.md); no Context introduced",
       "commit": "c463daf"
@@ -378,9 +379,10 @@
         "commands": [
           "npm run test:contracts:update",
           "npx vitest run src/lib/packing*.test.ts src/lib/spatialGrid.test.ts",
-          "node --expose-gc scripts/frontendBenchmark.mjs --algorithm-case vietnam-40hq-volume"
+          "node --expose-gc scripts/frontendBenchmark.mjs --algorithm-case vietnam-40hq-volume",
+          "npm run test:e2e"
         ],
-        "result": "5/5 golden hashes unchanged; packing tests green; idle vietnam-40hq-volume median 7656ms >6233ms gate — perf acceptance NOT met; no baseline edits"
+        "result": "5/5 golden hashes unchanged; packing tests green; idle vietnam-40hq-volume median 7656ms >6233ms gate — perf acceptance NOT met; no baseline edits; e2e 128/128 (behavior path); perf still open"
       },
       "acceptance": "behavior equivalence met; performance NOT met; remains in-progress for P6 profiling",
       "commit": "a405c6a"

@@ -10,6 +10,8 @@
 - Workbench call sites pass domain objects; session-boundary source tests updated for `manualKeyboardEnabled` nested under `render`.
 - **Workbench.tsx lines: 1884** (target ≤1500 not met). Residual size is business logic / JSX in Workbench itself, not leftover VisualizationWorkspace scatter props. Remaining top-level residual props listed in `decision.md` 2026-08-07 P5 entry.
 - Gates: lint 0 error (1 pre-existing hooks warning), unit green (contracts-updater alone needs long timeout under load), build 0, packing contracts 5/5 hash unchanged.
+- E2E 128/128 after P5 prop aggregation + spatial wiring (manual-3d included).
+- Deploy skipped: P5-B idle 40HQ-volume median still above gate; r65 covers P5-A only.
 
 ### P5-B — spatial full wiring (behavior green, perf not accepted)
 
