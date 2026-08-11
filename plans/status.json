@@ -382,7 +382,8 @@
         ],
         "result": "5/5 golden hashes unchanged; packing tests green; idle vietnam-40hq-volume median 7656ms >6233ms gate — perf acceptance NOT met; no baseline edits"
       },
-      "acceptance": "behavior equivalence met; performance NOT met; remains in-progress for P6 profiling"
+      "acceptance": "behavior equivalence met; performance NOT met; remains in-progress for P6 profiling",
+      "commit": "a405c6a"
     },
     {
       "id": "P4-1-knife5-note",
