@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-07 P5 Workbench line cut + packing hybrid grid
+
+- Extracted Workbench pure helpers/export/import/hotkeys/dialogs: `src/workbenchHelpers.ts`, `src/workbenchExports.ts`, `src/workbenchImport.ts`, `src/hooks/useManualWorkspaceHotkeys.ts`, `EditCargoDialog`, `CustomContainerDialogHost`, `LazyLoadFallback`.
+- `Workbench.tsx` line count now **1495** (≤1500).
+- Spatial grid stays API-wired but prefers linear scans (`GRID_NEARBY_MIN_PLACED = MAX_SAFE_INTEGER`) after measured grid overhead on 40HQ-volume; golden hashes unchanged.
+- E2E 128/128 after extraction.
+- Official idle `vietnam-40hq-volume` still unstable around/above 6233ms on this host; P5-B perf remains open in status/decision.
+
 ## 2026-08-07 P5-A props aggregation + P5-B spatial wiring (partial)
 
 ### P5-A — props aggregation (accepted on interface metrics except Workbench line count)

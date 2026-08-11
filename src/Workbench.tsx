@@ -4,10 +4,10 @@ import { CargoImportDialog } from './components/CargoImportDialog'
 import { buildPlaybackSequence } from './lib/playback'
 import { deriveVisibleWorkspaceBoxes } from './lib/visibleWorkspaceBoxes'
 import { buildLoadingTaskGroups } from './lib/loadingTaskGroups'
-import { buildLoadingSheetModel } from './lib/loadingSheet'
 import { usePlaybackController } from './hooks/usePlaybackController'
 import { usePackingSession } from './hooks/usePackingSession'
 import { useManualPlacementSession } from './hooks/useManualPlacementSession'
+import { useManualWorkspaceHotkeys } from './hooks/useManualWorkspaceHotkeys'
 import { useHistoryPlans } from './hooks/useHistoryPlans'
 import type { HistoryPlan } from './hooks/useHistoryPlans'
 import { useCustomCargoLibrary } from './hooks/useCustomCargoLibrary'
@@ -20,23 +20,20 @@ import { buildStandardCargoItem, STANDARD_BOXES, STANDARD_BOX_MAX_PER_CLICK } fr
 import { HistoryPage } from './components/HistoryPage'
 import { CargoLibraryPage } from './components/CargoLibraryPage'
 import { WorkbenchHeader } from './components/WorkbenchHeader'
+import { EditCargoDialog } from './components/EditCargoDialog'
+import { CustomContainerDialogHost } from './components/CustomContainerDialogHost'
+import { LazyLoadFallback } from './components/LazyLoadFallback'
 import { buildCogOverlay } from './lib/cogVisual'
 import { DEFAULT_VEHICLE_PROFILE, type VehicleProfileId } from './data/vehicleProfiles'
-import {
-  dryRunRotation as manualDryRunRotation,
-} from './lib/manualPlacement'
 import type { ResultsPanelHandle, ResultsPanelState } from './components/ResultsPanel'
 
 import type { ManualRotationDirection, OrientationKey, ValidationIssue } from './lib/manualPlacement'
-import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from './data/containers'
+import { containers, effectiveContainer, formatCubicMeters } from './data/containers'
 import type { VisualizationChrome } from './components/VisualizationWorkspace'
 import { VisualizationWorkspace } from './components/VisualizationWorkspace'
-import { buildExportPlanRows, buildExportRowsFromTemplate } from './lib/exportPlan'
+import { buildExportPlanRows } from './lib/exportPlan'
 import { createClientId } from './lib/clientId'
-import { MAX_IMPORT_CELLS, MAX_IMPORT_COLUMNS, MAX_IMPORT_FILE_BYTES, MAX_IMPORT_ROWS } from './lib/importCargo'
 import type { ImportCargoRow } from './lib/importCargo'
-import { importPreviewRows } from './lib/importTable'
-import { ImportWorkbookWorkerError, parseWorkbookFileInWorker } from './lib/importWorkbookWorkerClient'
 import { normalizeCargoLabelColors } from './lib/labels'
 import {
   deriveClearanceAnnotations,
@@ -57,175 +54,40 @@ import {
   savePlacementSettings,
   type PlacementSettings,
 } from './lib/placementSettings'
-import type { CargoItem, ContainerSpec, LoadingMode, Locale, PackingResult } from './types'
+import type { CargoItem, ContainerSpec, LoadingMode, Locale} from './types'
 import { readCustomContainers } from './api/customContainers'
 import type { User } from './lib/auth'
 import { PackingSidebar } from './components/PackingSidebar'
 import { DebugPanel } from './components/DebugPanel'
-import { excelStyleLabel } from './lib/excelStyleLabel'
 import { buildCargoDebugSnapshot } from './lib/debugSnapshot'
 import { ResultsPanel } from './components/ResultsPanel'
+import { prepareExcelImport } from './workbenchImport'
+import {
+  writeLoadingSheetPdf,
+  writePackingPlanWorkbook,
+  writePlaybackInstructionsWorkbook,
+  writeReviewChecklistExcel,
+  writeReviewChecklistJson,
+} from './workbenchExports'
 import { workbenchCopy as copy } from './data/workbenchCopy'
+import {
+  buildRotationNotice,
+  customContainerDefaults,
+  defaultProjectName,
+  emptyForm,
+  emptyPackingResult,
+  initialCargo,
+  historyPageLabels,
+  localizeManualIssue,
+  nextLabel,
+  workbenchColors as colors,
+  type CargoForm,
+  type NavTarget,
+} from './workbenchHelpers'
 
 type CustomContainerDialogComponent = typeof import('./components/CustomContainerDialog')['CustomContainerDialog']
 type TemplateManagerPageComponent = typeof import('./components/TemplateManagerPage')['TemplateManagerPage']
 type UserManagementComponent = typeof import('./components/UserManagement')['UserManagement']
-const colors = ['#f59e0b', '#0ea5e9', '#22c55e', '#ef4444', '#8b5cf6', '#14b8a6']
-
-
-
-const initialCargo: CargoItem[] = [
-  {
-    id: 'sample-1',
-    name: 'Carton A',
-    label: 'A',
-    length: 400,
-    width: 500,
-    height: 600,
-    weight: 18,
-    quantity: 18,
-    color: '#f59e0b',
-    canRotate: true,
-    stackable: true,
-  },
-]
-
-const customContainerDefaults = {
-  id: 'custom',
-  label: 'Custom container',
-  description: 'User defined container',
-  length: 12000,
-  width: 2350,
-  height: 2600,
-  maxWeight: 26000,
-  doorGap: 0,
-  topGap: 0,
-  sideGap: 0,
-}
-
-type CargoForm = Omit<CargoItem, 'id'>
-type NavTarget = 'overview' | 'report' | 'cargo' | 'container' | 'history' | 'cargo-library' | 'template-manager' | 'users'
-
-function buildRotationNotice(
-  dry: ReturnType<typeof manualDryRunRotation>,
-  container: ContainerSpec,
-  locale: Locale,
-): string {
-  if (dry.ok || !dry.rotatedBox) return ''
-  const box = dry.rotatedBox
-  const overflowL = box.x + box.length - container.length
-  const overflowW = box.y + box.width - container.width
-  const boundary = dry.issues.find((i) => i.type === 'boundary')
-  if (boundary) {
-    if (overflowL > 0) {
-      return locale === 'zh'
-        ? `旋转后长度 ${box.length} mm 超出柜长 ${container.length} mm（差 ${Math.round(overflowL)} mm）`
-        : `Rotated length ${box.length} mm exceeds container length ${container.length} mm (over by ${Math.round(overflowL)} mm)`
-    }
-    if (overflowW > 0) {
-      return locale === 'zh'
-        ? `旋转后宽度 ${box.width} mm 超出柜宽 ${container.width} mm（差 ${Math.round(overflowW)} mm）`
-        : `Rotated width ${box.width} mm exceeds container width ${container.width} mm (over by ${Math.round(overflowW)} mm)`
-    }
-    return locale === 'zh'
-      ? '旋转后会超出货柜边界'
-      : 'Rotated footprint exceeds the container'
-  }
-  const overlap = dry.issues.find((i) => i.type === 'overlap')
-  if (overlap) {
-    return locale === 'zh'
-      ? '旋转后会与其它货物重叠，请先腾出位置'
-      : 'Rotated box would overlap another cargo box'
-  }
-  const floating = dry.issues.find((i) => i.type === 'floating')
-  if (floating) {
-    return locale === 'zh'
-      ? '旋转后底面支撑不足（需要 ≥50%）'
-      : 'Rotated box has insufficient base support (≥50% required)'
-  }
-  const rotationDisabled = dry.issues.find((i) => i.type === 'rotation-disabled')
-  if (rotationDisabled) {
-    return locale === 'zh'
-      ? '该货物不允许旋转'
-      : 'This cargo cannot be rotated'
-  }
-  const stacking = dry.issues.find((i) => i.type === 'stacking')
-  if (stacking) {
-    return locale === 'zh'
-      ? '旋转后会压在不可堆叠货物上'
-      : 'Rotated box would rest on non-stackable cargo'
-  }
-  return locale === 'zh' ? '旋转后不满足校验，已撤销' : 'Rotation rejected by validation'
-}
-
-const emptyForm: CargoForm = {
-  name: 'Carton B',
-  label: 'B',
-  length: 400,
-  width: 500,
-  height: 600,
-  weight: 24,
-  quantity: 10,
-  color: '#0ea5e9',
-  canRotate: true,
-  stackable: true,
-  maxStackLayers: undefined,
-  groundOnly: false,
-}
-function nextLabel(index: number) {
-  return excelStyleLabel(index)
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
-function filenameSlug(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
-
-function defaultProjectName(locale: Locale) {
-  const now = new Date()
-  const pad = (value: number) => String(value).padStart(2, '0')
-  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`
-  return locale === 'zh' ? `装箱方案-${stamp}` : `Packing plan-${stamp}`
-}
-
-function emptyPackingResult(container: ContainerSpec, cargoItems: CargoItem[]): PackingResult {
-  return {
-    placed: [],
-    unplaced: [],
-    layers: [],
-    workSteps: [],
-    labelStats: [],
-    diagnostics: [],
-    totalCargoCount: cargoItems.reduce((sum, item) => sum + item.quantity, 0),
-    placedCount: 0,
-    usedVolume: 0,
-    containerVolume: getContainerVolume(container),
-    volumeUtilization: 0,
-    usedWeight: 0,
-    weightUtilization: 0,
-  }
-}
-
-function localizeManualIssue(issue: ValidationIssue, localeCopy: typeof copy.en) {
-  if (issue.type === 'boundary') return localeCopy.manualIssueBoundary
-  if (issue.type === 'overlap') return localeCopy.manualIssueOverlap
-  if (issue.type === 'floating') return localeCopy.manualIssueFloating
-  if (issue.type === 'rotation-disabled') return localeCopy.manualIssueRotationDisabled
-  if (issue.type === 'max-stack-layers') return localeCopy.manualIssueMaxStackLayers
-  return localeCopy.manualIssueStacking
-}
 
 type WorkbenchProps = {
   currentUser: User | null
@@ -695,79 +557,21 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     setHoverInfo(null)
   }, [placementMode])
 
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      if (target) {
-        const tag = target.tagName
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) {
-          return
-        }
-      }
-      const isManualWorkspaceTarget = activeNav === 'overview'
-        && placementMode === 'manual'
-        && target !== null
-        && workspaceRef.current?.contains(target)
-      if (!isManualWorkspaceTarget) return
-
-
-      const isMeta = event.ctrlKey || event.metaKey
-
-      if (isMeta && (event.key === 'z' || event.key === 'Z')) {
-        if (placementMode !== 'manual') return
-        event.preventDefault()
-        if (event.shiftKey) {
-          redoManualPlacement()
-        } else {
-          undoManualPlacement()
-        }
-        return
-      }
-      if (isMeta && (event.key === 'y' || event.key === 'Y')) {
-        if (placementMode !== 'manual') return
-        event.preventDefault()
-        redoManualPlacement()
-        return
-      }
-
-      if ((event.key === 'r' || event.key === 'R') && placementMode === 'manual' && manualSelectedId) {
-        event.preventDefault()
-        const direction: ManualRotationDirection = event.shiftKey ? 'down' : 'right'
-        const command = rotateManualBox(manualSelectedId, direction)
-        if (!command.ok) {
-          setRotationNotice(buildRotationNotice({
-            ok: false,
-            issues: command.issues,
-            rotatedBox: command.rotatedBox ?? null,
-          }, renderingContainer, locale))
-          setManualNotice(createManualOperationNotice({
-            operation: 'rotate',
-            boxId: manualSelectedId,
-            issues: command.issues,
-            locale,
-          }))
-          return
-        }
-        setRotationNotice('')
-        setManualNotice(null)
-        return
-      }
-
-      if (event.key === 'm' || event.key === 'M') {
-        event.preventDefault()
-        setClearanceToggleToken((token) => token + 1)
-        return
-      }
-
-      if (event.key === 'Escape') {
-        selectManualBox(null)
-        return
-      }
-    }
-
-    window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
-  }, [activeNav, locale, manualSelectedId, placementMode, redoManualPlacement, renderingContainer, rotateManualBox, selectManualBox, undoManualPlacement])
+  useManualWorkspaceHotkeys({
+    activeNav,
+    placementMode,
+    workspaceRef,
+    manualSelectedId,
+    renderingContainer,
+    locale,
+    rotateManualBox,
+    undoManualPlacement,
+    redoManualPlacement,
+    selectManualBox,
+    setRotationNotice,
+    setManualNotice,
+    setClearanceToggleToken,
+  })
 
   useEffect(() => {
     if (!manualNotice) return
@@ -1147,46 +951,14 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
 
   const importExcel = async (file: File | null) => {
     if (!file) return
-    if (file.size > MAX_IMPORT_FILE_BYTES) {
-      setImportMessages([`${t.importIssue}: ${t.importFileTooLarge}`])
+    const outcome = await prepareExcelImport({ file, locale, t })
+    if (outcome.kind === 'messages') {
+      setImportMessages(outcome.messages)
       resultsPanelRef.current?.showImportLog()
       navigateTo('report')
       return
     }
-    let rows: ImportCargoRow[]
-    try {
-      rows = await parseWorkbookFileInWorker(file)
-    } catch (error) {
-      const workerError = error instanceof ImportWorkbookWorkerError ? error : null
-      if (workerError?.code !== 'limit') console.error('[import-excel]', error)
-      const detail = workerError?.code === 'limit'
-        ? (locale === 'zh'
-            ? `工作表展开后超过导入上限（最多 ${MAX_IMPORT_ROWS} 行、${MAX_IMPORT_COLUMNS} 列且 ${MAX_IMPORT_CELLS} 个单元格）`
-            : `Expanded worksheet exceeds the import limit (${MAX_IMPORT_ROWS} rows, ${MAX_IMPORT_COLUMNS} columns, and ${MAX_IMPORT_CELLS} cells maximum)`)
-        : workerError?.code === 'timeout'
-          ? (locale === 'zh' ? '工作簿解析超时，已安全终止' : 'Workbook parsing timed out and was safely stopped')
-          : t.importFileUnreadable
-      setImportMessages([`${workerError?.code === 'limit' ? t.importIssue : t.importParseFailed}: ${detail}`])
-      resultsPanelRef.current?.showImportLog()
-      navigateTo('report')
-      return
-    }
-
-    if (rows.length === 0) {
-      setImportMessages([`${t.importIssue}: ${t.importNoData}`])
-      resultsPanelRef.current?.showImportLog()
-      navigateTo('report')
-      return
-    }
-
-    if (importPreviewRows(rows, 1, 2).length === 0) {
-      setImportMessages([`${t.importIssue}: ${t.importNoData}`])
-      resultsPanelRef.current?.showImportLog()
-      navigateTo('report')
-      return
-    }
-
-    setImportRows(rows)
+    setImportRows(outcome.rows)
     setShowMappingModal(true)
   }
 
@@ -1200,102 +972,39 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       alert(message || (locale === 'zh' ? '导出失败' : 'Export failed'))
     }
   }
-  const exportExcel = () => runPlanExport(async () => {
-    const XLSX = await import('xlsx')
-    const exportTemplate = exportTemplates.find((item) => item.id === selectedExportTemplateId)
-    const planRows = exportTemplate && exportTemplate.columns.length > 0
-      ? buildExportRowsFromTemplate(detailRows, exportTemplate.columns)
-      : detailRows
-    const sheet = XLSX.utils.json_to_sheet(planRows)
-    const shipmentSheet = XLSX.utils.json_to_sheet([
-      {
-        shipmentName: shipmentName.trim() || 'Untitled shipment',
-        container: selectedContainer.label,
-        loadingMode,
-        generatedAt: new Date().toISOString(),
-      },
-    ])
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, shipmentSheet, 'Shipment')
-    XLSX.utils.book_append_sheet(workbook, sheet, 'Packing Plan')
-    const prefix = filenameSlug(shipmentName)
-    XLSX.writeFile(workbook, `${prefix ? `${prefix}-` : ''}packing-plan.xlsx`)
-  })
+  const exportExcel = () => runPlanExport(() => writePackingPlanWorkbook({
+    detailRows,
+    exportTemplates,
+    selectedExportTemplateId,
+    shipmentName,
+    selectedContainerLabel: selectedContainer.label,
+    loadingMode,
+  }))
 
   const exportPlaybackInstructions = () => runPlanExport(async () => {
     if (!playbackAvailable) return
-    const XLSX = await import('xlsx')
-    const rows = playbackSequence.steps.map((entry) => {
-      const supportLabel = entry.box.supportType === 'floor'
-        ? (locale === 'zh' ? '地面' : 'floor')
-        : entry.box.supportType === 'fully-supported'
-          ? (locale === 'zh' ? '完全支撑' : 'fully supported')
-          : (locale === 'zh' ? '部分支撑' : 'partial support')
-      return {
-        step: entry.step,
-        boxId: entry.box.id,
-        label: entry.box.label,
-        cargoName: entry.box.name,
-        x: Math.round(entry.box.x),
-        y: Math.round(entry.box.y),
-        z: Math.round(entry.box.z),
-        length: entry.box.length,
-        width: entry.box.width,
-        height: entry.box.height,
-        orientation: entry.box.orientationKey,
-        physicalLayer: entry.box.physicalLayer,
-        supportType: supportLabel,
-        supportedBy: entry.box.supportedBy.join(','),
-      }
-    })
-    const sheet = XLSX.utils.json_to_sheet(rows)
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, sheet, 'Loading Steps')
-    const prefix = filenameSlug(shipmentName)
-    XLSX.writeFile(workbook, `${prefix ? `${prefix}-` : ''}loading-instructions.xlsx`)
+    await writePlaybackInstructionsWorkbook({ playbackSequence, locale, shipmentName })
   })
 
   const exportLoadingSheet = () => runPlanExport(async () => {
     if (!loadingStepsAvailable) return
-    const { exportLoadingSheetPdf } = await import('./lib/exportLoadingSheet')
-    const model = buildLoadingSheetModel(activeResult, renderingContainer)
-    const prefix = filenameSlug(shipmentName)
-    const blob = exportLoadingSheetPdf({
-      model,
-      boxes: activeResult.placed,
-      container: renderingContainer,
+    await writeLoadingSheetPdf({
+      activeResult,
+      renderingContainer,
       locale,
-      title: shipmentName || projectName,
+      shipmentName,
+      projectName,
     })
-    downloadBlob(blob, `${prefix ? `${prefix}-` : ''}loading-sheet.pdf`)
   })
 
   const exportReviewChecklistJson = () => runPlanExport(() => {
-    const prefix = filenameSlug(shipmentName)
-    downloadBlob(
-      new Blob([JSON.stringify(reviewChecklist, null, 2)], { type: 'application/json;charset=utf-8' }),
-      `${prefix ? `${prefix}-` : ''}review-checklist.json`,
-    )
+    writeReviewChecklistJson({ reviewChecklist, shipmentName })
   })
 
-  const exportReviewChecklistExcel = () => runPlanExport(async () => {
-    const XLSX = await import('xlsx')
-    const rows = reviewChecklist.items.map((item) => ({
-      source: item.source,
-      severity: item.severity,
-      title: item.title,
-      detail: item.detail,
-      action: item.action ?? '',
-      linkedDiagnostics: item.linkedDiagnosticIds?.join(', ') ?? '',
-    }))
-    const sheet = XLSX.utils.json_to_sheet(rows)
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, sheet, 'Review Checklist')
-    const prefix = filenameSlug(shipmentName)
-    XLSX.writeFile(workbook, `${prefix ? `${prefix}-` : ''}review-checklist.xlsx`)
-  })
-
-
+  const exportReviewChecklistExcel = () => runPlanExport(() => writeReviewChecklistExcel({
+    reviewChecklist,
+    shipmentName,
+  }))
 
   const saveCurrentPlan = async () => {
     const saveStartNavigationRevision = navigationRevisionRef.current
@@ -1408,7 +1117,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     })
   }
 
-
   const activateNav = (target: NavTarget) => {
     navigateTo(target)
     setMenuOpen(false)
@@ -1421,8 +1129,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       containerRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     }
   }
-
-
 
   const navItems: Array<{ target: NavTarget; label: string }> = [
     { target: 'overview', label: t.nav[0] },
@@ -1449,48 +1155,24 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
         />
 
         {activeNav === 'users' && currentUser?.role === 'admin' ? (
-          <section className="archive-card overflow-hidden p-[18px]" data-testid="users-page">
-            {UserManagement ? (
+          UserManagement ? (
+            <section className="archive-card overflow-hidden p-[18px]" data-testid="users-page">
               <UserManagement onBack={() => activateNav('overview')} />
-            ) : userManagementLoadFailed ? (
-              <div className="py-10 text-center text-sm text-slate-500">
-                <p className="font-semibold text-red-700" data-testid="user-management-load-error">
-                  {locale === 'zh' ? '登录审计加载失败' : 'Failed to load login audit'}
-                </p>
-                <div className="mt-4 flex justify-center gap-2">
-                  <button className="archive-button" type="button" onClick={() => window.location.reload()}>
-                    {locale === 'zh' ? '重新加载页面' : 'Reload page'}
-                  </button>
-                  <button className="archive-button secondary" type="button" onClick={() => activateNav('overview')}>
-                    {locale === 'zh' ? '关闭' : 'Close'}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="py-12 text-center text-sm text-slate-500" role="status">
-                {locale === 'zh' ? '登录审计加载中...' : 'Loading login audit...'}
-              </div>
-            )}
-          </section>
+            </section>
+          ) : (
+            <LazyLoadFallback
+              locale={locale}
+              testId="users-page"
+              errorTestId="user-management-load-error"
+              failed={userManagementLoadFailed}
+              loadingText={{ zh: '登录审计加载中...', en: 'Loading login audit...' }}
+              errorText={{ zh: '登录审计加载失败', en: 'Failed to load login audit' }}
+              onClose={() => activateNav('overview')}
+            />
+          )
         ) : activeNav === 'history' ? (
           <HistoryPage
-            labels={{
-              title: t.historyPage,
-              noHistory: t.noHistory,
-              savePlan: t.savePlan,
-              backToWorkbench: t.backToWorkbench,
-              shipmentName: t.shipmentName,
-              layers: t.layers,
-              restore: t.restore,
-              delete: locale === 'zh' ? '删除' : 'Delete',
-              retry: locale === 'zh' ? '重试' : 'Retry',
-              loadFailed: locale === 'zh' ? '历史方案加载失败' : 'Failed to load history plans',
-              confirmDelete: locale === 'zh' ? '确认删除该历史方案吗？' : 'Are you sure you want to delete this plan?',
-              saveFailed: locale === 'zh' ? '保存历史方案失败' : 'Failed to save plan',
-              deleteFailed: locale === 'zh' ? '删除失败' : 'Failed to delete',
-              snapshotBadge: locale === 'zh' ? '结果快照' : 'Snapshot',
-              legacyTemplateBadge: locale === 'zh' ? '输入模板' : 'Input template',
-            }}
+            labels={historyPageLabels(t, locale)}
             plans={historyPlans}
             loadFailed={historyLoadFailed}
             onRetry={refreshHistory}
@@ -1534,30 +1216,19 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
               onBack={() => activateNav('overview')}
             />
           ) : (
-            <section className="archive-card p-[18px] text-center text-sm text-slate-500" data-testid="template-manager-page">
-              {templateManagerPageLoadFailed ? (
-                <div className="py-10">
-                  <p className="font-semibold text-red-700" data-testid="template-manager-page-load-error">
-                    {locale === 'zh' ? '模板管理加载失败' : 'Failed to load template manager'}
-                  </p>
-                  <div className="mt-4 flex justify-center gap-2">
-                    <button className="archive-button" type="button" onClick={() => window.location.reload()}>
-                      {locale === 'zh' ? '重新加载页面' : 'Reload page'}
-                    </button>
-                    <button className="archive-button secondary" type="button" onClick={() => activateNav('overview')}>
-                      {locale === 'zh' ? '关闭' : 'Close'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="py-12" role="status">
-                  {locale === 'zh' ? '模板管理加载中...' : 'Loading template manager...'}
-                </div>
-              )}
-            </section>
+            <LazyLoadFallback
+              locale={locale}
+              testId="template-manager-page"
+              errorTestId="template-manager-page-load-error"
+              failed={templateManagerPageLoadFailed}
+              loadingText={{ zh: '模板管理加载中...', en: 'Loading template manager...' }}
+              errorText={{ zh: '模板管理加载失败', en: 'Failed to load template manager' }}
+              onClose={() => activateNav('overview')}
+              cardClassName="archive-card p-[18px] text-center text-sm text-slate-500"
+            />
           )
         ) : (
-        <section className={sidebarCollapsed ? "flex gap-5 max-lg:flex-col" : "flex gap-5 max-lg:flex-col"} data-testid="workbench-layout">
+        <section className="flex gap-5 max-lg:flex-col" data-testid="workbench-layout">
           <PackingSidebar
             sidebarCollapsed={sidebarCollapsed}
             setSidebarCollapsed={setSidebarCollapsed}
@@ -1786,95 +1457,34 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           />
         )}
         {editingCargo && (
-          <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4">
-            <form className="w-full max-w-[560px] rounded-xl bg-white p-5 shadow-2xl" onSubmit={saveEditedCargo} aria-label={t.editCargoTitle}>
-              <div className="mb-4 flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900">{t.editCargoTitle}</h3>
-                  <p className="mt-1 text-sm text-slate-500">{editingCargo.name}</p>
-                </div>
-                <button className="border border-slate-300 bg-white px-3 py-1 text-sm font-semibold" type="button" onClick={() => setEditingCargo(null)} aria-label={t.closeEditDialog}>
-                  ×
-                </button>
-              </div>
-              <div className="grid grid-cols-[1fr_72px] gap-3">
-                <label className="field-label">{t.name}<input className="field-input mt-1" value={editForm.name} onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))} /></label>
-                <label className="field-label">{t.label}<input className="field-input mt-1 text-center font-bold" maxLength={12} value={editForm.label ?? ''} onChange={(event) => setEditForm((current) => ({ ...current, label: event.target.value.toUpperCase() }))} /></label>
-              </div>
-              <div className="mt-3 grid grid-cols-3 gap-3">
-                <label className="field-label">{t.length}<input className="field-input mt-1" type="number" value={editForm.length} onChange={(event) => updateEditNumber('length', event.target.value)} /></label>
-                <label className="field-label">{t.width}<input className="field-input mt-1" type="number" value={editForm.width} onChange={(event) => updateEditNumber('width', event.target.value)} /></label>
-                <label className="field-label">{t.height}<input className="field-input mt-1" type="number" value={editForm.height} onChange={(event) => updateEditNumber('height', event.target.value)} /></label>
-              </div>
-              <div className="mt-3 grid grid-cols-[1fr_1fr_72px] gap-3">
-                <label className="field-label">{t.weight}<input className="field-input mt-1" type="number" value={editForm.weight} onChange={(event) => updateEditNumber('weight', event.target.value)} /></label>
-                <label className="field-label">{t.quantity}<input className="field-input mt-1" type="number" value={editForm.quantity} onChange={(event) => updateEditNumber('quantity', event.target.value)} /></label>
-                <label className="field-label">{t.color}<input className="mt-1 h-10 w-full border border-[#a8a8a8]" type="color" value={editForm.color} onChange={(event) => setEditForm((current) => ({ ...current, color: event.target.value }))} /></label>
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                <label className="flex items-center gap-2"><input checked={editForm.canRotate} type="checkbox" onChange={(event) => setEditForm((current) => ({ ...current, canRotate: event.target.checked }))} />{t.rotate}</label>
-                <label className="flex items-center gap-2"><input checked={editForm.stackable} type="checkbox" onChange={(event) => setEditForm((current) => ({ ...current, stackable: event.target.checked, maxStackLayers: event.target.checked ? current.maxStackLayers : undefined }))} />{t.stackable}</label>
-                <label className="flex items-center gap-2"><input checked={editForm.groundOnly ?? false} type="checkbox" onChange={(event) => setEditForm((current) => ({ ...current, groundOnly: event.target.checked }))} />{t.groundOnly}</label>
-              </div>
-              {editForm.stackable && (
-                <label className="field-label mt-3 block" data-testid="edit-max-stack-layers-field">
-                  {t.maxStackLayers}
-                  <input
-                    className="field-input mt-1"
-                    type="number"
-                    min={1}
-                    value={editForm.maxStackLayers ?? ''}
-                    onChange={(event) => updateEditMaxStackLayers(event.target.value)}
-                  />
-                </label>
-              )}
-              <div className="mt-5 flex justify-end gap-2">
-                <button className="border border-slate-300 bg-white px-4 py-2 text-sm font-semibold" type="button" onClick={() => setEditingCargo(null)}>
-                  {t.cancel}
-                </button>
-                <button className="archive-button px-4 py-2 text-sm" type="submit">
-                  {t.saveChanges}
-                </button>
-              </div>
-            </form>
-          </div>
+          <EditCargoDialog
+            cargoName={editingCargo.name}
+            form={editForm}
+            labels={t}
+            onChange={setEditForm}
+            onUpdateNumber={updateEditNumber}
+            onUpdateMaxStackLayers={updateEditMaxStackLayers}
+            onClose={() => setEditingCargo(null)}
+            onSubmit={saveEditedCargo}
+          />
         )}
       </div>
       {showCustomContainerDialog && (
-        CustomContainerDialog ? (
-          <CustomContainerDialog
-            currentSelectedId={selectedContainerId}
-            onClose={() => {
-              setShowCustomContainerDialog(false)
-              fetchCustomContainers()
-            }}
-            onSelect={(container) => {
-              changeSelectedContainer(container)
-              setShowCustomContainerDialog(false)
-              fetchCustomContainers()
-            }}
-          />
-        ) : (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4" data-testid="custom-container-dialog-loader">
-            {customContainerDialogLoadFailed ? (
-              <div className="w-full max-w-md rounded-lg bg-white p-6 text-center shadow-2xl">
-                <p className="text-sm font-semibold text-red-700" data-testid="custom-container-dialog-load-error">
-                  {locale === 'zh' ? '柜型管理加载失败' : 'Failed to load container manager'}
-                </p>
-                <div className="mt-4 flex justify-center gap-2">
-                  <button className="archive-button" type="button" onClick={() => window.location.reload()}>
-                    {locale === 'zh' ? '重新加载页面' : 'Reload page'}
-                  </button>
-                  <button className="archive-button secondary" type="button" onClick={() => setShowCustomContainerDialog(false)}>
-                    {locale === 'zh' ? '关闭' : 'Close'}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" role="status" aria-label={locale === 'zh' ? '正在加载柜型管理' : 'Loading container manager'} />
-            )}
-          </div>
-        )
+        <CustomContainerDialogHost
+          Dialog={CustomContainerDialog}
+          loadFailed={customContainerDialogLoadFailed}
+          locale={locale}
+          currentSelectedId={selectedContainerId}
+          onClose={() => {
+            setShowCustomContainerDialog(false)
+            fetchCustomContainers()
+          }}
+          onSelect={(container) => {
+            changeSelectedContainer(container)
+            setShowCustomContainerDialog(false)
+            fetchCustomContainers()
+          }}
+        />
       )}
       <DebugPanel snapshot={debugSnapshot} />
     </main>

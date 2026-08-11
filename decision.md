@@ -2647,3 +2647,12 @@
 - **已做优化（保持 golden 不变）**：lazy grid bulk-load（`GRID_NEARBY_MIN_PLACED=96`）、`placedByIdLive` 增量 Map、`canStageBlock` 单 Map 复用、地板 `buildPlacedBox` 跳过 support 查询、volume 路径避免 per-point grid query、riders 直接使用已收窄的 `placed` 参数。
 - **仍未做**：`node --prof`/`0x` 正式 profile 产物入库；块引擎 residual `bestPlacement` 的 topSurface 全量扫；EMS 选择循环本身。
 - **纪律**：未改 baseline/阈值/case/iterations；P5-B 保持 in-progress；不部署。
+
+
+## 2026-08-07 P5 Workbench ≤1500 达成；P5-B 性能仍 open
+
+- **Workbench.tsx = 1495 行**（≤1500）。手段：抽出 helpers/export/import/hotkeys 与对话框/懒加载壳，不引入 Context。
+- **props**：VisualizationWorkspace 19 / ResultsPanel 23（仍 ≤30）。
+- **性能**：同机官方 `frontendBenchmark --algorithm-case vietnam-40hq-volume` 多轮 median 多在 6.2–8.0s 波动；本轮对照 `9e471d7` packing 亦曾到 ~6.3s。曾出现 5949/6007 的较好空载样本，但不可稳定复现 ≤6233。按计划不改 baseline/阈值。
+- **grid 策略**：保留 placedNearby 接线与 lazy bulk-load 代码路径，但将激活阈值设为 `MAX_SAFE_INTEGER`，默认线性扫描，避免已测得的 query 开销在 40HQ-volume 上拖慢。
+- **P5-B status**：behavior + e2e green；perf acceptance 仍 not met → in-progress。不部署。

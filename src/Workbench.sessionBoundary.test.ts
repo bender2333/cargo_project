@@ -114,12 +114,15 @@ describe('Workbench packing-session boundary', () => {
 
   it('keeps workbook reads pending and commits cargo only from the confirmation callback', () => {
     const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+    const importHelper = readFileSync(path.resolve(process.cwd(), 'src/workbenchImport.ts'), 'utf8')
     const importBlock = source.slice(source.indexOf('const importExcel'), source.indexOf('const exportExcel'))
 
-    expect(importBlock).toContain('setImportRows(rows)')
+    expect(importBlock).toContain('setImportRows(outcome.rows)')
     expect(importBlock).toContain('setShowMappingModal(true)')
     expect(importBlock).not.toContain('cargoImported')
-    expect(importBlock).toContain('parseWorkbookFileInWorker(file)')
+    expect(importBlock).toContain('prepareExcelImport({ file, locale, t })')
+    expect(importHelper).toContain('parseWorkbookFileInWorker(file)')
+    expect(importHelper).not.toContain("import('xlsx')")
     expect(importBlock).not.toContain("import('xlsx')")
     expect(source.match(/type: 'cargoImported'/g)).toHaveLength(1)
     expect(source.indexOf("type: 'cargoImported'")).toBeGreaterThan(source.indexOf('onConfirm={(items, messages) =>'))
@@ -214,11 +217,13 @@ describe('Workbench packing-session boundary', () => {
 
   it('scopes manual keyboard commands to the focused overview workspace', () => {
     const workbenchSource = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+    const hotkeysSource = readFileSync(path.resolve(process.cwd(), 'src/hooks/useManualWorkspaceHotkeys.ts'), 'utf8')
     const workspaceSource = readFileSync(path.resolve(process.cwd(), 'src/components/VisualizationWorkspace.tsx'), 'utf8')
     const sceneSource = readFileSync(path.resolve(process.cwd(), 'src/components/ContainerScene.tsx'), 'utf8')
 
-    expect(workbenchSource).toMatch(/const isManualWorkspaceTarget =\s*activeNav === 'overview'\s*&& placementMode === 'manual'\s*&& target !== null\s*&& workspaceRef\.current\?\.contains\(target\)/)
-    expect(workbenchSource).toMatch(/if \(!isManualWorkspaceTarget\) return\s*\n\s*const isMeta/)
+    expect(workbenchSource).toContain('useManualWorkspaceHotkeys({')
+    expect(hotkeysSource).toMatch(/const isManualWorkspaceTarget =\s*activeNav === 'overview'\s*&& placementMode === 'manual'\s*&& target !== null\s*&& workspaceRef\.current\?\.contains\(target\)/)
+    expect(hotkeysSource).toMatch(/if \(!isManualWorkspaceTarget\) return/)
     expect(workbenchSource).toContain("tabIndex={activeNav === 'overview' && placementMode === 'manual' ? 0 : undefined}")
     expect(workbenchSource).toContain("manualKeyboardEnabled: activeNav === 'overview' && placementMode === 'manual'")
     expect(workspaceSource).toContain('manualKeyboardEnabled={manualKeyboardEnabled}')

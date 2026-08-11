@@ -952,7 +952,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   const placedGrid = new SpatialGrid<PlacementBox>(gridBounds, cellSize)
   // Hybrid recall: grid insert/query both have fixed overhead. Stay on linear scans until the
   // placed set is large enough, then bulk-load the grid once and use it for subsequent queries.
-  const GRID_NEARBY_MIN_PLACED = 96
+  const GRID_NEARBY_MIN_PLACED = Number.MAX_SAFE_INTEGER
   let gridReady = false
   const ensureGrid = () => {
     if (gridReady || placed.length < GRID_NEARBY_MIN_PLACED) return
