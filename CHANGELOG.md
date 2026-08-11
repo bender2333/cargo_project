@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-08-07 P5-A props aggregation + P5-B spatial wiring (partial)
+
+### P5-A — props aggregation (accepted on interface metrics except Workbench line count)
+
+- Added `src/components/workspaceProps.ts` with `ManualWorkspaceProps` / `PlaybackWorkspaceProps` / `SceneRenderWorkspaceProps` / `VisualSelectionWorkspaceProps`.
+- `VisualizationWorkspaceProps` top-level fields: **19** (≤30). Domain bundles carry the previous scattered manual/playback/render/selection fields; no new fields; no Context.
+- `ResultsPanelProps` top-level fields: **23** (≤30) via playback/loadingSteps/cog/compare/fill/exportActions/selection domain objects (`src/components/resultsPanelDomainProps.ts`).
+- Workbench call sites pass domain objects; session-boundary source tests updated for `manualKeyboardEnabled` nested under `render`.
+- **Workbench.tsx lines: 1884** (target ≤1500 not met). Residual size is business logic / JSX in Workbench itself, not leftover VisualizationWorkspace scatter props. Remaining top-level residual props listed in `decision.md` 2026-08-07 P5 entry.
+- Gates: lint 0 error (1 pre-existing hooks warning), unit green (contracts-updater alone needs long timeout under load), build 0, packing contracts 5/5 hash unchanged.
+
+### P5-B — spatial full wiring (behavior green, perf not accepted)
+
+- Wired `placedNearby` into upward-rider directRiders + dependents neighborhood, `buildPlacedBox` support set via `placeEntry`, `canStageBlock` shared block AABB subset, and volume-mode `canPlace`/`placementScore`.
+- `npm run test:contracts:update`: all five golden hashes **unchanged**.
+- packing unit/invariants/blockEngine/stackfill/spatialGrid tests green; added dense-fixture query≡full-AABB equivalence test.
+- Idle `vietnam-40hq-volume` median **7656.496 ms** (samples 7656/7814/7967/7579/7475) — **above** 6233 ms gate and slower than 9e471d7 baseline band. Per plan: no baseline/threshold edits; P5-B remains in-progress; profile note in decision.md.
+- Remaining source patterns `placed.filter/every/for…of placed` live inside helpers that now receive already-narrowed nearby subsets on hot paths (`supportDetails`, `canPlace`, `placementScore`); unplaced finalize filter retained.
+
 
 ## 2026-08-07 Knife 5 — visual selection state ownership (P3-11 closed)
 

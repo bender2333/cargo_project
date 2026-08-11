@@ -1615,9 +1615,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             activeResult={activeResult}
             formatCubicMeters={formatCubicMeters}
             t={t}
-            placementMode={placementMode}
-            manualKeyboardEnabled={activeNav === 'overview' && placementMode === 'manual'}
-            setPlacementMode={setPlacementMode}
             hasCalculated={hasCalculated}
             handleContinueManually={handleContinueManually}
             exportCurrentViewDisabled={!activePlanCompliance.ok}
@@ -1627,53 +1624,64 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             containerChangeNotice={containerChangeNotice}
             customContainerLoadFailed={customContainerLoadFailed}
             locale={locale}
-            manualNotice={manualNotice}
-            setManualNotice={setManualNotice}
-            rotationNotice={rotationNotice}
-            setRotationNotice={setRotationNotice}
-            manualIssues={manualIssues}
-            localizeManualIssue={(issue) => localizeManualIssue(issue, t)}
-            manualPool={manualPool}
-            handleManualPoolDragStart={handleManualPoolDragStart}
-            handleManualPoolDragEnd={handleManualPoolDragEnd}
-            handleQuickPlaceCargo={handleQuickPlaceCargo}
-            manualHelpOpen={manualHelpOpen}
-            setManualHelpOpen={setManualHelpOpen}
-            automaticPlaced={automaticDisplayResult.placed}
-            manualPlacedBoxes={manualPlacedBoxes}
-            playbackActive={playbackActive}
-            playbackSequence={playbackSequence}
-            playbackCursor={playback.cursor}
-            renderingContainer={renderingContainer}
-            gridSnap={gridSnap}
-            edgeSnap={edgeSnap}
-            placementSettings={placementSettings}
-            manualInvalidBoxIds={manualInvalidBoxIds}
-            poolDragInfo={poolDragInfo}
-            loadingStepsActive={loadingStepsActive}
-            activeLoadingGroupBoxIds={activeLoadingGroupBoxIds}
-            manualSelectedId={manualSelectedId}
-            selectManualBox={selectManualBox}
-            setHoverInfo={setHoverInfo}
-            handleManualDeleteBox={handleManualDeleteBox}
-            handleManualDropFromPool={handleManualDropFromPool}
-            handleManualMoveBox={handleManualMoveBox}
-            notifyManualRejected={notifyManualRejected}
-            handleManualRotateBox={handleManualRotateBox}
-            clearanceAnnotations={clearanceAnnotations}
-            manualDraft={manualDraft}
-            autoHelpOpen={autoHelpOpen}
-            setAutoHelpOpen={setAutoHelpOpen}
-            activeLabelId={activeLabelId}
-            activeLayerId={activeLayerId}
-            cogViewState={cogViewState}
-            cogOverlay={cogOverlay}
-            selectedBoxId={selectedBoxId}
-            setSelectedBoxId={setSelectedBoxId}
             calculateAndShowPlacement={calculateAndShowPlacement}
-            hoverInfo={hoverInfo}
             onChromeChange={setVisualizationChrome}
             clearanceToggleToken={clearanceToggleToken}
+            manual={{
+              manualNotice,
+              setManualNotice,
+              rotationNotice,
+              setRotationNotice,
+              manualIssues,
+              localizeManualIssue: (issue) => localizeManualIssue(issue, t),
+              manualPool,
+              handleManualPoolDragStart,
+              handleManualPoolDragEnd,
+              handleQuickPlaceCargo,
+              manualHelpOpen,
+              setManualHelpOpen,
+              automaticPlaced: automaticDisplayResult.placed,
+              manualPlacedBoxes,
+              manualInvalidBoxIds,
+              poolDragInfo,
+              manualSelectedId,
+              selectManualBox,
+              setHoverInfo,
+              handleManualDeleteBox,
+              handleManualDropFromPool,
+              handleManualMoveBox,
+              notifyManualRejected,
+              handleManualRotateBox,
+              clearanceAnnotations,
+              manualDraft,
+              autoHelpOpen,
+              setAutoHelpOpen,
+              hoverInfo,
+            }}
+            playback={{
+              playbackActive,
+              playbackSequence,
+              playbackCursor: playback.cursor,
+              loadingStepsActive,
+              activeLoadingGroupBoxIds,
+            }}
+            render={{
+              placementMode,
+              manualKeyboardEnabled: activeNav === 'overview' && placementMode === 'manual',
+              setPlacementMode,
+              renderingContainer,
+              gridSnap,
+              edgeSnap,
+              placementSettings,
+            }}
+            selection={{
+              activeLabelId,
+              activeLayerId,
+              cogViewState,
+              cogOverlay,
+              selectedBoxId,
+              setSelectedBoxId,
+            }}
           />
         </div>
 
@@ -1686,54 +1694,68 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             activeResult={activeResult}
             selectedContainer={selectedContainer}
             labelOptions={labelOptions}
-            activeSelectedBoxId={activeSelectedBoxId}
             detailRows={detailRows}
-            importMessages={importMessages}
-            exportTemplates={exportTemplates}
-            exportTemplateLoadFailed={exportTemplateLoadFailed}
-            selectedExportTemplateId={selectedExportTemplateId}
-            setSelectedExportTemplateId={setSelectedExportTemplateId}
-            fetchExportTemplates={fetchExportTemplates}
-            playbackAvailable={playbackAvailable}
-            playback={playback}
-            playbackSequence={playbackSequence}
-            loadingStepsAvailable={loadingStepsAvailable}
-            loadingTaskGroups={loadingTaskGroups}
-            activeLoadingGroupIndex={activeLoadingGroupIndex}
-            loadingGroupsPlaying={loadingGroupsPlaying}
-            setActiveLoadingGroupIndex={setActiveLoadingGroupIndex}
-            setLoadingGroupsPlaying={setLoadingGroupsPlaying}
-            cogResult={cogResult}
-            showCogOverlay={showCogOverlay}
-            vehicleProfile={vehicleProfile}
-            toggleCogOverlay={toggleCogOverlay}
-            setVehicleProfile={setVehicleProfile}
-            compareCandidates={compareCandidates}
-            compareSelection={compareSelection}
-            setCompareSelection={setCompareSelection}
-            selectContainerById={selectContainerById}
             hasCalculated={hasCalculated}
-            fillSuggestions={fillSuggestions}
-            handleAddFillCargo={handleAddFillCargo}
-            handleAddAllFillCargo={handleAddAllFillCargo}
-            reviewChecklist={reviewChecklist}
-            exportReviewChecklistJson={exportReviewChecklistJson}
-            exportReviewChecklistExcel={exportReviewChecklistExcel}
-            importExcel={importExcel}
-            downloadImportTemplate={downloadImportTemplate}
-            exportExcel={exportExcel}
-            saveCurrentPlan={saveCurrentPlan}
-            exportPlaybackInstructions={exportPlaybackInstructions}
-            exportLoadingSheet={exportLoadingSheet}
             displayCargoItemsCount={displayCargoItems.length}
             placementMode={placementMode}
             planCompliance={activePlanCompliance}
-            selectManualBox={selectManualBox}
-            setSelectedBoxId={setSelectedBoxId}
             onStateChange={setResultsPanelState}
             displayCargoItems={displayCargoItems}
             loadingMode={loadingMode}
             defaultMaxStackLayers={defaultMaxStackLayers}
+            playback={{
+              playbackAvailable,
+              playback,
+              playbackSequence,
+            }}
+            loadingSteps={{
+              loadingStepsAvailable,
+              loadingTaskGroups,
+              activeLoadingGroupIndex,
+              loadingGroupsPlaying,
+              setActiveLoadingGroupIndex,
+              setLoadingGroupsPlaying,
+            }}
+            cog={{
+              cogResult,
+              showCogOverlay,
+              vehicleProfile,
+              toggleCogOverlay,
+              setVehicleProfile,
+            }}
+            compare={{
+              compareCandidates,
+              compareSelection,
+              setCompareSelection,
+              selectContainerById,
+            }}
+            fill={{
+              fillSuggestions,
+              handleAddFillCargo,
+              handleAddAllFillCargo,
+            }}
+            exportActions={{
+              exportTemplates,
+              exportTemplateLoadFailed,
+              selectedExportTemplateId,
+              setSelectedExportTemplateId,
+              fetchExportTemplates,
+              importMessages,
+              reviewChecklist,
+              exportReviewChecklistJson,
+              exportReviewChecklistExcel,
+              importExcel,
+              downloadImportTemplate,
+              exportExcel,
+              saveCurrentPlan,
+              exportPlaybackInstructions,
+              exportLoadingSheet,
+            }}
+            selection={{
+              activeSelectedBoxId,
+              selectManualBox,
+              setSelectedBoxId,
+            }}
           />
         </section>
         </section>

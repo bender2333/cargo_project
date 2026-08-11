@@ -1,167 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { DragEvent as ReactDragEvent } from 'react'
 import { ContainerScene } from './ContainerScene'
 import type { SceneViewMode } from './ContainerScene'
 import { ContainerPlan2D } from './ContainerPlan2D'
 import type { PlanViewMode } from './ContainerPlan2D'
 import { ManualPlacement2D } from './ManualPlacement2D'
-import type { ContainerSpec, Locale, PackingResult, PlacedBox } from '../types'
-import type { ValidationIssue, PoolEntry, OrientationKey, ManualDraft, ManualRotationDirection } from '../lib/manualPlacement'
-import type { ManualOperationNotice } from '../lib/manualFeedback'
-import type { PlacementSettings } from '../lib/placementSettings'
-import type { ClearanceAnnotation } from '../lib/measurement'
-import type { CogOverlay } from '../lib/cogVisual'
-import type { PlaybackSequence } from '../lib/playback'
 import { deriveVisibleWorkspaceBoxes } from '../lib/visibleWorkspaceBoxes'
+import type {
+  VisualizationWorkspaceProps,
+  WorkspaceView,
+} from './workspaceProps'
 
-export type WorkspaceView = '3d' | '2d'
-type PlacementMode = 'auto' | 'manual'
-
-export type VisualizationChrome = {
-  workspaceMaximized: boolean
-  workspaceView: WorkspaceView
-  sceneViewMode: SceneViewMode
-  planViewMode: PlanViewMode
-  clearanceEnabled: boolean
-}
-
-type HoverInfo = {
-  id: string
-  label: string
-  length: number
-  width: number
-  height: number
-  orientationKey: OrientationKey
-  x: number
-  y: number
-  z: number
-  clientX: number
-  clientY: number
-}
-
-type PoolDragInfo = {
-  cargoId: string
-  length: number
-  width: number
-  height: number
-  color: string
-}
-
-type TranslationKeys = {
-  loaded: string
-  weight: string
-  weightUse: string
-  volumeUse: string
-  autoMode: string
-  manualMode: string
-  continueManually: string
-  view2d: string
-  view3d: string
-  topView: string
-  frontView: string
-  sideView: string
-  isoView: string
-  resetView: string
-  clearanceTitle: string
-  exportView: string
-  dismissNotice: string
-  manualIssues: string
-  placementPool: string
-  poolEmpty: string
-  poolRemaining: string
-  quickPlace: string
-  restoreManual: string
-  maximizeManual: string
-  manualKeyboardHelp: string
-  manualKeyboardHelpItems: string[]
-  autoKeyboardHelp: string
-  autoKeyboardHelpItems: string[]
-  load: string
-  hoverTooltipLabel: string
-  hoverTooltipSize: string
-  hoverTooltipOrientation: string
-  hoverTooltipPosition: string
-  manualIssueBoundary: string
-  manualIssueOverlap: string
-  manualIssueFloating: string
-  manualIssueRotationDisabled: string
-  manualIssueStacking: string
-  manualIssueMaxStackLayers: string
-}
-
-export type VisualizationWorkspaceProps = {
-  activeResult: PackingResult
-  formatCubicMeters: (volume: number) => string
-  t: TranslationKeys
-  /** Single source: useManualPlacementSession state.mode */
-  placementMode: PlacementMode
-  manualKeyboardEnabled: boolean
-  setPlacementMode: (mode: PlacementMode) => void
-  hasCalculated: boolean
-  handleContinueManually: () => void
-  exportCurrentViewDisabled: boolean
-  exportCurrentViewDisabledReason?: string | null
-  exportShipmentName: string
-  onExportView: (operation: () => Promise<void> | void) => Promise<void>
-  containerChangeNotice: string
-  customContainerLoadFailed: boolean
-  locale: Locale
-  manualNotice: ManualOperationNotice | null
-  setManualNotice: (notice: ManualOperationNotice | null) => void
-  rotationNotice: string
-  setRotationNotice: (notice: string) => void
-  manualIssues: ValidationIssue[]
-  localizeManualIssue: (issue: ValidationIssue) => string
-  manualPool: PoolEntry[]
-  handleManualPoolDragStart: (event: ReactDragEvent<HTMLDivElement>, cargoId: string) => void
-  handleManualPoolDragEnd: () => void
-  handleQuickPlaceCargo: (cargoId: string) => void
-  manualHelpOpen: boolean
-  setManualHelpOpen: (fn: (current: boolean) => boolean) => void
-  automaticPlaced: readonly PlacedBox[]
-  manualPlacedBoxes: readonly PlacedBox[]
-  playbackActive: boolean
-  playbackSequence: PlaybackSequence
-  playbackCursor: number
-  renderingContainer: ContainerSpec
-  gridSnap: boolean
-  edgeSnap: boolean
-  placementSettings: PlacementSettings
-  manualInvalidBoxIds: Set<string>
-  poolDragInfo: PoolDragInfo | null
-  loadingStepsActive: boolean
-  activeLoadingGroupBoxIds: Set<string> | undefined
-  manualSelectedId: string | null
-  selectManualBox: (id: string | null) => void
-  setHoverInfo: (info: HoverInfo | null) => void
-  handleManualDeleteBox: (boxId: string) => void
-  handleManualDropFromPool: (cargoId: string, x: number, y: number, z?: number) => void
-  handleManualMoveBox: (boxId: string, x: number, y: number, z?: number) => void
-  notifyManualRejected: (
-    operation: 'move' | 'drop' | 'rotate' | 'delete',
-    boxId?: string,
-    cargoId?: string,
-    issues?: ValidationIssue[],
-    reasonCode?: ManualOperationNotice['reasonCode']
-  ) => void
-  handleManualRotateBox: (boxId: string, direction?: ManualRotationDirection) => void
-  clearanceAnnotations: ClearanceAnnotation[]
-  manualDraft: ManualDraft
-  autoHelpOpen: boolean
-  setAutoHelpOpen: (fn: (current: boolean) => boolean) => void
-  activeLabelId: string
-  activeLayerId: string
-  cogViewState: { boxOpacity: number | null; showOverlay: boolean }
-  cogOverlay: CogOverlay | null
-  selectedBoxId: string | null
-  setSelectedBoxId: (id: string | null) => void
-  calculateAndShowPlacement: () => void
-  hoverInfo: HoverInfo | null
-  /** Lift pure visual chrome for Workbench consumers (header/sidebar/debug). */
-  onChromeChange?: (chrome: VisualizationChrome) => void
-  /** External clearance toggle (Workbench keyboard shortcut). */
-  clearanceToggleToken?: number
-}
+export type { HoverInfo, PlacementMode, VisualizationChrome, VisualizationWorkspaceProps, WorkspaceView } from './workspaceProps'
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
@@ -184,9 +33,6 @@ export function VisualizationWorkspace({
   activeResult,
   formatCubicMeters,
   t,
-  placementMode,
-  manualKeyboardEnabled,
-  setPlacementMode,
   hasCalculated,
   handleContinueManually,
   exportCurrentViewDisabled,
@@ -196,54 +42,70 @@ export function VisualizationWorkspace({
   containerChangeNotice,
   customContainerLoadFailed,
   locale,
-  manualNotice,
-  setManualNotice,
-  rotationNotice,
-  setRotationNotice,
-  manualIssues,
-  localizeManualIssue,
-  manualPool,
-  handleManualPoolDragStart,
-  handleManualPoolDragEnd,
-  handleQuickPlaceCargo,
-  manualHelpOpen,
-  setManualHelpOpen,
-  automaticPlaced,
-  manualPlacedBoxes,
-  playbackActive,
-  playbackSequence,
-  playbackCursor,
-  renderingContainer,
-  gridSnap,
-  edgeSnap,
-  placementSettings,
-  manualInvalidBoxIds,
-  poolDragInfo,
-  loadingStepsActive,
-  activeLoadingGroupBoxIds,
-  manualSelectedId,
-  selectManualBox,
-  setHoverInfo,
-  handleManualDeleteBox,
-  handleManualDropFromPool,
-  handleManualMoveBox,
-  notifyManualRejected,
-  handleManualRotateBox,
-  clearanceAnnotations,
-  manualDraft,
-  autoHelpOpen,
-  setAutoHelpOpen,
-  activeLabelId,
-  activeLayerId,
-  cogViewState,
-  cogOverlay,
-  selectedBoxId,
-  setSelectedBoxId,
   calculateAndShowPlacement,
-  hoverInfo,
   onChromeChange,
   clearanceToggleToken = 0,
+  manual,
+  playback,
+  render,
+  selection,
 }: VisualizationWorkspaceProps) {
+  const {
+    manualNotice,
+    setManualNotice,
+    rotationNotice,
+    setRotationNotice,
+    manualIssues,
+    localizeManualIssue,
+    manualPool,
+    handleManualPoolDragStart,
+    handleManualPoolDragEnd,
+    handleQuickPlaceCargo,
+    manualHelpOpen,
+    setManualHelpOpen,
+    automaticPlaced,
+    manualPlacedBoxes,
+    manualInvalidBoxIds,
+    poolDragInfo,
+    manualSelectedId,
+    selectManualBox,
+    setHoverInfo,
+    handleManualDeleteBox,
+    handleManualDropFromPool,
+    handleManualMoveBox,
+    notifyManualRejected,
+    handleManualRotateBox,
+    clearanceAnnotations,
+    manualDraft,
+    autoHelpOpen,
+    setAutoHelpOpen,
+    hoverInfo,
+  } = manual
+  const {
+    playbackActive,
+    playbackSequence,
+    playbackCursor,
+    loadingStepsActive,
+    activeLoadingGroupBoxIds,
+  } = playback
+  const {
+    placementMode,
+    manualKeyboardEnabled,
+    setPlacementMode,
+    renderingContainer,
+    gridSnap,
+    edgeSnap,
+    placementSettings,
+  } = render
+  const {
+    activeLabelId,
+    activeLayerId,
+    cogViewState,
+    cogOverlay,
+    selectedBoxId,
+    setSelectedBoxId,
+  } = selection
+
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
   const [sceneViewMode, setSceneViewMode] = useState<SceneViewMode>('iso')
   const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')

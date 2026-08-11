@@ -209,7 +209,7 @@ describe('Workbench packing-session boundary', () => {
     expect(source).toContain('setMode: setPlacementMode')
     expect(source).not.toMatch(/const \[placementMode,\s*setPlacementMode\]/)
     expect(source).not.toMatch(/useState<\s*['"]auto['"]\s*\|\s*['"]manual['"]\s*>/)
-    expect(source).toContain('placementMode={placementMode}')
+    expect(source).toMatch(/placementMode(?:=\{placementMode\}|,)/)
   })
 
   it('scopes manual keyboard commands to the focused overview workspace', () => {
@@ -220,7 +220,7 @@ describe('Workbench packing-session boundary', () => {
     expect(workbenchSource).toMatch(/const isManualWorkspaceTarget =\s*activeNav === 'overview'\s*&& placementMode === 'manual'\s*&& target !== null\s*&& workspaceRef\.current\?\.contains\(target\)/)
     expect(workbenchSource).toMatch(/if \(!isManualWorkspaceTarget\) return\s*\n\s*const isMeta/)
     expect(workbenchSource).toContain("tabIndex={activeNav === 'overview' && placementMode === 'manual' ? 0 : undefined}")
-    expect(workbenchSource).toContain("manualKeyboardEnabled={activeNav === 'overview' && placementMode === 'manual'}")
+    expect(workbenchSource).toContain("manualKeyboardEnabled: activeNav === 'overview' && placementMode === 'manual'")
     expect(workspaceSource).toContain('manualKeyboardEnabled={manualKeyboardEnabled}')
     expect(sceneSource).toContain('if (!manualEditableRef.current || !manualKeyboardEnabledRef.current) return')
     expect(sceneSource).toContain('if (!mount.contains(target)) return')

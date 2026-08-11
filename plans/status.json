@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "round": "2026-08-07-refactor-review-round-6-recap",
+  "round": "2026-08-07-p5-props-aggregation-and-spatial-wiring",
   "updatedAt": "2026-08-07",
   "tasks": [
     {
@@ -324,7 +324,7 @@
     {
       "id": "P4-1-knife5",
       "plan": "plans/2026-08-07-knife5-visual-selection-ownership.md",
-      "status": "in-progress",
+      "status": "superseded",
       "commit": "916db8d",
       "verification": {
         "commands": [
@@ -333,12 +333,13 @@
         "result": "state ownership moved to ResultsPanel (Workbensh.tsx contains zero setState for the three); derived compare/cog inputs sunk; codex e2e 128/128. BUT VisualizationWorkspaceProps still 67 (target <=30) and Workbench.tsx 1862 lines (target <=1500)"
       },
       "acceptance": "NOT met as written. Functional ownership goal met; quantitative interface-area targets (props<=30, Workbench<=1500) still open. M-7 not closed.",
-      "note": "Landed knife-5 state ownership in 916db8d (state move complete); acceptance targets props<=30/Workbench<=1500 still open -> remaining work is prop aggregation"
+      "note": "Superseded by P5-A: ownership done earlier; interface-area closed via domain prop aggregation (props<=30). Workbench line count still open per decision.md.",
+      "supersededBy": "P5-A-props-aggregation"
     },
     {
       "id": "P4-2-spatial-index",
       "plan": "plans/2026-08-07-packing-spatial-index.md",
-      "status": "in-progress",
+      "status": "superseded",
       "commit": "9e471d7 + c22c963",
       "verification": {
         "commands": [
@@ -349,7 +350,52 @@
         "result": "5 golden hashes unchanged; 0802 877/877 identical; 32/32 focused tests green. Idle median: baseline 5105/5642 vs grid 5879/6192 -> grid ~+4-13% slower. Only 2/5 hot paths wired (canPlace, placementScore via bestPlacement); directRiders packing.ts:253 / dependents :269 / buildPlacedBox :1009 unswitched"
       },
       "acceptance": "NOT met: behavior equivalence yes (all contract hashes unchanged), 40HQ-volume target <=6233ms no (~5879-6238 observed); P-D wiring of remaining paths plus block-commit support sharing must land before any baseline write",
-      "note": "Grid landed and wired to 2/5 hot paths (9e471d7+c22c963); behavior equivalence verified (5 golden hashes unchanged); 40HQ-volume target not met (grid ~+4-13% slower idle) -> P-D remaining wiring + support-sharing required before baseline write"
+      "note": "Superseded by P5-B full wiring attempt; behavior equivalence kept, perf still open.",
+      "supersededBy": "P5-B-spatial-full-wiring"
+    },
+    {
+      "id": "P5-A-props-aggregation",
+      "plan": "plans/2026-08-07-p5-props-aggregation-and-spatial-wiring.md",
+      "status": "committed",
+      "verification": {
+        "commands": [
+          "node -e count VisualizationWorkspaceProps/ResultsPanelProps",
+          "npm run lint",
+          "npx tsc -b",
+          "npx vitest run src/components/VisualizationWorkspace.test.tsx src/components/ResultsPanel.compliance.test.tsx src/Workbench.sessionBoundary.test.ts",
+          "npm run build"
+        ],
+        "result": "VisualizationWorkspaceProps=19, ResultsPanelProps=23; Workbench.tsx=1884 (line target missed, documented); lint 0 err; build 0; focused tests green"
+      },
+      "acceptance": "props<=30 met; Workbench<=1500 NOT met (residual business logic, see decision.md); no Context introduced"
+    },
+    {
+      "id": "P5-B-spatial-full-wiring",
+      "plan": "plans/2026-08-07-p5-props-aggregation-and-spatial-wiring.md",
+      "status": "in-progress",
+      "verification": {
+        "commands": [
+          "npm run test:contracts:update",
+          "npx vitest run src/lib/packing*.test.ts src/lib/spatialGrid.test.ts",
+          "node --expose-gc scripts/frontendBenchmark.mjs --algorithm-case vietnam-40hq-volume"
+        ],
+        "result": "5/5 golden hashes unchanged; packing tests green; idle vietnam-40hq-volume median 7656ms >6233ms gate — perf acceptance NOT met; no baseline edits"
+      },
+      "acceptance": "behavior equivalence met; performance NOT met; remains in-progress for P6 profiling"
+    },
+    {
+      "id": "P4-1-knife5-note",
+      "plan": "plans/2026-08-07-p5-props-aggregation-and-spatial-wiring.md",
+      "status": "superseded",
+      "supersededBy": "P5-A-props-aggregation",
+      "note": "P4-1 knife5 ownership achieved in 916db8d; remaining interface-area work (props<=30/Workbench<=1500) carries into P5-A"
+    },
+    {
+      "id": "P4-2-spatial-index-note",
+      "plan": "plans/2026-08-07-p5-props-aggregation-and-spatial-wiring.md",
+      "status": "superseded",
+      "supersededBy": "P5-B-spatial-full-wiring",
+      "note": "P4-2 grid built and 2/5 hot paths wired in 9e471d7+c22c963; behavior equivalence verified, perf acceptance not met; full wiring carries into P5-B"
     }
   ]
 }

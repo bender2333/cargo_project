@@ -1,20 +1,12 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react'
 import { PlaybackPanel } from './PlaybackPanel'
+import type { PlaybackSpeed } from '../hooks/usePlaybackController'
 import { LoadingStepsPanel } from './LoadingStepsPanel'
 import { CenterOfGravityPanel } from './CenterOfGravityPanel'
 import { ContainerComparisonPanel } from './ContainerComparisonPanel'
 import { FillSuggestionPanel } from './FillSuggestionPanel'
 import type { Locale, PackingResult, ContainerSpec, PackingDiagnostic, PackingLayer } from '../types'
-import type { PlaybackSpeed } from '../hooks/usePlaybackController'
-import type { PlaybackController } from '../hooks/usePlaybackController'
-import type { PlaybackSequence } from '../lib/playback'
-import type { LoadingTaskGroup } from '../lib/loadingTaskGroups'
 import type { ExportPlanRow } from '../lib/exportPlan'
-import type { ReviewChecklist } from '../lib/reviewChecklist'
-import type { CogResult } from '../lib/centerOfGravity'
-import type { FillSuggestion } from '../lib/fillSuggestion'
-import type { ExportTemplate } from '../types'
-import type { VehicleProfileId } from '../data/vehicleProfiles'
 import { formatPlanComplianceMessage, localizePlanComplianceBlocker, type ActivePlanCompliance } from '../lib/planCompliance'
 import { formatCubicMeters, getContainerVolume } from '../data/containers'
 import { countDistinctLabels } from '../lib/labels'
@@ -23,6 +15,15 @@ import { deriveCogOverlayState } from '../lib/cogView'
 import { compareContainers } from '../lib/containerCompare'
 import type { CargoItem, LoadingMode } from '../types'
 import type { CogViewState } from '../lib/cogView'
+import type {
+  ResultsPlaybackProps,
+  ResultsLoadingStepsProps,
+  ResultsCogProps,
+  ResultsCompareProps,
+  ResultsFillProps,
+  ResultsExportActionsProps,
+  ResultsSelectionProps,
+} from './resultsPanelDomainProps'
 
 type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback' | 'loadingSteps' | 'cog' | 'compare' | 'fill' | 'reviewChecklist'
 
@@ -181,56 +182,22 @@ export type ResultsPanelProps = {
   activeResult: PackingResult
   selectedContainer: ContainerSpec
   labelOptions: string[]
-  activeSelectedBoxId: string | null
   detailRows: ExportPlanRow[]
-  importMessages: string[]
-  exportTemplates: ExportTemplate[]
-  exportTemplateLoadFailed: boolean
-  selectedExportTemplateId: string
-  setSelectedExportTemplateId: (id: string) => void
-  fetchExportTemplates: () => void
-  playbackAvailable: boolean
-  playback: PlaybackController
-  playbackSequence: PlaybackSequence
-  loadingStepsAvailable: boolean
-  loadingTaskGroups: LoadingTaskGroup[]
-  activeLoadingGroupIndex: number
-  loadingGroupsPlaying: boolean
-  setActiveLoadingGroupIndex: (index: number) => void
-  setLoadingGroupsPlaying: (playing: boolean | ((current: boolean) => boolean)) => void
-  cogResult: CogResult
-  showCogOverlay: boolean
-  vehicleProfile: VehicleProfileId
-  toggleCogOverlay: (show: boolean) => void
-  setVehicleProfile: (id: VehicleProfileId) => void
-  compareCandidates: ContainerSpec[]
-  compareSelection: string[]
-  setCompareSelection: (fn: (current: string[]) => string[]) => void
-  selectContainerById: (id: string) => void
   hasCalculated: boolean
-  fillSuggestions: FillSuggestion[]
-  handleAddFillCargo: (presetId: string, quantity: number) => void
-  handleAddAllFillCargo: (rows: { preset: { id: string }; maxCount: number }[]) => void
-  reviewChecklist: ReviewChecklist
-  exportReviewChecklistJson: () => void
-  exportReviewChecklistExcel: () => void
-  importExcel: (file: File | null) => void
-  downloadImportTemplate: () => void
-  exportExcel: () => void
-  saveCurrentPlan: () => void
-  exportPlaybackInstructions: () => void
-  exportLoadingSheet: () => void
   displayCargoItemsCount: number
   placementMode: 'auto' | 'manual'
   planCompliance: ActivePlanCompliance
-  selectManualBox: (id: string | null) => void
-  setSelectedBoxId: (id: string | null) => void
-  /** Pushes owned selection state upward to Workbench for workspace consumption */
   onStateChange?: (state: ResultsPanelState) => void
-  /** Cargo items for compareRows computation (owned by ResultsPanel for compare tab) */
   displayCargoItems?: CargoItem[]
   loadingMode?: LoadingMode
   defaultMaxStackLayers?: number
+  playback: ResultsPlaybackProps
+  loadingSteps: ResultsLoadingStepsProps
+  cog: ResultsCogProps
+  compare: ResultsCompareProps
+  fill: ResultsFillProps
+  exportActions: ResultsExportActionsProps
+  selection: ResultsSelectionProps
 }
 
 export interface ResultsPanelHandle {
@@ -247,55 +214,77 @@ export const ResultsPanel = forwardRef<ResultsPanelHandle, ResultsPanelProps>(fu
   activeResult,
   selectedContainer,
   labelOptions,
-  activeSelectedBoxId,
   detailRows,
-  importMessages,
-  exportTemplates,
-  exportTemplateLoadFailed,
-  selectedExportTemplateId,
-  setSelectedExportTemplateId,
-  fetchExportTemplates,
-  playbackAvailable,
-  playback,
-  playbackSequence,
-  loadingStepsAvailable,
-  loadingTaskGroups,
-  activeLoadingGroupIndex,
-  loadingGroupsPlaying,
-  setActiveLoadingGroupIndex,
-  setLoadingGroupsPlaying,
-  cogResult,
-  showCogOverlay,
-  vehicleProfile,
-  toggleCogOverlay,
-  setVehicleProfile,
-  compareCandidates,
-  compareSelection,
-  setCompareSelection,
-  selectContainerById,
   hasCalculated,
-  fillSuggestions,
-  handleAddFillCargo,
-  handleAddAllFillCargo,
-  reviewChecklist,
-  exportReviewChecklistJson,
-  exportReviewChecklistExcel,
-  importExcel,
-  downloadImportTemplate,
-  exportExcel,
-  saveCurrentPlan,
-  exportPlaybackInstructions,
-  exportLoadingSheet,
   displayCargoItemsCount,
   placementMode,
   planCompliance,
-  selectManualBox,
-  setSelectedBoxId,
   onStateChange,
   displayCargoItems,
   loadingMode,
   defaultMaxStackLayers,
+  playback: playbackDomain,
+  loadingSteps: loadingStepsDomain,
+  cog: cogDomain,
+  compare: compareDomain,
+  fill: fillDomain,
+  exportActions,
+  selection,
 }, ref) {
+  const {
+    playbackAvailable,
+    playback,
+    playbackSequence,
+  } = playbackDomain
+  const {
+    loadingStepsAvailable,
+    loadingTaskGroups,
+    activeLoadingGroupIndex,
+    loadingGroupsPlaying,
+    setActiveLoadingGroupIndex,
+    setLoadingGroupsPlaying,
+  } = loadingStepsDomain
+  const {
+    cogResult,
+    showCogOverlay,
+    vehicleProfile,
+    toggleCogOverlay,
+    setVehicleProfile,
+  } = cogDomain
+  const {
+    compareCandidates,
+    compareSelection,
+    setCompareSelection,
+    selectContainerById,
+  } = compareDomain
+  const {
+    fillSuggestions,
+    handleAddFillCargo,
+    handleAddAllFillCargo,
+  } = fillDomain
+  const {
+    exportTemplates,
+    exportTemplateLoadFailed,
+    selectedExportTemplateId,
+    setSelectedExportTemplateId,
+    fetchExportTemplates,
+    importMessages,
+    reviewChecklist,
+    exportReviewChecklistJson,
+    exportReviewChecklistExcel,
+    importExcel,
+    downloadImportTemplate,
+    exportExcel,
+    saveCurrentPlan,
+    exportPlaybackInstructions,
+    exportLoadingSheet,
+  } = exportActions
+  const {
+    activeSelectedBoxId,
+    selectManualBox,
+    setSelectedBoxId,
+  } = selection
+
   // --- Owned state (moved from Workbench, Knife 5) ---
   const [activeLayerId, setActiveLayerId] = useState('all')
   const [activeLabelId, setActiveLabelId] = useState('all')

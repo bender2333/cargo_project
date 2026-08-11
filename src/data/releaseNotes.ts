@@ -14,6 +14,27 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-08-07-r65-workspace-props-aggregation',
+    date: '2026-08-07',
+    title: {
+      en: 'Cleaner workspace and report panel component boundaries',
+      zh: '工作区与报告面板组件边界收口',
+    },
+    items: {
+      en: [
+        '3D/2D workspace props are grouped into manual, playback, render, and selection domain objects instead of dozens of loose fields.',
+        'Results panel props are grouped into playback, loading steps, COG, compare, fill, export, and selection domains for the same reason.',
+        'Behavior is unchanged: layer/label filtering, manual placement, export blockers, and keyboard shortcuts keep the same user-facing paths.',
+      ],
+      zh: [
+        '3D/2D 工作区 props 收成 manual / playback / render / selection 四个域对象，不再以几十个散字段透传。',
+        '报告面板 props 同样收成回放、装柜步骤、重心、柜型对比、补货、导出与选择等域对象。',
+        '行为不变：层级/标签过滤、手动装柜、导出阻断与键盘快捷键仍走原来的用户路径。',
+      ],
+    },
+  },
+
+  {
     version: '2026-08-07-r64-visual-selection-ownership',
     date: '2026-08-07',
     title: {

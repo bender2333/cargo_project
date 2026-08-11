@@ -2608,3 +2608,30 @@
 - **机制分析（复核 diff 后得出）**：Codex 只接线了 `bestPlacement` 的 `canPlace` 与 `placementScore` 两处；`respectsStackCapacityWithUpwardRiders` 的 `directRiders = placed.filter`（`packing.ts:253`）、dependents 反转（`:269`）、`buildPlacedBox → supportDetails(point, box, supportPlaced)`（`:1009`）仍是全量。等价性保证来自「grid 命中子集替代全量」，但**小批量下 `grid.query` 的 cellKeys 枚举 + `seen` Set + `expand` 开销 ≈ 单纯扫 placed**，当近邻占比不低时是净负担。这是「接线 2/5 处 + 索引自身开销」叠加的结果：**等价已是事实，加速未发生**。
 - **处置**：**不**把 `c22c963` 记为达成；保留 grid 代码与测试（9e471d7 本身是干净的），下一步必须（a）把剩余的 3 处热路径接线、`buildPlacedBox` 复用整块支撑子集，（b）确认接线后空载 benchmark 才允许回写 baseline。在做到之前，40HQ-volume 的 +38% 回退**仍然未被消除**，按计划仍在 `planned`。
 - **纪律确认**：Codex 没有改 benchmark 基线/阈值；没有把 perf 未达标写成已修；commit 与 CHANGELOG 的表达（含 self-reported "All five golden hashes unchanged"）与独立复核一致。
+
+## 2026-08-07 P5 计划立项（架构师交付）
+
+- **计划**：`plans/2026-08-07-p5-props-aggregation-and-spatial-wiring.md`——把 P4-1/P4-2 从各自「in-progress」推进到「达成验收」。
+- **P5-A 的根因（不是再搬状态）**：Knife 5 后 `VisualizationWorkspaceProps` 67 / `Workbench.tsx` 1862 行的形态是「散 prop 透传」，不是「状态没拆」。聚合方向为 `manual/playback/render/selection` 四簇域对象 + 净余回调；验收 `props ≤30`、`Workbench ≤1500 行`；**不允许引入 Context/全局仓**（保持函数组件单向 props 流，给 CLAUDE.md 规则 2/7）。
+- **P5-B 的根因（接上条复核结论）**：`c22c963` 只接了 `bestPlacement` 的 `canPlace`/`placementScore`，导致等价证成、但 `grid.query` 自身开销落在小批量场景下大于线性扫描收益。本轮必须 5/5 全接线（补上 `directRiders:253`、`dependents:269`、`buildPlacedBox:1009`，并允许 `commitBlock:1101-1116` 在同一块 commit 内共享 placed 子集），验收含「5/5 热路径零全量 placed 扫」+「空载 ≤ 1.2× 5194」双向约束；任一条不满足不许动 baseline。
+- **不做什么**：P5-B 不动 `SpatialGrid` 实现（P-B 自身已干净）;不允许 `benchmark:update`/调阈值/调 case/调 iterations；部署失败走保护 rollback 不得另起基建。
+- **例行**：新 CLAUDE.md「每次计划提醒 release note + 部署」已在本计划末尾收为「收尾例行」段落，Codex 无需额外提醒。
+
+
+## 2026-08-07 P5-A/P5-B 执行结果
+
+### P5-A props 聚合
+
+- **达成**：`VisualizationWorkspaceProps` 顶层 19 字段；`ResultsPanelProps` 顶层 23 字段；四/七个域对象聚合，无 Context/全局仓；行为路径保持 props 单向流。
+- **未达成行数**：`Workbench.tsx` **1884** 行（目标 ≤1500）。聚合后 JSX 传参变短，但 Workbench 主体仍是装柜会话/导入导出/导航/编辑对话框等业务逻辑，不是「还剩一簇未聚合的 VisualizationWorkspace 散 prop」。
+- **Workbench → VisualizationWorkspace 顶层残余字段清单**（19）：`activeResult`, `formatCubicMeters`, `t`, `hasCalculated`, `handleContinueManually`, `exportCurrentViewDisabled`, `exportCurrentViewDisabledReason`, `exportShipmentName`, `onExportView`, `containerChangeNotice`, `customContainerLoadFailed`, `locale`, `calculateAndShowPlacement`, `onChromeChange`, `clearanceToggleToken`, `manual`, `playback`, `render`, `selection`。
+- **若要再压 Workbench 行数**：需要另开刀把 sidebar/import/edit-dialog/history 路由等整段下沉，已超出「只做聚合、不搬状态」的 P5-A 边界。
+
+### P5-B 空间索引全接线
+
+- **行为**：5 golden hash 不变；packing/invariants/block/stackfill 全绿；新增 grid query ≡ full AABB（含 EPSILON）等价测试。
+- **接线**：upward riders directRiders + dependents 邻域、`placeEntry→buildPlacedBox` nearby support、`canStageBlock` 块包围盒共享子集、volume 路径 nearby `canPlace`/`placementScore`。
+- **性能未达标（空载）**：`node --expose-gc scripts/frontendBenchmark.mjs --algorithm-case vietnam-40hq-volume` median **7656.496 ms**（>6233 且慢于 9e471d7 基线带）。**未**改 baseline/阈值/case/iterations。
+- **剩余 hot path 形态**：源码仍可见 `supportDetails`/`canPlace`/`placementScore` 内的 `placed.filter|every|for…of placed`，但热路径传入的 `placed` 已是 `placedNearby` 子集；真正全量扫只剩 finalize 的 unplaced 整理。
+- **后续 P6 方向**：对 40HQ-volume 做 `node --prof` / 0x profile（产出放 `test-results/`）；重点看 `grid.query` cellKeys 枚举、块引擎 `canStageBlock` 重复 nearby、volume 模式 extreme-point 双重循环是否仍主导；考虑块 commit 后避免 stagedExtra 线性拷贝、或对 score 邻接查询用更紧 AABB。
+- **发布**：r65 只写 P5-A 界面收口，不写 40HQ-volume 提速；P5-B 保持 in-progress，合并部署等 perf 门禁或明确降级决策后再做。
