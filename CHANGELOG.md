@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-07 P5-B perf gate met
+
+- Official idle `vietnam-40hq-volume` dual runs: median **6158.463ms** and **5137.822ms** (better **5137.822 ≤ 6233**).
+- Same-machine `9e471d7` packing median **7333.771ms**; current **5833.981ms** — not slower than baseline.
+- 5/5 golden hashes unchanged; packing unit/invariants/block/stackfill green.
+- Speedups: bestPlacement single-pass scoring, orientation cache, residual top-point cache, live placedById, placementScore one-pass neighbor scan; grid remains hybrid/linear-default.
+
 ## 2026-08-07 P5 Workbench line cut + packing hybrid grid
 
 - Extracted Workbench pure helpers/export/import/hotkeys/dialogs: `src/workbenchHelpers.ts`, `src/workbenchExports.ts`, `src/workbenchImport.ts`, `src/hooks/useManualWorkspaceHotkeys.ts`, `EditCargoDialog`, `CustomContainerDialogHost`, `LazyLoadFallback`.

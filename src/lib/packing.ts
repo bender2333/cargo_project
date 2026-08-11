@@ -118,9 +118,14 @@ function makeOrientation(length: number, width: number, height: number, orientat
   }
 }
 
+const orientationCache = new Map<string, BoxOrientation[]>()
 export function orientations(item: CargoItem): BoxOrientation[] {
+  const key = `${item.length}x${item.width}x${item.height}:${item.canRotate ? 1 : 0}`
+  const cached = orientationCache.get(key)
+  if (cached) return cached
   const base = makeOrientation(item.length, item.width, item.height, 'LWH')
   if (!item.canRotate) {
+    orientationCache.set(key, [base])
     return [base]
   }
 
@@ -133,7 +138,7 @@ export function orientations(item: CargoItem): BoxOrientation[] {
     makeOrientation(item.height, item.width, item.length, 'HWL'),
   ]
 
-  return options.filter(
+  const unique = options.filter(
     (option, index, list) =>
       list.findIndex(
         (other) =>
@@ -142,6 +147,8 @@ export function orientations(item: CargoItem): BoxOrientation[] {
           other.height === option.height,
       ) === index,
   )
+  orientationCache.set(key, unique)
+  return unique
 }
 
 function fitsInsideContainer(point: PackingPoint, box: BoxSize, container: ContainerSpec) {
@@ -448,6 +455,22 @@ export function placementScore(
   if (Math.abs(point.x + box.length - container.length) <= EPSILON) {
     snapBonus -= container.height
   }
+
+  const topPassengerFloorPenalty = stackCapacity(item) === 1 && point.z <= EPSILON
+    ? container.length * container.width * container.height
+    : 0
+
+  const capacity = stackCapacity(item)
+  // Branch on whether the stack limit is binding in this container, not merely finite.
+  // Non-binding values (e.g. user "99") must share the unlimited low-z scoring path.
+  const minimumHeight = minimumFittingHeight(item, container)
+  const maxPhysicalLayers = minimumHeight > EPSILON
+    ? Math.ceil(container.height / minimumHeight)
+    : 0
+  const capacityIsBinding = Number.isFinite(capacity) && capacity < maxPhysicalLayers
+  // One pass over nearby placed boxes for snap / same-label / same-height bonuses.
+  let sameLabelBonus = 0
+  let sameHeightBonus = 0
   for (const candidate of placed) {
     if (
       Math.abs(point.y + box.width - candidate.y) <= EPSILON &&
@@ -463,26 +486,7 @@ export function placementScore(
     ) {
       snapBonus -= container.height
     }
-  }
-
-  const topPassengerFloorPenalty = stackCapacity(item) === 1 && point.z <= EPSILON
-    ? container.length * container.width * container.height
-    : 0
-
-  const capacity = stackCapacity(item)
-  // Branch on whether the stack limit is binding in this container, not merely finite.
-  // Non-binding values (e.g. user "99") must share the unlimited low-z scoring path.
-  const minimumHeight = minimumFittingHeight(item, container)
-  const maxPhysicalLayers = minimumHeight > EPSILON
-    ? Math.ceil(container.height / minimumHeight)
-    : 0
-  const capacityIsBinding = Number.isFinite(capacity) && capacity < maxPhysicalLayers
-  // Same-label adjacency bonus: prefer placing cargo near existing boxes
-  // with the same label, so same-product groups stay together in the container.
-  let sameLabelBonus = 0
-  for (const candidate of placed) {
     if (candidate.cargoId === item.id) {
-      // Check if placed adjacent (touching on floor plane) or stacked on top
       const touchesX = Math.abs(point.x - candidate.x) <= EPSILON && Math.abs(point.y + box.width - candidate.y) <= EPSILON
       const touchesY = Math.abs(candidate.y + candidate.width - point.y) <= EPSILON && Math.abs(point.x - candidate.x) <= EPSILON
       const stackedOn = point.z > EPSILON && Math.abs(point.z - candidate.z - candidate.height) <= EPSILON &&
@@ -492,15 +496,8 @@ export function placementScore(
         sameLabelBonus -= container.height
       }
     }
-  }
-
-  // Same-height stacking bonus: prefer stacking boxes of the same height
-  // on top of each other, reducing the visual gaps from mixed-height layers.
-  let sameHeightBonus = 0
-  for (const candidate of placed) {
     if (Math.abs(candidate.height - box.height) <= EPSILON && point.z > EPSILON &&
       Math.abs(point.z - candidate.z - candidate.height) <= EPSILON) {
-      // Supporting box has same height as the placed box
       sameHeightBonus -= container.height / 1000
     }
   }
@@ -555,9 +552,9 @@ function bestPlacement(
   committedOrientation?: OrientationKey,
   minSupportRatio = MINIMUM_SUPPORT_RATIO,
   placedNearby?: (aabb: SpatialAabb) => PlacementBox[],
+  placedByIdInput?: Map<string, StackChainNode>,
 ) {
-  // Prefer caller-provided live index when available via placed symbols that already carry ids.
-  const placedById = new Map<string, StackChainNode>(placed.map((placedBox) => [placedBox.id, placedBox]))
+  const placedById = placedByIdInput ?? new Map<string, StackChainNode>(placed.map((placedBox) => [placedBox.id, placedBox]))
   const nearbyFor = (point: PackingPoint, box: BoxOrientation): PlacementBox[] => {
     if (!placedNearby) return placed
     return placedNearby({
@@ -565,34 +562,42 @@ function bestPlacement(
       maxX: point.x + box.length + EPSILON, maxY: point.y + box.width + EPSILON, maxZ: point.z + box.height + EPSILON,
     })
   }
-  const bestFromPoints = (candidatePoints: PackingPoint[]) => orientations(item)
-    .filter(
-      (option) =>
-        option.length <= container.length &&
-        option.width <= container.width &&
-        option.height <= container.height,
-    )
-    .flatMap((box) =>
-      candidatePoints
-        .filter((point) => canPlace(
+  const itemOrientations = orientations(item).filter(
+    (option) =>
+      option.length <= container.length &&
+      option.width <= container.width &&
+      option.height <= container.height,
+  )
+  const bestFromPoints = (candidatePoints: PackingPoint[]) => {
+    let best: { box: BoxOrientation; point: PackingPoint; score: number } | undefined
+    for (const box of itemOrientations) {
+      for (const point of candidatePoints) {
+        const nearby = nearbyFor(point, box)
+        if (!canPlace(
           point,
           box,
           container,
-          nearbyFor(point, box),
+          nearby,
           placedById,
           item,
           reservedTopPassengerHeight,
           reserveTopPassengerStackSlot,
           minSupportRatio,
           placedNearby,
-        ))
-        .map((point) => ({
-          box,
-          point,
-          score: placementScore(item, box, point, nearbyFor(point, box), container, committedOrientation),
-        })),
-    )
-    .sort((a, b) => a.score - b.score || b.box.width - a.box.width || b.box.length * b.box.width - a.box.length * a.box.width)[0]
+        )) continue
+        const score = placementScore(item, box, point, nearby, container, committedOrientation)
+        if (
+          !best ||
+          score < best.score ||
+          (score === best.score && box.width > best.box.width) ||
+          (score === best.score && box.width === best.box.width && box.length * box.width > best.box.length * best.box.width)
+        ) {
+          best = { box, point, score }
+        }
+      }
+    }
+    return best
+  }
 
   if (preferCapacityOneTopPassenger && stackCapacity(item) === 1 && !item.groundOnly && placed.length > 0) {
     const topPlacement = bestFromPoints(normalizePoints(topSurfacePoints(placed, item, container.height - item.height), container))
@@ -1260,19 +1265,28 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     const fallbackStates = loadingMode === 'quantity'
       ? residualStates.sort((a, b) => b.remaining - a.remaining || cargoVolume(b.item) - cargoVolume(a.item))
       : residualStates
+    // Precompute top-surface candidates once per residual SKU, then only recompute after a place
+    // that actually changes the placed set (every successful placeEntry). This still matches
+    // full topSurfacePoints(placed, item) because the function is pure over the placed array.
     for (const state of fallbackStates) {
+      const usesTops = canUseTopSurfacePoints(state.item)
+      let residualPoints = usesTops
+        ? normalizePoints([...extremePoints, ...topSurfacePoints(placed, state.item)], effective)
+        : extremePoints
+      let pointsAtPlacedLen = placed.length
       while (state.remaining > 0) {
         if (usedWeight + state.item.weight > effective.maxWeight + EPSILON) break
+        if (pointsAtPlacedLen !== placed.length) {
+          residualPoints = usesTops
+            ? normalizePoints([...extremePoints, ...topSurfacePoints(placed, state.item)], effective)
+            : extremePoints
+          pointsAtPlacedLen = placed.length
+        }
         const placement = bestPlacement(
           state.item,
           effective,
           placed,
-          normalizePoints(
-            canUseTopSurfacePoints(state.item)
-              ? [...extremePoints, ...topSurfacePoints(placed, state.item)]
-              : extremePoints,
-            effective,
-          ),
+          residualPoints,
           0,
           loadingMode === 'quantity',
           false,
@@ -1280,6 +1294,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
           committedOrientations.get(state.item.id),
           minSupportRatio,
           placedNearby,
+          placedByIdLive,
         )
         if (!placement) break
         placeEntry({
@@ -1418,6 +1433,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         committedOrientations.get(item.id),
         minSupportRatio,
         placedNearby,
+        placedByIdLive,
       )
       if (!placement) {
         markUnplaced(item, entry.label, UNPLACED_REASON_CODES.NO_SPACE)
@@ -1441,6 +1457,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         committedOrientations.get(entry.item.id),
         minSupportRatio,
         placedNearby,
+        placedByIdLive,
       )
       if (!placement) continue
       placeEntry(entry, placement)

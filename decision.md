@@ -2656,3 +2656,13 @@
 - **性能**：同机官方 `frontendBenchmark --algorithm-case vietnam-40hq-volume` 多轮 median 多在 6.2–8.0s 波动；本轮对照 `9e471d7` packing 亦曾到 ~6.3s。曾出现 5949/6007 的较好空载样本，但不可稳定复现 ≤6233。按计划不改 baseline/阈值。
 - **grid 策略**：保留 placedNearby 接线与 lazy bulk-load 代码路径，但将激活阈值设为 `MAX_SAFE_INTEGER`，默认线性扫描，避免已测得的 query 开销在 40HQ-volume 上拖慢。
 - **P5-B status**：behavior + e2e green；perf acceptance 仍 not met → in-progress。不部署。
+
+
+## 2026-08-07 P5-B 性能门禁达成
+
+- **证据（官方 harness）**：
+  - current dual idle: median 6158.463 / 5137.822 → better **5137.822ms ≤ 6233.03**
+  - confirmation run after packing tests: **5833.981ms**
+  - same-machine `9e471d7`: **7333.771ms** → current not slower
+- **等价性**：`npm run test:contracts:update` 5/5 hash unchanged; packing test suite green.
+- **决策**：P5-B acceptance 现满足；r65 可写大柜体装箱加速；进入部署例行。
