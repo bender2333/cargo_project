@@ -6,6 +6,8 @@
 
 - Mapping fields are full column dropdowns when the file has headers.
 - Quantity prefers `箱数` over `预计发货数量`; weight prefers per-carton gross weight.
+- Deployed. Backup `/root/cargo_project-backup-20260818-083316`. Live release note `2026-08-18-r67-import-mapping-columns`.
+
 - User can change any suggested mapping. Release note `2026-08-18-r67-import-mapping-columns` required for this deploy.
 
 ## 2026-08-17 Vietnam combined-dimension weight rematch
