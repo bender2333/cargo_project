@@ -6,6 +6,8 @@
 - Changing the import header row now rebinds empty/stale mapping fields via `preselectMapping`.
 - Vietnam fixture `越南第十一批6.2海运.xlsx` with combined `外箱尺寸（mm）` then maps `产品毛重(KG)/箱` and parses 24 rows without weight errors.
 - Untemplated default-weight stripping and blank mapped-weight rejection stay unchanged.
+- Deployed to production. Backup `/root/cargo_project-backup-20260818-074522`. Live Workbench `Workbench-n2zSgAxw.js` (r65, not P6). Remote focused e2e: header row 2 + combined `外箱尺寸（mm）` → weight `产品毛重(KG)/箱`, **24 ok / 0 err**.
+
 
 ## 2026-08-07 P5 complete
 

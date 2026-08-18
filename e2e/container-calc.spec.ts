@@ -1463,6 +1463,24 @@ test('imports Vietnam irregular workbook through a reusable combined-dimension t
   await expect(page.getByText('Mixed gap-fill').first()).toBeVisible()
 })
 
+test('rebinds Vietnam carton weight after header row skips the title', async ({ page }) => {
+  await openEnglish(page)
+  await page.locator('input[accept*="xlsx"]').setInputFiles(vietnamWorkbookPath())
+  await expect(page.getByTestId('mapping-modal')).toBeVisible()
+  await expect(page.getByTestId('map-select-weight')).toHaveValue('')
+
+  await page.getByTestId('template-header-row').fill('2')
+  await page.getByTestId('template-start-row').fill('3')
+  await page.getByTestId('template-dimension-mode').selectOption('combined')
+  await page.getByTestId('template-combined-column').fill('外箱尺寸（mm）')
+
+  await expect(page.getByTestId('map-select-weight')).toHaveValue('产品毛重(KG)/箱')
+  await expect(page.getByTestId('mapping-parse-summary')).toContainText('24 ok / 0 err')
+  await page.getByTestId('confirm-mapping').click()
+  await expect(page.getByTestId('import-log-panel').getByText('Import success: 24')).toBeVisible()
+})
+
+
 test('shows localized failure reasons in Chinese mode', async ({ page }) => {
   await openEnglish(page)
   await page.getByLabel('Max payload kg').fill('36')
