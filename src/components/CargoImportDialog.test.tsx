@@ -310,6 +310,28 @@ describe('CargoImportDialog pending import transaction', () => {
     expect(blankWeight.getByTestId('mapping-parse-summary').textContent).toContain('Missing or invalid weight.')
   })
 
+  it('rebinds Vietnam carton weight after the header row is moved past the title', () => {
+    const vietnamRows: ImportCargoRow[] = [
+      ['越南第十一批6.2海运', null, null, null, null, null, null, null, null],
+      ['物料代码SKU', '物料名称', '预计发货数量', '箱数', '产品净重（KG)/个', '产品毛重(KG)/箱', '产品总毛重(KG)', '外箱尺寸（mm）', '箱规'],
+      ['TB-C10-EV_v1.1', 'EV cable', 7056, 126, 0.1, 8.27, 1042, '530*305*310', '1'],
+      ['TB-C10-EV_v1.2', 'EV cable 2', 1000, 20, 0.1, 8.25, 165, '530*305*310', '1'],
+    ]
+    const view = renderDialog({ importRows: vietnamRows, importTemplates: [] })
+
+    expect((view.getByTestId('map-select-weight') as HTMLInputElement).value).toBe('')
+
+    fireEvent.change(view.getByTestId('template-header-row'), { target: { value: '2' } })
+    fireEvent.change(view.getByTestId('template-start-row'), { target: { value: '3' } })
+    fireEvent.change(view.getByTestId('template-dimension-mode'), { target: { value: 'combined' } })
+    fireEvent.change(view.getByTestId('template-combined-column'), { target: { value: '外箱尺寸（mm）' } })
+
+    expect((view.getByTestId('map-select-weight') as HTMLInputElement).value).toBe('产品毛重(KG)/箱')
+    expect(view.getByTestId('mapping-parse-summary').textContent).toMatch(/2 ok \/ 0 err/)
+    expect((view.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+
   it('does not invent a weight default for a selected template that omits one', () => {
     const template = makeTemplate()
     const view = renderDialog({ importRows: templateRows, importTemplates: [template] })

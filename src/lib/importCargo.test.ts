@@ -13,6 +13,7 @@ import {
   parseCargoRowsWithTemplate,
 } from './importCargo'
 import type { ImportCargoRow, ImportTemplateConfig } from './importCargo'
+import { preselectMapping } from './importWorkflow'
 
 describe('parseCargoRows', () => {
   it('maps Chinese headers and converts centimeter dimensions to millimeters', () => {
@@ -334,6 +335,40 @@ describe('parseCargoRowsWithMapping', () => {
       quantity: 126,
     })
   })
+
+  it('rematches Vietnam weight after the title row is skipped', () => {
+    const workbookPath = path.join(process.cwd(), 'test-data', 'excel', '越南第十一批6.2海运.xlsx')
+    const workbook = XLSX.readFile(workbookPath)
+    const sheet = workbook.Sheets[workbook.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true }) as ImportCargoRow[]
+    const header = (rows[1] as unknown[]).map((cell) => String(cell ?? '').trim()).filter(Boolean)
+    const mapping = preselectMapping(header)
+
+    const untitled = parseCargoRowsWithTemplate(rows, buildTemplateImportConfig({
+      mapping: {},
+      headerRow: 1,
+      startRow: 2,
+      dimensionMode: 'combined',
+      combinedColumn: '外箱尺寸（mm）',
+      defaultValues: { quantity: 1, canRotate: true, stackable: true },
+    }))
+    expect(untitled.summary.importedRows).toBe(0)
+    expect(untitled.errors.every((issue) => issue.code === 'invalid-weight')).toBe(true)
+
+    const result = parseCargoRowsWithTemplate(rows, buildTemplateImportConfig({
+      mapping,
+      headerRow: 2,
+      startRow: 3,
+      dimensionMode: 'combined',
+      combinedColumn: '外箱尺寸（mm）',
+      defaultValues: { quantity: 1, canRotate: true, stackable: true },
+    }))
+
+    expect(result.errors).toEqual([])
+    expect(result.summary.importedRows).toBe(24)
+    expect(result.items[0]).toMatchObject({ weight: 8.27, length: 530, width: 305, height: 310 })
+  })
+
 
   it('applies default quantity when no quantity column is mapped', () => {
     const result = parseCargoRowsWithTemplate(

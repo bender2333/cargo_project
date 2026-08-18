@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   canAutoMap,
   preSelectCol,
+  preselectMapping,
   translateImportIssue,
   buildImportMessages,
   importMappingValueFromTemplate,
@@ -109,6 +110,39 @@ describe('preSelectCol', () => {
     ).toEqual([])
   })
 })
+
+describe('preselectMapping', () => {
+  const vietnamHeader = [
+    '物料代码SKU',
+    '物料名称',
+    '预计发货数量',
+    '箱数',
+    '产品净重（KG)/个',
+    '产品毛重(KG)/箱',
+    '产品总净重（KG)',
+    '产品总毛重(KG)',
+    '外箱尺寸（mm）',
+    '箱规',
+  ]
+
+  it('binds the per-carton gross-weight column when the real header appears', () => {
+    const remapped = preselectMapping(vietnamHeader, { weight: '' })
+    expect(remapped.weight).toBe('产品毛重(KG)/箱')
+    expect(remapped.label).toBe('物料代码SKU')
+  })
+
+  it('keeps an existing weight mapping that still exists in the new header', () => {
+    const remapped = preselectMapping(vietnamHeader, { weight: '产品总毛重(KG)' })
+    expect(remapped.weight).toBe('产品总毛重(KG)')
+  })
+
+  it('does not invent a weight column when the header has none', () => {
+    expect(preselectMapping(['标题', '备注'], { weight: '' }).weight).toBe('')
+  })
+})
+
+
+
 
 describe('translateImportIssue', () => {
   it('translates cm-converted to Chinese', () => {

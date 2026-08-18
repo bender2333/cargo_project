@@ -80,6 +80,20 @@ export function preSelectCol(fieldKey: string, columns: string[]): string {
   return columns.find(col => list.some(cand => col.toLowerCase().includes(cand.toLowerCase()))) ?? ''
 }
 
+export function preselectMapping(
+  columns: string[],
+  current: Record<string, string> = {},
+): Record<string, string> {
+  const next = { ...current }
+  IMPORT_REQUIRED_FIELDS.forEach((field) => {
+    const mapped = next[field]?.trim() ?? ''
+    if (mapped && columns.includes(mapped)) return
+    next[field] = preSelectCol(field, columns)
+  })
+  return next
+}
+
+
 export function importMappingValueFromTemplate(template: ImportTemplate): ImportMappingValue {
   return {
     mapping: { ...template.mapping, dimensions: template.combinedColumn || template.mapping.dimensions || '' },

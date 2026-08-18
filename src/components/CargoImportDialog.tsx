@@ -9,6 +9,7 @@ import { parseCargoRowsWithTemplate } from '../lib/importCargo'
 import { saveLastImportConfig } from '../lib/lastImportConfig'
 import {
   preSelectCol,
+  preselectMapping,
   importMappingValueFromTemplate,
   missingMappedColumns,
   IMPORT_REQUIRED_FIELDS,
@@ -205,7 +206,11 @@ export function CargoImportDialog({
       customMapping.quantity, templateCombinedColumn, templateDefaults.quantity, labels])
 
   const handleImportMappingChange = (next: ImportMappingValue) => {
-    setCustomMapping(next.mapping)
+    const headerChanged = next.headerRow !== templateHeaderRow
+    const mapping = headerChanged
+      ? preselectMapping(importColumnsForHeaderRow(importRows, next.headerRow), next.mapping)
+      : next.mapping
+    setCustomMapping(mapping)
     setCustomUnits(next.units)
     setTemplateHeaderRow(next.headerRow)
     setTemplateStartRow(next.startRow)
@@ -214,7 +219,7 @@ export function CargoImportDialog({
     setTemplateDimensionOrder(next.dimensionOrder)
     setTemplateDefaults({ ...BASE_IMPORT_DEFAULTS, ...next.defaults })
     setMissingImportColumns(selectedImportTemplateId
-      ? missingMappedColumns(next, importColumnsForHeaderRow(importRows, next.headerRow))
+      ? missingMappedColumns({ ...next, mapping }, importColumnsForHeaderRow(importRows, next.headerRow))
       : [])
   }
 

@@ -1,5 +1,12 @@
 # Changelog
 
+
+## 2026-08-17 Vietnam combined-dimension weight rematch
+
+- Changing the import header row now rebinds empty/stale mapping fields via `preselectMapping`.
+- Vietnam fixture `越南第十一批6.2海运.xlsx` with combined `外箱尺寸（mm）` then maps `产品毛重(KG)/箱` and parses 24 rows without weight errors.
+- Untemplated default-weight stripping and blank mapped-weight rejection stay unchanged.
+
 ## 2026-08-07 P5 complete
 
 - All plan gates green including remote e2e x2 128/128.
