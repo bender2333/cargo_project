@@ -131,6 +131,23 @@ describe('preselectMapping', () => {
     expect(remapped.label).toBe('物料代码SKU')
   })
 
+  it('prefers carton count over planned shipment quantity', () => {
+    const remapped = preselectMapping(vietnamHeader, { quantity: '' })
+    expect(remapped.quantity).toBe('箱数')
+  })
+
+  it('prefers per-carton gross weight over total gross weight', () => {
+    const remapped = preselectMapping(vietnamHeader, { weight: '' })
+    expect(remapped.weight).toBe('产品毛重(KG)/箱')
+    expect(remapped.weight).not.toBe('产品总毛重(KG)')
+  })
+
+  it('keeps a user-chosen quantity column instead of rebinding it', () => {
+    const remapped = preselectMapping(vietnamHeader, { quantity: '预计发货数量' })
+    expect(remapped.quantity).toBe('预计发货数量')
+  })
+
+
   it('keeps an existing weight mapping that still exists in the new header', () => {
     const remapped = preselectMapping(vietnamHeader, { weight: '产品总毛重(KG)' })
     expect(remapped.weight).toBe('产品总毛重(KG)')

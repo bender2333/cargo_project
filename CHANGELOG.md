@@ -1,6 +1,13 @@
 # Changelog
 
 
+
+## 2026-08-18 r67 import mapping columns
+
+- Mapping fields are full column dropdowns when the file has headers.
+- Quantity prefers `箱数` over `预计发货数量`; weight prefers per-carton gross weight.
+- User can change any suggested mapping. Release note `2026-08-18-r67-import-mapping-columns` required for this deploy.
+
 ## 2026-08-17 Vietnam combined-dimension weight rematch
 
 - Changing the import header row now rebinds empty/stale mapping fields via `preselectMapping`.

@@ -14,6 +14,27 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-08-18-r67-import-mapping-columns',
+    date: '2026-08-18',
+    title: {
+      en: 'Import mapping columns are freely selectable',
+      zh: '导入映射列可自由选择',
+    },
+    items: {
+      en: [
+        'After you set the real header row, empty mapping fields are suggested from the file columns. You can still change any field, including quantity and weight.',
+        'Vietnam combined-size sheets now suggest per-carton gross weight and carton count, not planned piece quantity or total gross weight.',
+        'When the file has columns, mapping pickers are full dropdowns of every column instead of a filtered suggestion box.',
+      ],
+      zh: [
+        '改到真实表头行后，空着的映射字段会按文件列给出建议；数量、重量等仍可改成任意列。',
+        '越南合并尺寸表会优先建议单箱毛重和箱数，而不是预计发货数量或总毛重。',
+        '文件里已有列时，映射控件是完整下拉，不再被当前输入过滤成只剩一项。',
+      ],
+    },
+  },
+
+  {
     version: '2026-08-07-r65-workspace-props-aggregation',
     date: '2026-08-07',
     title: {

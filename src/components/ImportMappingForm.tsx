@@ -90,13 +90,16 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
   // not contain them (e.g. editing a saved template before loading a sample file).
   const usedValues = [value.combinedColumn, value.mapping.dimensions, ...FIELD_KEYS.map((field) => value.mapping[field] ?? '')].filter(Boolean)
   const columns = Array.from(new Set([...availableColumns, ...usedValues]))
+  const hasFileColumns = availableColumns.length > 0
   const missingColumnSet = new Set(missingColumns.map((column) => column.trim()).filter(Boolean))
   const missingColumnMessage = 'Column not found in file / 列在文件中未找到'
-  const inputClass = (invalid: boolean) => `mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 ${invalid ? 'border-red-500 ring-1 ring-red-400 focus:border-red-500 focus:ring-red-400' : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-500'}`
+
   const columnMissing = (column: string | undefined) => {
     const trimmed = column?.trim() ?? ''
     return trimmed !== '' && missingColumnSet.has(trimmed)
   }
+  const inputClass = (invalid: boolean) => `mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 ${invalid ? 'border-red-500 ring-1 ring-red-400 focus:border-red-500 focus:ring-red-400' : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-500'}`
+
 
   const fieldLabel: Record<string, string> = {
     label: labels.mappingFieldLabel,
@@ -133,20 +136,32 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
                 {fieldLabel[fieldKey] || fieldKey}
                 {fieldKey === 'label' && <HelpTooltip text={labels.templateHelpLabelColumn} testId={tid('help-tooltip-label-column')} />}
               </span>
-              <input
-                className={inputClass(fieldMissing)}
-                value={value.mapping[fieldKey] ?? ''}
-                list={tid(`map-options-${fieldKey}`)}
-                placeholder={labels.mappingSelectColumn}
-                onChange={(event) => onChange({ ...value, mapping: { ...value.mapping, [fieldKey]: event.target.value } })}
-                data-testid={tid(`map-select-${fieldKey}`)}
-                data-invalid={fieldMissing ? 'true' : undefined}
-              />
-              <datalist id={tid(`map-options-${fieldKey}`)}>
-                {columns.map((col) => (
-                  <option key={col} value={col} />
-                ))}
-              </datalist>
+              {hasFileColumns ? (
+                <select
+                  className={inputClass(fieldMissing)}
+                  value={value.mapping[fieldKey] ?? ''}
+                  onChange={(event) => onChange({ ...value, mapping: { ...value.mapping, [fieldKey]: event.target.value } })}
+                  data-testid={tid(`map-select-${fieldKey}`)}
+                  data-invalid={fieldMissing ? 'true' : undefined}
+                >
+                  <option value="">{labels.mappingSelectColumn}</option>
+                  {columns.map((col) => (
+                    <option key={col} value={col}>{col}</option>
+                  ))}
+                  {(value.mapping[fieldKey] ?? '') && !columns.includes(value.mapping[fieldKey] ?? '') && (
+                    <option value={value.mapping[fieldKey]}>{value.mapping[fieldKey]}</option>
+                  )}
+                </select>
+              ) : (
+                <input
+                  className={inputClass(fieldMissing)}
+                  value={value.mapping[fieldKey] ?? ''}
+                  placeholder={labels.mappingSelectColumn}
+                  onChange={(event) => onChange({ ...value, mapping: { ...value.mapping, [fieldKey]: event.target.value } })}
+                  data-testid={tid(`map-select-${fieldKey}`)}
+                  data-invalid={fieldMissing ? 'true' : undefined}
+                />
+              )}
             </label>
             {fieldMissing && (
               <p className="mt-1 text-xs font-semibold text-red-600">{missingColumnMessage}</p>
@@ -318,20 +333,32 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
                   {labels.templateCombinedColumn}
                   <HelpTooltip text={labels.templateHelpCombinedColumn} testId={tid('help-tooltip-combined-column')} />
                 </span>
-                <input
-                  className={inputClass(combinedMissing)}
-                  value={value.combinedColumn}
-                  list={tid('combined-column-options')}
-                  placeholder={labels.mappingSelectColumn}
-                  data-testid={tid('template-combined-column')}
-                  data-invalid={combinedMissing ? 'true' : undefined}
-                  onChange={(event) => onChange({ ...value, combinedColumn: event.target.value, mapping: { ...value.mapping, dimensions: event.target.value } })}
-                />
-                <datalist id={tid('combined-column-options')}>
-                  {columns.map((col) => (
-                    <option key={col} value={col} />
-                  ))}
-                </datalist>
+                {hasFileColumns ? (
+                  <select
+                    className={inputClass(combinedMissing)}
+                    value={value.combinedColumn}
+                    data-testid={tid('template-combined-column')}
+                    data-invalid={combinedMissing ? 'true' : undefined}
+                    onChange={(event) => onChange({ ...value, combinedColumn: event.target.value, mapping: { ...value.mapping, dimensions: event.target.value } })}
+                  >
+                    <option value="">{labels.mappingSelectColumn}</option>
+                    {columns.map((col) => (
+                      <option key={col} value={col}>{col}</option>
+                    ))}
+                    {value.combinedColumn && !columns.includes(value.combinedColumn) && (
+                      <option value={value.combinedColumn}>{value.combinedColumn}</option>
+                    )}
+                  </select>
+                ) : (
+                  <input
+                    className={inputClass(combinedMissing)}
+                    value={value.combinedColumn}
+                    placeholder={labels.mappingSelectColumn}
+                    data-testid={tid('template-combined-column')}
+                    data-invalid={combinedMissing ? 'true' : undefined}
+                    onChange={(event) => onChange({ ...value, combinedColumn: event.target.value, mapping: { ...value.mapping, dimensions: event.target.value } })}
+                  />
+                )}
               </label>
               {combinedMissing && (
                 <p className="mt-1 text-xs font-semibold text-red-600">{missingColumnMessage}</p>

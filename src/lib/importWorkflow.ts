@@ -77,8 +77,32 @@ export function preSelectCol(fieldKey: string, columns: string[]): string {
     groundOnly: ['groundonly', 'ground only', '必须落地', '落地', '不可上托', '不可堆叠在上'],
   }
   const list = candidates[fieldKey] ?? []
-  return columns.find(col => list.some(cand => col.toLowerCase().includes(cand.toLowerCase()))) ?? ''
+  let best: { column: string; score: number } | null = null
+  for (const column of columns) {
+    const score = scoreColumnMatch(fieldKey, column, list)
+    if (score === null) continue
+    if (!best || score < best.score) best = { column, score }
+  }
+  return best?.column ?? ''
 }
+
+function scoreColumnMatch(fieldKey: string, column: string, candidates: string[]): number | null {
+  const lower = column.toLowerCase()
+  const hit = candidates.find((candidate) => lower.includes(candidate.toLowerCase()))
+  if (!hit) return null
+  if (lower === hit.toLowerCase()) return 0
+  let score = 10 + column.length
+  if (fieldKey === 'quantity') {
+    if (/箱数|箱數|carton_count/.test(column)) score -= 8
+    if (/预计|預計|发货|發貨/.test(column)) score += 20
+  }
+  if (fieldKey === 'weight') {
+    if (/总|總/.test(column)) score += 20
+    if (column.includes('箱')) score -= 4
+  }
+  return score
+}
+
 
 export function preselectMapping(
   columns: string[],
