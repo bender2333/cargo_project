@@ -2,11 +2,12 @@
 
 
 
-## 2026-08-19 import template behavior design
+## 2026-08-19 import and template product behavior
 
-- Completed the approved behavior design for Excel import and import-template configuration in `docs/superpowers/specs/2026-08-19-import-template-behavior-design.md`.
-- Contract decisions: whole-batch blocking on any row error, one pure Import Analyzer, explicit combined-dimension units, source-row preservation, structural template validation, visible fallback-label warnings, and removal of inactive `mergeRows` behavior.
-- This is design-only; no implementation or deployment was performed. Review evidence remains: targeted import E2E `52 passed`, focused import tests `144 passed / 1 failed` due the stale template-manager `datalist` assertion, build passed, and lint was blocked by the existing nested-worktree `tsconfigRootDir` conflict.
+- Rewrote `docs/superpowers/specs/2026-08-19-import-template-behavior-design.md` as a product behavior specification rather than an implementation design.
+- The document now defines user goals, feature descriptions, import and template journeys, visible states, replacement/cancel semantics, error and warning behavior, and business acceptance scenarios.
+- Removed module interfaces, type shapes, transport details, and implementation architecture from the behavior document. No runtime code, tests, or deployment changed in this revision.
+
 
 ## 2026-08-18 r67 import mapping columns
 
