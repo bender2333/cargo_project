@@ -7,6 +7,8 @@
 - Rewrote `docs/superpowers/specs/2026-08-19-import-template-behavior-design.md` as a product behavior specification rather than an implementation design.
 - The document now defines user goals, feature descriptions, import and template journeys, visible states, replacement/cancel semantics, error and warning behavior, and business acceptance scenarios.
 - Removed module interfaces, type shapes, transport details, and implementation architecture from the behavior document. No runtime code, tests, or deployment changed in this revision.
+- Clarified the flow: file parsing first opens template selection inside the import confirmation; template management remains a separate feature.
+- Users may choose an existing template or “no template”; after building a mapping without a template, they can save it as a new template and still must explicitly confirm the import.
 
 
 ## 2026-08-18 r67 import mapping columns
