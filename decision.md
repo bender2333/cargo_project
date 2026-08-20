@@ -48,9 +48,9 @@
 - 背景：完整 `npm run benchmark` 退出码 1：`algorithm.russia-volume.medianMs exceeded 20%` 与 `algorithm.russia-volume.p95Ms exceeded 20%`。实测 samples `3.968, 3.966, 4.014, 3.993, 4.347`，median `3.993`、p95 `4.347`；基线 median `3.07`、p95 `3.156`（约 +30% / +38%）。报告 `test-results/benchmark/frontend-architecture.json`。浏览器 Playwright `1 passed`。未改 baseline、阈值、样本、golden。
 - 核查：五项 contract hash 仍由 packing golden 校验；失败仅 russia-volume 3–4ms 算法微基准，发生在 9 分钟全量 E2E 之后。模板重构不改 packing 算法。其余算法/浏览器/包体门禁未列入本次失败列表。
 - 选项：A. `benchmark:update` 或降阈值；B. 复跑挑选更好样本并宣称 GREEN；C. 保持 RED 记录，不改门禁。
-- 决策：C。不宣称 benchmark GREEN。不修改 baseline/阈值/样本/golden。
-- 影响：本地完整门禁不能称为全绿；部署仍按任务执行，远程结果单独记录。
-- 后续：空载复测 russia-volume 若回到门内，再以完整 `npm run benchmark` 作为权威结果。
+- 决策：C。当时不宣称 benchmark GREEN，不修改 baseline/阈值/样本/golden。
+- 影响：首次门禁不能称为全绿；部署已按任务执行。
+- 后续 / 关闭：空载复测（CPU ~19%，无 Playwright 负载；清掉远程隧道 `PLAYWRIGHT_BASE_URL`）完整 `npm run benchmark` 退出码 0：`Frontend benchmark passed (timings comparable).` russia-volume samples `3.607, 3.463, 3.393, 3.494, 3.48`，median `3.48`、p95 `3.607`（相对基线 3.07 / 3.156 低于 20%）。未改 baseline。本条 RED 关闭。
 
 ## 2026-08-20 Task 7 既有 sample-headers datalist 断言仍失败
 

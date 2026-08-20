@@ -6,7 +6,13 @@
 - `npm run deploy` completed 7/7. Backup `/root/cargo_project-backup-20260820-120440`. Health check passed (`curl http://127.0.0.1/` + unauthenticated `/api/import-templates` 401). Live `http://101.33.232.150/` serves `index-Dc9lLCLw.js` / `index-Bxzrmups.css`; Workbench chunk `Workbench-TTAAe4dj.js`. Backend `server/*.mjs` + `package*.json` synced; `cargo-server.service` restarted.
 - Direct `PLAYWRIGHT_BASE_URL=http://101.33.232.150` is rejected by `e2e/credentials.ts` (public HTTP). Remote E2E used SSH tunnel `127.0.0.1:18080 -> cargo-server:80` per README / P1-2. Recorded in `decision.md`.
 - Remote full Playwright via `PLAYWRIGHT_BASE_URL=http://127.0.0.1:18080/`: **144 passed / 0 failed / 0 skipped** in 16.5m. Repeat `e2e/import-templates.spec.ts`: **15 passed / 0 failed / 0 skipped** in 2.3m. A–O including Russian **31/31** and Vietnam **24 ok / 0 err**. Template writes used isolated `e2e-t7-*` names and manager cleanup.
-- Remaining RED (not claimed complete as all-green): full `eslint .` 449 tsconfigRootDir parse errors; `npm test` 1 pre-existing TemplateManagerPage datalist failure; `npm run benchmark` russia-volume median/p95 over 20%. No fixture/golden/baseline/assertion weakening.
+- Remaining RED (not claimed complete as all-green): full `eslint .` 449 tsconfigRootDir parse errors; `npm test` 1 pre-existing TemplateManagerPage datalist failure. Idle `npm run benchmark` re-run GREEN (see below). No fixture/golden/baseline/assertion weakening.
+
+
+## 2026-08-20 Task 8 review: idle benchmark re-run GREEN
+
+- CPU ~19%, no Playwright/e2e load. Unset leftover `PLAYWRIGHT_BASE_URL` (tunnel had been stopped). `npm run benchmark` exit 0: `Frontend benchmark passed (timings comparable).` Playwright architecture spec 1/1 in 2.2m.
+- russia-volume samples `3.607, 3.463, 3.393, 3.494, 3.48` — median **3.48** / p95 **3.607** vs baseline 3.07 / 3.156 (inside 20%). totalJsGzipBytes **703189**. Report `test-results/benchmark/frontend-architecture.json`. Baseline, threshold, samples, golden unchanged. No redeploy.
 
 
 ## 2026-08-20 Task 8: local gates and import template verification
