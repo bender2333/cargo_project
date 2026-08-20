@@ -1,6 +1,15 @@
 # Changelog
 
 
+## 2026-08-20 Task 3: mark required mapping fields
+
+- `ImportMappingForm` derives required dimension fields from `value.dimensionMode`. Separate mode marks length/width/height; combined mode marks the combined size column and split order. Label, name, weight, quantity, color, and business-limit fields stay unmarked. No `requiredFields` prop.
+- Required `*` is a separate `aria-hidden` node plus `sr-only` `mappingRequiredField`. Form top shows `mappingRequiredMarkerHint`. New copy lives in `workbenchCopy.ts` zh/en, including later-flow keys (`templateSelectionTitle`, `templateUseWithout`, `templateSaveAs`, name/config errors).
+- TDD RED: `npx vitest run src/components/ImportMappingForm.test.tsx` — 1 failed file / 3 failed tests in 1.85s (`Unable to find` hint text).
+- TDD GREEN: same command — 1 file / 8 tests passed in 1.83s.
+- `npm run lint` (`eslint .`) exit 1, 446 `tsconfigRootDir` parse errors from `.worktrees/p6-linear-packing-authority`. Targeted eslint on this task's files exit 0. Recorded in `decision.md`; assertions not weakened.
+
+
 ## 2026-08-20 Task 2 review: combined order write gate and auto-map tests
 
 - Combined templates with omitted, empty, or invalid `dimensionOrder` now fail `parseImportTemplatePayload` as `invalid-template`. Client `payloadForRequest` no longer rewrites invalid order to LWH before POST/PUT.

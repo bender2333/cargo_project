@@ -51,6 +51,8 @@ export type ImportMappingFormLabels = {
   mappingUnit: string
   mappingAutoUnit: string
   mappingConvertHint: string
+  mappingRequiredMarkerHint: string
+  mappingRequiredField: string
 }
 
 // Fixed, ordered field set so the import dialog and the template manager page
@@ -132,6 +134,12 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
           <div key={fieldKey} className="rounded-md border border-slate-200 bg-white p-3">
             <label className="block text-sm font-semibold text-slate-700">
               <span className="inline-flex items-center gap-1.5">
+                {dimensionKey ? (
+                  <>
+                    <span aria-hidden="true" className="text-red-600">*</span>
+                    <span className="sr-only">{labels.mappingRequiredField}</span>
+                  </>
+                ) : null}
                 {fieldLabel[fieldKey] || fieldKey}
                 {fieldKey === 'label' && <HelpTooltip text={labels.templateHelpLabelColumn} testId={tid('help-tooltip-label-column')} />}
               </span>
@@ -191,6 +199,7 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
 
   return (
     <>
+      <p className="mb-2 text-xs font-medium text-slate-600">{labels.mappingRequiredMarkerHint}</p>
       <div className="mb-4 grid gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm md:grid-cols-4" data-testid={tid('import-template-manager')}>
         <label className="font-semibold text-slate-700">
           <span className="inline-flex items-center gap-1.5">
@@ -314,6 +323,8 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
             <div>
               <label className="font-semibold text-slate-700">
                 <span className="inline-flex items-center gap-1.5">
+                  <span aria-hidden="true" className="text-red-600">*</span>
+                  <span className="sr-only">{labels.mappingRequiredField}</span>
                   {labels.templateCombinedColumn}
                   <HelpTooltip text={labels.templateHelpCombinedColumn} testId={tid('help-tooltip-combined-column')} />
                 </span>
@@ -349,6 +360,8 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
               )}
               <label className="font-semibold text-slate-700">
                 <span className="inline-flex items-center gap-1.5">
+                  <span aria-hidden="true" className="text-red-600">*</span>
+                  <span className="sr-only">{labels.mappingRequiredField}</span>
                   {labels.templateDimensionOrder}
                 </span>
                 <select

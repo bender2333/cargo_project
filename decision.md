@@ -1,5 +1,14 @@
 # Decision Log
 
+## 2026-08-20 Task 3 npm run lint 全仓失败
+
+- 背景：Task 3 要求运行 `npm run lint`。`eslint .` 退出码 1，446 errors，全部是 `Parsing error: No tsconfigRootDir was set, and multiple candidate TSConfigRootDirs are present`（仓库根与 `.worktrees/p6-linear-packing-authority`）。
+- 核查：`npx eslint src/components/ImportMappingForm.tsx src/components/ImportMappingForm.test.tsx src/data/workbenchCopy.ts src/components/TemplateManagerPage.test.tsx` 退出码 0、无输出。失败来自 worktree 并存，不是本任务文件。
+- 决策：不削弱断言，不改 ESLint 配置。聚焦 Vitest 全绿后仍提交。
+- 影响：全仓 `npm run lint` 在该 worktree 存在时不可作为本任务门禁。
+- 后续：由仓库维护处理 tsconfigRootDir / worktree ignore，不并入模板重构任务。
+
+
 ## 2026-08-20 模板导入重构行为基准
 
 - 背景：`2026-08-19-import-template-behavior-design.md` 原为待确认稿，实施计划对无模板映射、重量默认值、已有模板保存和替换提示存在互相冲突的解释。

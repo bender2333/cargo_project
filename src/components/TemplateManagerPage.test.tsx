@@ -101,6 +101,8 @@ const labels: TemplateManagerLabels = {
   mappingUnit: 'Unit',
   mappingAutoUnit: 'Auto',
   mappingConvertHint: 'Convert cm to mm',
+  mappingRequiredMarkerHint: '* marks fields required to complete the current configuration',
+  mappingRequiredField: 'Required',
   exportColumnHeader: 'Column header',
   exportColumnUnit: 'Unit',
   exportAddColumn: 'Add column',
