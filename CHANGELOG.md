@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-20 import-template behavior baseline revision
+
+- Confirmed `docs/superpowers/specs/2026-08-19-import-template-behavior-design.md` as the product behavior baseline.
+- Replaced no-template auto-mapping with explicit blank manual mapping and required-field `*` markers.
+- Made weight mapping optional: missing or blank weight becomes an internal `1 kg`; non-empty invalid, zero, or negative weight remains a blocking error.
+- Defined explicit existing-template “update” and “save as” actions, valid-template checks, Chinese-first bilingual behavior, and independent template-save/import commits.
+- Rebuilt acceptance as scenarios A–O. This documentation revision does not execute the implementation plan or modify runtime code.
+
 
 
 ## 2026-08-19 import and template product behavior
