@@ -1,5 +1,18 @@
 # Changelog
 
+
+## 2026-08-20 Task 8: local gates and import template verification
+
+- Forbidden-pattern search (src/server/e2e implementation): `CargoImportDialog` does not reference `preSelectCol` / `preselectMapping` / `IMPORT_REQUIRED_FIELDS`. `ImportPhase` is `template-selection` | `mapping-preview` only; `canConfirmMapping` disables confirm, does not auto-advance phase. No `defaultValues.weight` UI (`template-default-weight` absent). `currentCargos` not passed into the import dialog. New template copy lives in `workbenchCopy.ts` zh/en. Confirm still writes `cargo_last_used_template_id`; dialog always starts on template selection and does not read last-used to skip it.
+- Local gates in order:
+  - `npm run lint`: exit 1, **449 errors / 0 warnings**, all `tsconfigRootDir` parse errors from `.worktrees/p6-linear-packing-authority`. Targeted eslint on template implementation files exit 0. Recorded in `decision.md`; lint not claimed green.
+  - `npm test`: `test:unit` **911 passed / 1 failed / 0 skipped** (99 files, 58.95s). Only failure is the pre-existing TemplateManagerPage `datalist#tm-new-map-options-name` assertion. Standalone `test:rollback` **29 passed** (110.87s); `test:packing-performance` **9 passed** (23.15s). Assertion not weakened.
+  - `npm run build`: exit 0 (`tsc -b && vite build`, vite 1.86s). Workbench chunk `Workbench-TTAAe4dj.js`.
+  - First `npm run test:e2e` RED on 4 leftover tests (old dropdown/alert/name-only save/duplicate length:W) then 600s timeout. Rewrote those assertions to the confirmed UI/validation; focused 4 passed. Re-run `npm run test:e2e`: **144 passed / 0 failed / 0 skipped** in 9.0m.
+  - `npm run benchmark`: exit 1. Playwright architecture spec 1/1. Failures: `algorithm.russia-volume.medianMs` 3.993 vs baseline 3.07 and `p95Ms` 4.347 vs 3.156 (20% gate). Did not change baseline, threshold, samples, or golden. Recorded in `decision.md`.
+- A–O coverage (local e2e `import-templates.spec.ts` 15/15 plus lib/component/API): A/B selection then blank mapping; C editable preview; D internal 1 kg; E invalid weight blocks; F/G/H save/update/save-as without import; I/J invalid writes blocked; K cancel unchanged; L confirm replace; M manager independent; N zh/en; O Russian **31 ok** then **Loaded: 31 / 31** at 13400×2450×2650 mm; Vietnam combined **24 ok / 0 err**.
+- No fixture, golden, or benchmark baseline edits.
+
 ## 2026-08-20 Task 7 review fix: save-as persistence and visible I errors
 
 - H: after save-as, cancel and reopen the same file. Original id still maps `Goods`; copy maps `Code`. Empty, original, and a third existing catalog name are rejected before a unique copy name succeeds. Cargo stays unchanged.

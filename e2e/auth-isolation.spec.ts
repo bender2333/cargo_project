@@ -564,15 +564,16 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
 
     await page.locator('input[accept*="xlsx"]').setInputFiles(realWorkbookPath())
     await expect(page.getByTestId('mapping-modal')).toBeVisible()
-    const dialogError = page.getByTestId('import-template-dialog-load-error')
-    const templateSelect = page.getByTestId('import-template-select')
-    await expect(dialogError).toHaveText(/导入模板加载失败/)
-    await expect(templateSelect).toBeDisabled()
+    const selection = page.getByTestId('template-selection-panel')
+    await expect(selection).toBeVisible()
+    await expect(selection).toContainText('导入模板加载失败')
+    await expect(page.getByTestId('use-without-template')).toBeEnabled()
+    await expect(page.getByTestId('import-template-select')).toHaveCount(0)
 
-    await dialogError.getByRole('button', { name: '重试', exact: true }).click()
+    await selection.getByRole('button', { name: '重试', exact: true }).click()
     await expect.poll(() => reads).toBe(2)
-    await expect(dialogError).toHaveCount(0)
-    await expect(templateSelect).toBeEnabled()
+    await expect(selection).not.toContainText('导入模板加载失败')
+    await expect(page.getByTestId('use-without-template')).toBeEnabled()
   })
 
   test('keeps a newly created import template when the bootstrap list finishes last', async ({ page }) => {
@@ -624,6 +625,9 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await page.getByTestId('nav-template-manager').click()
     await page.getByTestId('template-manager-new').click()
     await page.getByTestId('template-manager-new-name').fill(createdTemplate.name)
+    await page.getByTestId('tm-new-map-select-length').fill('Length')
+    await page.getByTestId('tm-new-map-select-width').fill('Width')
+    await page.getByTestId('tm-new-map-select-height').fill('Height')
     await page.getByTestId('template-manager-new-save').click()
     await expect.poll(() => writes).toBe(1)
     await expect.poll(() => reads).toBe(2)
@@ -691,16 +695,9 @@ test.describe('Auth Gating, User Isolation, and Admin Panel', () => {
     await expect(row).toContainText(existingTemplate.name)
     await page.getByTestId(`template-manager-edit-${existingTemplate.id}`).click()
     await page.getByTestId(`template-manager-name-${existingTemplate.id}`).fill('Rejected template rename')
-
-    const updateDialog = page.waitForEvent('dialog').then(async (dialog) => {
-      expect(dialog.message()).toBe('更新模板失败')
-      await dialog.dismiss()
-    })
-    await Promise.all([
-      updateDialog,
-      page.getByTestId(`template-manager-save-${existingTemplate.id}`).click(),
-    ])
+    await page.getByTestId(`template-manager-save-${existingTemplate.id}`).click()
     await expect.poll(() => updates).toBe(1)
+    await expect(page.getByTestId(`template-manager-error-${existingTemplate.id}`)).toHaveText('模板名称已存在')
     await row.getByRole('button', { name: '取消', exact: true }).click()
     await expect(row).toContainText(existingTemplate.name)
 

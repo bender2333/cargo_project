@@ -1,5 +1,48 @@
 # Decision Log
 
+
+## 2026-08-20 Task 8 npm run lint 全仓失败
+
+- 背景：Task 8 要求按序运行 `npm run lint`。`eslint .` 退出码 1，**449 problems (449 errors, 0 warnings)**，全部是同一解析错误：
+  `Parsing error: No tsconfigRootDir was set, and multiple candidate TSConfigRootDirs are present`（`C:\project\cargo_project` 与 `C:\project\cargo_project\.worktrees\p6-linear-packing-authority`）。代表文件：`.worktrees/p6-linear-packing-authority/benchmark/frontend-architecture.spec.ts` 与仓库根 `src/types.ts`。
+- 核查：与 Task 3 / Task 5 同一 worktree 并存问题；本次 449 条全部是该 parse error，无其它规则失败。`npx eslint src/components/CargoImportDialog.tsx src/components/ImportMappingForm.tsx src/components/TemplateSelectionPanel.tsx src/components/TemplateManagerPage.tsx src/data/workbenchCopy.ts src/lib/importWorkflow.ts src/lib/importCargo.ts` 退出码 0、无输出。
+- 选项：A. 改 ESLint / 删除 worktree 凑绿；B. 削弱或跳过 lint；C. 记录为既有失败，不改配置，继续其余门禁。
+- 决策：C。不宣称 lint 全绿。不修改 ESLint 配置。
+- 影响：全仓 `npm run lint` 在该 worktree 存在时不可作为本任务 GREEN 门禁。
+- 后续：由仓库维护处理 tsconfigRootDir / worktree ignore，不并入模板重构任务。
+
+
+## 2026-08-20 Task 8 npm test 既有 sample-headers datalist 断言仍失败
+
+- 背景：`npm test` → `test:unit` 退出码 1。`Tests  1 failed | 911 passed (912)`，`Test Files  1 failed | 98 passed (99)`，0 skipped。唯一失败：`src/components/TemplateManagerPage.test.tsx` `keeps the newest sample headers when files finish out of order and clears a failed sample`，`datalist#tm-new-map-options-name option[value="Second name"]` 为 null。
+- 核查：与 Task 1 / 6 / 7 同一既有失败。无新增失败。因 `test:unit` 失败，`npm test` 未继续 rollback / packing-performance；单独复跑 `npm run test:rollback` **29 passed / 0 failed**（110.87s），`npm run test:packing-performance` **9 passed / 0 failed**（23.15s）。
+- 决策：不削弱该断言。记录后继续 build / e2e / benchmark。
+- 影响：不能宣称 `npm test` GREEN。
+- 后续：映射输入形态若改回 datalist，再同步该断言。
+
+
+## 2026-08-20 Task 8 遗留 E2E 与新模板合同冲突
+
+- 背景：首次 `npm run test:e2e` 在 144 条套件中失败 4 条（随后被 600s 命令超时截断）：
+  1. `shows import template load failure in the mapping dialog and recovers on retry` 等待已删除的 `import-template-dialog-load-error` / `import-template-select`。
+  2. `keeps a newly created import template when the bootstrap list finishes last` 只填名称，`template-manager-new-save` 因缺尺寸映射保持 disabled。
+  3. `keeps import template update and delete failures visible` 等待更新失败的 `window.alert('更新模板失败')`；更新 409 现为行内 `templateNameDuplicate`。
+  4. `renames and deletes import templates from top-level template manager` 把 length 改成已占用的 `W`，重复映射使保存 disabled。
+- 选项：A. 削弱或跳过；B. 改回旧 UI/校验；C. 按已确认行为稿改写可见合同，不绕过模板选择。
+- 决策：C。加载失败改断言 `template-selection-panel` 文案 + 重试 + `use-without-template` 仍可用，并确认旧 `import-template-select` 不存在。创建补齐 length/width/height。更新失败断言行内 `模板名称已存在`，删除仍走 `window.alert('删除模板失败')`。重命名把 width 改到 `L`，导入尺寸改为 `60 x 80 x 40 mm`（W×L×H），保留 rename/mapping persist/delete 合同。
+- 影响：聚焦 4 条转绿后全量 Playwright **144 passed / 0 failed / 0 skipped**（9.0m）。未改夹具、golden、baseline。
+- 后续：无。
+
+
+## 2026-08-20 Task 8 benchmark russia-volume timing RED
+
+- 背景：完整 `npm run benchmark` 退出码 1：`algorithm.russia-volume.medianMs exceeded 20%` 与 `algorithm.russia-volume.p95Ms exceeded 20%`。实测 samples `3.968, 3.966, 4.014, 3.993, 4.347`，median `3.993`、p95 `4.347`；基线 median `3.07`、p95 `3.156`（约 +30% / +38%）。报告 `test-results/benchmark/frontend-architecture.json`。浏览器 Playwright `1 passed`。未改 baseline、阈值、样本、golden。
+- 核查：五项 contract hash 仍由 packing golden 校验；失败仅 russia-volume 3–4ms 算法微基准，发生在 9 分钟全量 E2E 之后。模板重构不改 packing 算法。其余算法/浏览器/包体门禁未列入本次失败列表。
+- 选项：A. `benchmark:update` 或降阈值；B. 复跑挑选更好样本并宣称 GREEN；C. 保持 RED 记录，不改门禁。
+- 决策：C。不宣称 benchmark GREEN。不修改 baseline/阈值/样本/golden。
+- 影响：本地完整门禁不能称为全绿；部署仍按任务执行，远程结果单独记录。
+- 后续：空载复测 russia-volume 若回到门内，再以完整 `npm run benchmark` 作为权威结果。
+
 ## 2026-08-20 Task 7 既有 sample-headers datalist 断言仍失败
 
 - 背景：Task 7 聚焦命令包含 `src/components/TemplateManagerPage.test.tsx`。该文件 23 passed / 1 failed：`keeps the newest sample headers when files finish out of order and clears a failed sample` 在 `datalist#tm-new-map-options-name option[value="Second name"]` 仍为 null。

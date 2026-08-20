@@ -1406,6 +1406,7 @@ test('renames and deletes import templates from top-level template manager', asy
   await page.getByTestId(`template-manager-edit-${templateId}`).click()
   await page.getByTestId(`template-manager-name-${templateId}`).fill(renamedTemplateName)
   await page.getByTestId(`tm-edit-${templateId}-map-select-length`).fill('W')
+  await page.getByTestId(`tm-edit-${templateId}-map-select-width`).fill('L')
   await page.getByTestId(`template-manager-save-${templateId}`).click()
   await expect(page.getByTestId(`template-manager-row-${templateId}`)).toContainText(renamedTemplateName)
   await expect(page.getByTestId(`template-manager-row-${templateId}`)).toContainText('length:W')
@@ -1418,7 +1419,7 @@ test('renames and deletes import templates from top-level template manager', asy
   await page.getByTestId('confirm-mapping').click()
   await expect(page.getByTestId('mapping-modal')).toHaveCount(0)
   await expect(page.getByRole('button', { name: /Template only crate/ }).first()).toBeVisible()
-  await expect(page.getByText(/60 x 60 x 40 mm/)).toBeVisible()
+  await expect(page.getByText(/60 x 80 x 40 mm/)).toBeVisible()
 
   await page.getByTestId('nav-template-manager').click()
   await page.getByTestId(`template-manager-delete-${templateId}`).click()
