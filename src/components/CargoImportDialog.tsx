@@ -371,8 +371,11 @@ export function CargoImportDialog({
     defaultValues: mappingValue.defaults,
   }, { colors: colors as string[] }), [colors, importRows, mappingValue])
 
+  const availableColumns = importColumnsForHeaderRow(importRows, mappingValue.headerRow)
+  const mappingValidation = validateImportMappingValue(mappingValue, availableColumns)
+
   const confirmMappingImport = () => {
-    if (pendingImport.errors.length > 0) return
+    if (!mappingValidation.valid || pendingImport.errors.length > 0) return
     const messages = buildImportMessages(pendingImport, labels, locale)
     onConfirm(pendingImport.items, messages)
     saveLastImportConfig(userId, {
@@ -390,11 +393,9 @@ export function CargoImportDialog({
     }
   }
 
-  const availableColumns = importColumnsForHeaderRow(importRows, mappingValue.headerRow)
   const previewRows = importPreviewRows(importRows, mappingValue.headerRow, mappingValue.startRow).slice(0, 5)
   const onMappingPreview = phase === 'mapping-preview'
   const mappingDirty = !sameImportMappingValue(mappingValue, mappingBaseline)
-  const mappingValidation = validateImportMappingValue(mappingValue, availableColumns)
   const canWriteTemplate = mappingValidation.valid
   const writeBusy = pendingTemplateWrite !== null
   const hasSelectedTemplate = selectedImportTemplateId !== ''
@@ -611,7 +612,7 @@ export function CargoImportDialog({
               className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               data-testid="confirm-mapping"
-              disabled={!canConfirmMapping || pendingImport.errors.length > 0}
+              disabled={!canConfirmMapping || !mappingValidation.valid || pendingImport.errors.length > 0}
               onClick={confirmMappingImport}
             >
               {labels.mappingConfirm}

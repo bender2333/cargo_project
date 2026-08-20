@@ -47,6 +47,7 @@ const labels: ImportMappingFormLabels = {
   mappingConvertHint: 'Convert cm to mm',
   mappingRequiredMarkerHint: '* marks fields required to complete the current configuration',
   mappingRequiredField: 'Required',
+  mappingDuplicateConflict: 'Column "{column}" is mapped to {fields}',
 }
 
 const zhLabels: ImportMappingFormLabels = {
@@ -139,6 +140,26 @@ describe('ImportMappingForm missing column feedback', () => {
     )
 
     expect(getByTestId('template-combined-column').getAttribute('data-invalid')).toBe('true')
+  })
+
+  it('explains duplicate mapping conflicts by naming the source column and target fields', () => {
+    const { getByTestId } = render(
+      <ImportMappingForm
+        value={{
+          ...baseValue,
+          mapping: { ...baseValue.mapping, length: 'L', width: 'L', height: 'H' },
+        }}
+        onChange={vi.fn()}
+        availableColumns={['L', 'H', 'Qty', 'Code', 'Goods']}
+        labels={labels}
+        duplicateColumns={['L']}
+      />,
+    )
+
+    const hint = getByTestId('mapping-duplicate-hint').textContent ?? ''
+    expect(hint).toContain('L')
+    expect(hint).toContain('Length')
+    expect(hint).toContain('Width')
   })
 
   it('updates ground-only and loading-priority defaults', () => {

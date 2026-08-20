@@ -104,6 +104,7 @@ const labels: TemplateManagerLabels = {
   mappingConvertHint: 'Convert cm to mm',
   mappingRequiredMarkerHint: '* marks fields required to complete the current configuration',
   mappingRequiredField: 'Required',
+  mappingDuplicateConflict: 'Column "{column}" is mapped to {fields}',
   templateNameRequired: 'Enter a template name',
   templateNameDuplicate: 'A template with this name already exists',
   templateConfigInvalid: 'Template configuration is incomplete or has mapping conflicts',
@@ -295,14 +296,14 @@ describe('TemplateManagerPage', () => {
     })
 
     await waitFor(() => expect(view.getByTestId('template-manager-sample-status').textContent).toContain('2'))
-    expect(view.container.querySelector('datalist#tm-new-map-options-name option[value="Second name"]')).toBeTruthy()
+    expect(view.container.querySelector('[data-testid="tm-new-map-select-name"] option[value="Second name"]')).toBeTruthy()
 
     await act(async () => {
       firstRead.resolve(workbookBuffer(['Stale SKU']))
       await firstRead.promise
     })
     expect(view.getByTestId('template-manager-sample-status').textContent).toContain('2')
-    expect(view.container.querySelector('datalist#tm-new-map-options-name option[value="Stale SKU"]')).toBeNull()
+    expect(view.container.querySelector('[data-testid="tm-new-map-select-name"] option[value="Stale SKU"]')).toBeNull()
 
     fireEvent.change(sampleInput, { target: { files: [badFile] } })
     await waitFor(() => expect(view.queryByTestId('template-manager-sample-status')).toBeNull())

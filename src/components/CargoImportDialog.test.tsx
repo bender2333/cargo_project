@@ -922,6 +922,36 @@ describe('CargoImportDialog scenario contracts E/I/J/N', () => {
     expect((view.getByTestId('save-import-template') as HTMLButtonElement).disabled).toBe(true)
   })
 
+  it('disables confirm when length and width map to the same column', () => {
+    const onConfirm = vi.fn()
+    const view = renderDialog({
+      importRows: [{ Label: 'A', Name: 'Carton', L: 1000, W: 800, H: 600, Qty: 4 }],
+      onConfirm,
+    })
+    chooseWithoutTemplate(view)
+    mapFields(view, { length: 'L', width: 'L', height: 'H', quantity: 'Qty' })
+
+    expect((view.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(view.getByTestId('confirm-mapping'))
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  it('disables confirm when a selected template references a missing optional column', () => {
+    const onConfirm = vi.fn()
+    const template = makeTemplate()
+    const view = renderDialog({
+      importRows: [{ Label: 'A', L: 1000, W: 800, H: 600, Qty: 4 }],
+      importTemplates: [template],
+      onConfirm,
+    })
+    selectTemplate(template.id)
+
+    expect(view.getByTestId('map-select-name').getAttribute('data-invalid')).toBe('true')
+    expect((view.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(view.getByTestId('confirm-mapping'))
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
   it('keeps a selected template and blocks confirm when mapped columns are missing', () => {
     const template = makeTemplate()
     const view = renderDialog({

@@ -53,6 +53,7 @@ export type ImportMappingFormLabels = {
   mappingConvertHint: string
   mappingRequiredMarkerHint: string
   mappingRequiredField: string
+  mappingDuplicateConflict: string
 }
 
 // Fixed, ordered field set so the import dialog and the template manager page
@@ -121,6 +122,20 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
     stackable: labels.stackable,
     maxStackLayers: labels.maxStackLayers,
     groundOnly: labels.mappingFieldGroundOnly,
+  }
+
+  const fieldsForDuplicateColumn = (column: string): string[] => {
+    const trimmed = column.trim()
+    const names: string[] = []
+    if (value.dimensionMode === 'combined') {
+      const combined = (value.combinedColumn || value.mapping.dimensions || '').trim()
+      if (combined === trimmed) names.push(labels.templateCombinedColumn)
+    }
+    for (const fieldKey of FIELD_KEYS) {
+      if (value.dimensionMode === 'combined' && DIMENSION_FIELDS[fieldKey]) continue
+      if ((value.mapping[fieldKey] ?? '').trim() === trimmed) names.push(fieldLabel[fieldKey] || fieldKey)
+    }
+    return names
   }
 
   const patchDefaults = (partial: Partial<ImportTemplateDefaults>) =>
@@ -207,6 +222,21 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
   return (
     <>
       <p className="mb-2 text-xs font-medium text-slate-600">{labels.mappingRequiredMarkerHint}</p>
+      {duplicateColumns.length > 0 && (
+        <div
+          className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800"
+          data-testid={tid('mapping-duplicate-hint')}
+          role="alert"
+        >
+          {duplicateColumns.map((column) => (
+            <p key={column}>
+              {labels.mappingDuplicateConflict
+                .replaceAll('{column}', column)
+                .replaceAll('{fields}', fieldsForDuplicateColumn(column).join(', '))}
+            </p>
+          ))}
+        </div>
+      )}
       <div className="mb-4 grid gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm md:grid-cols-4" data-testid={tid('import-template-manager')}>
         <label className="font-semibold text-slate-700">
           <span className="inline-flex items-center gap-1.5">

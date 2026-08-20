@@ -1,6 +1,14 @@
 # Changelog
 
 
+## 2026-08-20 Final review: block confirm on invalid mapping
+
+- Confirm now requires `mappingValidation.valid` (duplicates + missingColumns) as well as required-field checks and parse errors. Mapping length and width to the same column, or selecting a template whose optional mapped column is missing, disables Confirm; `confirmMappingImport` also returns without calling `onConfirm`.
+- Duplicate conflicts show zh/en copy from `workbenchCopy.mappingDuplicateConflict` near the mapping form (`mapping-duplicate-hint`), naming the source column and target fields.
+- TemplateManagerPage last-request-wins sample headers now assert `tm-new-map-select-name` options because file columns render `<select>`, not datalist. Assertion not weakened: newest headers still win, stale headers stay absent.
+- TDD: Confirm/duplicate tests RED (Confirm stayed enabled; no conflict copy), then GREEN. Focused vitest `CargoImportDialog.test.tsx` + `TemplateManagerPage.test.tsx` + `ImportMappingForm.test.tsx`: **79 passed / 0 failed**. Playwright `e2e/import-templates.spec.ts -g "I:|J:"`: **2 passed** in 15.5s. Did not run full `npm test` / lint / e2e.
+
+
 ## 2026-08-20 Task 8: import template deployment and remote e2e
 
 - `npm run deploy` completed 7/7. Backup `/root/cargo_project-backup-20260820-120440`. Health check passed (`curl http://127.0.0.1/` + unauthenticated `/api/import-templates` 401). Live `http://101.33.232.150/` serves `index-Dc9lLCLw.js` / `index-Bxzrmups.css`; Workbench chunk `Workbench-TTAAe4dj.js`. Backend `server/*.mjs` + `package*.json` synced; `cargo-server.service` restarted.
