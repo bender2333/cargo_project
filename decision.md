@@ -1,6 +1,15 @@
 # Decision Log
 
 
+## 2026-08-20 Task 8 远程 E2E 使用 SSH 回环隧道
+
+- 背景：任务书写明 `PLAYWRIGHT_BASE_URL=http://101.33.232.150`。直接执行被 `e2e/credentials.ts` 拒绝：`PLAYWRIGHT_BASE_URL must use HTTPS or loopback HTTP`（P1-2 / README：生产明文 HTTP 不得携带 E2E 凭据）。
+- 选项：A. 改 credentials 守卫以凑任务书原文；B. 停在远程 E2E 未跑；C. 按仓库生产规则 SSH 转发 `127.0.0.1:18080 -> 127.0.0.1:80`，`PLAYWRIGHT_BASE_URL=http://127.0.0.1:18080/`，凭据走 `E2E_*`。
+- 决策：C。不削弱 URL 守卫。
+- 影响：全量远程 **144 passed / 0 skipped**；模板聚焦再跑 **15 passed / 0 skipped**。
+- 后续：生产配 TLS 后可改用 HTTPS 公网入口。
+
+
 ## 2026-08-20 Task 8 npm run lint 全仓失败
 
 - 背景：Task 8 要求按序运行 `npm run lint`。`eslint .` 退出码 1，**449 problems (449 errors, 0 warnings)**，全部是同一解析错误：

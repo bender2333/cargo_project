@@ -1,6 +1,14 @@
 # Changelog
 
 
+## 2026-08-20 Task 8: import template deployment and remote e2e
+
+- `npm run deploy` completed 7/7. Backup `/root/cargo_project-backup-20260820-120440`. Health check passed (`curl http://127.0.0.1/` + unauthenticated `/api/import-templates` 401). Live `http://101.33.232.150/` serves `index-Dc9lLCLw.js` / `index-Bxzrmups.css`; Workbench chunk `Workbench-TTAAe4dj.js`. Backend `server/*.mjs` + `package*.json` synced; `cargo-server.service` restarted.
+- Direct `PLAYWRIGHT_BASE_URL=http://101.33.232.150` is rejected by `e2e/credentials.ts` (public HTTP). Remote E2E used SSH tunnel `127.0.0.1:18080 -> cargo-server:80` per README / P1-2. Recorded in `decision.md`.
+- Remote full Playwright via `PLAYWRIGHT_BASE_URL=http://127.0.0.1:18080/`: **144 passed / 0 failed / 0 skipped** in 16.5m. Repeat `e2e/import-templates.spec.ts`: **15 passed / 0 failed / 0 skipped** in 2.3m. A–O including Russian **31/31** and Vietnam **24 ok / 0 err**. Template writes used isolated `e2e-t7-*` names and manager cleanup.
+- Remaining RED (not claimed complete as all-green): full `eslint .` 449 tsconfigRootDir parse errors; `npm test` 1 pre-existing TemplateManagerPage datalist failure; `npm run benchmark` russia-volume median/p95 over 20%. No fixture/golden/baseline/assertion weakening.
+
+
 ## 2026-08-20 Task 8: local gates and import template verification
 
 - Forbidden-pattern search (src/server/e2e implementation): `CargoImportDialog` does not reference `preSelectCol` / `preselectMapping` / `IMPORT_REQUIRED_FIELDS`. `ImportPhase` is `template-selection` | `mapping-preview` only; `canConfirmMapping` disables confirm, does not auto-advance phase. No `defaultValues.weight` UI (`template-default-weight` absent). `currentCargos` not passed into the import dialog. New template copy lives in `workbenchCopy.ts` zh/en. Confirm still writes `cargo_last_used_template_id`; dialog always starts on template selection and does not read last-used to skip it.
