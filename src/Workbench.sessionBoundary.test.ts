@@ -105,11 +105,14 @@ describe('Workbench packing-session boundary', () => {
     expect(source).toContain('onCreateTemplate={createImportTemplateRecord}')
     expect(source).toContain('onUpdateTemplate={updateImportTemplateRecord}')
 
-    // CargoImportDialog owns the reconciliation, mapping state, and template CRUD
+    // CargoImportDialog owns the mapping state and explicit template write actions
     expect(dialogSource).toContain('selectedImportTemplateId')
     expect(dialogSource).toContain('selectTemplate')
     expect(dialogSource).toContain('selectNone')
-    expect(dialogSource).toContain('handleSaveImportTemplate')
+    expect(dialogSource).toContain('handleCreateTemplate')
+    expect(dialogSource).toContain('handleUpdateTemplate')
+    expect(dialogSource).toContain('handleSaveTemplateCopy')
+    expect(dialogSource).not.toContain('handleSaveImportTemplate')
     expect(dialogSource).toContain('importMappingValueFromTemplate')
   })
 

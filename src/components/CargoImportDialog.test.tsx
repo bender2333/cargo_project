@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CargoImportDialog } from './CargoImportDialog'
 import type { ImportCargoRow } from '../lib/importCargo'
 import type { ImportTemplate } from '../types'
+import { ImportTemplateRequestError } from '../api/importTemplates'
 
 afterEach(cleanup)
 
@@ -93,10 +94,6 @@ function mapFields(view: { getByTestId: (id: string) => HTMLElement }, mapping: 
   }
 }
 
-function templateNameInput() {
-  return document.querySelector('[data-testid="import-template-name"]') as HTMLInputElement
-}
-
 function mappingSelect(view: { getByTestId: (id: string) => HTMLElement }, field: string) {
   return view.getByTestId(`map-select-${field}`) as HTMLSelectElement | HTMLInputElement
 }
@@ -105,6 +102,45 @@ function expectBlankMapping(view: { getByTestId: (id: string) => HTMLElement }) 
   for (const field of MAPPING_FIELDS) {
     expect(mappingSelect(view, field).value).toBe('')
   }
+}
+
+function mapRequiredSeparate(view: { getByTestId: (id: string) => HTMLElement }) {
+  mapFields(view, { length: 'L', width: 'W', height: 'H', quantity: 'Qty' })
+}
+
+function combinedTemplate(overrides: Partial<ImportTemplate> = {}) {
+  return makeTemplate({
+    dimensionMode: 'combined',
+    combinedColumn: 'L',
+    mapping: { label: 'Label', name: 'Name', quantity: 'Qty' },
+    dimensionOrder: ['length', 'width', 'height'],
+    ...overrides,
+  })
+}
+
+function echoSavedTemplate(payload: {
+  name: string
+  mapping: ImportTemplate['mapping']
+  units: ImportTemplate['units']
+  headerRow?: number
+  startRow?: number
+  dimensionMode?: ImportTemplate['dimensionMode']
+  combinedColumn?: string
+  dimensionOrder?: ImportTemplate['dimensionOrder']
+  defaultValues?: ImportTemplate['defaultValues']
+}, id = 't-new'): ImportTemplate {
+  return makeTemplate({
+    id,
+    name: payload.name,
+    mapping: payload.mapping,
+    units: payload.units,
+    headerRow: payload.headerRow,
+    startRow: payload.startRow,
+    dimensionMode: payload.dimensionMode,
+    combinedColumn: payload.combinedColumn,
+    dimensionOrder: payload.dimensionOrder,
+    defaultValues: payload.defaultValues,
+  })
 }
 
 describe('CargoImportDialog two-phase flow', () => {
@@ -274,10 +310,10 @@ describe('CargoImportDialog two-phase flow', () => {
 
 describe('CargoImportDialog template reconciliation', () => {
   it('syncs the canonical name when the selected template is renamed elsewhere', async () => {
-    const { rerender } = renderDialog({ importTemplates: [makeTemplate()] })
+    const { rerender, getByTestId } = renderDialog({ importTemplates: [makeTemplate()] })
 
     selectTemplate('t1')
-    await waitFor(() => expect(templateNameInput().value).toBe('Vietnam layout'))
+    await waitFor(() => expect(getByTestId('selected-import-template-name').textContent).toBe('Vietnam layout'))
 
     rerender(
       <CargoImportDialog
@@ -285,21 +321,21 @@ describe('CargoImportDialog template reconciliation', () => {
       />,
     )
 
-    await waitFor(() => expect(templateNameInput().value).toBe('Vietnam v2'))
+    await waitFor(() => expect(getByTestId('selected-import-template-name').textContent).toBe('Vietnam v2'))
   })
 
   it('updates instead of creating a duplicate after an authoritative rename', async () => {
     const onCreateTemplate = vi.fn().mockResolvedValue(makeTemplate())
     const onUpdateTemplate = vi.fn().mockResolvedValue(makeTemplate({ name: 'Vietnam v2' }))
 
-    const { rerender } = renderDialog({
+    const { rerender, getByTestId } = renderDialog({
       importTemplates: [makeTemplate()],
       onCreateTemplate,
       onUpdateTemplate,
     })
 
     selectTemplate('t1')
-    await waitFor(() => expect(templateNameInput().value).toBe('Vietnam layout'))
+    await waitFor(() => expect(getByTestId('selected-import-template-name').textContent).toBe('Vietnam layout'))
 
     rerender(
       <CargoImportDialog
@@ -310,23 +346,23 @@ describe('CargoImportDialog template reconciliation', () => {
         })}
       />,
     )
-    await waitFor(() => expect(templateNameInput().value).toBe('Vietnam v2'))
+    await waitFor(() => expect(getByTestId('selected-import-template-name').textContent).toBe('Vietnam v2'))
 
-    fireEvent.click(document.querySelector('[data-testid="save-import-template"]')!)
+    fireEvent.change(getByTestId('map-unit-length'), { target: { value: 'cm' } })
+    fireEvent.click(getByTestId('update-import-template'))
 
     await waitFor(() => expect(onUpdateTemplate).toHaveBeenCalledTimes(1))
     expect(onUpdateTemplate).toHaveBeenCalledWith('t1', expect.objectContaining({ name: 'Vietnam v2' }))
     expect(onCreateTemplate).not.toHaveBeenCalled()
   })
 
-  it('keeps a name the user edited instead of overwriting it with the canonical name', async () => {
-    const { rerender } = renderDialog({ importTemplates: [makeTemplate()] })
+  it('keeps a save-as name the user edited instead of overwriting it with the canonical name', async () => {
+    const { rerender, getByTestId } = renderDialog({ importTemplates: [makeTemplate()] })
 
     selectTemplate('t1')
-    await waitFor(() => expect(templateNameInput().value).toBe('Vietnam layout'))
-
-    fireEvent.change(templateNameInput(), { target: { value: 'My copy' } })
-    expect(templateNameInput().value).toBe('My copy')
+    fireEvent.change(getByTestId('map-unit-length'), { target: { value: 'cm' } })
+    fireEvent.change(getByTestId('import-template-save-as-name'), { target: { value: 'My copy' } })
+    expect((getByTestId('import-template-save-as-name') as HTMLInputElement).value).toBe('My copy')
 
     rerender(
       <CargoImportDialog
@@ -334,14 +370,15 @@ describe('CargoImportDialog template reconciliation', () => {
       />,
     )
 
-    expect(templateNameInput().value).toBe('My copy')
+    expect((getByTestId('import-template-save-as-name') as HTMLInputElement).value).toBe('My copy')
+    expect(getByTestId('selected-import-template-name').textContent).toBe('Vietnam layout')
   })
 
   it('clears the selection when the selected template is deleted elsewhere', async () => {
-    const { rerender } = renderDialog({ importTemplates: [makeTemplate()] })
+    const { rerender, getByTestId, queryByTestId } = renderDialog({ importTemplates: [makeTemplate()] })
 
     selectTemplate('t1')
-    await waitFor(() => expect(templateNameInput().value).toBe('Vietnam layout'))
+    await waitFor(() => expect(getByTestId('selected-import-template-name').textContent).toBe('Vietnam layout'))
 
     rerender(
       <CargoImportDialog
@@ -349,20 +386,20 @@ describe('CargoImportDialog template reconciliation', () => {
       />,
     )
 
-    await waitFor(() => expect(templateNameInput().value).toBe(''))
+    await waitFor(() => expect(queryByTestId('selected-import-template-name')).toBeNull())
   })
 
   it('keeps the reference intact while the catalog load is failing', async () => {
     const onCreateTemplate = vi.fn().mockResolvedValue(makeTemplate())
     const onUpdateTemplate = vi.fn().mockResolvedValue(makeTemplate())
-    const { rerender } = renderDialog({
+    const { rerender, getByTestId } = renderDialog({
       importTemplates: [makeTemplate()],
       onCreateTemplate,
       onUpdateTemplate,
     })
 
     selectTemplate('t1')
-    await waitFor(() => expect(templateNameInput().value).toBe('Vietnam layout'))
+    await waitFor(() => expect(getByTestId('selected-import-template-name').textContent).toBe('Vietnam layout'))
 
     const renderWith = (templates: ImportTemplate[], loadFailed: boolean) => rerender(
       <CargoImportDialog
@@ -376,12 +413,13 @@ describe('CargoImportDialog template reconciliation', () => {
     )
 
     renderWith([], true)
-    expect(templateNameInput().value).toBe('Vietnam layout')
+    expect(getByTestId('selected-import-template-name').textContent).toBe('Vietnam layout')
 
     renderWith([makeTemplate()], false)
-    await waitFor(() => expect(templateNameInput().value).toBe('Vietnam layout'))
+    await waitFor(() => expect(getByTestId('selected-import-template-name').textContent).toBe('Vietnam layout'))
 
-    fireEvent.click(document.querySelector('[data-testid="save-import-template"]')!)
+    fireEvent.change(getByTestId('map-unit-length'), { target: { value: 'cm' } })
+    fireEvent.click(getByTestId('update-import-template'))
     await waitFor(() => expect(onUpdateTemplate).toHaveBeenCalledWith('t1', expect.anything()))
     expect(onCreateTemplate).not.toHaveBeenCalled()
   })
@@ -520,6 +558,7 @@ describe('CargoImportDialog pending import transaction', () => {
     const onCreateTemplate = vi.fn().mockResolvedValue(makeTemplate())
     const view = renderDialog({ importRows: templateRows, onCreateTemplate })
     chooseWithoutTemplate(view)
+    mapRequiredSeparate(view)
 
     fireEvent.change(view.getByTestId('import-template-name'), { target: { value: 'Template without weight default' } })
     expect(view.queryByTestId('template-default-weight')).toBeNull()
@@ -547,6 +586,268 @@ describe('CargoImportDialog pending import transaction', () => {
     expect(onConfirm).toHaveBeenCalledWith([
       expect.objectContaining({ weight: 1 }),
     ], expect.any(Array))
+  })
+})
+
+describe('CargoImportDialog template write actions', () => {
+  it('hides update and save-as when an existing template mapping is unchanged', () => {
+    const view = renderDialog()
+    selectTemplate('t1')
+
+    expect(view.queryByTestId('update-import-template')).toBeNull()
+    expect(view.queryByTestId('save-as-import-template')).toBeNull()
+    expect(view.queryByTestId('save-import-template')).toBeNull()
+  })
+
+  it.each([
+    {
+      name: 'mapping',
+      template: () => makeTemplate(),
+      dirty: (view: { getByTestId: (id: string) => HTMLElement }) => {
+        fireEvent.change(view.getByTestId('map-select-name'), { target: { value: '' } })
+      },
+    },
+    {
+      name: 'unit',
+      template: () => makeTemplate(),
+      dirty: (view: { getByTestId: (id: string) => HTMLElement }) => {
+        fireEvent.change(view.getByTestId('map-unit-length'), { target: { value: 'cm' } })
+      },
+    },
+    {
+      name: 'header row',
+      template: () => makeTemplate(),
+      dirty: (view: { getByTestId: (id: string) => HTMLElement }) => {
+        fireEvent.change(view.getByTestId('template-header-row'), { target: { value: '2' } })
+      },
+    },
+    {
+      name: 'start row',
+      template: () => makeTemplate(),
+      dirty: (view: { getByTestId: (id: string) => HTMLElement }) => {
+        fireEvent.change(view.getByTestId('template-start-row'), { target: { value: '3' } })
+      },
+    },
+    {
+      name: 'dimension mode',
+      template: () => makeTemplate(),
+      dirty: (view: { getByTestId: (id: string) => HTMLElement }) => {
+        fireEvent.change(view.getByTestId('template-dimension-mode'), { target: { value: 'combined' } })
+      },
+    },
+    {
+      name: 'combined column',
+      template: () => combinedTemplate(),
+      dirty: (view: { getByTestId: (id: string) => HTMLElement }) => {
+        fireEvent.change(view.getByTestId('template-combined-column'), { target: { value: 'W' } })
+      },
+    },
+    {
+      name: 'dimension order',
+      template: () => combinedTemplate(),
+      dirty: (view: { getByTestId: (id: string) => HTMLElement }) => {
+        fireEvent.change(view.getByTestId('template-dimension-order'), { target: { value: 'width,height,length' } })
+      },
+    },
+    {
+      name: 'visible default',
+      template: () => makeTemplate(),
+      dirty: (view: { getByTestId: (id: string) => HTMLElement }) => {
+        fireEvent.change(view.getByTestId('template-default-quantity'), { target: { value: '9' } })
+      },
+    },
+  ])('shows update and save-as after a $name change', ({ template, dirty }) => {
+    const selected = template()
+    const view = renderDialog({ importTemplates: [selected] })
+    selectTemplate(selected.id)
+
+    expect(view.queryByTestId('update-import-template')).toBeNull()
+    expect(view.queryByTestId('save-as-import-template')).toBeNull()
+
+    dirty(view)
+
+    expect(view.getByTestId('update-import-template')).toBeTruthy()
+    expect(view.getByTestId('save-as-import-template')).toBeTruthy()
+  })
+
+  it('shows save-template for a valid untemplated mapping and not update or save-as', () => {
+    const view = renderDialog({ importTemplates: [] })
+    chooseWithoutTemplate(view)
+    mapRequiredSeparate(view)
+
+    expect(view.getByTestId('save-import-template')).toBeTruthy()
+    expect(view.getByTestId('import-template-name').closest('label')?.querySelector('[aria-hidden="true"]')?.textContent).toBe('*')
+    expect(view.queryByTestId('update-import-template')).toBeNull()
+    expect(view.queryByTestId('save-as-import-template')).toBeNull()
+  })
+
+  it('update calls only onUpdateTemplate with the original template name', async () => {
+    const onCreateTemplate = vi.fn()
+    const onUpdateTemplate = vi.fn().mockResolvedValue(makeTemplate())
+    const view = renderDialog({ onCreateTemplate, onUpdateTemplate })
+    selectTemplate('t1')
+    fireEvent.change(view.getByTestId('map-unit-length'), { target: { value: 'cm' } })
+    fireEvent.change(view.getByTestId('import-template-save-as-name'), { target: { value: 'A copy' } })
+    fireEvent.click(view.getByTestId('update-import-template'))
+
+    await waitFor(() => expect(onUpdateTemplate).toHaveBeenCalledTimes(1))
+    expect(onUpdateTemplate).toHaveBeenCalledWith('t1', expect.objectContaining({
+      name: 'Vietnam layout',
+      units: expect.objectContaining({ length: 'cm' }),
+    }))
+    expect(onCreateTemplate).not.toHaveBeenCalled()
+  })
+
+  it('marks save-as name as required and blocks empty, original, and duplicate names before requesting', () => {
+    const other = makeTemplate({ id: 't2', name: 'Other layout' })
+    const onCreateTemplate = vi.fn()
+    const view = renderDialog({ importTemplates: [makeTemplate(), other], onCreateTemplate })
+    selectTemplate('t1')
+    fireEvent.change(view.getByTestId('map-unit-length'), { target: { value: 'cm' } })
+
+    const saveAsInput = view.getByTestId('import-template-save-as-name')
+    expect(saveAsInput.closest('label')?.querySelector('[aria-hidden="true"]')?.textContent).toBe('*')
+    expect(saveAsInput.closest('label')?.textContent).toContain('templateSaveAsName')
+
+    fireEvent.click(view.getByTestId('save-as-import-template'))
+    expect(view.getByTestId('template-write-error').textContent).toBe('templateNameRequired')
+    expect(onCreateTemplate).not.toHaveBeenCalled()
+
+    fireEvent.change(saveAsInput, { target: { value: '  Vietnam layout  ' } })
+    fireEvent.click(view.getByTestId('save-as-import-template'))
+    expect(view.getByTestId('template-write-error').textContent).toBe('templateNameUnchanged')
+    expect(onCreateTemplate).not.toHaveBeenCalled()
+
+    fireEvent.change(saveAsInput, { target: { value: 'Other layout' } })
+    fireEvent.click(view.getByTestId('save-as-import-template'))
+    expect(view.getByTestId('template-write-error').textContent).toBe('templateNameDuplicate')
+    expect(onCreateTemplate).not.toHaveBeenCalled()
+  })
+
+  it('save-as calls only onCreateTemplate', async () => {
+    const onCreateTemplate = vi.fn().mockImplementation(async (payload) => echoSavedTemplate(payload, 't-copy'))
+    const onUpdateTemplate = vi.fn()
+    const view = renderDialog({ onCreateTemplate, onUpdateTemplate })
+    selectTemplate('t1')
+    fireEvent.change(view.getByTestId('map-unit-length'), { target: { value: 'cm' } })
+    fireEvent.change(view.getByTestId('import-template-save-as-name'), { target: { value: 'Vietnam copy' } })
+    fireEvent.click(view.getByTestId('save-as-import-template'))
+
+    await waitFor(() => expect(onCreateTemplate).toHaveBeenCalledTimes(1))
+    expect(onCreateTemplate).toHaveBeenCalledWith(expect.objectContaining({ name: 'Vietnam copy' }))
+    expect(onUpdateTemplate).not.toHaveBeenCalled()
+  })
+
+  it('shows localized errors for 400, 409, and network failures without clearing the draft', async () => {
+    const onCreateTemplate = vi.fn()
+      .mockRejectedValueOnce(new ImportTemplateRequestError('Invalid template', 400, 'invalid-template'))
+      .mockRejectedValueOnce(new ImportTemplateRequestError('Template name already exists', 409, 'duplicate-name'))
+      .mockRejectedValueOnce(new ImportTemplateRequestError('保存模板失败', 500, 'request-failed'))
+    const view = renderDialog({ importTemplates: [], onCreateTemplate })
+    chooseWithoutTemplate(view)
+    mapRequiredSeparate(view)
+    fireEvent.change(view.getByTestId('import-template-name'), { target: { value: 'Solo' } })
+
+    fireEvent.click(view.getByTestId('save-import-template'))
+    await waitFor(() => expect(view.getByTestId('template-write-error').textContent).toBe('templateConfigInvalid'))
+    expect((view.getByTestId('import-template-name') as HTMLInputElement).value).toBe('Solo')
+    expect(mappingSelect(view, 'length').value).toBe('L')
+    expect(view.getByTestId('mapping-modal')).toBeTruthy()
+
+    fireEvent.click(view.getByTestId('save-import-template'))
+    await waitFor(() => expect(view.getByTestId('template-write-error').textContent).toBe('templateNameDuplicate'))
+
+    fireEvent.click(view.getByTestId('save-import-template'))
+    await waitFor(() => expect(view.getByTestId('template-write-error').textContent).toBe('templateSaveFailed'))
+    expect(view.queryByTestId('template-selection-panel')).toBeNull()
+    expect(mappingSelect(view, 'width').value).toBe('W')
+  })
+
+  it('disables every write action while a write is pending and ignores duplicate clicks', async () => {
+    let resolveCreate!: (value: ImportTemplate) => void
+    const onCreateTemplate = vi.fn().mockImplementation(() => new Promise<ImportTemplate>((resolve) => {
+      resolveCreate = resolve
+    }))
+    const createView = renderDialog({ importTemplates: [], onCreateTemplate })
+    chooseWithoutTemplate(createView)
+    mapRequiredSeparate(createView)
+    fireEvent.change(createView.getByTestId('import-template-name'), { target: { value: 'Solo' } })
+    const createBtn = createView.getByTestId('save-import-template') as HTMLButtonElement
+    fireEvent.click(createBtn)
+    fireEvent.click(createBtn)
+    await waitFor(() => expect(onCreateTemplate).toHaveBeenCalledTimes(1))
+    expect(createBtn.disabled).toBe(true)
+    resolveCreate(echoSavedTemplate(onCreateTemplate.mock.calls[0][0]))
+    createView.unmount()
+
+    let resolveUpdate!: (value: ImportTemplate) => void
+    const onUpdateTemplate = vi.fn().mockImplementation(() => new Promise<ImportTemplate>((resolve) => {
+      resolveUpdate = resolve
+    }))
+    const onCreate = vi.fn()
+    const view = renderDialog({ onUpdateTemplate, onCreateTemplate: onCreate })
+    selectTemplate('t1')
+    fireEvent.change(view.getByTestId('map-unit-length'), { target: { value: 'cm' } })
+    const updateBtn = view.getByTestId('update-import-template') as HTMLButtonElement
+    const saveAsBtn = view.getByTestId('save-as-import-template') as HTMLButtonElement
+    fireEvent.click(updateBtn)
+    fireEvent.click(updateBtn)
+    fireEvent.click(saveAsBtn)
+    await waitFor(() => expect(onUpdateTemplate).toHaveBeenCalledTimes(1))
+    expect(onCreate).not.toHaveBeenCalled()
+    expect(updateBtn.disabled).toBe(true)
+    expect(saveAsBtn.disabled).toBe(true)
+    expect(view.queryByTestId('save-import-template')).toBeNull()
+    resolveUpdate(makeTemplate())
+  })
+
+  it('keeps the dialog open after a successful save without calling onConfirm and resets the comparison baseline', async () => {
+    const onCreateTemplate = vi.fn().mockImplementation(async (payload) => echoSavedTemplate(payload, 't-new'))
+    const onConfirm = vi.fn()
+    const view = renderDialog({ importTemplates: [], onCreateTemplate, onConfirm })
+    chooseWithoutTemplate(view)
+    mapRequiredSeparate(view)
+    fireEvent.change(view.getByTestId('import-template-name'), { target: { value: 'Manual save' } })
+    fireEvent.click(view.getByTestId('save-import-template'))
+
+    await waitFor(() => expect(onCreateTemplate).toHaveBeenCalledTimes(1))
+    expect(onConfirm).not.toHaveBeenCalled()
+    expect(view.getByTestId('mapping-modal')).toBeTruthy()
+    expect(view.getByTestId('mapping-fields')).toBeTruthy()
+    expect(view.getByTestId('selected-import-template-name').textContent).toBe('Manual save')
+    expect(view.queryByTestId('save-import-template')).toBeNull()
+    expect(view.queryByTestId('update-import-template')).toBeNull()
+    expect(view.queryByTestId('save-as-import-template')).toBeNull()
+
+    fireEvent.change(view.getByTestId('map-unit-length'), { target: { value: 'cm' } })
+    expect(view.getByTestId('update-import-template')).toBeTruthy()
+    expect(view.getByTestId('save-as-import-template')).toBeTruthy()
+  })
+
+  it('resets comparison baseline and pending write when importRows change', async () => {
+    const onCreateTemplate = vi.fn().mockImplementation(() => new Promise<ImportTemplate>(() => undefined))
+    const { rerender, getByTestId, queryByTestId } = renderDialog({ onCreateTemplate })
+    chooseWithoutTemplate({ getByTestId })
+    mapRequiredSeparate({ getByTestId })
+    fireEvent.change(getByTestId('import-template-name'), { target: { value: 'Pending' } })
+    fireEvent.click(getByTestId('save-import-template'))
+    await waitFor(() => expect(onCreateTemplate).toHaveBeenCalledTimes(1))
+    expect((getByTestId('save-import-template') as HTMLButtonElement).disabled).toBe(true)
+
+    const nextRows: ImportCargoRow[] = [
+      { Sku: 'Sku', Length: 'Length', Width: 'Width', Height: 'Height' },
+      { Sku: 'B', Length: 200, Width: 100, Height: 50 },
+    ]
+    rerender(<CargoImportDialog {...dialogProps({ importRows: nextRows, onCreateTemplate })} />)
+
+    expect(getByTestId('template-selection-panel')).toBeTruthy()
+    expect(queryByTestId('save-import-template')).toBeNull()
+
+    chooseWithoutTemplate({ getByTestId })
+    mapFields({ getByTestId }, { length: 'Length', width: 'Width', height: 'Height' })
+    fireEvent.change(getByTestId('import-template-name'), { target: { value: 'After reset' } })
+    fireEvent.click(getByTestId('save-import-template'))
+    await waitFor(() => expect(onCreateTemplate).toHaveBeenCalledTimes(2))
   })
 })
 

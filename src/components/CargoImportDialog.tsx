@@ -3,7 +3,7 @@ import { ImportMappingForm } from './ImportMappingForm'
 import type { ImportMappingValue } from './ImportMappingForm'
 import { TemplateSelectionPanel, type TemplateSelectionPanelLabels } from './TemplateSelectionPanel'
 import type { CargoItem, ImportTemplate, ImportTemplateDefaults, ImportTemplateUnits, Locale } from '../types'
-import type { ImportTemplatePayload } from '../api/importTemplates'
+import { ImportTemplateRequestError, type ImportTemplatePayload } from '../api/importTemplates'
 import { importColumnsForHeaderRow, importPreviewRows } from '../lib/importTable'
 import type { ImportCargoRow } from '../lib/importCargo'
 import { parseCargoRowsWithTemplate } from '../lib/importCargo'
@@ -13,12 +13,16 @@ import {
   importMappingValueFromTemplate,
   missingMappedColumns,
   buildImportMessages,
+  sameImportMappingValue,
+  validateImportMappingValue,
 } from '../lib/importWorkflow'
 import type { BuildImportMessagesLabels } from '../lib/importWorkflow'
-import { reconcileSelectedTemplateName, shouldClearTemplateReference } from '../hooks/useTemplateCatalogs'
+import { shouldClearTemplateReference } from '../hooks/useTemplateCatalogs'
 
 export type ImportPhase = 'template-selection' | 'mapping-preview'
 export type TemplateSelectionMode = 'none' | 'existing'
+export type TemplateWriteAction = 'create' | 'update' | 'copy'
+type PendingTemplateWrite = TemplateWriteAction | null
 
 type Labels = BuildImportMessagesLabels & TemplateSelectionPanelLabels & {
   mappingTitle: string
@@ -31,6 +35,15 @@ type Labels = BuildImportMessagesLabels & TemplateSelectionPanelLabels & {
   templateSave: string
   templateSaved: string
   templateUpdated: string
+  templateUpdateExplicit: string
+  templateSaveAs: string
+  templateSaveAsName: string
+  templateNameRequired: string
+  templateNameUnchanged: string
+  templateNameDuplicate: string
+  templateConfigInvalid: string
+  templateSaveFailed: string
+  mappingRequiredField: string
   templateSelectionBack: string
   mappingPreview: string
   mappingConvertHint: string
@@ -84,9 +97,14 @@ export function CargoImportDialog({
   const [selectionMode, setSelectionMode] = useState<TemplateSelectionMode | null>(null)
   const [mappingValue, setMappingValue] = useState<ImportMappingValue>(emptyImportMappingValue)
   const [selectedImportTemplateId, setSelectedImportTemplateId] = useState('')
-  const selectedImportTemplateNameRef = useRef<{ id: string; name: string } | null>(null)
+  const [selectedTemplateName, setSelectedTemplateName] = useState('')
+  const [mappingBaseline, setMappingBaseline] = useState<ImportMappingValue>(emptyImportMappingValue)
   const [templateName, setTemplateName] = useState('')
   const [templateSaveNotice, setTemplateSaveNotice] = useState('')
+  const [templateWriteError, setTemplateWriteError] = useState('')
+  const [pendingTemplateWrite, setPendingTemplateWrite] = useState<PendingTemplateWrite>(null)
+  const pendingTemplateWriteRef = useRef<PendingTemplateWrite>(null)
+  const retainSelectedIdRef = useRef<string | null>(null)
   const [missingImportColumns, setMissingImportColumns] = useState<string[]>([])
   const dialogRef = useRef<HTMLDivElement>(null)
 
@@ -94,10 +112,15 @@ export function CargoImportDialog({
     setPhase('template-selection')
     setSelectionMode(null)
     setMappingValue(emptyImportMappingValue())
+    setMappingBaseline(emptyImportMappingValue())
     setSelectedImportTemplateId('')
-    selectedImportTemplateNameRef.current = null
+    setSelectedTemplateName('')
     setTemplateName('')
     setTemplateSaveNotice('')
+    setTemplateWriteError('')
+    pendingTemplateWriteRef.current = null
+    setPendingTemplateWrite(null)
+    retainSelectedIdRef.current = null
     setMissingImportColumns([])
   }, [importRows])
 
@@ -136,21 +159,26 @@ export function CargoImportDialog({
 
   useEffect(() => {
     if (!selectedImportTemplateId) {
-      selectedImportTemplateNameRef.current = null
+      setSelectedTemplateName('')
       return
     }
     if (importTemplateLoadFailed) return
+    if (retainSelectedIdRef.current === selectedImportTemplateId) {
+      if (importTemplates.some(template => template.id === selectedImportTemplateId)) {
+        retainSelectedIdRef.current = null
+      } else {
+        return
+      }
+    }
     if (shouldClearTemplateReference(selectedImportTemplateId, importTemplates, importTemplateLoadFailed)) {
       setSelectedImportTemplateId('')
+      setSelectedTemplateName('')
       setTemplateName('')
-      selectedImportTemplateNameRef.current = null
       return
     }
     const selectedTemplate = importTemplates.find((template) => template.id === selectedImportTemplateId)
     if (!selectedTemplate) return
-    const previousTemplate = selectedImportTemplateNameRef.current
-    setTemplateName((current) => reconcileSelectedTemplateName(current, previousTemplate, selectedTemplate))
-    selectedImportTemplateNameRef.current = { id: selectedTemplate.id, name: selectedTemplate.name }
+    setSelectedTemplateName(selectedTemplate.name)
   }, [importTemplateLoadFailed, importTemplates, selectedImportTemplateId])
 
   const { canConfirm: canConfirmMapping, missingFieldsHint } = useMemo(() => {
@@ -193,10 +221,13 @@ export function CargoImportDialog({
     setSelectionMode('none')
     setPhase('mapping-preview')
     setMappingValue(next)
+    setMappingBaseline(next)
     setSelectedImportTemplateId('')
-    selectedImportTemplateNameRef.current = null
+    setSelectedTemplateName('')
+    retainSelectedIdRef.current = null
     setTemplateName('')
     setTemplateSaveNotice('')
+    setTemplateWriteError('')
     setMissingImportColumns([])
   }
 
@@ -207,45 +238,110 @@ export function CargoImportDialog({
     setSelectionMode('existing')
     setPhase('mapping-preview')
     setMappingValue(next)
+    setMappingBaseline(next)
     setSelectedImportTemplateId(template.id)
-    selectedImportTemplateNameRef.current = { id: template.id, name: template.name }
-    setTemplateName(template.name)
+    setSelectedTemplateName(template.name)
+    retainSelectedIdRef.current = null
+    setTemplateName('')
     setTemplateSaveNotice('')
+    setTemplateWriteError('')
     setMissingImportColumns(missingMappedColumns(next, importColumnsForHeaderRow(importRows, next.headerRow)))
   }
 
-  const handleSaveImportTemplate = async () => {
-    const name = templateName.trim()
-    if (!name) return
-    const selected = importTemplates.find(t => t.id === selectedImportTemplateId)
-    const isUpdate = !!(selectedImportTemplateId && selected && name === selected.name)
-    const payload = {
-      name,
-      mapping: mappingValue.mapping,
-      units: mappingValue.units as ImportTemplateUnits,
-      headerRow: mappingValue.headerRow,
-      startRow: mappingValue.startRow,
-      mergeRows: 'none' as const,
-      dimensionMode: mappingValue.dimensionMode,
-      combinedColumn: mappingValue.combinedColumn || mappingValue.mapping.dimensions || '',
-      dimensionOrder: mappingValue.dimensionOrder,
-      defaultValues: mappingValue.defaults,
+  const mappingPayload = (name: string): ImportTemplatePayload => ({
+    name,
+    mapping: mappingValue.mapping,
+    units: mappingValue.units as ImportTemplateUnits,
+    headerRow: mappingValue.headerRow,
+    startRow: mappingValue.startRow,
+    mergeRows: 'none',
+    dimensionMode: mappingValue.dimensionMode,
+    combinedColumn: mappingValue.combinedColumn || mappingValue.mapping.dimensions || '',
+    dimensionOrder: mappingValue.dimensionOrder,
+    defaultValues: mappingValue.defaults,
+  })
+
+  const templateWriteErrorMessage = (error: unknown): string => {
+    if (error instanceof ImportTemplateRequestError) {
+      if (error.code === 'duplicate-name') return labels.templateNameDuplicate
+      if (error.code === 'invalid-template') return labels.templateConfigInvalid
     }
+    return labels.templateSaveFailed
+  }
+
+  const runTemplateWrite = async (
+    action: TemplateWriteAction,
+    execute: () => Promise<ImportTemplate | null>,
+    notice: string,
+  ): Promise<void> => {
+    if (pendingTemplateWriteRef.current) return
+    if (!validateImportMappingValue(mappingValue, importColumnsForHeaderRow(importRows, mappingValue.headerRow)).valid) {
+      setTemplateWriteError(labels.templateConfigInvalid)
+      return
+    }
+    pendingTemplateWriteRef.current = action
+    setPendingTemplateWrite(action)
+    setTemplateWriteError('')
     setTemplateSaveNotice('')
     try {
-      const saved = isUpdate
-        ? await onUpdateTemplate(selected.id, payload)
-        : await onCreateTemplate(payload)
+      const saved = await execute()
       if (!saved) return
-      selectedImportTemplateNameRef.current = { id: saved.id, name: saved.name }
+      setSelectedTemplateName(saved.name)
+      retainSelectedIdRef.current = saved.id
       setSelectedImportTemplateId(saved.id)
-      try { localStorage.setItem('cargo_last_used_template_id', saved.id) } catch { /* ignore */ }
-      const noticeText = isUpdate ? labels.templateUpdated : labels.templateSaved
-      setTemplateSaveNotice(`${noticeText}: ${saved.name}`)
-    } catch (err) {
-      console.error(err)
-      alert(locale === 'zh' ? '保存模板失败' : 'Failed to save template')
+      setSelectionMode('existing')
+      setMappingBaseline(applyMappingDefaults(importMappingValueFromTemplate(saved)))
+      setTemplateName('')
+      setTemplateSaveNotice(`${notice}: ${saved.name}`)
+    } catch (error) {
+      setTemplateWriteError(templateWriteErrorMessage(error))
+    } finally {
+      pendingTemplateWriteRef.current = null
+      setPendingTemplateWrite(null)
     }
+  }
+
+  const handleCreateTemplate = async (name: string): Promise<void> => {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      setTemplateWriteError(labels.templateNameRequired)
+      return
+    }
+    if (importTemplates.some(template => template.name === trimmed)) {
+      setTemplateWriteError(labels.templateNameDuplicate)
+      return
+    }
+    await runTemplateWrite('create', () => onCreateTemplate(mappingPayload(trimmed)), labels.templateSaved)
+  }
+
+  const handleUpdateTemplate = async (): Promise<void> => {
+    const originalName = importTemplates.find(template => template.id === selectedImportTemplateId)?.name
+      ?? selectedTemplateName
+    if (!selectedImportTemplateId || !originalName) return
+    await runTemplateWrite(
+      'update',
+      () => onUpdateTemplate(selectedImportTemplateId, mappingPayload(originalName)),
+      labels.templateUpdated,
+    )
+  }
+
+  const handleSaveTemplateCopy = async (name: string): Promise<void> => {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      setTemplateWriteError(labels.templateNameRequired)
+      return
+    }
+    const originalName = importTemplates.find(template => template.id === selectedImportTemplateId)?.name
+      ?? selectedTemplateName
+    if (trimmed === originalName) {
+      setTemplateWriteError(labels.templateNameUnchanged)
+      return
+    }
+    if (importTemplates.some(template => template.name === trimmed)) {
+      setTemplateWriteError(labels.templateNameDuplicate)
+      return
+    }
+    await runTemplateWrite('copy', () => onCreateTemplate(mappingPayload(trimmed)), labels.templateSaved)
   }
 
   const pendingImport = useMemo(() => parseCargoRowsWithTemplate(importRows, {
@@ -282,6 +378,14 @@ export function CargoImportDialog({
   const availableColumns = importColumnsForHeaderRow(importRows, mappingValue.headerRow)
   const previewRows = importPreviewRows(importRows, mappingValue.headerRow, mappingValue.startRow).slice(0, 5)
   const onMappingPreview = phase === 'mapping-preview'
+  const mappingDirty = !sameImportMappingValue(mappingValue, mappingBaseline)
+  const canWriteTemplate = validateImportMappingValue(mappingValue, availableColumns).valid
+  const writeBusy = pendingTemplateWrite !== null
+  const hasSelectedTemplate = selectedImportTemplateId !== ''
+  const displayedSelectedName = importTemplates.find(template => template.id === selectedImportTemplateId)?.name
+    ?? selectedTemplateName
+  const showCreateTemplate = !hasSelectedTemplate
+  const showExistingWrites = hasSelectedTemplate && mappingDirty
 
   return (
     <div
@@ -333,24 +437,77 @@ export function CargoImportDialog({
               </button>
             </div>
             <div className="mb-4 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm md:grid-cols-[1fr_auto]" data-testid="import-template-controls">
-              <label className="font-semibold text-slate-700">
-                {labels.templateName}
-                <input
-                  className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                  value={templateName}
-                  data-testid="import-template-name"
-                  onChange={event => setTemplateName(event.target.value)}
-                />
-              </label>
-              <button
-                className="self-end rounded-lg border border-indigo-200 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
-                type="button"
-                data-testid="save-import-template"
-                disabled={!templateName.trim()}
-                onClick={() => { void handleSaveImportTemplate() }}
-              >
-                {labels.templateSave}
-              </button>
+              {hasSelectedTemplate && (
+                <div className="md:col-span-2 font-semibold text-slate-700" data-testid="selected-import-template-name">
+                  {displayedSelectedName}
+                </div>
+              )}
+              {showCreateTemplate && (
+                <>
+                  <label className="font-semibold text-slate-700">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span aria-hidden="true" className="text-red-600">*</span>
+                      <span className="sr-only">{labels.mappingRequiredField}</span>
+                      {labels.templateName}
+                    </span>
+                    <input
+                      className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                      value={templateName}
+                      data-testid="import-template-name"
+                      onChange={event => setTemplateName(event.target.value)}
+                    />
+                  </label>
+                  <button
+                    className="self-end rounded-lg border border-indigo-200 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    type="button"
+                    data-testid="save-import-template"
+                    disabled={writeBusy || !canWriteTemplate}
+                    onClick={() => { void handleCreateTemplate(templateName) }}
+                  >
+                    {labels.templateSave}
+                  </button>
+                </>
+              )}
+              {showExistingWrites && (
+                <>
+                  <button
+                    className="self-end rounded-lg border border-indigo-200 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    type="button"
+                    data-testid="update-import-template"
+                    disabled={writeBusy || !canWriteTemplate}
+                    onClick={() => { void handleUpdateTemplate() }}
+                  >
+                    {labels.templateUpdateExplicit}
+                  </button>
+                  <label className="font-semibold text-slate-700 md:col-span-2">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span aria-hidden="true" className="text-red-600">*</span>
+                      <span className="sr-only">{labels.mappingRequiredField}</span>
+                      {labels.templateSaveAsName}
+                    </span>
+                    <input
+                      className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                      value={templateName}
+                      data-testid="import-template-save-as-name"
+                      onChange={event => setTemplateName(event.target.value)}
+                    />
+                  </label>
+                  <button
+                    className="self-end rounded-lg border border-indigo-200 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    type="button"
+                    data-testid="save-as-import-template"
+                    disabled={writeBusy || !canWriteTemplate}
+                    onClick={() => { void handleSaveTemplateCopy(templateName) }}
+                  >
+                    {labels.templateSaveAs}
+                  </button>
+                </>
+              )}
+              {templateWriteError && (
+                <div className="md:col-span-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800" data-testid="template-write-error">
+                  {templateWriteError}
+                </div>
+              )}
               {templateSaveNotice && (
                 <div className="md:col-span-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800" data-testid="template-save-status">
                   {templateSaveNotice}

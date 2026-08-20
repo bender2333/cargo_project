@@ -1,5 +1,14 @@
 # Decision Log
 
+## 2026-08-20 Task 5 npm run lint 全仓失败
+
+- 背景：Task 5 要求运行 `npm run lint`。`eslint .` 退出码 1，448 errors，全部是 `Parsing error: No tsconfigRootDir was set, and multiple candidate TSConfigRootDirs are present`（仓库根与 `.worktrees/p6-linear-packing-authority`）。与 Task 3 记录的同一问题。
+- 核查：`npx eslint src/components/CargoImportDialog.tsx src/components/CargoImportDialog.test.tsx src/hooks/useTemplateCatalogs.test.ts src/Workbench.sessionBoundary.test.ts` 初次因 render 中读取 `selectedImportTemplateNameRef` 失败；改为 `selectedTemplateName` state 后退出码 0、无输出。
+- 决策：不削弱断言，不改 ESLint 配置。全仓失败记入本条；任务文件 eslint 全绿后提交。
+- 影响：全仓 `npm run lint` 在该 worktree 存在时不可作为本任务门禁。
+- 后续：由仓库维护处理 tsconfigRootDir / worktree ignore，不并入模板重构任务。
+
+
 ## 2026-08-20 Task 3 npm run lint 全仓失败
 
 - 背景：Task 3 要求运行 `npm run lint`。`eslint .` 退出码 1，446 errors，全部是 `Parsing error: No tsconfigRootDir was set, and multiple candidate TSConfigRootDirs are present`（仓库根与 `.worktrees/p6-linear-packing-authority`）。

@@ -1,6 +1,16 @@
 # Changelog
 
 
+## 2026-08-20 Task 5: separate update and save-as actions
+
+- Replaced the leftover name-equality save button in `CargoImportDialog` with three explicit handlers: `handleCreateTemplate`, `handleUpdateTemplate`, `handleSaveTemplateCopy`. Create/copy POST via `onCreateTemplate`; update PUT via `onUpdateTemplate` with the original catalog name. The clicked button chooses the verb; name equality is never used to infer PUT vs POST.
+- Existing unmodified templates hide write actions. Any mapping, unit, row, dimension mode, combined column, order, or visible-default change shows Update and Save as. No-template valid mapping shows Save template with required `*` name. Save-as name is required `*` and blocks empty, original, and catalog-duplicate names before the request. Pending write disables every visible write action; duplicate clicks send one request. `importRows` reset clears comparison baseline and pending write.
+- `ImportTemplateRequestError` 400/409/network map to `templateConfigInvalid` / `templateNameDuplicate` / `templateSaveFailed`. Failures keep the draft. Success keeps the dialog open, does not call `onConfirm`, and uses the returned template as the existing baseline. Save no longer writes `cargo_last_used_template_id`.
+- TDD RED: `npx vitest run src/components/CargoImportDialog.test.tsx src/hooks/useTemplateCatalogs.test.ts` — 1 failed file / 22 failed tests in 41.67s (missing update/save-as controls, no pending lock, leftover inferred save).
+- TDD GREEN: same command — 2 files / 56 tests passed in 3.25s (re-run after lint fix 3.91s). Extra `src/Workbench.sessionBoundary.test.ts` 1 file / 14 passed in 1.60s.
+- `npm run build` exit 0 (`tsc -b && vite build`, vite 2.12s). `npm run lint` (`eslint .`) exit 1, 448 `tsconfigRootDir` parse errors from `.worktrees/p6-linear-packing-authority`. Targeted eslint on this task's files exit 0 after moving selected template name out of a render-time ref. Recorded in `decision.md`; assertions not weakened.
+
+
 ## 2026-08-20 Task 4: explicit template selection then mapping-preview
 
 - `CargoImportDialog` now starts on `template-selection`. `TemplateSelectionPanel` is presentational only (templates, loadFailed, labels, callbacks). `selectNone()` uses `emptyImportMappingValue()`; `selectTemplate(id)` uses `importMappingValueFromTemplate`. Mapping and preview stay on one `mapping-preview` phase; back-to-selection replaces unsaved drafts on reselect. New `importRows` reset phase, selection, mapping, save name/status, and missing columns.
