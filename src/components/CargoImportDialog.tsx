@@ -105,10 +105,12 @@ export function CargoImportDialog({
   const [pendingTemplateWrite, setPendingTemplateWrite] = useState<PendingTemplateWrite>(null)
   const pendingTemplateWriteRef = useRef<PendingTemplateWrite>(null)
   const retainSelectedIdRef = useRef<string | null>(null)
+  const writeGenerationRef = useRef(0)
   const [missingImportColumns, setMissingImportColumns] = useState<string[]>([])
   const dialogRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    writeGenerationRef.current += 1
     setPhase('template-selection')
     setSelectionMode(null)
     setMappingValue(emptyImportMappingValue())
@@ -216,8 +218,15 @@ export function CargoImportDialog({
       : [])
   }
 
+  const abandonTemplateWrite = () => {
+    writeGenerationRef.current += 1
+    pendingTemplateWriteRef.current = null
+    setPendingTemplateWrite(null)
+  }
+
   const selectNone = () => {
     const next = emptyImportMappingValue()
+    abandonTemplateWrite()
     setSelectionMode('none')
     setPhase('mapping-preview')
     setMappingValue(next)
@@ -235,6 +244,7 @@ export function CargoImportDialog({
     const template = importTemplates.find(item => item.id === templateId)
     if (!template) return
     const next = applyMappingDefaults(importMappingValueFromTemplate(template))
+    abandonTemplateWrite()
     setSelectionMode('existing')
     setPhase('mapping-preview')
     setMappingValue(next)
@@ -279,12 +289,14 @@ export function CargoImportDialog({
       setTemplateWriteError(labels.templateConfigInvalid)
       return
     }
+    const generation = writeGenerationRef.current
     pendingTemplateWriteRef.current = action
     setPendingTemplateWrite(action)
     setTemplateWriteError('')
     setTemplateSaveNotice('')
     try {
       const saved = await execute()
+      if (writeGenerationRef.current !== generation) return
       if (!saved) return
       setSelectedTemplateName(saved.name)
       retainSelectedIdRef.current = saved.id
@@ -294,10 +306,13 @@ export function CargoImportDialog({
       setTemplateName('')
       setTemplateSaveNotice(`${notice}: ${saved.name}`)
     } catch (error) {
+      if (writeGenerationRef.current !== generation) return
       setTemplateWriteError(templateWriteErrorMessage(error))
     } finally {
-      pendingTemplateWriteRef.current = null
-      setPendingTemplateWrite(null)
+      if (writeGenerationRef.current === generation) {
+        pendingTemplateWriteRef.current = null
+        setPendingTemplateWrite(null)
+      }
     }
   }
 
@@ -429,6 +444,7 @@ export function CargoImportDialog({
                 type="button"
                 data-testid="template-selection-back"
                 onClick={() => {
+                  abandonTemplateWrite()
                   setPhase('template-selection')
                   setSelectionMode(null)
                 }}

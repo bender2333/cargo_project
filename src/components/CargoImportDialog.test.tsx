@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CargoImportDialog } from './CargoImportDialog'
 import type { ImportCargoRow } from '../lib/importCargo'
@@ -848,6 +848,44 @@ describe('CargoImportDialog template write actions', () => {
     fireEvent.change(getByTestId('import-template-name'), { target: { value: 'After reset' } })
     fireEvent.click(getByTestId('save-import-template'))
     await waitFor(() => expect(onCreateTemplate).toHaveBeenCalledTimes(2))
+  })
+
+  it('does not apply a write that completes after back and reselect', async () => {
+    let resolveCreate!: (value: ImportTemplate) => void
+    const onCreateTemplate = vi.fn().mockImplementation(() => new Promise<ImportTemplate>((resolve) => {
+      resolveCreate = resolve
+    }))
+    const other = makeTemplate({
+      id: 't2',
+      name: 'Other layout',
+      units: { length: 'cm', width: 'cm', height: 'cm' },
+    })
+    const view = renderDialog({
+      importTemplates: [makeTemplate(), other],
+      onCreateTemplate,
+    })
+    chooseWithoutTemplate(view)
+    mapRequiredSeparate(view)
+    fireEvent.change(view.getByTestId('import-template-name'), { target: { value: 'Solo' } })
+    fireEvent.click(view.getByTestId('save-import-template'))
+    await waitFor(() => expect(onCreateTemplate).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(view.getByTestId('template-selection-back'))
+    selectTemplate('t2')
+
+    expect(view.getByTestId('selected-import-template-name').textContent).toBe('Other layout')
+    expect((view.getByTestId('map-unit-length') as HTMLSelectElement).value).toBe('cm')
+    expect(view.queryByTestId('update-import-template')).toBeNull()
+
+    await act(async () => {
+      resolveCreate(echoSavedTemplate(onCreateTemplate.mock.calls[0][0], 't-stale'))
+    })
+
+    expect(view.getByTestId('selected-import-template-name').textContent).toBe('Other layout')
+    expect(mappingSelect(view, 'length').value).toBe('L')
+    expect(view.queryByTestId('update-import-template')).toBeNull()
+    expect(view.queryByTestId('save-import-template')).toBeNull()
+    expect(view.queryByTestId('template-save-status')).toBeNull()
   })
 })
 

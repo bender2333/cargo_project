@@ -9,6 +9,7 @@
 - TDD RED: `npx vitest run src/components/CargoImportDialog.test.tsx src/hooks/useTemplateCatalogs.test.ts` — 1 failed file / 22 failed tests in 41.67s (missing update/save-as controls, no pending lock, leftover inferred save).
 - TDD GREEN: same command — 2 files / 56 tests passed in 3.25s (re-run after lint fix 3.91s). Extra `src/Workbench.sessionBoundary.test.ts` 1 file / 14 passed in 1.60s.
 - `npm run build` exit 0 (`tsc -b && vite build`, vite 2.12s). `npm run lint` (`eslint .`) exit 1, 448 `tsconfigRootDir` parse errors from `.worktrees/p6-linear-packing-authority`. Targeted eslint on this task's files exit 0 after moving selected template name out of a render-time ref. Recorded in `decision.md`; assertions not weakened.
+- Review fix: in-flight template writes are generation-guarded. Back / reselect / `selectNone` / new `importRows` abandon the pending write so a late create/update/copy cannot attach its id or baseline to a mapping the user is no longer editing. Covering test: write completing after back+reselect keeps the new selection. GREEN `npx vitest run src/components/CargoImportDialog.test.tsx src/hooks/useTemplateCatalogs.test.ts` — 2 files / 57 passed in 3.65s.
 
 
 ## 2026-08-20 Task 4: explicit template selection then mapping-preview
