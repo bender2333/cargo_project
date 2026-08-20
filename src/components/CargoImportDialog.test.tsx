@@ -5,6 +5,8 @@ import type { ImportCargoRow } from '../lib/importCargo'
 import type { ImportTemplate } from '../types'
 import { ImportTemplateRequestError } from '../api/importTemplates'
 
+import { workbenchCopy } from '../data/workbenchCopy'
+
 afterEach(cleanup)
 
 function makeTemplate(overrides: Partial<ImportTemplate> = {}): ImportTemplate {
@@ -161,6 +163,8 @@ describe('CargoImportDialog two-phase flow', () => {
 
     expect(view.queryByTestId('template-selection-panel')).toBeNull()
     expect(view.getByTestId('mapping-fields')).toBeTruthy()
+    expect(view.getByTestId('mapping-required-length')).toBeTruthy()
+    expect(view.getByTestId('mapping-preview')).toBeTruthy()
     expectBlankMapping(view)
     expect((view.getByTestId('template-dimension-mode') as HTMLSelectElement).value).toBe('separate')
     expect((view.getByTestId('template-header-row') as HTMLInputElement).value).toBe('1')
@@ -886,6 +890,78 @@ describe('CargoImportDialog template write actions', () => {
     expect(view.queryByTestId('update-import-template')).toBeNull()
     expect(view.queryByTestId('save-import-template')).toBeNull()
     expect(view.queryByTestId('template-save-status')).toBeNull()
+  })
+})
+
+describe('CargoImportDialog scenario contracts E/I/J/N', () => {
+  it('blocks confirm when a mapped weight is non-empty invalid', () => {
+    const onConfirm = vi.fn()
+    const view = renderDialog({
+      importRows: [{ Name: 'Bad weight crate', L: 900, W: 700, H: 500, Weight: -1, Qty: 1 }],
+      onConfirm,
+    })
+    chooseWithoutTemplate(view)
+    mapFields(view, { name: 'Name', length: 'L', width: 'W', height: 'H', weight: 'Weight', quantity: 'Qty' })
+
+    expect((view.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(true)
+    expect(view.getByTestId('mapping-error-hint')).toBeTruthy()
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  it('disables save when required mappings are missing or duplicated', () => {
+    const view = renderDialog({ importTemplates: [] })
+    chooseWithoutTemplate(view)
+    fireEvent.change(view.getByTestId('import-template-name'), { target: { value: 'Incomplete' } })
+    expect((view.getByTestId('save-import-template') as HTMLButtonElement).disabled).toBe(true)
+
+    mapFields(view, { length: 'L', width: 'L', height: 'H' })
+    expect((view.getByTestId('save-import-template') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('keeps a selected template and blocks confirm when mapped columns are missing', () => {
+    const template = makeTemplate()
+    const view = renderDialog({
+      importRows: [{ Goods: 'Missing length crate', W: 60, H: 40, Qty: 2 }],
+      importTemplates: [template],
+    })
+    selectTemplate(template.id)
+
+    expect(view.getByTestId('selected-import-template-name').textContent).toBe('Vietnam layout')
+    expect(view.getByTestId('map-select-length').getAttribute('data-invalid')).toBe('true')
+    expect(view.getAllByText(/Column not found in file/).length).toBeGreaterThan(0)
+    expect((view.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(view.getByTestId('map-unit-width'), { target: { value: 'cm' } })
+    expect((view.getByTestId('update-import-template') as HTMLButtonElement).disabled).toBe(true)
+    expect((view.getByTestId('save-as-import-template') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('exposes Chinese and English template selection and mapping actions', () => {
+    const zh = render(
+      <CargoImportDialog
+        {...dialogProps({ locale: 'zh', labels: workbenchCopy.zh as never, importTemplates: [] })}
+      />,
+    )
+    expect(zh.getByTestId('template-selection-panel').textContent).toContain('选择导入模板')
+    expect(zh.getByTestId('use-without-template').textContent).toBe('不使用模板')
+    fireEvent.click(zh.getByTestId('use-without-template'))
+    expect(zh.getByTestId('mapping-required-length')).toBeTruthy()
+    expect(zh.getByText('* 表示完成当前配置所必需的项目')).toBeTruthy()
+    expect(zh.getByTestId('save-import-template').textContent).toBe('保存模板')
+    expect(zh.getByTestId('confirm-mapping').textContent).toBe('确认导入')
+    zh.unmount()
+
+    const en = render(
+      <CargoImportDialog
+        {...dialogProps({ locale: 'en', labels: workbenchCopy.en as never, importTemplates: [] })}
+      />,
+    )
+    expect(en.getByTestId('template-selection-panel').textContent).toContain('Choose an import template')
+    expect(en.getByTestId('use-without-template').textContent).toBe('Continue without a template')
+    fireEvent.click(en.getByTestId('use-without-template'))
+    expect(en.getByTestId('mapping-required-length')).toBeTruthy()
+    expect(en.getByTestId('save-import-template').textContent).toBe('Save template')
+    expect(en.getByTestId('confirm-mapping').textContent).toBe('Confirm import')
+    en.unmount()
   })
 })
 

@@ -1,5 +1,15 @@
 # Decision Log
 
+## 2026-08-20 Task 7 既有 sample-headers datalist 断言仍失败
+
+- 背景：Task 7 聚焦命令包含 `src/components/TemplateManagerPage.test.tsx`。该文件 23 passed / 1 failed：`keeps the newest sample headers when files finish out of order and clears a failed sample` 在 `datalist#tm-new-map-options-name option[value="Second name"]` 仍为 null。
+- 核查：与 Task 1 / Task 6 记录的同一既有失败。当前 `ImportMappingForm` 在已有文件列时渲染 `<select>` 而非 `datalist#*-map-options-*`。Task 7 只为必填 `*` 增加了 `mapping-required-*` testid，未改样本解析或映射输入形态。
+- 选项：A. 削弱或改写该断言以凑绿；B. 把映射输入改回 datalist；C. 继续记录为既有失败，不改断言。
+- 决策：C。按任务约束不削弱该断言。
+- 影响：聚焦 Vitest 164 passed / 1 failed（9 files）；Playwright `e2e/import-templates.spec.ts` 15 passed / 0 failed / 0 skipped。
+- 后续：不要用改测试来掩盖；若后续任务改映射输入形态，再同步该断言。
+
+
 ## 2026-08-20 Task 6 既有 sample-headers datalist 断言仍失败
 
 - 背景：Task 6 聚焦命令 `npx vitest run src/components/TemplateManagerPage.test.tsx`。新有效性合同测试全绿后，该文件 22 passed / 1 failed：`keeps the newest sample headers when files finish out of order and clears a failed sample` 在 `datalist#tm-new-map-options-name option[value="Second name"]` 仍为 null。

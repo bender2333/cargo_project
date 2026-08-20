@@ -143,7 +143,7 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
               <span className="inline-flex items-center gap-1.5">
                 {dimensionKey ? (
                   <>
-                    <span aria-hidden="true" className="text-red-600">*</span>
+                    <span aria-hidden="true" className="text-red-600" data-testid={tid(`mapping-required-${fieldKey}`)}>*</span>
                     <span className="sr-only">{labels.mappingRequiredField}</span>
                   </>
                 ) : null}
@@ -331,7 +331,7 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
             <div>
               <label className="font-semibold text-slate-700">
                 <span className="inline-flex items-center gap-1.5">
-                  <span aria-hidden="true" className="text-red-600">*</span>
+                  <span aria-hidden="true" className="text-red-600" data-testid={tid('mapping-required-combinedColumn')}>*</span>
                   <span className="sr-only">{labels.mappingRequiredField}</span>
                   {labels.templateCombinedColumn}
                   <HelpTooltip text={labels.templateHelpCombinedColumn} testId={tid('help-tooltip-combined-column')} />
@@ -368,7 +368,7 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
               )}
               <label className="font-semibold text-slate-700">
                 <span className="inline-flex items-center gap-1.5">
-                  <span aria-hidden="true" className="text-red-600">*</span>
+                  <span aria-hidden="true" className="text-red-600" data-testid={tid('mapping-required-dimensionOrder')}>*</span>
                   <span className="sr-only">{labels.mappingRequiredField}</span>
                   {labels.templateDimensionOrder}
                 </span>

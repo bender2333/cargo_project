@@ -938,4 +938,18 @@ describe('TemplateManagerPage', () => {
     expect(view.queryByTestId('cargo-import-dialog')).toBeNull()
   })
 
+  it('does not open cargo import while creating or loading a sample', async () => {
+    const view = render(<TemplateManagerPage {...props()} />)
+    fireEvent.click(view.getByTestId('template-manager-new'))
+    expect(view.queryByTestId('mapping-modal')).toBeNull()
+    expect(view.queryByTestId('confirm-mapping')).toBeNull()
+    expect(view.queryByTestId('template-selection-panel')).toBeNull()
+    fireEvent.change(view.getByTestId('template-manager-sample-input'), {
+      target: { files: [fileWithArrayBuffer('sample.xlsx', async () => workbookBuffer(['Goods', 'L', 'W', 'H']))] },
+    })
+    await waitFor(() => expect(view.getByTestId('template-manager-sample-status')).toBeTruthy())
+    expect(view.queryByTestId('mapping-modal')).toBeNull()
+    expect(view.queryByTestId('confirm-mapping')).toBeNull()
+  })
+
 })

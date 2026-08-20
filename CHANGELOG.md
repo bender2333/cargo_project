@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-08-20 Task 7: rebuild import template acceptance A–O
+
+- Rebuilt scenario A–O automation. New `e2e/import-templates.spec.ts` drives visible two-phase controls (`template-selection-panel` → `use-without-template` / template item → `mapping-preview`). Write cases use unique names and delete templates through the manager. No phase skip, auto-map helper, or direct state injection.
+- `e2e/container-calc.spec.ts` Excel flows now go through template selection and manual mapping. Removed auto-map assertions (`import-template-select` default mapping, Vietnam weight rebound after header-row change). Business result assertions (export, 31 pallets, 24 cargos, 0802 877 boxes) kept.
+- `ImportMappingForm` required `*` nodes now expose `mapping-required-length|width|height|combinedColumn|dimensionOrder` for the specified e2e contract.
+- Component/lib additions: dialog E/I/J/N contracts; TemplateManagerPage independence (no mapping modal); Russian fixture explicit `parseCargoRowsWithTemplate` mapping (31 pallets, 1250×830×2500 mm).
+- A–O coverage:
+  - A Component + E2E: dialog first paint + `import-templates` A/B
+  - B Component + E2E: blank mapping, required `*`, no auto-map
+  - C Component + E2E: mapping and preview stay editable; back to selection
+  - D Lib + E2E: unmapped/blank weight → internal 1 kg, no default-weight UI/warning
+  - E Lib + E2E: non-empty invalid weight blocks confirm
+  - F Component + API + E2E: save without template does not import
+  - G Component + API + E2E: update keeps original id; cargo unchanged
+  - H Component + API + E2E: save-as creates a new template; original remains
+  - I Lib + Server + Component + E2E: incomplete/duplicate mapping cannot save
+  - J Lib + Component + E2E: missing columns stay selected, confirm/writes blocked
+  - K Component + E2E: cancel leaves cargo and packing result
+  - L Reducer existing (`cargoImported` replace) + E2E confirm replace
+  - M Component + E2E: template manager CRUD/sample does not open import
+  - N Component + E2E: zh/en selection, mapping, save, update, save-as
+  - O Lib + E2E: Russian 31 pallets packed 31/31 at 13400×2450×2650 mm; Vietnam 24 cargos via combined dimensions
+- Focused Vitest: 9 files, **164 passed / 1 failed / 0 skipped** in 5.83s. The remaining failure is the pre-existing TemplateManagerPage `datalist#tm-new-map-options-name` assertion; recorded in `decision.md`, not weakened.
+- Playwright `npx playwright test e2e/import-templates.spec.ts`: **15 passed / 0 failed / 0 skipped** in 1.3m.
+
+
 ## 2026-08-20 Task 6: block invalid template drafts
 
 - Template manager create/edit drafts now call `validateImportMappingValue(draftToMappingValue(draft), sampleRows.length > 0 ? availableColumns : null)`. No sample file → `null` (required + duplicate only). After sample load → real column array and missing-column checks. Weight mapping stays optional.

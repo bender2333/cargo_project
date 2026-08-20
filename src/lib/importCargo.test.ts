@@ -653,6 +653,34 @@ describe('parseCargoRowsWithMapping', () => {
     expect(result.items).toHaveLength(31)
   })
 
+  it('parses the Russian pallet fixture with an explicit template mapping', () => {
+    const workbookPath = path.join(process.cwd(), 'test-data', 'excel', '俄罗斯整托装柜尺寸.xlsx')
+    const workbook = XLSX.readFile(workbookPath)
+    const sheet = workbook.Sheets[workbook.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true }) as ImportCargoRow[]
+    const result = parseCargoRowsWithTemplate(rows, {
+      mapping: {
+        label: '托盘',
+        length: '长cm',
+        width: '宽cm',
+        height: '高cm',
+        weight: '整托重量kg',
+      },
+      units: { length: 'cm', width: 'cm', height: 'cm' },
+      headerRow: 1,
+      startRow: 2,
+    }, { createId: () => 'russian-explicit' })
+
+    expect(result.errors).toEqual([])
+    expect(result.items).toHaveLength(31)
+    expect(result.items[0]).toMatchObject({
+      label: '1',
+      length: 1250,
+      width: 830,
+      height: 2500,
+    })
+  })
+
   it('uses an internal 1kg weight for a blank mapped cell even if a historical default is present', () => {
     const result = parseCargoRowsWithTemplate(
       [{ L: 400, W: 500, H: 600, Weight: '' }],
