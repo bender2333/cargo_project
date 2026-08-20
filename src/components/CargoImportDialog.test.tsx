@@ -912,9 +912,13 @@ describe('CargoImportDialog scenario contracts E/I/J/N', () => {
     const view = renderDialog({ importTemplates: [] })
     chooseWithoutTemplate(view)
     fireEvent.change(view.getByTestId('import-template-name'), { target: { value: 'Incomplete' } })
+    expect(view.getByTestId('mapping-required-length')).toBeTruthy()
+    expect(view.getByTestId('mapping-missing-hint')).toBeTruthy()
     expect((view.getByTestId('save-import-template') as HTMLButtonElement).disabled).toBe(true)
 
     mapFields(view, { length: 'L', width: 'L', height: 'H' })
+    expect(view.getByTestId('map-select-length').getAttribute('data-invalid')).toBe('true')
+    expect(view.getByTestId('map-select-width').getAttribute('data-invalid')).toBe('true')
     expect((view.getByTestId('save-import-template') as HTMLButtonElement).disabled).toBe(true)
   })
 

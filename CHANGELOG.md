@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-20 Task 7 review fix: save-as persistence and visible I errors
+
+- H: after save-as, cancel and reopen the same file. Original id still maps `Goods`; copy maps `Code`. Empty, original, and a third existing catalog name are rejected before a unique copy name succeeds. Cargo stays unchanged.
+- I: `CargoImportDialog` now passes `validateImportMappingValue(...).duplicateColumns` into `ImportMappingForm`. Incomplete mapping shows required `*` and `mapping-missing-hint`; duplicate L/W shows `data-invalid` on both fields; save stays disabled.
+- Covering: `npx vitest run src/components/CargoImportDialog.test.tsx` — 44 passed / 0 failed in 3.37s. `npx playwright test e2e/import-templates.spec.ts -g "H: save-as|I: incomplete"` — 2 passed in 19.1s. Full `e2e/import-templates.spec.ts` — 15 passed / 0 skipped in 1.3m.
+
+
 ## 2026-08-20 Task 7: rebuild import template acceptance A–O
 
 - Rebuilt scenario A–O automation. New `e2e/import-templates.spec.ts` drives visible two-phase controls (`template-selection-panel` → `use-without-template` / template item → `mapping-preview`). Write cases use unique names and delete templates through the manager. No phase skip, auto-map helper, or direct state injection.

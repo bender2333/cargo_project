@@ -394,7 +394,8 @@ export function CargoImportDialog({
   const previewRows = importPreviewRows(importRows, mappingValue.headerRow, mappingValue.startRow).slice(0, 5)
   const onMappingPreview = phase === 'mapping-preview'
   const mappingDirty = !sameImportMappingValue(mappingValue, mappingBaseline)
-  const canWriteTemplate = validateImportMappingValue(mappingValue, availableColumns).valid
+  const mappingValidation = validateImportMappingValue(mappingValue, availableColumns)
+  const canWriteTemplate = mappingValidation.valid
   const writeBusy = pendingTemplateWrite !== null
   const hasSelectedTemplate = selectedImportTemplateId !== ''
   const displayedSelectedName = importTemplates.find(template => template.id === selectedImportTemplateId)?.name
@@ -536,6 +537,7 @@ export function CargoImportDialog({
               availableColumns={availableColumns}
               labels={labels as never}
               missingColumns={missingImportColumns}
+              duplicateColumns={mappingValidation.duplicateColumns}
               previewSlot={(
                 <div className="space-y-3">
                   <div className="rounded-md border border-slate-200 bg-white p-3 text-xs" data-testid="mapping-parse-summary">
