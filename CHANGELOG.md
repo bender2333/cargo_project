@@ -8,6 +8,14 @@
 - Defined explicit existing-template “update” and “save as” actions, valid-template checks, Chinese-first bilingual behavior, and independent template-save/import commits.
 - Rebuilt acceptance as scenarios A–O. This documentation revision does not execute the implementation plan or modify runtime code.
 
+## 2026-08-20 import-template implementation plan revision
+
+- Rewrote `docs/superpowers/specs/2026-08-20-template-refactor-plan.md` against the confirmed behavior baseline and review decisions.
+- Replaced the automatic three-phase transition with explicit template selection plus a continuously editable mapping/preview phase.
+- Added clean weight-contract cutover, shared client/server template validation, explicit update/save-as API routing, required markers, bilingual copy, and template-manager validation tasks.
+- Replaced legacy acceptance instructions with scenario A–O traceability across lib, component, API, server, and E2E tests, followed by full local gates, deployment, and remote E2E.
+- No implementation-plan task, runtime test, deployment, or runtime-code change was executed during this documentation revision.
+
 
 
 ## 2026-08-19 import and template product behavior
