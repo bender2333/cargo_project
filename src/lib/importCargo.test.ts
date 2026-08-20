@@ -13,7 +13,7 @@ import {
   parseCargoRowsWithTemplate,
 } from './importCargo'
 import type { ImportCargoRow, ImportTemplateConfig } from './importCargo'
-import { preselectMapping } from './importWorkflow'
+
 
 
 const dimensionsOnlyRows: ImportCargoRow[] = [
@@ -384,13 +384,18 @@ describe('parseCargoRowsWithMapping', () => {
     })
   })
 
-  it('rematches Vietnam weight after the title row is skipped', () => {
+  it('parses Vietnam weight after the title row is skipped with an explicit mapping', () => {
     const workbookPath = path.join(process.cwd(), 'test-data', 'excel', '越南第十一批6.2海运.xlsx')
     const workbook = XLSX.readFile(workbookPath)
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
     const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true }) as ImportCargoRow[]
-    const header = (rows[1] as unknown[]).map((cell) => String(cell ?? '').trim()).filter(Boolean)
-    const mapping = preselectMapping(header)
+    const mapping = {
+      label: '物料代码SKU',
+      name: '物料名称',
+      quantity: '箱数',
+      dimensions: '外箱尺寸（mm）',
+      weight: '产品毛重(KG)/箱',
+    }
 
     const untitled = parseCargoRowsWithTemplate(rows, buildTemplateImportConfig({
       mapping: {},
@@ -415,6 +420,7 @@ describe('parseCargoRowsWithMapping', () => {
     expect(result.summary.importedRows).toBe(24)
     expect(result.items[0]).toMatchObject({ weight: 8.27, length: 530, width: 305, height: 310 })
   })
+
 
 
   it('applies default quantity when no quantity column is mapped', () => {

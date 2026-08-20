@@ -8,11 +8,8 @@ import type { ImportCargoRow } from '../lib/importCargo'
 import { parseCargoRowsWithTemplate } from '../lib/importCargo'
 import { saveLastImportConfig } from '../lib/lastImportConfig'
 import {
-  preSelectCol,
-  preselectMapping,
   importMappingValueFromTemplate,
   missingMappedColumns,
-  IMPORT_REQUIRED_FIELDS,
   buildImportMessages,
 } from '../lib/importWorkflow'
 import type { BuildImportMessagesLabels } from '../lib/importWorkflow'
@@ -88,14 +85,7 @@ export function CargoImportDialog({
   onCreateTemplate,
   onUpdateTemplate,
 }: Props) {
-  const [customMapping, setCustomMapping] = useState<Record<string, string>>(() => {
-    const rowKeys = importColumnsForHeaderRow(importRows, 1)
-    const initialMap: Record<string, string> = { ...EMPTY_MAPPING }
-    IMPORT_REQUIRED_FIELDS.forEach(field => {
-      initialMap[field] = preSelectCol(field, rowKeys)
-    })
-    return initialMap
-  })
+  const [customMapping, setCustomMapping] = useState<Record<string, string>>({ ...EMPTY_MAPPING })
   const [customUnits, setCustomUnits] = useState<Record<'length' | 'width' | 'height', DimensionUnit>>(EMPTY_UNITS)
   const [templateDimensionMode, setTemplateDimensionMode] = useState<'separate' | 'combined'>('separate')
   const [templateCombinedColumn, setTemplateCombinedColumn] = useState('')
@@ -206,11 +196,7 @@ export function CargoImportDialog({
       customMapping.quantity, templateCombinedColumn, templateDefaults.quantity, labels])
 
   const handleImportMappingChange = (next: ImportMappingValue) => {
-    const headerChanged = next.headerRow !== templateHeaderRow
-    const mapping = headerChanged
-      ? preselectMapping(importColumnsForHeaderRow(importRows, next.headerRow), next.mapping)
-      : next.mapping
-    setCustomMapping(mapping)
+    setCustomMapping(next.mapping)
     setCustomUnits(next.units)
     setTemplateHeaderRow(next.headerRow)
     setTemplateStartRow(next.startRow)
@@ -219,7 +205,7 @@ export function CargoImportDialog({
     setTemplateDimensionOrder(next.dimensionOrder)
     setTemplateDefaults({ ...BASE_IMPORT_DEFAULTS, ...next.defaults })
     setMissingImportColumns(selectedImportTemplateId
-      ? missingMappedColumns({ ...next, mapping }, importColumnsForHeaderRow(importRows, next.headerRow))
+      ? missingMappedColumns(next, importColumnsForHeaderRow(importRows, next.headerRow))
       : [])
   }
 

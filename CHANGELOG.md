@@ -1,5 +1,15 @@
 # Changelog
 
+
+## 2026-08-20 Task 2: validate import template configurations
+
+- Added client `emptyImportMappingValue`, `validateImportMappingValue`, and `sameImportMappingValue` in `src/lib/importWorkflow.ts`. Blank separate mappings miss length/width/height; combined mode requires combinedColumn plus a unique three-field dimensionOrder; inactive dimension fields are ignored for duplicates; `availableColumns === null` skips missing-column checks, while `[]` reports mapped headers as missing. Weight stays optional.
+- Added server `parseImportTemplatePayload` in `server/importTemplatePayload.mjs`. POST/PUT `/api/import-templates` reject empty names, incomplete dimensions, and duplicate active mappings with HTTP 400 `code: 'invalid-template'`; SQLite UNIQUE conflicts return HTTP 409 `code: 'duplicate-name'`. Unmapped weight is accepted. Removed the old in-file `parseTemplatePayload`.
+- Client `ImportTemplateRequestError` maps HTTP 409 → `duplicate-name`, 400 → `invalid-template`, other write failures → `request-failed`. Deleted `canAutoMap`, `preSelectCol`, `preselectMapping`, and `IMPORT_REQUIRED_FIELDS` with no aliases. CargoImportDialog now starts from empty mapping. Vietnam Excel test uses an explicit mapping. Vitest `include` now covers `server/**/*.test.mjs`.
+- TDD RED: `npx vitest run src/lib/importWorkflow.test.ts server/importTemplatePayload.test.mjs src/api/importTemplates.test.ts` — 3 failed files / 11 failed tests + 1 failed suite in 1.88s. New helpers were undefined; `server/importTemplatePayload.mjs` did not exist.
+- TDD GREEN: same command — 3 files / 30 tests passed in 2.54s after deleting auto-map tests. Intermediate `src/lib/importCargo.test.ts` included run: 4 files / 61 passed in 2.54s.
+- `npm run build` exit 0 (`tsc -b && vite build`, vite 1.13s). Parameter properties on `ImportTemplateRequestError` were rewritten as class fields for `erasableSyntaxOnly`.
+
 ## 2026-08-20 Task 1: make cargo weight mapping optional
 
 - Removed `ImportTemplateDefaults.weight` and the default-weight UI/payload path. Unmapped or blank weight now parses as internal `1 kg` with no warning; non-empty invalid, zero, or negative weight still blocks the batch. Optional `mapping.weight` is unchanged.

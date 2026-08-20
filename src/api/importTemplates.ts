@@ -52,6 +52,24 @@ export type ImportTemplatePayload = {
   defaultValues?: ImportTemplateDefaults
 }
 
+export class ImportTemplateRequestError extends Error {
+  readonly status: number
+  readonly code: 'duplicate-name' | 'invalid-template' | 'request-failed'
+
+  constructor(
+    message: string,
+    status: number,
+    code: 'duplicate-name' | 'invalid-template' | 'request-failed',
+  ) {
+    super(message)
+    this.name = 'ImportTemplateRequestError'
+    this.status = status
+    this.code = code
+  }
+}
+
+
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -161,9 +179,33 @@ async function writeImportTemplate(
     method,
     body: JSON.stringify(payloadForRequest(payload)),
   })
-  if (!response.ok) throw new Error('保存模板失败')
+  if (!response.ok) throw await importTemplateWriteError(response)
   return templateFromDto(await response.json() as ImportTemplateDto)
 }
+
+async function importTemplateWriteError(response: Response): Promise<ImportTemplateRequestError> {
+  const code = response.status === 409
+    ? 'duplicate-name'
+    : response.status === 400
+      ? 'invalid-template'
+      : 'request-failed'
+  let message = code === 'request-failed'
+    ? '保存模板失败'
+    : code === 'duplicate-name'
+      ? 'Template name already exists'
+      : 'Invalid template'
+  try {
+    const data: unknown = await response.json()
+    if (isRecord(data)) {
+      if (typeof data.message === 'string' && data.message.trim()) message = data.message
+      else if (typeof data.error === 'string' && data.error.trim()) message = data.error
+    }
+  } catch {
+    // Keep the status-based fallback when the body is empty or not JSON.
+  }
+  return new ImportTemplateRequestError(message, response.status, code)
+}
+
 
 export async function readImportTemplates(): Promise<ImportTemplate[]> {
   const response = await fetchWithAuth('/api/import-templates')
