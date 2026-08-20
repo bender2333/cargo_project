@@ -165,7 +165,8 @@ function payloadForRequest(payload: ImportTemplatePayload): ImportTemplatePayloa
   if (payload.mergeRows !== undefined) request.mergeRows = payload.mergeRows
   if (payload.dimensionMode !== undefined) request.dimensionMode = payload.dimensionMode
   if (payload.combinedColumn !== undefined) request.combinedColumn = payload.combinedColumn
-  if (payload.dimensionOrder !== undefined) request.dimensionOrder = normalizeDimensionOrder(payload.dimensionOrder)
+  if (payload.dimensionOrder !== undefined) request.dimensionOrder = payload.dimensionOrder
+
   if (payload.defaultValues !== undefined) request.defaultValues = normalizeDefaults(payload.defaultValues)
   return request
 }

@@ -71,4 +71,25 @@ describe('parseImportTemplatePayload', () => {
       expect(result.value.mapping).not.toHaveProperty('weight')
     }
   })
+
+  it.each([
+    ['omitted', undefined],
+    ['empty', []],
+    ['duplicated', ['length', 'length', 'width']],
+  ])('rejects combined mode with %s dimensionOrder', (_label, dimensionOrder) => {
+    const body = {
+      name: 'Combined layout',
+      mapping: { quantity: 'Qty' },
+      units: { length: 'mm', width: 'mm', height: 'mm' },
+      dimensionMode: 'combined',
+      combinedColumn: 'Size',
+    }
+    if (dimensionOrder !== undefined) body.dimensionOrder = dimensionOrder
+    expect(parseImportTemplatePayload(body)).toEqual({
+      ok: false,
+      code: 'invalid-template',
+      message: 'Incomplete dimension mapping',
+    })
+  })
+
 })

@@ -212,4 +212,19 @@ describe('import template API', () => {
     })
   })
 
+  it('does not rewrite an invalid dimensionOrder to LWH before save', async () => {
+    mockedFetch.mockResolvedValue(new Response(JSON.stringify(dto), { status: 201 }))
+
+    await saveImportTemplate({
+      ...payload,
+      dimensionOrder: ['width', 'width', 'height'],
+    } as ImportTemplatePayload)
+
+    expect(JSON.parse(String(mockedFetch.mock.calls[0]?.[1]?.body))).toEqual({
+      ...payload,
+      dimensionOrder: ['width', 'width', 'height'],
+    })
+  })
+
+
 })

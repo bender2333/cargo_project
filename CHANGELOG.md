@@ -1,6 +1,13 @@
 # Changelog
 
 
+## 2026-08-20 Task 2 review: combined order write gate and auto-map tests
+
+- Combined templates with omitted, empty, or invalid `dimensionOrder` now fail `parseImportTemplatePayload` as `invalid-template`. Client `payloadForRequest` no longer rewrites invalid order to LWH before POST/PUT.
+- CargoImportDialog tests no longer expect header-row auto-mapping. Vietnam weight stays blank; pending-import cases map columns explicitly.
+- Covering GREEN: `npx vitest run server/importTemplatePayload.test.mjs src/api/importTemplates.test.ts src/components/CargoImportDialog.test.tsx` — 3 files / 30 tests passed in 2.86s.
+
+
 ## 2026-08-20 Task 2: validate import template configurations
 
 - Added client `emptyImportMappingValue`, `validateImportMappingValue`, and `sameImportMappingValue` in `src/lib/importWorkflow.ts`. Blank separate mappings miss length/width/height; combined mode requires combinedColumn plus a unique three-field dimensionOrder; inactive dimension fields are ignored for duplicates; `availableColumns === null` skips missing-column checks, while `[]` reports mapped headers as missing. Weight stays optional.

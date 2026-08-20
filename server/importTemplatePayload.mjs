@@ -96,7 +96,7 @@ export function parseImportTemplatePayload(body) {
     if (!(combinedColumn || String(cleanMapping.dimensions ?? '').trim())) {
       return invalid('Incomplete dimension mapping')
     }
-    if (requestedOrder.length > 0 && !isUniqueDimensionOrder(requestedOrder)) {
+    if (!isUniqueDimensionOrder(requestedOrder)) {
       return invalid('Incomplete dimension mapping')
     }
   } else if (!String(cleanMapping.length ?? '').trim()
@@ -104,6 +104,7 @@ export function parseImportTemplatePayload(body) {
     || !String(cleanMapping.height ?? '').trim()) {
     return invalid('Incomplete dimension mapping')
   }
+
 
   if (hasDuplicateColumns(cleanMapping, dimensionMode, combinedColumn)) {
     return invalid('Duplicate column mapping')

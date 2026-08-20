@@ -64,6 +64,14 @@ function selectTemplate(id: string) {
   fireEvent.change(select, { target: { value: id } })
 }
 
+function mapFields(view: { getByTestId: (id: string) => HTMLElement }, mapping: Record<string, string>) {
+  for (const [field, column] of Object.entries(mapping)) {
+    fireEvent.change(view.getByTestId(`map-select-${field}`), { target: { value: column } })
+  }
+}
+
+
+
 function templateNameInput() {
   return document.querySelector('[data-testid="import-template-name"]') as HTMLInputElement
 }
@@ -256,9 +264,13 @@ describe('CargoImportDialog pending import transaction', () => {
   const templateRows: ImportCargoRow[] = [
     { Label: 'A', Name: 'Template weight', L: 1000, W: 800, H: 600, Qty: 4 },
   ]
-  it('keeps a valid auto-mapped workbook pending until explicit confirmation', () => {
+  it('keeps a mapped workbook pending until explicit confirmation', () => {
     const onConfirm = vi.fn()
     const view = renderDialog({ importRows: autoMappedRows, onConfirm })
+    mapFields(view, {
+      label: 'Label', name: 'Name', length: 'Length', width: 'Width',
+      height: 'Height', weight: 'Weight', quantity: 'Quantity',
+    })
 
     expect(view.getByTestId('mapping-modal')).toBeTruthy()
     expect(onConfirm).not.toHaveBeenCalled()
@@ -270,6 +282,7 @@ describe('CargoImportDialog pending import transaction', () => {
     ], expect.any(Array))
   })
 
+
   it('maps worker matrix rows through the same confirmation path', () => {
     const onConfirm = vi.fn()
     const matrixRows: ImportCargoRow[] = [
@@ -277,6 +290,10 @@ describe('CargoImportDialog pending import transaction', () => {
       ['A', 'Matrix crate', 1000, 800, 600, 25, 2],
     ]
     const view = renderDialog({ importRows: matrixRows, onConfirm })
+    mapFields(view, {
+      label: 'Label', name: 'Name', length: 'Length', width: 'Width',
+      height: 'Height', weight: 'Weight', quantity: 'Quantity',
+    })
 
     fireEvent.click(view.getByTestId('confirm-mapping'))
 
@@ -284,6 +301,7 @@ describe('CargoImportDialog pending import transaction', () => {
       expect.objectContaining({ name: 'Matrix crate', weight: 25, quantity: 2 }),
     ], expect.any(Array))
   })
+
 
   it('cancels a pending import without confirming cargo', () => {
     const onConfirm = vi.fn()
@@ -299,6 +317,10 @@ describe('CargoImportDialog pending import transaction', () => {
   it('allows untemplated rows with missing or blank weight as internal 1kg', () => {
     const onConfirm = vi.fn()
     const missingWeight = renderDialog({ importRows: missingWeightRows, onConfirm })
+    mapFields(missingWeight, {
+      label: 'Label', name: 'Name', length: 'Length', width: 'Width',
+      height: 'Height', quantity: 'Quantity',
+    })
     expect((missingWeight.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(false)
     expect(missingWeight.queryByTestId('weight-default-source')).toBeNull()
     fireEvent.click(missingWeight.getByTestId('confirm-mapping'))
@@ -312,6 +334,10 @@ describe('CargoImportDialog pending import transaction', () => {
       { Label: 'A', Name: 'Blank weight', Length: 1000, Width: 800, Height: 600, Weight: '', Quantity: 1 },
     ]
     const blankWeight = renderDialog({ importRows: blankWeightRows, onConfirm })
+    mapFields(blankWeight, {
+      label: 'Label', name: 'Name', length: 'Length', width: 'Width',
+      height: 'Height', weight: 'Weight', quantity: 'Quantity',
+    })
     expect((blankWeight.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(false)
     fireEvent.click(blankWeight.getByTestId('confirm-mapping'))
     expect(onConfirm).toHaveBeenCalledWith([
@@ -319,7 +345,8 @@ describe('CargoImportDialog pending import transaction', () => {
     ], expect.any(Array))
   })
 
-  it('rebinds Vietnam carton weight after the header row is moved past the title', () => {
+
+  it('does not auto-map weight after the header row is moved past the title', () => {
     const vietnamRows: ImportCargoRow[] = [
       ['越南第十一批6.2海运', null, null, null, null, null, null, null, null],
       ['物料代码SKU', '物料名称', '预计发货数量', '箱数', '产品净重（KG)/个', '产品毛重(KG)/箱', '产品总毛重(KG)', '外箱尺寸（mm）', '箱规'],
@@ -335,10 +362,9 @@ describe('CargoImportDialog pending import transaction', () => {
     fireEvent.change(view.getByTestId('template-dimension-mode'), { target: { value: 'combined' } })
     fireEvent.change(view.getByTestId('template-combined-column'), { target: { value: '外箱尺寸（mm）' } })
 
-    expect((view.getByTestId('map-select-weight') as HTMLInputElement).value).toBe('产品毛重(KG)/箱')
-    expect(view.getByTestId('mapping-parse-summary').textContent).toMatch(/2 ok \/ 0 err/)
-    expect((view.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(false)
+    expect((view.getByTestId('map-select-weight') as HTMLInputElement).value).toBe('')
   })
+
 
 
   it('uses an internal 1kg weight for a selected template that omits a weight mapping', () => {
