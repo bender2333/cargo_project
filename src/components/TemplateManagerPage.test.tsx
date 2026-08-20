@@ -65,7 +65,6 @@ const labels: TemplateManagerLabels = {
   templateHelpStartRow: 'Start row help',
   templateDefaultLabel: 'Default label',
   templateDefaultQuantity: 'Default quantity',
-  templateDefaultWeight: 'Default weight',
   templateDefaultColor: 'Default color',
   templateDefaultRotate: 'Default rotate',
   templateDefaultStackable: 'Default stackable',
@@ -125,7 +124,7 @@ const importA: ImportTemplate = {
   dimensionMode: 'combined',
   combinedColumn: '',
   dimensionOrder: ['length', 'width', 'height'],
-  defaultValues: { quantity: 1, weight: 1, canRotate: true, stackable: true },
+  defaultValues: { quantity: 1, canRotate: true, stackable: true },
   createdAt: '2026-07-23T00:00:00.000Z',
   updatedAt: '2026-07-23T01:00:00.000Z',
 }
@@ -338,7 +337,7 @@ describe('TemplateManagerPage', () => {
     expect((view.getByTestId('tm-new-template-header-row') as HTMLInputElement).value).toBe('1')
     expect((view.getByTestId('tm-new-template-start-row') as HTMLInputElement).value).toBe('2')
     expect((view.getByTestId('tm-new-template-default-quantity') as HTMLInputElement).value).toBe('1')
-    expect((view.getByTestId('tm-new-template-default-weight') as HTMLInputElement).value).toBe('')
+    expect(view.queryByTestId('tm-new-template-default-weight')).toBeNull()
     expect((view.getByTestId('tm-new-template-default-rotate') as HTMLInputElement).checked).toBe(true)
     expect((view.getByTestId('tm-new-template-default-stackable') as HTMLInputElement).checked).toBe(true)
     expect((view.getByTestId('tm-new-template-dimension-mode') as HTMLSelectElement).value).toBe('separate')
@@ -368,7 +367,6 @@ describe('TemplateManagerPage', () => {
     fireEvent.change(view.getByTestId('tm-new-template-start-row'), { target: { value: '4' } })
     fireEvent.change(view.getByTestId('tm-new-template-default-label'), { target: { value: 'BX' } })
     fireEvent.change(view.getByTestId('tm-new-template-default-quantity'), { target: { value: '4' } })
-    fireEvent.change(view.getByTestId('tm-new-template-default-weight'), { target: { value: '7' } })
     fireEvent.change(view.getByTestId('tm-new-template-default-color'), { target: { value: '#ef4444' } })
     fireEvent.click(view.getByTestId('tm-new-template-default-rotate'))
     fireEvent.change(view.getByTestId('tm-new-template-default-max-stack-layers'), { target: { value: '3' } })
@@ -394,7 +392,6 @@ describe('TemplateManagerPage', () => {
       dimensionOrder: ['width', 'length', 'height'],
       defaultValues: {
         quantity: 4,
-        weight: 7,
         canRotate: false,
         stackable: true,
         label: 'BX',

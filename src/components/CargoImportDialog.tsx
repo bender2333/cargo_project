@@ -286,11 +286,6 @@ export function CargoImportDialog({
       alert(locale === 'zh' ? '保存模板失败' : 'Failed to save template')
     }
   }
-
-  const effectiveTemplateDefaults = useMemo<ImportTemplateDefaults>(() => (
-    selectedImportTemplateId ? templateDefaults : { ...templateDefaults, weight: undefined }
-  ), [selectedImportTemplateId, templateDefaults])
-
   const pendingImport = useMemo(() => parseCargoRowsWithTemplate(importRows, {
     mapping: customMapping,
     units: customUnits,
@@ -300,14 +295,14 @@ export function CargoImportDialog({
     dimensionMode: templateDimensionMode,
     combinedColumn: templateCombinedColumn,
     dimensionOrder: templateDimensionOrder,
-    defaultValues: effectiveTemplateDefaults,
+    defaultValues: templateDefaults,
   }, { colors: colors as string[] }), [
     colors,
     customMapping,
     customUnits,
     importRows,
     templateCombinedColumn,
-    effectiveTemplateDefaults,
+    templateDefaults,
     templateDimensionMode,
     templateDimensionOrder,
     templateHeaderRow,
@@ -417,11 +412,6 @@ export function CargoImportDialog({
                 <div className="font-semibold text-slate-700">
                   {locale === 'zh' ? '解析预览' : 'Parse preview'}: {pendingImport.summary.importedRows} ok / {pendingImport.errors.length} err / {pendingImport.warnings.length} warn
                 </div>
-                {selectedImportTemplateId && effectiveTemplateDefaults.weight !== undefined && !customMapping.weight && (
-                  <p className="mt-1 text-indigo-700" data-testid="weight-default-source">
-                    {locale === 'zh' ? '重量来源：所选模板默认值' : 'Weight source: selected template default'}: {effectiveTemplateDefaults.weight} kg
-                  </p>
-                )}
                 {pendingImport.errors.slice(0, 3).map((issue) => (
                   <p className="mt-1 text-red-700" key={`err-${issue.row}-${issue.code}`}>R{issue.row}: {issue.message}</p>
                 ))}

@@ -229,7 +229,7 @@ describe('importMappingValueFromTemplate', () => {
     expect(value.headerRow).toBe(2)
     expect(value.defaults.stackable).toBe(false)
     expect(value.defaults).toEqual({ quantity: 1, canRotate: true, stackable: false })
-    expect(value.defaults.weight).toBeUndefined()
+    expect(value.defaults).not.toHaveProperty('weight')
   })
 })
 

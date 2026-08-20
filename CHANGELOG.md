@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-20 Task 1: make cargo weight mapping optional
+
+- Removed `ImportTemplateDefaults.weight` and the default-weight UI/payload path. Unmapped or blank weight now parses as internal `1 kg` with no warning; non-empty invalid, zero, or negative weight still blocks the batch. Optional `mapping.weight` is unchanged.
+- Parser, mapping form, import dialog, template manager fixtures, client `normalizeDefaults`, server `parseTemplatePayload`, and `lastImportConfig` ignore historical `defaultValues.weight` and do not write it back.
+- TDD RED: `npx vitest run src/lib/importCargo.test.ts src/lib/importWorkflow.test.ts src/components/ImportMappingForm.test.tsx src/components/CargoImportDialog.test.tsx src/components/TemplateManagerPage.test.tsx src/api/importTemplates.test.ts` — 5 failed files / 20 failed tests in 29.08s. Missing/blank weight returned `invalid-weight`; default-weight input and payload still present.
+- TDD GREEN: same command — 5 files passed; `TemplateManagerPage.test.tsx` 15 passed / 1 failed (`keeps the newest sample headers…` looking for `datalist#tm-new-map-options-name`). Duration 3.86s. Failure reproduces on unmodified `feat/template-refactor` HEAD; recorded in `decision.md`, assertion not weakened.
+- `npm run build` exit 0 (`tsc -b && vite build`, vite 2.43s). No remaining `ImportTemplateDefaults['weight']` consumers.
+
 ## 2026-08-20 import-template behavior baseline revision
 
 - Confirmed `docs/superpowers/specs/2026-08-19-import-template-behavior-design.md` as the product behavior baseline.

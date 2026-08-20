@@ -10,6 +10,16 @@
 - 语言与验收：新增文案同时接入中英文，优先验收中文效果；旧模板导入验收不再作为新交互基准，按已确认行为稿场景 A–O 重建自动化验收。
 
 
+## 2026-08-20 Task 1 聚焦测试中的既有失败
+
+- 背景：Task 1 重量合同清洁切换的聚焦命令包含 `src/components/TemplateManagerPage.test.tsx`。实现后该文件 15 passed / 1 failed：`keeps the newest sample headers when files finish out of order and clears a failed sample` 在 `datalist#tm-new-map-options-name option[value="Second name"]` 断言为 null。
+- 核查：用 `git stash` 暂时移开 Task 1 改动后，同一条测试在 `feat/template-refactor` HEAD 上同样失败（断言行 278）。当前 `ImportMappingForm` 在已有文件列时渲染 `<select>` 而非 `datalist#*-map-options-*`，该断言与现实现不一致。
+- 选项：A. 削弱或改写该断言以凑绿；B. 在 Task 1 中改回 datalist；C. 记录为既有失败，不改断言。
+- 决策：C。失败与重量合同无关，不削弱断言，不把 datalist 修复并入 Task 1。
+- 影响：Task 1 聚焦套件除该既有失败外全绿；`npm run build` 仍须通过。datalist 与样本表头竞态由后续任务处理。
+- 后续：不要用改测试来掩盖；若后续任务改映射输入形态，再同步该断言。
+
+
 ## 2026-07-31 生产 module worker 的 XLSX namespace 兼容
 
 - 背景：部署后的真实 Excel 导入路径在文件选择后只显示“导入解析失败：无法解析为工作簿”。浏览器网络日志显示 `/assets/importWorkbook.worker-*.js` 与 `/assets/xlsx.js` 均返回 200，Worker 控制台实际报 `[import-excel] ImportWorkbookWorkerError: Workbook worker failed: parse`。

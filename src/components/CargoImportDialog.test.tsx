@@ -296,18 +296,27 @@ describe('CargoImportDialog pending import transaction', () => {
     expect(onConfirm).not.toHaveBeenCalled()
   })
 
-  it('blocks untemplated rows with missing or blank weight', () => {
-    const missingWeight = renderDialog({ importRows: missingWeightRows })
-    expect((missingWeight.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(true)
-    expect(missingWeight.getByTestId('mapping-parse-summary').textContent).toContain('Missing or invalid weight.')
+  it('allows untemplated rows with missing or blank weight as internal 1kg', () => {
+    const onConfirm = vi.fn()
+    const missingWeight = renderDialog({ importRows: missingWeightRows, onConfirm })
+    expect((missingWeight.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(false)
+    expect(missingWeight.queryByTestId('weight-default-source')).toBeNull()
+    fireEvent.click(missingWeight.getByTestId('confirm-mapping'))
+    expect(onConfirm).toHaveBeenCalledWith([
+      expect.objectContaining({ name: 'Missing weight', weight: 1 }),
+    ], expect.any(Array))
     missingWeight.unmount()
 
+    onConfirm.mockClear()
     const blankWeightRows: ImportCargoRow[] = [
       { Label: 'A', Name: 'Blank weight', Length: 1000, Width: 800, Height: 600, Weight: '', Quantity: 1 },
     ]
-    const blankWeight = renderDialog({ importRows: blankWeightRows })
-    expect((blankWeight.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(true)
-    expect(blankWeight.getByTestId('mapping-parse-summary').textContent).toContain('Missing or invalid weight.')
+    const blankWeight = renderDialog({ importRows: blankWeightRows, onConfirm })
+    expect((blankWeight.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(blankWeight.getByTestId('confirm-mapping'))
+    expect(onConfirm).toHaveBeenCalledWith([
+      expect.objectContaining({ name: 'Blank weight', weight: 1 }),
+    ], expect.any(Array))
   })
 
   it('rebinds Vietnam carton weight after the header row is moved past the title', () => {
@@ -332,61 +341,53 @@ describe('CargoImportDialog pending import transaction', () => {
   })
 
 
-  it('does not invent a weight default for a selected template that omits one', () => {
-    const template = makeTemplate()
-    const view = renderDialog({ importRows: templateRows, importTemplates: [template] })
-
-    selectTemplate(template.id)
-
-    expect((view.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(true)
-    expect(view.queryByTestId('weight-default-source')).toBeNull()
-    expect(view.getByTestId('mapping-parse-summary').textContent).toContain('Missing or invalid weight.')
-  })
-
-  it('uses an explicitly selected template default only for an unmapped weight', () => {
+  it('uses an internal 1kg weight for a selected template that omits a weight mapping', () => {
     const onConfirm = vi.fn()
-    const template = makeTemplate({ defaultValues: { quantity: 1, weight: 7, canRotate: true, stackable: true } })
+    const template = makeTemplate()
     const view = renderDialog({ importRows: templateRows, importTemplates: [template], onConfirm })
 
     selectTemplate(template.id)
 
-    expect(view.getByTestId('weight-default-source').textContent).toContain('7')
+    expect((view.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(false)
+    expect(view.queryByTestId('weight-default-source')).toBeNull()
     fireEvent.click(view.getByTestId('confirm-mapping'))
     expect(onConfirm).toHaveBeenCalledWith([
-      expect.objectContaining({ weight: 7 }),
+      expect.objectContaining({ weight: 1 }),
     ], expect.any(Array))
   })
 
-  it('persists an explicit default weight when creating a template from the dialog', async () => {
-    const onCreateTemplate = vi.fn().mockResolvedValue(makeTemplate({
-      defaultValues: { quantity: 1, weight: 7, canRotate: true, stackable: true },
-    }))
+  it('does not persist defaultValues.weight when creating a template from the dialog', async () => {
+    const onCreateTemplate = vi.fn().mockResolvedValue(makeTemplate())
     const view = renderDialog({ importRows: templateRows, onCreateTemplate })
 
-    fireEvent.change(view.getByTestId('import-template-name'), { target: { value: 'Template with weight' } })
-    fireEvent.change(view.getByTestId('template-default-weight'), { target: { value: '7' } })
+    fireEvent.change(view.getByTestId('import-template-name'), { target: { value: 'Template without weight default' } })
+    expect(view.queryByTestId('template-default-weight')).toBeNull()
     fireEvent.click(view.getByTestId('save-import-template'))
 
-    await waitFor(() => expect(onCreateTemplate).toHaveBeenCalledWith(expect.objectContaining({
-      defaultValues: expect.objectContaining({ weight: 7 }),
-    })))
+    await waitFor(() => expect(onCreateTemplate).toHaveBeenCalled())
+    const payload = onCreateTemplate.mock.calls[0][0]
+    expect(payload.defaultValues).not.toHaveProperty('weight')
   })
 
-  it('keeps a blank mapped weight invalid even when the selected template has a default', () => {
+  it('uses an internal 1kg weight for a blank mapped cell', () => {
+    const onConfirm = vi.fn()
     const blankWeightRows: ImportCargoRow[] = [
       { Label: 'A', Name: 'Blank weight', L: 1000, W: 800, H: 600, Weight: '', Qty: 1 },
     ]
     const template = makeTemplate({
       mapping: { ...makeTemplate().mapping, weight: 'Weight' },
-      defaultValues: { quantity: 1, weight: 7, canRotate: true, stackable: true },
     })
-    const view = renderDialog({ importRows: blankWeightRows, importTemplates: [template] })
+    const view = renderDialog({ importRows: blankWeightRows, importTemplates: [template], onConfirm })
 
     selectTemplate(template.id)
 
-    expect((view.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(true)
-    expect(view.getByTestId('mapping-parse-summary').textContent).toContain('Missing or invalid weight.')
+    expect((view.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(view.getByTestId('confirm-mapping'))
+    expect(onConfirm).toHaveBeenCalledWith([
+      expect.objectContaining({ weight: 1 }),
+    ], expect.any(Array))
   })
+
 })
 
 describe('CargoImportDialog keyboard focus management', () => {

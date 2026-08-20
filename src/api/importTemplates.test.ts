@@ -62,6 +62,7 @@ const dto = {
   defaultValues: {
     ...template.defaultValues,
     obsoleteDefault: 'discard-me',
+    weight: 12,
   },
 }
 
@@ -137,7 +138,9 @@ describe('import template API', () => {
         maxStackLayers: 3,
         groundOnly: true,
         obsoleteDefault: 'discard-me',
+        weight: 12,
       },
+
     } as ImportTemplatePayload
     mockedFetch
       .mockResolvedValueOnce(new Response(JSON.stringify(dto), { status: 201 }))
