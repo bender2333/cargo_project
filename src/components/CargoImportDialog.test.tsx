@@ -25,14 +25,16 @@ function makeTemplate(overrides: Partial<ImportTemplate> = {}): ImportTemplate {
   }
 }
 
-// Header row + one data row so the dialog has columns to map.
 const importRows: ImportCargoRow[] = [
   { Label: 'Label', Name: 'Name', L: 'L', W: 'W', H: 'H', Qty: 'Qty' },
   { Label: 'A', Name: 'Carton', L: 1000, W: 800, H: 600, Qty: 4 },
 ]
 
-// The dialog reads ~40 label strings; an identity proxy keeps the fixture small
-// while still rendering real text for queries.
+const MAPPING_FIELDS = [
+  'label', 'name', 'length', 'width', 'height', 'weight', 'quantity',
+  'color', 'canRotate', 'stackable', 'maxStackLayers', 'groundOnly',
+] as const
+
 const labels = new Proxy({}, {
   get: (_target, key: string) => key,
 }) as never
@@ -59,9 +61,30 @@ function renderDialog(props: Partial<Parameters<typeof CargoImportDialog>[0]> = 
   return { ...utils, onCreateTemplate, onUpdateTemplate }
 }
 
+function dialogProps(overrides: Partial<Parameters<typeof CargoImportDialog>[0]> = {}) {
+  return {
+    importRows,
+    importTemplates: [makeTemplate()],
+    importTemplateLoadFailed: false,
+    locale: 'en' as const,
+    labels,
+    userId: 'u1',
+    colors: ['#0ea5e9'] as const,
+    onConfirm: vi.fn(),
+    onClose: vi.fn(),
+    onRefreshTemplates: vi.fn(),
+    onCreateTemplate: vi.fn(),
+    onUpdateTemplate: vi.fn(),
+    ...overrides,
+  }
+}
+
 function selectTemplate(id: string) {
-  const select = document.querySelector('[data-testid="import-template-select"]') as HTMLSelectElement
-  fireEvent.change(select, { target: { value: id } })
+  fireEvent.click(document.querySelector(`[data-testid="template-selection-item-${id}"]`)!)
+}
+
+function chooseWithoutTemplate(view: { getByTestId: (id: string) => HTMLElement }) {
+  fireEvent.click(view.getByTestId('use-without-template'))
 }
 
 function mapFields(view: { getByTestId: (id: string) => HTMLElement }, mapping: Record<string, string>) {
@@ -70,11 +93,184 @@ function mapFields(view: { getByTestId: (id: string) => HTMLElement }, mapping: 
   }
 }
 
-
-
 function templateNameInput() {
   return document.querySelector('[data-testid="import-template-name"]') as HTMLInputElement
 }
+
+function mappingSelect(view: { getByTestId: (id: string) => HTMLElement }, field: string) {
+  return view.getByTestId(`map-select-${field}`) as HTMLSelectElement | HTMLInputElement
+}
+
+function expectBlankMapping(view: { getByTestId: (id: string) => HTMLElement }) {
+  for (const field of MAPPING_FIELDS) {
+    expect(mappingSelect(view, field).value).toBe('')
+  }
+}
+
+describe('CargoImportDialog two-phase flow', () => {
+  it('shows only template selection on first render, not the mapping form', () => {
+    const view = renderDialog()
+
+    expect(view.getByTestId('template-selection-panel')).toBeTruthy()
+    expect(view.getByTestId('use-without-template')).toBeTruthy()
+    expect(view.queryByTestId('mapping-fields')).toBeNull()
+    expect(view.queryByTestId('mapping-preview')).toBeNull()
+    expect(view.queryByTestId('confirm-mapping')).toBeNull()
+  })
+
+  it('starts every mapping field blank after choosing no template', () => {
+    const view = renderDialog()
+
+    chooseWithoutTemplate(view)
+
+    expect(view.queryByTestId('template-selection-panel')).toBeNull()
+    expect(view.getByTestId('mapping-fields')).toBeTruthy()
+    expectBlankMapping(view)
+    expect((view.getByTestId('template-dimension-mode') as HTMLSelectElement).value).toBe('separate')
+    expect((view.getByTestId('template-header-row') as HTMLInputElement).value).toBe('1')
+    expect((view.getByTestId('template-start-row') as HTMLInputElement).value).toBe('2')
+  })
+
+  it('applies the full template configuration after selecting an existing template', () => {
+    const template = makeTemplate({
+      mapping: {
+        label: 'Label',
+        name: 'Name',
+        length: 'L',
+        width: 'W',
+        height: 'H',
+        quantity: 'Qty',
+        color: '',
+      },
+      units: { length: 'cm', width: 'mm', height: 'auto' },
+      headerRow: 1,
+      startRow: 2,
+      dimensionMode: 'separate',
+      defaultValues: { quantity: 3, canRotate: false, stackable: true, label: 'SKU' },
+    })
+    const view = renderDialog({ importTemplates: [template] })
+
+    selectTemplate(template.id)
+
+    expect(view.queryByTestId('template-selection-panel')).toBeNull()
+    expect(mappingSelect(view, 'label').value).toBe('Label')
+    expect(mappingSelect(view, 'name').value).toBe('Name')
+    expect(mappingSelect(view, 'length').value).toBe('L')
+    expect(mappingSelect(view, 'width').value).toBe('W')
+    expect(mappingSelect(view, 'height').value).toBe('H')
+    expect(mappingSelect(view, 'quantity').value).toBe('Qty')
+    expect(mappingSelect(view, 'weight').value).toBe('')
+    expect((view.getByTestId('map-unit-length') as HTMLSelectElement).value).toBe('cm')
+    expect((view.getByTestId('map-unit-width') as HTMLSelectElement).value).toBe('mm')
+    expect((view.getByTestId('map-unit-height') as HTMLSelectElement).value).toBe('auto')
+    expect((view.getByTestId('template-header-row') as HTMLInputElement).value).toBe('1')
+    expect((view.getByTestId('template-start-row') as HTMLInputElement).value).toBe('2')
+    expect((view.getByTestId('template-dimension-mode') as HTMLSelectElement).value).toBe('separate')
+    expect((view.getByTestId('template-default-quantity') as HTMLInputElement).value).toBe('3')
+    expect((view.getByTestId('template-default-label') as HTMLInputElement).value).toBe('SKU')
+    expect((view.getByTestId('template-default-rotate') as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('stays on mapping-preview with mapping and preview both visible after a valid mapping', () => {
+    const view = renderDialog({
+      importRows: [{ Label: 'A', Name: 'Carton', L: 1000, W: 800, H: 600, Qty: 4 }],
+    })
+
+    selectTemplate('t1')
+
+    expect(view.getByTestId('mapping-fields')).toBeTruthy()
+    expect(view.getByTestId('mapping-preview')).toBeTruthy()
+    expect(view.queryByTestId('template-selection-panel')).toBeNull()
+    expect((view.getByTestId('confirm-mapping') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('returns to template selection and replaces an unsaved mapping draft on reselect', () => {
+    const view = renderDialog()
+
+    chooseWithoutTemplate(view)
+    mapFields(view, { length: 'L', name: 'Name' })
+    expect(mappingSelect(view, 'length').value).toBe('L')
+    expect(mappingSelect(view, 'name').value).toBe('Name')
+
+    fireEvent.click(view.getByTestId('template-selection-back'))
+    expect(view.getByTestId('template-selection-panel')).toBeTruthy()
+    expect(view.queryByTestId('mapping-fields')).toBeNull()
+
+    selectTemplate('t1')
+    expect(mappingSelect(view, 'label').value).toBe('Label')
+    expect(mappingSelect(view, 'name').value).toBe('Name')
+    expect(mappingSelect(view, 'length').value).toBe('L')
+    expect(mappingSelect(view, 'width').value).toBe('W')
+    expect(mappingSelect(view, 'height').value).toBe('H')
+
+    fireEvent.click(view.getByTestId('template-selection-back'))
+    chooseWithoutTemplate(view)
+    expectBlankMapping(view)
+  })
+
+  it('keeps use-without available when the catalog fails to load so manual import is not blocked', () => {
+    const onRefreshTemplates = vi.fn()
+    const onConfirm = vi.fn()
+    const view = renderDialog({
+      importRows: [{ Label: 'A', Name: 'Carton', L: 1000, W: 800, H: 600, Qty: 4 }],
+      importTemplates: [],
+      importTemplateLoadFailed: true,
+      onRefreshTemplates,
+      onConfirm,
+    })
+
+    expect(view.getByTestId('template-selection-panel')).toBeTruthy()
+    expect(view.getByText('importTemplateLoadFailed')).toBeTruthy()
+    fireEvent.click(view.getByRole('button', { name: 'importTemplateRetry' }))
+    expect(onRefreshTemplates).toHaveBeenCalledOnce()
+
+    chooseWithoutTemplate(view)
+    mapFields(view, {
+      label: 'Label', name: 'Name', length: 'L', width: 'W', height: 'H', quantity: 'Qty',
+    })
+    fireEvent.click(view.getByTestId('confirm-mapping'))
+    expect(onConfirm).toHaveBeenCalledWith([
+      expect.objectContaining({ name: 'Carton' }),
+    ], expect.any(Array))
+  })
+
+  it('does not call onConfirm on Escape or cancel', () => {
+    const onConfirm = vi.fn()
+    const onClose = vi.fn()
+    const view = renderDialog({ onConfirm, onClose })
+
+    fireEvent.keyDown(view.getByTestId('mapping-modal'), { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(onConfirm).not.toHaveBeenCalled()
+    view.unmount()
+
+    onClose.mockClear()
+    const open = renderDialog({ onConfirm, onClose })
+    fireEvent.click(open.getByRole('button', { name: 'mappingCancel' }))
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  it('resets the session when importRows change', () => {
+    const { rerender, getByTestId, queryByTestId } = renderDialog()
+    chooseWithoutTemplate({ getByTestId })
+    mapFields({ getByTestId }, { length: 'L' })
+    expect(mappingSelect({ getByTestId }, 'length').value).toBe('L')
+
+    const nextRows: ImportCargoRow[] = [
+      { Sku: 'Sku', Length: 'Length', Width: 'Width', Height: 'Height' },
+      { Sku: 'B', Length: 200, Width: 100, Height: 50 },
+    ]
+    rerender(<CargoImportDialog {...dialogProps({ importRows: nextRows })} />)
+
+    expect(getByTestId('template-selection-panel')).toBeTruthy()
+    expect(queryByTestId('mapping-fields')).toBeNull()
+    expect(queryByTestId('import-template-name')).toBeNull()
+
+    chooseWithoutTemplate({ getByTestId })
+    expectBlankMapping({ getByTestId })
+  })
+})
 
 describe('CargoImportDialog template reconciliation', () => {
   it('syncs the canonical name when the selected template is renamed elsewhere', async () => {
@@ -83,21 +279,9 @@ describe('CargoImportDialog template reconciliation', () => {
     selectTemplate('t1')
     await waitFor(() => expect(templateNameInput().value).toBe('Vietnam layout'))
 
-    // The shared catalog refresh reports an authoritative rename.
     rerender(
       <CargoImportDialog
-        importRows={importRows}
-        importTemplates={[makeTemplate({ name: 'Vietnam v2' })]}
-        importTemplateLoadFailed={false}
-        locale="en"
-        labels={labels}
-        userId="u1"
-        colors={['#0ea5e9']}
-        onConfirm={vi.fn()}
-        onClose={vi.fn()}
-        onRefreshTemplates={vi.fn()}
-        onCreateTemplate={vi.fn()}
-        onUpdateTemplate={vi.fn()}
+        {...dialogProps({ importTemplates: [makeTemplate({ name: 'Vietnam v2' })] })}
       />,
     )
 
@@ -119,25 +303,17 @@ describe('CargoImportDialog template reconciliation', () => {
 
     rerender(
       <CargoImportDialog
-        importRows={importRows}
-        importTemplates={[makeTemplate({ name: 'Vietnam v2' })]}
-        importTemplateLoadFailed={false}
-        locale="en"
-        labels={labels}
-        userId="u1"
-        colors={['#0ea5e9']}
-        onConfirm={vi.fn()}
-        onClose={vi.fn()}
-        onRefreshTemplates={vi.fn()}
-        onCreateTemplate={onCreateTemplate}
-        onUpdateTemplate={onUpdateTemplate}
+        {...dialogProps({
+          importTemplates: [makeTemplate({ name: 'Vietnam v2' })],
+          onCreateTemplate,
+          onUpdateTemplate,
+        })}
       />,
     )
     await waitFor(() => expect(templateNameInput().value).toBe('Vietnam v2'))
 
     fireEvent.click(document.querySelector('[data-testid="save-import-template"]')!)
 
-    // Saving an unchanged, renamed template must update it — not create a second one.
     await waitFor(() => expect(onUpdateTemplate).toHaveBeenCalledTimes(1))
     expect(onUpdateTemplate).toHaveBeenCalledWith('t1', expect.objectContaining({ name: 'Vietnam v2' }))
     expect(onCreateTemplate).not.toHaveBeenCalled()
@@ -149,25 +325,12 @@ describe('CargoImportDialog template reconciliation', () => {
     selectTemplate('t1')
     await waitFor(() => expect(templateNameInput().value).toBe('Vietnam layout'))
 
-    // User types a "save as" name.
     fireEvent.change(templateNameInput(), { target: { value: 'My copy' } })
     expect(templateNameInput().value).toBe('My copy')
 
-    // A catalog refresh arrives; it must not clobber the user's draft name.
     rerender(
       <CargoImportDialog
-        importRows={importRows}
-        importTemplates={[makeTemplate()]}
-        importTemplateLoadFailed={false}
-        locale="en"
-        labels={labels}
-        userId="u1"
-        colors={['#0ea5e9']}
-        onConfirm={vi.fn()}
-        onClose={vi.fn()}
-        onRefreshTemplates={vi.fn()}
-        onCreateTemplate={vi.fn()}
-        onUpdateTemplate={vi.fn()}
+        {...dialogProps({ importTemplates: [makeTemplate()] })}
       />,
     )
 
@@ -180,29 +343,13 @@ describe('CargoImportDialog template reconciliation', () => {
     selectTemplate('t1')
     await waitFor(() => expect(templateNameInput().value).toBe('Vietnam layout'))
 
-    // Template deleted in the template manager; catalog refresh returns without it.
     rerender(
       <CargoImportDialog
-        importRows={importRows}
-        importTemplates={[]}
-        importTemplateLoadFailed={false}
-        locale="en"
-        labels={labels}
-        userId="u1"
-        colors={['#0ea5e9']}
-        onConfirm={vi.fn()}
-        onClose={vi.fn()}
-        onRefreshTemplates={vi.fn()}
-        onCreateTemplate={vi.fn()}
-        onUpdateTemplate={vi.fn()}
+        {...dialogProps({ importTemplates: [] })}
       />,
     )
 
-    await waitFor(() => {
-      const select = document.querySelector('[data-testid="import-template-select"]') as HTMLSelectElement
-      expect(select.value).toBe('')
-      expect(templateNameInput().value).toBe('')
-    })
+    await waitFor(() => expect(templateNameInput().value).toBe(''))
   })
 
   it('keeps the reference intact while the catalog load is failing', async () => {
@@ -219,35 +366,21 @@ describe('CargoImportDialog template reconciliation', () => {
 
     const renderWith = (templates: ImportTemplate[], loadFailed: boolean) => rerender(
       <CargoImportDialog
-        importRows={importRows}
-        importTemplates={templates}
-        importTemplateLoadFailed={loadFailed}
-        locale="en"
-        labels={labels}
-        userId="u1"
-        colors={['#0ea5e9']}
-        onConfirm={vi.fn()}
-        onClose={vi.fn()}
-        onRefreshTemplates={vi.fn()}
-        onCreateTemplate={onCreateTemplate}
-        onUpdateTemplate={onUpdateTemplate}
+        {...dialogProps({
+          importTemplates: templates,
+          importTemplateLoadFailed: loadFailed,
+          onCreateTemplate,
+          onUpdateTemplate,
+        })}
       />,
     )
 
-    // Load failure must not be mistaken for a deletion.
     renderWith([], true)
     expect(templateNameInput().value).toBe('Vietnam layout')
 
-    // The name alone cannot distinguish "reference kept" from "name kept but ID
-    // cleared", because the option is absent from an empty list either way. Restore
-    // the catalog and assert the ID itself survived.
     renderWith([makeTemplate()], false)
-    await waitFor(() => {
-      const select = document.querySelector('[data-testid="import-template-select"]') as HTMLSelectElement
-      expect(select.value).toBe('t1')
-    })
+    await waitFor(() => expect(templateNameInput().value).toBe('Vietnam layout'))
 
-    // Strongest proof the ID is intact: saving still routes to update, not create.
     fireEvent.click(document.querySelector('[data-testid="save-import-template"]')!)
     await waitFor(() => expect(onUpdateTemplate).toHaveBeenCalledWith('t1', expect.anything()))
     expect(onCreateTemplate).not.toHaveBeenCalled()
@@ -264,9 +397,11 @@ describe('CargoImportDialog pending import transaction', () => {
   const templateRows: ImportCargoRow[] = [
     { Label: 'A', Name: 'Template weight', L: 1000, W: 800, H: 600, Qty: 4 },
   ]
+
   it('keeps a mapped workbook pending until explicit confirmation', () => {
     const onConfirm = vi.fn()
     const view = renderDialog({ importRows: autoMappedRows, onConfirm })
+    chooseWithoutTemplate(view)
     mapFields(view, {
       label: 'Label', name: 'Name', length: 'Length', width: 'Width',
       height: 'Height', weight: 'Weight', quantity: 'Quantity',
@@ -282,7 +417,6 @@ describe('CargoImportDialog pending import transaction', () => {
     ], expect.any(Array))
   })
 
-
   it('maps worker matrix rows through the same confirmation path', () => {
     const onConfirm = vi.fn()
     const matrixRows: ImportCargoRow[] = [
@@ -290,6 +424,7 @@ describe('CargoImportDialog pending import transaction', () => {
       ['A', 'Matrix crate', 1000, 800, 600, 25, 2],
     ]
     const view = renderDialog({ importRows: matrixRows, onConfirm })
+    chooseWithoutTemplate(view)
     mapFields(view, {
       label: 'Label', name: 'Name', length: 'Length', width: 'Width',
       height: 'Height', weight: 'Weight', quantity: 'Quantity',
@@ -301,7 +436,6 @@ describe('CargoImportDialog pending import transaction', () => {
       expect.objectContaining({ name: 'Matrix crate', weight: 25, quantity: 2 }),
     ], expect.any(Array))
   })
-
 
   it('cancels a pending import without confirming cargo', () => {
     const onConfirm = vi.fn()
@@ -317,6 +451,7 @@ describe('CargoImportDialog pending import transaction', () => {
   it('allows untemplated rows with missing or blank weight as internal 1kg', () => {
     const onConfirm = vi.fn()
     const missingWeight = renderDialog({ importRows: missingWeightRows, onConfirm })
+    chooseWithoutTemplate(missingWeight)
     mapFields(missingWeight, {
       label: 'Label', name: 'Name', length: 'Length', width: 'Width',
       height: 'Height', quantity: 'Quantity',
@@ -334,6 +469,7 @@ describe('CargoImportDialog pending import transaction', () => {
       { Label: 'A', Name: 'Blank weight', Length: 1000, Width: 800, Height: 600, Weight: '', Quantity: 1 },
     ]
     const blankWeight = renderDialog({ importRows: blankWeightRows, onConfirm })
+    chooseWithoutTemplate(blankWeight)
     mapFields(blankWeight, {
       label: 'Label', name: 'Name', length: 'Length', width: 'Width',
       height: 'Height', weight: 'Weight', quantity: 'Quantity',
@@ -345,7 +481,6 @@ describe('CargoImportDialog pending import transaction', () => {
     ], expect.any(Array))
   })
 
-
   it('does not auto-map weight after the header row is moved past the title', () => {
     const vietnamRows: ImportCargoRow[] = [
       ['越南第十一批6.2海运', null, null, null, null, null, null, null, null],
@@ -354,6 +489,7 @@ describe('CargoImportDialog pending import transaction', () => {
       ['TB-C10-EV_v1.2', 'EV cable 2', 1000, 20, 0.1, 8.25, 165, '530*305*310', '1'],
     ]
     const view = renderDialog({ importRows: vietnamRows, importTemplates: [] })
+    chooseWithoutTemplate(view)
 
     expect((view.getByTestId('map-select-weight') as HTMLInputElement).value).toBe('')
 
@@ -364,8 +500,6 @@ describe('CargoImportDialog pending import transaction', () => {
 
     expect((view.getByTestId('map-select-weight') as HTMLInputElement).value).toBe('')
   })
-
-
 
   it('uses an internal 1kg weight for a selected template that omits a weight mapping', () => {
     const onConfirm = vi.fn()
@@ -385,6 +519,7 @@ describe('CargoImportDialog pending import transaction', () => {
   it('does not persist defaultValues.weight when creating a template from the dialog', async () => {
     const onCreateTemplate = vi.fn().mockResolvedValue(makeTemplate())
     const view = renderDialog({ importRows: templateRows, onCreateTemplate })
+    chooseWithoutTemplate(view)
 
     fireEvent.change(view.getByTestId('import-template-name'), { target: { value: 'Template without weight default' } })
     expect(view.queryByTestId('template-default-weight')).toBeNull()
@@ -413,7 +548,6 @@ describe('CargoImportDialog pending import transaction', () => {
       expect.objectContaining({ weight: 1 }),
     ], expect.any(Array))
   })
-
 })
 
 describe('CargoImportDialog keyboard focus management', () => {

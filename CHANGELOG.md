@@ -1,6 +1,15 @@
 # Changelog
 
 
+## 2026-08-20 Task 4: explicit template selection then mapping-preview
+
+- `CargoImportDialog` now starts on `template-selection`. `TemplateSelectionPanel` is presentational only (templates, loadFailed, labels, callbacks). `selectNone()` uses `emptyImportMappingValue()`; `selectTemplate(id)` uses `importMappingValueFromTemplate`. Mapping and preview stay on one `mapping-preview` phase; back-to-selection replaces unsaved drafts on reselect. New `importRows` reset phase, selection, mapping, save name/status, and missing columns.
+- Catalog load failure still offers retry and “use without template”; manual confirm is not blocked. Escape/cancel do not call `onConfirm`. Workbench still dispatches `cargoImported` only from `onConfirm` (no `currentCargos`, no Workbench.tsx change). Existing save button kept for Task 5.
+- TDD RED: `npx vitest run src/components/TemplateSelectionPanel.test.tsx src/components/CargoImportDialog.test.tsx` — 2 failed files / 20 failed tests + 1 failed suite in 2.96s (missing panel module; mapping form on first paint).
+- TDD GREEN: same command — 2 files / 28 tests passed in 3.23s.
+- `npm run build` exit 0 (`tsc -b && vite build`, vite 1.29s).
+
+
 ## 2026-08-20 Task 3: mark required mapping fields
 
 - `ImportMappingForm` derives required dimension fields from `value.dimensionMode`. Separate mode marks length/width/height; combined mode marks the combined size column and split order. Label, name, weight, quantity, color, and business-limit fields stay unmarked. No `requiredFields` prop.
