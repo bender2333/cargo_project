@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ImportTemplateRequestError } from '../api/importTemplates'
 import { ExportColumnsEditor } from './ExportColumnsEditor'
 import type { ExportColumnsEditorLabels } from './ExportColumnsEditor'
 import { ImportMappingForm } from './ImportMappingForm'
@@ -6,6 +7,7 @@ import type { ImportMappingFormLabels, ImportMappingValue } from './ImportMappin
 import type { ExportTemplatePayload, ImportTemplatePayload } from '../hooks/useTemplateCatalogs'
 import { MAX_IMPORT_FILE_BYTES, type ImportCargoRow } from '../lib/importCargo'
 import { importColumnsForHeaderRow } from '../lib/importTable'
+import { validateImportMappingValue } from '../lib/importWorkflow'
 import { parseWorkbookFileInWorker } from '../lib/importWorkbookWorkerClient'
 import { EXPORT_FIELD_KEYS } from '../lib/exportPlan'
 import type { ExportTemplate, ImportTemplate, Locale } from '../types'
@@ -33,6 +35,10 @@ export type TemplateManagerLabels = ImportMappingFormLabels & ExportColumnsEdito
   exportTemplateRetry: string
   exportTemplateLoadFailed: string
   cancel: string
+  templateNameRequired: string
+  templateNameDuplicate: string
+  templateConfigInvalid: string
+  templateSaveFailed: string
 }
 
 type Props = {
@@ -150,6 +156,40 @@ function importPayloadFromDraft(draft: ImportTemplatePayload, name: string): Imp
   }
 }
 
+function importDraftErrorMessage(error: unknown, copy: TemplateManagerLabels): string {
+  if (error instanceof ImportTemplateRequestError) {
+    if (error.code === 'duplicate-name') return copy.templateNameDuplicate
+    if (error.code === 'invalid-template') return copy.templateConfigInvalid
+  }
+  return copy.templateSaveFailed
+}
+
+function catalogNameTaken(templates: readonly ImportTemplate[], name: string, exceptId?: string): boolean {
+  return templates.some((template) => template.name === name && template.id !== exceptId)
+}
+
+function draftMappingValidation(draft: ImportTemplatePayload, sampleRows: ImportCargoRow[]) {
+  const availableColumns = importColumnsForHeaderRow(sampleRows, draft.headerRow ?? 1)
+  return {
+    availableColumns,
+    validation: validateImportMappingValue(
+      draftToMappingValue(draft),
+      sampleRows.length > 0 ? availableColumns : null,
+    ),
+  }
+}
+
+function requiredNameLabel(text: string, requiredText: string) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span aria-hidden="true" className="text-red-600">*</span>
+      <span className="sr-only">{requiredText}</span>
+      {text}
+    </span>
+  )
+}
+
+
 function createBlankExportTemplate(): ExportTemplatePayload {
   return {
     name: '',
@@ -178,7 +218,9 @@ export function TemplateManagerPage({
   const [sampleRows, setSampleRows] = useState<ImportCargoRow[]>([])
   const [sampleLoadError, setSampleLoadError] = useState('')
   const [newImportDraft, setNewImportDraft] = useState<ImportTemplatePayload | null>(null)
+  const [newImportError, setNewImportError] = useState('')
   const [editingImport, setEditingImport] = useState<ImportEditState | null>(null)
+  const [editImportError, setEditImportError] = useState('')
   const [newExportDraft, setNewExportDraft] = useState<ExportTemplatePayload | null>(null)
   const [editingExport, setEditingExport] = useState<ExportEditState | null>(null)
   const [pendingActions, setPendingActions] = useState<ReadonlySet<string>>(() => new Set())
@@ -260,20 +302,33 @@ export function TemplateManagerPage({
 
   const saveNewImport = async () => {
     const draft = newImportDraft
-    const name = draft?.name.trim()
-    if (!draft || !name) return
+    if (!draft) return
+    const name = draft.name.trim()
+    if (!name) {
+      setNewImportError(labels.templateNameRequired)
+      return
+    }
+    if (catalogNameTaken(importTemplates, name)) {
+      setNewImportError(labels.templateNameDuplicate)
+      return
+    }
+    if (!draftMappingValidation(draft, sampleRows).validation.valid) {
+      setNewImportError(labels.templateConfigInvalid)
+      return
+    }
     const actionKey = 'import:create'
     const operationId = beginOperation(actionKey)
     if (operationId === null) return
+    setNewImportError('')
     try {
       const saved = await onCreateImport(importPayloadFromDraft(draft, name))
       if (!saved || !mountedRef.current) return
       setNewImportDraft((current) => current === draft ? null : current)
+      setNewImportError('')
       if (canPublishOperation(operationId)) setNotice(`${labels.templateSaved}: ${saved.name}`)
     } catch (error) {
       if (!mountedRef.current) return
-      console.error(error)
-      window.alert(locale === 'zh' ? '创建模板失败' : 'Failed to create template')
+      setNewImportError(importDraftErrorMessage(error, labels))
     } finally {
       finishOperation(actionKey)
     }
@@ -281,20 +336,33 @@ export function TemplateManagerPage({
 
   const saveEditedImport = async () => {
     const editState = editingImport
-    const name = editState?.draft.name.trim()
-    if (!editState || !name) return
+    if (!editState) return
+    const name = editState.draft.name.trim()
+    if (!name) {
+      setEditImportError(labels.templateNameRequired)
+      return
+    }
+    if (catalogNameTaken(importTemplates, name, editState.id)) {
+      setEditImportError(labels.templateNameDuplicate)
+      return
+    }
+    if (!draftMappingValidation(editState.draft, sampleRows).validation.valid) {
+      setEditImportError(labels.templateConfigInvalid)
+      return
+    }
     const actionKey = `import:${editState.id}`
     const operationId = beginOperation(actionKey)
     if (operationId === null) return
+    setEditImportError('')
     try {
       const updated = await onUpdateImport(editState.id, importPayloadFromDraft(editState.draft, name))
       if (!updated || !mountedRef.current) return
       setEditingImport((current) => current === editState ? null : current)
+      setEditImportError('')
       if (canPublishOperation(operationId)) setNotice(`${labels.templateUpdated}: ${updated.name}`)
     } catch (error) {
       if (!mountedRef.current) return
-      console.error(error)
-      window.alert(locale === 'zh' ? '更新模板失败' : 'Failed to update template')
+      setEditImportError(importDraftErrorMessage(error, labels))
     } finally {
       finishOperation(actionKey)
     }
@@ -378,6 +446,9 @@ export function TemplateManagerPage({
     }
   }
 
+  const newImportCheck = newImportDraft ? draftMappingValidation(newImportDraft, sampleRows) : null
+  const editingImportCheck = editingImport ? draftMappingValidation(editingImport.draft, sampleRows) : null
+
   return (
     <section className="archive-card overflow-hidden p-[18px]" data-testid="template-manager-page">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -408,7 +479,10 @@ export function TemplateManagerPage({
               data-testid="template-manager-new"
               type="button"
               disabled={pendingActions.has('import:create')}
-              onClick={() => setNewImportDraft(createBlankImportTemplate())}
+              onClick={() => {
+                setNewImportError('')
+                setNewImportDraft(createBlankImportTemplate())
+              }}
             >
               {labels.templateNew}
             </button>
@@ -427,7 +501,7 @@ export function TemplateManagerPage({
         {newImportDraft && (
           <div className="mb-4 grid gap-2 rounded border border-[#93c5fd] bg-[#eff6ff] p-3 text-sm" data-testid="template-manager-new-form">
             <label className="text-xs font-semibold text-[#475569]">
-              {labels.templateName}
+              {requiredNameLabel(labels.templateName, labels.mappingRequiredField)}
               <input
                 className="field-input mt-1"
                 data-testid="template-manager-new-name"
@@ -438,13 +512,20 @@ export function TemplateManagerPage({
             <ImportMappingForm
               value={draftToMappingValue(newImportDraft)}
               onChange={(next) => setNewImportDraft((current) => current ? applyMappingValueToDraft(current, next) : current)}
-              availableColumns={importColumnsForHeaderRow(sampleRows, newImportDraft.headerRow ?? 1)}
+              availableColumns={newImportCheck?.availableColumns ?? []}
               labels={labels}
               testIdPrefix="tm-new-"
+              missingColumns={newImportCheck?.validation.missingColumns}
+              duplicateColumns={newImportCheck?.validation.duplicateColumns}
             />
+            {newImportError && (
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800" data-testid="template-manager-new-error" role="alert">
+                {newImportError}
+              </div>
+            )}
             <div className="flex flex-wrap gap-2">
-              <button className="archive-button success px-2 py-1 text-xs" data-testid="template-manager-new-save" type="button" onClick={() => void saveNewImport()} disabled={!newImportDraft.name.trim() || pendingActions.has('import:create')}>{labels.templateCreate}</button>
-              <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => setNewImportDraft(null)}>{labels.cancel}</button>
+              <button className="archive-button success px-2 py-1 text-xs" data-testid="template-manager-new-save" type="button" onClick={() => void saveNewImport()} disabled={!newImportDraft.name.trim() || !newImportCheck?.validation.valid || pendingActions.has('import:create')}>{labels.templateCreate}</button>
+              <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => { setNewImportDraft(null); setNewImportError('') }}>{labels.cancel}</button>
             </div>
           </div>
         )}
@@ -462,7 +543,7 @@ export function TemplateManagerPage({
                 {editingImport?.id === template.id ? (
                   <div className="grid gap-2">
                     <label className="text-xs font-semibold text-[#475569]">
-                      {labels.templateName}
+                      {requiredNameLabel(labels.templateName, labels.mappingRequiredField)}
                       <input
                         className="field-input mt-1"
                         data-testid={`template-manager-name-${template.id}`}
@@ -473,13 +554,20 @@ export function TemplateManagerPage({
                     <ImportMappingForm
                       value={draftToMappingValue(editingImport.draft)}
                       onChange={(next) => setEditingImport((current) => current?.id === template.id ? { ...current, draft: applyMappingValueToDraft(current.draft, next) } : current)}
-                      availableColumns={importColumnsForHeaderRow(sampleRows, editingImport.draft.headerRow ?? 1)}
+                      availableColumns={editingImportCheck?.availableColumns ?? []}
                       labels={labels}
                       testIdPrefix={`tm-edit-${template.id}-`}
+                      missingColumns={editingImportCheck?.validation.missingColumns}
+                      duplicateColumns={editingImportCheck?.validation.duplicateColumns}
                     />
+                    {editImportError && (
+                      <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800" data-testid={`template-manager-error-${template.id}`} role="alert">
+                        {editImportError}
+                      </div>
+                    )}
                     <div className="flex flex-wrap gap-2">
-                      <button className="archive-button success px-2 py-1 text-xs" data-testid={`template-manager-save-${template.id}`} type="button" onClick={() => void saveEditedImport()} disabled={pendingActions.has(`import:${template.id}`)}>{labels.templateUpdate}</button>
-                      <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => setEditingImport(null)}>{labels.cancel}</button>
+                      <button className="archive-button success px-2 py-1 text-xs" data-testid={`template-manager-save-${template.id}`} type="button" onClick={() => void saveEditedImport()} disabled={!editingImport.draft.name.trim() || !editingImportCheck?.validation.valid || pendingActions.has(`import:${template.id}`)}>{labels.templateUpdate}</button>
+                      <button className="archive-button secondary px-2 py-1 text-xs" type="button" onClick={() => { setEditingImport(null); setEditImportError('') }}>{labels.cancel}</button>
                     </div>
                   </div>
                 ) : (
@@ -492,7 +580,7 @@ export function TemplateManagerPage({
                       {Object.entries(template.mapping).filter(([, value]) => value).map(([key, value]) => `${key}:${value}`).join(', ') || '-'}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <button className="archive-button secondary px-2 py-1 text-xs" data-testid={`template-manager-edit-${template.id}`} type="button" disabled={pendingActions.has(`import:${template.id}`)} onClick={() => setEditingImport(createImportEditState(template))}>{labels.templateEdit}</button>
+                      <button className="archive-button secondary px-2 py-1 text-xs" data-testid={`template-manager-edit-${template.id}`} type="button" disabled={pendingActions.has(`import:${template.id}`)} onClick={() => { setEditImportError(''); setEditingImport(createImportEditState(template)) }}>{labels.templateEdit}</button>
                       <button className="archive-button px-2 py-1 text-xs text-red-700" data-testid={`template-manager-delete-${template.id}`} type="button" disabled={pendingActions.has(`import:${template.id}`)} onClick={() => void removeImport(template.id)}>{labels.templateDelete}</button>
                     </div>
                   </>

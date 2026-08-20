@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-08-20 Task 6: block invalid template drafts
+
+- Template manager create/edit drafts now call `validateImportMappingValue(draftToMappingValue(draft), sampleRows.length > 0 ? availableColumns : null)`. No sample file → `null` (required + duplicate only). After sample load → real column array and missing-column checks. Weight mapping stays optional.
+- Save buttons require a trimmed name, a valid mapping, and a free entity write lock. Create and edit names show required `*` via `mappingRequiredField`. Catalog uniqueness is checked client-side (trim + current-user list, excluding the template being edited); server 409 remains authoritative.
+- 400 / 409 / network map to `templateConfigInvalid` / `templateNameDuplicate` / `templateSaveFailed` inside the draft. Failures do not use the global success notice or `window.alert`. Duplicate source columns mark both target fields (`data-invalid`) through `ImportMappingForm.duplicateColumns`. Management still does not open `CargoImportDialog` or import cargo. Sample last-request-wins and entity write lock are unchanged.
+- TDD RED: `npx vitest run src/components/TemplateManagerPage.test.tsx` — 1 failed file / 8 failed tests in 4.79s (name-only create still enabled, no `*` on names, no duplicate-field marks, PUT still sent for invalid edits, 409/400 used `window.alert`).
+- TDD GREEN: same command — 22 passed / 1 failed in 2.92s. Remaining failure is the pre-existing `datalist#tm-new-map-options-name` assertion; recorded in `decision.md`, assertion not weakened.
+- `npm run build` exit 0 (`tsc -b && vite build`, vite 1.13s).
+
+
 
 ## 2026-08-20 Task 5: separate update and save-as actions
 

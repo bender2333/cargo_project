@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx'
 import { EXPORT_FIELD_KEYS } from '../lib/exportPlan'
 import { parseWorkbookBuffer } from '../lib/importWorkbookBoundary'
 import type { ExportTemplate, ImportTemplate } from '../types'
+import { ImportTemplateRequestError } from '../api/importTemplates'
 import {
   TemplateManagerPage,
   type TemplateManagerLabels,
@@ -103,6 +104,10 @@ const labels: TemplateManagerLabels = {
   mappingConvertHint: 'Convert cm to mm',
   mappingRequiredMarkerHint: '* marks fields required to complete the current configuration',
   mappingRequiredField: 'Required',
+  templateNameRequired: 'Enter a template name',
+  templateNameDuplicate: 'A template with this name already exists',
+  templateConfigInvalid: 'Template configuration is incomplete or has mapping conflicts',
+  templateSaveFailed: 'Failed to save template',
   exportColumnHeader: 'Column header',
   exportColumnUnit: 'Unit',
   exportAddColumn: 'Add column',
@@ -212,6 +217,20 @@ function fileWithArrayBuffer(name: string, read: () => Promise<ArrayBuffer>): Fi
   Object.defineProperty(file, 'arrayBuffer', { value: read })
   return file
 }
+
+function fillRequiredSeparateMapping(view: { getByTestId: (id: string) => HTMLElement }, prefix: string) {
+  fireEvent.change(view.getByTestId(`${prefix}map-select-length`), { target: { value: 'L' } })
+  fireEvent.change(view.getByTestId(`${prefix}map-select-width`), { target: { value: 'W' } })
+  fireEvent.change(view.getByTestId(`${prefix}map-select-height`), { target: { value: 'H' } })
+}
+
+function hasRequiredMarker(label: HTMLElement | null, requiredText: string) {
+  if (!label) return false
+  const visualStar = [...label.querySelectorAll('span[aria-hidden="true"]')].some((node) => node.textContent === '*')
+  const accessible = [...label.querySelectorAll('.sr-only')].some((node) => node.textContent === requiredText)
+  return visualStar && accessible
+}
+
 beforeEach(() => {
   vi.stubGlobal('Worker', SampleWorker)
   SampleWorker.nextResponse = null
@@ -465,6 +484,7 @@ describe('TemplateManagerPage', () => {
 
     fireEvent.click(view.getByTestId('template-manager-new'))
     fireEvent.change(view.getByTestId('template-manager-new-name'), { target: { value: 'One import' } })
+    fillRequiredSeparateMapping(view, 'tm-new-')
     const createButton = view.getByTestId('template-manager-new-save') as HTMLButtonElement
     fireEvent.click(createButton)
     fireEvent.click(createButton)
@@ -496,6 +516,7 @@ describe('TemplateManagerPage', () => {
 
     fireEvent.click(view.getByTestId('template-manager-new'))
     fireEvent.change(view.getByTestId('template-manager-new-name'), { target: { value: 'Older import' } })
+    fillRequiredSeparateMapping(view, 'tm-new-')
     fireEvent.click(view.getByTestId('template-manager-new-save'))
     fireEvent.click(view.getByTestId('export-template-new'))
     fireEvent.change(view.getByTestId('export-template-new-name'), { target: { value: 'Newer export' } })
@@ -516,10 +537,9 @@ describe('TemplateManagerPage', () => {
   })
 
   it('cancels import edits and preserves a failed update draft with the legacy combined-column fallback', async () => {
-    const alertMock = vi.fn()
-    vi.stubGlobal('alert', alertMock)
-    vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    const onUpdateImport = vi.fn().mockRejectedValue(new Error('update failed'))
+    const onUpdateImport = vi.fn().mockRejectedValue(
+      new ImportTemplateRequestError('Template name already exists', 409, 'duplicate-name'),
+    )
     const view = render(
       <TemplateManagerPage
         {...props({ importTemplates: [importA], onUpdateImport })}
@@ -539,7 +559,7 @@ describe('TemplateManagerPage', () => {
     fireEvent.change(view.getByTestId('template-manager-name-import-a'), { target: { value: '  Rejected rename  ' } })
     fireEvent.click(view.getByTestId('template-manager-save-import-a'))
 
-    await waitFor(() => expect(alertMock).toHaveBeenCalledWith('Failed to update template'))
+    await waitFor(() => expect(view.getByTestId('template-manager-error-import-a').textContent).toBe(labels.templateNameDuplicate))
     expect(onUpdateImport).toHaveBeenCalledWith(
       'import-a',
       expect.objectContaining({
@@ -549,6 +569,7 @@ describe('TemplateManagerPage', () => {
       }),
     )
     expect((view.getByTestId('template-manager-name-import-a') as HTMLInputElement).value).toBe('  Rejected rename  ')
+    expect(view.queryByText(`Template updated: Rejected rename`)).toBeNull()
   })
 
   it('cancels export edits and keeps the changed columns visible when update fails', async () => {
@@ -658,6 +679,7 @@ describe('TemplateManagerPage', () => {
 
     fireEvent.click(view.getByTestId('template-manager-new'))
     fireEvent.change(view.getByTestId('template-manager-new-name'), { target: { value: 'Strict deferred import' } })
+    fillRequiredSeparateMapping(view, 'tm-new-')
     fireEvent.click(view.getByTestId('template-manager-new-save'))
 
     const saved = { ...importA, id: 'strict-import', name: 'Strict deferred import' }
@@ -745,6 +767,7 @@ describe('TemplateManagerPage', () => {
 
     fireEvent.click(view.getByTestId('template-manager-new'))
     fireEvent.change(view.getByTestId('template-manager-new-name'), { target: { value: 'Pending import' } })
+    fillRequiredSeparateMapping(view, 'tm-new-')
     fireEvent.click(view.getByTestId('template-manager-new-save'))
     fireEvent.click(view.getByTestId('export-template-delete-export-a'))
     fireEvent.click(view.getByTestId('export-template-edit-export-b'))
@@ -769,4 +792,150 @@ describe('TemplateManagerPage', () => {
     expect(alertMock).not.toHaveBeenCalled()
     expect(consoleError).not.toHaveBeenCalled()
   })
+
+  it('does not create a named template that is missing dimension mappings', () => {
+    const onCreateImport = vi.fn()
+    const view = render(<TemplateManagerPage {...props({ onCreateImport })} />)
+
+    fireEvent.click(view.getByTestId('template-manager-new'))
+    fireEvent.change(view.getByTestId('template-manager-new-name'), { target: { value: 'Dimensions missing' } })
+    const save = view.getByTestId('template-manager-new-save') as HTMLButtonElement
+    expect(save.disabled).toBe(true)
+    fireEvent.click(save)
+    expect(onCreateImport).not.toHaveBeenCalled()
+    expect(view.getByTestId('template-manager-new-form')).toBeTruthy()
+  })
+
+  it('marks template name as required for create and edit and blocks an empty update name', () => {
+    const onUpdateImport = vi.fn()
+    const view = render(
+      <TemplateManagerPage {...props({ importTemplates: [importB], onUpdateImport })} />,
+    )
+
+    fireEvent.click(view.getByTestId('template-manager-new'))
+    const newNameLabel = view.getByTestId('template-manager-new-name').closest('label')
+    expect(hasRequiredMarker(newNameLabel, labels.mappingRequiredField)).toBe(true)
+
+    fireEvent.click(view.getByTestId('template-manager-edit-import-b'))
+    const editName = view.getByTestId('template-manager-name-import-b') as HTMLInputElement
+    const editNameLabel = editName.closest('label')
+    expect(hasRequiredMarker(editNameLabel, labels.mappingRequiredField)).toBe(true)
+
+    fireEvent.change(editName, { target: { value: '   ' } })
+    const update = view.getByTestId('template-manager-save-import-b') as HTMLButtonElement
+    expect(update.disabled).toBe(true)
+    fireEvent.click(update)
+    expect(onUpdateImport).not.toHaveBeenCalled()
+  })
+
+  it('marks both target fields when a source column is reused and blocks save', () => {
+    const onCreateImport = vi.fn()
+    const view = render(<TemplateManagerPage {...props({ onCreateImport })} />)
+
+    fireEvent.click(view.getByTestId('template-manager-new'))
+    fireEvent.change(view.getByTestId('template-manager-new-name'), { target: { value: 'Conflicted' } })
+    fireEvent.change(view.getByTestId('tm-new-map-select-length'), { target: { value: 'W' } })
+    fireEvent.change(view.getByTestId('tm-new-map-select-width'), { target: { value: 'W' } })
+    fireEvent.change(view.getByTestId('tm-new-map-select-height'), { target: { value: 'H' } })
+
+    expect(view.getByTestId('tm-new-map-select-length').getAttribute('data-invalid')).toBe('true')
+    expect(view.getByTestId('tm-new-map-select-width').getAttribute('data-invalid')).toBe('true')
+    expect(view.getByTestId('tm-new-map-select-height').hasAttribute('data-invalid')).toBe(false)
+
+    const save = view.getByTestId('template-manager-new-save') as HTMLButtonElement
+    expect(save.disabled).toBe(true)
+    fireEvent.click(save)
+    expect(onCreateImport).not.toHaveBeenCalled()
+  })
+
+  it('saves a valid template without a weight mapping', async () => {
+    const saved: ImportTemplate = { ...importB, id: 'no-weight', name: 'No weight' }
+    const onCreateImport = vi.fn(async () => saved)
+    const view = render(<TemplateManagerPage {...props({ onCreateImport })} />)
+
+    fireEvent.click(view.getByTestId('template-manager-new'))
+    fireEvent.change(view.getByTestId('template-manager-new-name'), { target: { value: 'No weight' } })
+    fillRequiredSeparateMapping(view, 'tm-new-')
+    expect((view.getByTestId('tm-new-map-select-weight') as HTMLInputElement).value).toBe('')
+    fireEvent.click(view.getByTestId('template-manager-new-save'))
+
+    await waitFor(() => expect(onCreateImport).toHaveBeenCalledTimes(1))
+    expect(onCreateImport).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'No weight',
+      mapping: expect.objectContaining({ length: 'L', width: 'W', height: 'H', weight: '' }),
+    }))
+    expect(view.queryByTestId('mapping-modal')).toBeNull()
+    expect(view.queryByTestId('cargo-import-dialog')).toBeNull()
+  })
+
+  it('does not PUT an edited template after the mapping becomes invalid', () => {
+    const onUpdateImport = vi.fn()
+    const view = render(
+      <TemplateManagerPage {...props({ importTemplates: [importB], onUpdateImport })} />,
+    )
+
+    fireEvent.click(view.getByTestId('template-manager-edit-import-b'))
+    fireEvent.change(view.getByTestId('tm-edit-import-b-map-select-length'), { target: { value: '' } })
+    const save = view.getByTestId('template-manager-save-import-b') as HTMLButtonElement
+    expect(save.disabled).toBe(true)
+    fireEvent.click(save)
+    expect(onUpdateImport).not.toHaveBeenCalled()
+  })
+
+  it('keeps create and edit drafts after a catalog duplicate name and an API 409', async () => {
+    const onCreateImport = vi.fn()
+    const onUpdateImport = vi.fn().mockRejectedValue(
+      new ImportTemplateRequestError('Template name already exists', 409, 'duplicate-name'),
+    )
+    const view = render(
+      <TemplateManagerPage
+        {...props({
+          importTemplates: [importA, importB],
+          onCreateImport,
+          onUpdateImport,
+        })}
+      />,
+    )
+
+    fireEvent.click(view.getByTestId('template-manager-new'))
+    fireEvent.change(view.getByTestId('template-manager-new-name'), { target: { value: '  Import A  ' } })
+    fillRequiredSeparateMapping(view, 'tm-new-')
+    fireEvent.click(view.getByTestId('template-manager-new-save'))
+    expect(onCreateImport).not.toHaveBeenCalled()
+    expect(view.getByTestId('template-manager-new-error').textContent).toBe(labels.templateNameDuplicate)
+    expect((view.getByTestId('template-manager-new-name') as HTMLInputElement).value).toBe('  Import A  ')
+    expect((view.getByTestId('tm-new-map-select-length') as HTMLInputElement).value).toBe('L')
+
+    fireEvent.click(view.getByTestId('template-manager-edit-import-b'))
+    fireEvent.change(view.getByTestId('template-manager-name-import-b'), { target: { value: 'Unique rename' } })
+    fireEvent.click(view.getByTestId('template-manager-save-import-b'))
+    await waitFor(() => expect(view.getByTestId('template-manager-error-import-b').textContent).toBe(labels.templateNameDuplicate))
+    expect(onUpdateImport).toHaveBeenCalledTimes(1)
+    expect((view.getByTestId('template-manager-name-import-b') as HTMLInputElement).value).toBe('Unique rename')
+    expect(view.getByTestId('template-manager-error-import-b').textContent).not.toBe('Template updated: Unique rename')
+    expect(view.queryByTestId('mapping-modal')).toBeNull()
+  })
+
+  it('shows localized 400 and network errors in the draft instead of a success notice', async () => {
+    const onCreateImport = vi.fn()
+      .mockRejectedValueOnce(new ImportTemplateRequestError('Invalid template', 400, 'invalid-template'))
+      .mockRejectedValueOnce(new Error('network down'))
+    const view = render(<TemplateManagerPage {...props({ onCreateImport })} />)
+
+    fireEvent.click(view.getByTestId('template-manager-new'))
+    fireEvent.change(view.getByTestId('template-manager-new-name'), { target: { value: 'Solo' } })
+    fillRequiredSeparateMapping(view, 'tm-new-')
+
+    fireEvent.click(view.getByTestId('template-manager-new-save'))
+    await waitFor(() => expect(view.getByTestId('template-manager-new-error').textContent).toBe(labels.templateConfigInvalid))
+    expect((view.getByTestId('template-manager-new-name') as HTMLInputElement).value).toBe('Solo')
+    expect(view.queryByText('Template saved: Solo')).toBeNull()
+
+    fireEvent.click(view.getByTestId('template-manager-new-save'))
+    await waitFor(() => expect(view.getByTestId('template-manager-new-error').textContent).toBe(labels.templateSaveFailed))
+    expect(view.getByTestId('template-manager-new-form')).toBeTruthy()
+    expect(view.queryByTestId('mapping-modal')).toBeNull()
+    expect(view.queryByTestId('cargo-import-dialog')).toBeNull()
+  })
+
 })
