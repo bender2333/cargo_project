@@ -2714,3 +2714,24 @@
 - 未选择模板时，用户可以在导入确认中完成映射并点击“保存为模板”创建新模板；保存成功不等于导入成功，当前确认界面保持打开，仍需用户单独确认导入。
 - 选择已有模板只填入本次导入配置；用户在确认前修改映射不会静默改写原模板，除非在明确的模板管理编辑或另存为操作中保存。
 
+
+## 2026-08-20 模板功能重构技术方案
+
+- 背景：产品行为稿 `2026-08-19-import-template-behavior-design.md` 明确了模板选择流程、保存语义和独立管理边界，需要技术实施方案落地。
+- 选项：
+  1. 完全重写 `CargoImportDialog`，引入状态机管理 phase 转换。
+  2. 在现有组件基础上增加 `importPhase` 状态和条件渲染，保留现有映射、预览逻辑。
+  3. 拆分 `CargoImportDialog` 为多个子对话框，每个 phase 独立组件。
+- 决策：选项 2 — 在现有组件基础上增加 phase 状态，条件渲染不同阶段 UI。
+- 理由：
+  - 现有架构已有良好基础：`useTemplateCatalogs` hook、`importTemplates` API、`TemplateManagerPage` 独立页面、`ImportMappingForm` 可复用组件。
+  - `CargoImportDialog` 内部映射配置、预览计算、错误提示逻辑完整且经过测试，不需要重写。
+  - 增加 phase 状态是局部改动，风险可控，现有单元测试可修复而非重写。
+  - 拆分为多个对话框会引入对话框间状态传递和生命周期管理复杂度，不如单组件内 phase 切换清晰。
+- 影响：
+  - `CargoImportDialog.tsx` 增加 `importPhase` 和 `templateSelectionMode` 状态，增加 `handleTemplateSelection` 函数。
+  - 新建 `TemplateSelectionPanel.tsx` 组件，负责模板选择 UI。
+  - 拆分 `handleSaveImportTemplate` 为 `handleSaveAsNew` 和 `handleSaveAsCopy`，明确保存语义。
+  - `TemplateManagerPage` 保持不变，确认独立性。
+- 后续：按 6 天实施计划执行，每个阶段完成后 commit + 更新 `CHANGELOG.md`。
+- 文档：`docs/superpowers/specs/2026-08-20-template-refactor-plan.md`。

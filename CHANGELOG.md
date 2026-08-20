@@ -10,6 +10,18 @@
 - Clarified the flow: file parsing first opens template selection inside the import confirmation; template management remains a separate feature.
 - Users may choose an existing template or “no template”; after building a mapping without a template, they can save it as a new template and still must explicitly confirm the import.
 
+## 2026-08-20 模板功能重构方案
+
+- 完成模板功能技术实施方案 `docs/superpowers/specs/2026-08-20-template-refactor-plan.md`。
+- 方案基于 `2026-08-19-import-template-behavior-design.md` 产品行为稿和当前代码梳理。
+- 核心调整：
+  - `CargoImportDialog` 增加 `ImportPhase` 状态（`template-selection` | `mapping-config` | `preview-ready`），文件解析后先展示模板选择。
+  - 新建 `TemplateSelectionPanel` 组件，明确"选择已有模板"或"不使用模板"。
+  - 拆分模板保存逻辑：`save-as-new`（未选模板时）、`save-as-copy`（选择模板并修改后）、`update-existing`（仅模板管理页）。
+  - 模板管理页保持独立，不触发货物导入。
+- 实施计划分 5 个阶段，预计 6 天完成，包含单元测试、端到端测试和产品行为验收。
+- 现有架构基础良好（`useTemplateCatalogs`、`importTemplates` API、`TemplateManagerPage`），重构风险可控。
+
 
 ## 2026-08-18 r67 import mapping columns
 
