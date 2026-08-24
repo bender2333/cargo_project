@@ -1,6 +1,13 @@
 # Changelog
 
 
+## 2026-08-24 upper-gap packing solution plan
+
+- Diagnosis: the 0824 400 mm slot is an upper-layer external-opening residual created by selecting a maximum `TB-C13` block (`5490 x 1590`) before a `TB-C10` block; all affected boxes come from block placement, not residual single-box gap fill.
+- Plan: `plans/2026-08-24-packing-upper-gap-lookahead.md` defines a bounded candidate frontier plus one-step EMS remaining-space scoring, preserves quantity/volume goals and six orientations, and separates `internal_notch` from legal `external_residual`.
+- No packing implementation changed in this planning step.
+
+
 ## 2026-08-24 3D selection hotkey fix plan
 
 - Diagnosis: after selecting a box in the manual 3D scene, `ContainerScene` did not establish workspace focus; the shared hotkey guard then discarded `M`/`Delete` when the active element remained outside `workspaceRef`.
