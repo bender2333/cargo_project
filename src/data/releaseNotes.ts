@@ -14,6 +14,25 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-08-24-r70-compact-packing',
+    date: '2026-08-24',
+    title: {
+      en: 'Automatic packing fills from the closed end and leaves leftover on the outside',
+      zh: '自动装箱从里端填实，空隙留在外侧',
+    },
+    items: {
+      en: [
+        'Same-size cartons are still packed as blocks, but each block is chosen for the current empty space instead of being stuffed into the smallest leftover hole.',
+        'A mixed 40HQ load that previously left boxes out now packs completely. Mixed orientations stay allowed so a carton can tilt when the remaining height is too short.',
+      ],
+      zh: [
+        '相同纸箱仍按块来装，但每一块对着当前空区来选，不再塞进最小的缝里。',
+        '原先装不满的 40HQ 混合货现在可以装满。高度不够时仍允许换朝向侧立，不会为了整齐而装不进去。',
+      ],
+    },
+  },
+
+  {
     version: '2026-08-24-r69-workspace-hotkeys',
     date: '2026-08-24',
     title: {

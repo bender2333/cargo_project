@@ -13,6 +13,14 @@
 - 影响：下一轮只动 `packing.ts` 块选择与残件填缝（填缝继续用 EMS）；不改 `canPlace`、不改 PackingResult 契约、不砍 `blocks.ts` 的 6 朝向。验收禁止「朝向种类必须 = 1」；高度受限侧立仍能放置视为回归门槛。
 - 后续：执行计划 `plans/2026-08-24-packing-compact-interior.md`。来源：Fanslau & Bortfeldt 2010；Zhu et al. 2012 六要素；Parreño et al. 2008 maximal spaces；Bortfeldt & Wäscher 2013 约束综述。
 
+## 2026-08-24 紧凑选位落地后的夹具与模式差异（已决策）
+
+- 背景：块选择改为当前 EMS（按 x、z、y）+ 对该空区生成最大可贴块。越南 20GP quantity 464 / volume 468；40HQ 两模式 864/864。
+- 选项：A. 为维持 quantity 件数 ≥ volume，残件跨 SKU 轮询；B. 接受 volume 可多装几件小货，保住 40HQ 满装与侧槽修复。
+- 决策：B。A 把 40HQ quantity 从 864 打到 833。件数优先仍在块内比 count；体积模式可以在边料多塞小件。20GP 包络仍 >88%。quantity 体积利用率 86.9% 高于 volume 85.5%。
+- 影响：不再断言 quantity.placedCount ≥ volume。合同与 invariant 为 464/468/864/864。1 步 lookahead 未做：按空区生成最大块已能填窄条。
+- 后续：40HQ quantity 满装后仍可能有约 1.8m 的行内空档，若要再消再加剩余空间 lookahead。
+
 
 ## 2026-08-24 工作区快捷键收成一条监听
 

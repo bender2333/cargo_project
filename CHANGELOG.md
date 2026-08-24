@@ -1,6 +1,15 @@
 # Changelog
 
 
+## 2026-08-24 compact space-first block packing
+
+- Root cause: block engine picked the largest-count block then the lowest-waste EMS (smallest hole). Different SKU footprints left a length-wise side corridor. Trimmed full-container catalogs had no long 1-row blocks for a 300mm strip.
+- Change: select the origin-most EMS (x, then z, then y). For that space, `bestBlocksForSpace` builds the max-count block that actually fits it. Residual singles also split EMS. Six orientations kept. No same-SKU orientation lock.
+- Verification: compactness 3/3 (corridor < 200mm on the 20GP mixed load; L leftover legal; tilt still places). packing.test 57/57. packingInvariants 15/15. blockEngine 6/6 including 0802 877/877 and Vietnam 40HQ 864/864. Contracts refreshed: 20GP qty 464 (+1), vol 468 (+6); 40HQ qty 864 (+25), vol 864 (+41). eslint on touched packing files exit 0.
+- Tradeoff: Vietnam 20GP quantity util 86.9% (was 90.6%) with envelope still >88% and corridor 0. 40HQ util 80.9% (was 77.9%) and fully placed. Volume may place a few more leftover pieces than quantity; count-order assertion dropped (`decision.md`).
+- Lookahead not added: generating the max block for the current EMS already filled the residual strip. 40HQ can still show ~1.8m empty runs on some floor rows after a full pack.
+
+
 ## 2026-08-24 packing compactness diagnosis and algorithm survey (no engine change)
 
 - User report: automatic packing leaves interior gaps; cargo should be compact inside with leftover on the outside. Mixed orientations must stay legal so height-limited leftover can still take a tilted box.
