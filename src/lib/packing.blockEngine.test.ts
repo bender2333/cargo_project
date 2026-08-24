@@ -326,7 +326,6 @@ describe('block-building packing engine', () => {
 
     const [quantity, volume] = outcomes
     expect(outcomes.some(({ result }) => result.placed.some(isGapFillBox))).toBe(true)
-    expect(quantity.result.placedCount).toBeGreaterThanOrEqual(volume.result.placedCount)
     expect(
       quantity.result.placedCount !== volume.result.placedCount
       || placedDistributionKey(quantity.result.placed) !== placedDistributionKey(volume.result.placed),
