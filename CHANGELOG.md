@@ -7,6 +7,7 @@
 - Change: `resolveWorkspaceHotkey` in `src/lib/workspaceHotkeys.ts`; one `useWorkspaceHotkeys` on the visualization workspace. Scene is pointer-only (`onManualDelete` / `manualKeyboardEnabled` / scene keydown deleted). Rotate keyboard reuses `handleManualRotateBox`. Auto M works. Auto help only lists M. Esc: maximize first, then clear selection.
 - Verification: vitest `workspaceHotkeys.test.ts` 8/8, sessionBoundary 14/14, VisualizationWorkspace 3/3. `npx tsc -b` exit 0. eslint on touched files exit 0 (pre-existing Workbench hooks warning). Playwright `e2e/manual-3d.spec.ts` **54 passed / 0 failed** including quick-place Delete without canvas focus, 2D Delete, auto M, Esc maximize layering, floating PageUp.
 - Not weakened: history-nav still must not mutate the draft. Assertions encode the new product contract (workspace contains), not canvas focus.
+- Deploy 7/7. Backup `/root/cargo_project-backup-20260824-024949`. Health `curl http://127.0.0.1/` passed. Live Workbench chunk `Workbench-CVyUwR6S.js`, scene `ContainerScene-CgesVUXr.js`. Remote Playwright not run this round: `E2E_*` env unset, cannot set `PLAYWRIGHT_BASE_URL` per README. Local `e2e/manual-3d.spec.ts` 54/54 stands as the keyboard-contract evidence.
 
 ## 2026-08-24 r68 production deploy
 
