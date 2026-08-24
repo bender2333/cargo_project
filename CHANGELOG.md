@@ -1,5 +1,142 @@
 # Changelog
 
+
+## 2026-08-20 r68 import template flow release note
+
+- Added in-app release note `2026-08-20-r68-import-template-flow` at the top of `src/data/releaseNotes.ts`.
+- User-facing: template selection first; no auto-map without a template; required `*`; optional weight with internal 1 kg; explicit update vs save-as; confirm blocked on conflicts or missing columns.
+
+## 2026-08-20 Final review: block confirm on invalid mapping
+
+- Confirm now requires `mappingValidation.valid` (duplicates + missingColumns) as well as required-field checks and parse errors. Mapping length and width to the same column, or selecting a template whose optional mapped column is missing, disables Confirm; `confirmMappingImport` also returns without calling `onConfirm`.
+- Duplicate conflicts show zh/en copy from `workbenchCopy.mappingDuplicateConflict` near the mapping form (`mapping-duplicate-hint`), naming the source column and target fields.
+- TemplateManagerPage last-request-wins sample headers now assert `tm-new-map-select-name` options because file columns render `<select>`, not datalist. Assertion not weakened: newest headers still win, stale headers stay absent.
+- TDD: Confirm/duplicate tests RED (Confirm stayed enabled; no conflict copy), then GREEN. Focused vitest `CargoImportDialog.test.tsx` + `TemplateManagerPage.test.tsx` + `ImportMappingForm.test.tsx`: **79 passed / 0 failed**. Playwright `e2e/import-templates.spec.ts -g "I:|J:"`: **2 passed** in 15.5s. Did not run full `npm test` / lint / e2e.
+
+
+## 2026-08-20 Task 8: import template deployment and remote e2e
+
+- `npm run deploy` completed 7/7. Backup `/root/cargo_project-backup-20260820-120440`. Health check passed (`curl http://127.0.0.1/` + unauthenticated `/api/import-templates` 401). Live `http://101.33.232.150/` serves `index-Dc9lLCLw.js` / `index-Bxzrmups.css`; Workbench chunk `Workbench-TTAAe4dj.js`. Backend `server/*.mjs` + `package*.json` synced; `cargo-server.service` restarted.
+- Direct `PLAYWRIGHT_BASE_URL=http://101.33.232.150` is rejected by `e2e/credentials.ts` (public HTTP). Remote E2E used SSH tunnel `127.0.0.1:18080 -> cargo-server:80` per README / P1-2. Recorded in `decision.md`.
+- Remote full Playwright via `PLAYWRIGHT_BASE_URL=http://127.0.0.1:18080/`: **144 passed / 0 failed / 0 skipped** in 16.5m. Repeat `e2e/import-templates.spec.ts`: **15 passed / 0 failed / 0 skipped** in 2.3m. A–O including Russian **31/31** and Vietnam **24 ok / 0 err**. Template writes used isolated `e2e-t7-*` names and manager cleanup.
+- Remaining RED (not claimed complete as all-green): full `eslint .` 449 tsconfigRootDir parse errors; `npm test` 1 pre-existing TemplateManagerPage datalist failure. Idle `npm run benchmark` re-run GREEN (see below). No fixture/golden/baseline/assertion weakening.
+
+
+## 2026-08-20 Task 8 review: idle benchmark re-run GREEN
+
+- CPU ~19%, no Playwright/e2e load. Unset leftover `PLAYWRIGHT_BASE_URL` (tunnel had been stopped). `npm run benchmark` exit 0: `Frontend benchmark passed (timings comparable).` Playwright architecture spec 1/1 in 2.2m.
+- russia-volume samples `3.607, 3.463, 3.393, 3.494, 3.48` — median **3.48** / p95 **3.607** vs baseline 3.07 / 3.156 (inside 20%). totalJsGzipBytes **703189**. Report `test-results/benchmark/frontend-architecture.json`. Baseline, threshold, samples, golden unchanged. No redeploy.
+
+
+## 2026-08-20 Task 8: local gates and import template verification
+
+- Forbidden-pattern search (src/server/e2e implementation): `CargoImportDialog` does not reference `preSelectCol` / `preselectMapping` / `IMPORT_REQUIRED_FIELDS`. `ImportPhase` is `template-selection` | `mapping-preview` only; `canConfirmMapping` disables confirm, does not auto-advance phase. No `defaultValues.weight` UI (`template-default-weight` absent). `currentCargos` not passed into the import dialog. New template copy lives in `workbenchCopy.ts` zh/en. Confirm still writes `cargo_last_used_template_id`; dialog always starts on template selection and does not read last-used to skip it.
+- Local gates in order:
+  - `npm run lint`: exit 1, **449 errors / 0 warnings**, all `tsconfigRootDir` parse errors from `.worktrees/p6-linear-packing-authority`. Targeted eslint on template implementation files exit 0. Recorded in `decision.md`; lint not claimed green.
+  - `npm test`: `test:unit` **911 passed / 1 failed / 0 skipped** (99 files, 58.95s). Only failure is the pre-existing TemplateManagerPage `datalist#tm-new-map-options-name` assertion. Standalone `test:rollback` **29 passed** (110.87s); `test:packing-performance` **9 passed** (23.15s). Assertion not weakened.
+  - `npm run build`: exit 0 (`tsc -b && vite build`, vite 1.86s). Workbench chunk `Workbench-TTAAe4dj.js`.
+  - First `npm run test:e2e` RED on 4 leftover tests (old dropdown/alert/name-only save/duplicate length:W) then 600s timeout. Rewrote those assertions to the confirmed UI/validation; focused 4 passed. Re-run `npm run test:e2e`: **144 passed / 0 failed / 0 skipped** in 9.0m.
+  - `npm run benchmark`: exit 1. Playwright architecture spec 1/1. Failures: `algorithm.russia-volume.medianMs` 3.993 vs baseline 3.07 and `p95Ms` 4.347 vs 3.156 (20% gate). Did not change baseline, threshold, samples, or golden. Recorded in `decision.md`.
+- A–O coverage (local e2e `import-templates.spec.ts` 15/15 plus lib/component/API): A/B selection then blank mapping; C editable preview; D internal 1 kg; E invalid weight blocks; F/G/H save/update/save-as without import; I/J invalid writes blocked; K cancel unchanged; L confirm replace; M manager independent; N zh/en; O Russian **31 ok** then **Loaded: 31 / 31** at 13400×2450×2650 mm; Vietnam combined **24 ok / 0 err**.
+- No fixture, golden, or benchmark baseline edits.
+
+## 2026-08-20 Task 7 review fix: save-as persistence and visible I errors
+
+- H: after save-as, cancel and reopen the same file. Original id still maps `Goods`; copy maps `Code`. Empty, original, and a third existing catalog name are rejected before a unique copy name succeeds. Cargo stays unchanged.
+- I: `CargoImportDialog` now passes `validateImportMappingValue(...).duplicateColumns` into `ImportMappingForm`. Incomplete mapping shows required `*` and `mapping-missing-hint`; duplicate L/W shows `data-invalid` on both fields; save stays disabled.
+- Covering: `npx vitest run src/components/CargoImportDialog.test.tsx` — 44 passed / 0 failed in 3.37s. `npx playwright test e2e/import-templates.spec.ts -g "H: save-as|I: incomplete"` — 2 passed in 19.1s. Full `e2e/import-templates.spec.ts` — 15 passed / 0 skipped in 1.3m.
+
+
+## 2026-08-20 Task 7: rebuild import template acceptance A–O
+
+- Rebuilt scenario A–O automation. New `e2e/import-templates.spec.ts` drives visible two-phase controls (`template-selection-panel` → `use-without-template` / template item → `mapping-preview`). Write cases use unique names and delete templates through the manager. No phase skip, auto-map helper, or direct state injection.
+- `e2e/container-calc.spec.ts` Excel flows now go through template selection and manual mapping. Removed auto-map assertions (`import-template-select` default mapping, Vietnam weight rebound after header-row change). Business result assertions (export, 31 pallets, 24 cargos, 0802 877 boxes) kept.
+- `ImportMappingForm` required `*` nodes now expose `mapping-required-length|width|height|combinedColumn|dimensionOrder` for the specified e2e contract.
+- Component/lib additions: dialog E/I/J/N contracts; TemplateManagerPage independence (no mapping modal); Russian fixture explicit `parseCargoRowsWithTemplate` mapping (31 pallets, 1250×830×2500 mm).
+- A–O coverage:
+  - A Component + E2E: dialog first paint + `import-templates` A/B
+  - B Component + E2E: blank mapping, required `*`, no auto-map
+  - C Component + E2E: mapping and preview stay editable; back to selection
+  - D Lib + E2E: unmapped/blank weight → internal 1 kg, no default-weight UI/warning
+  - E Lib + E2E: non-empty invalid weight blocks confirm
+  - F Component + API + E2E: save without template does not import
+  - G Component + API + E2E: update keeps original id; cargo unchanged
+  - H Component + API + E2E: save-as creates a new template; original remains
+  - I Lib + Server + Component + E2E: incomplete/duplicate mapping cannot save
+  - J Lib + Component + E2E: missing columns stay selected, confirm/writes blocked
+  - K Component + E2E: cancel leaves cargo and packing result
+  - L Reducer existing (`cargoImported` replace) + E2E confirm replace
+  - M Component + E2E: template manager CRUD/sample does not open import
+  - N Component + E2E: zh/en selection, mapping, save, update, save-as
+  - O Lib + E2E: Russian 31 pallets packed 31/31 at 13400×2450×2650 mm; Vietnam 24 cargos via combined dimensions
+- Focused Vitest: 9 files, **164 passed / 1 failed / 0 skipped** in 5.83s. The remaining failure is the pre-existing TemplateManagerPage `datalist#tm-new-map-options-name` assertion; recorded in `decision.md`, not weakened.
+- Playwright `npx playwright test e2e/import-templates.spec.ts`: **15 passed / 0 failed / 0 skipped** in 1.3m.
+
+
+## 2026-08-20 Task 6: block invalid template drafts
+
+- Template manager create/edit drafts now call `validateImportMappingValue(draftToMappingValue(draft), sampleRows.length > 0 ? availableColumns : null)`. No sample file → `null` (required + duplicate only). After sample load → real column array and missing-column checks. Weight mapping stays optional.
+- Save buttons require a trimmed name, a valid mapping, and a free entity write lock. Create and edit names show required `*` via `mappingRequiredField`. Catalog uniqueness is checked client-side (trim + current-user list, excluding the template being edited); server 409 remains authoritative.
+- 400 / 409 / network map to `templateConfigInvalid` / `templateNameDuplicate` / `templateSaveFailed` inside the draft. Failures do not use the global success notice or `window.alert`. Duplicate source columns mark both target fields (`data-invalid`) through `ImportMappingForm.duplicateColumns`. Management still does not open `CargoImportDialog` or import cargo. Sample last-request-wins and entity write lock are unchanged.
+- TDD RED: `npx vitest run src/components/TemplateManagerPage.test.tsx` — 1 failed file / 8 failed tests in 4.79s (name-only create still enabled, no `*` on names, no duplicate-field marks, PUT still sent for invalid edits, 409/400 used `window.alert`).
+- TDD GREEN: same command — 22 passed / 1 failed in 2.92s. Remaining failure is the pre-existing `datalist#tm-new-map-options-name` assertion; recorded in `decision.md`, assertion not weakened.
+- `npm run build` exit 0 (`tsc -b && vite build`, vite 1.13s).
+
+
+
+## 2026-08-20 Task 5: separate update and save-as actions
+
+- Replaced the leftover name-equality save button in `CargoImportDialog` with three explicit handlers: `handleCreateTemplate`, `handleUpdateTemplate`, `handleSaveTemplateCopy`. Create/copy POST via `onCreateTemplate`; update PUT via `onUpdateTemplate` with the original catalog name. The clicked button chooses the verb; name equality is never used to infer PUT vs POST.
+- Existing unmodified templates hide write actions. Any mapping, unit, row, dimension mode, combined column, order, or visible-default change shows Update and Save as. No-template valid mapping shows Save template with required `*` name. Save-as name is required `*` and blocks empty, original, and catalog-duplicate names before the request. Pending write disables every visible write action; duplicate clicks send one request. `importRows` reset clears comparison baseline and pending write.
+- `ImportTemplateRequestError` 400/409/network map to `templateConfigInvalid` / `templateNameDuplicate` / `templateSaveFailed`. Failures keep the draft. Success keeps the dialog open, does not call `onConfirm`, and uses the returned template as the existing baseline. Save no longer writes `cargo_last_used_template_id`.
+- TDD RED: `npx vitest run src/components/CargoImportDialog.test.tsx src/hooks/useTemplateCatalogs.test.ts` — 1 failed file / 22 failed tests in 41.67s (missing update/save-as controls, no pending lock, leftover inferred save).
+- TDD GREEN: same command — 2 files / 56 tests passed in 3.25s (re-run after lint fix 3.91s). Extra `src/Workbench.sessionBoundary.test.ts` 1 file / 14 passed in 1.60s.
+- `npm run build` exit 0 (`tsc -b && vite build`, vite 2.12s). `npm run lint` (`eslint .`) exit 1, 448 `tsconfigRootDir` parse errors from `.worktrees/p6-linear-packing-authority`. Targeted eslint on this task's files exit 0 after moving selected template name out of a render-time ref. Recorded in `decision.md`; assertions not weakened.
+- Review fix: in-flight template writes are generation-guarded. Back / reselect / `selectNone` / new `importRows` abandon the pending write so a late create/update/copy cannot attach its id or baseline to a mapping the user is no longer editing. Covering test: write completing after back+reselect keeps the new selection. GREEN `npx vitest run src/components/CargoImportDialog.test.tsx src/hooks/useTemplateCatalogs.test.ts` — 2 files / 57 passed in 3.65s.
+
+
+## 2026-08-20 Task 4: explicit template selection then mapping-preview
+
+- `CargoImportDialog` now starts on `template-selection`. `TemplateSelectionPanel` is presentational only (templates, loadFailed, labels, callbacks). `selectNone()` uses `emptyImportMappingValue()`; `selectTemplate(id)` uses `importMappingValueFromTemplate`. Mapping and preview stay on one `mapping-preview` phase; back-to-selection replaces unsaved drafts on reselect. New `importRows` reset phase, selection, mapping, save name/status, and missing columns.
+- Catalog load failure still offers retry and “use without template”; manual confirm is not blocked. Escape/cancel do not call `onConfirm`. Workbench still dispatches `cargoImported` only from `onConfirm` (no `currentCargos`, no Workbench.tsx change). Existing save button kept for Task 5.
+- TDD RED: `npx vitest run src/components/TemplateSelectionPanel.test.tsx src/components/CargoImportDialog.test.tsx` — 2 failed files / 20 failed tests + 1 failed suite in 2.96s (missing panel module; mapping form on first paint).
+- TDD GREEN: same command — 2 files / 28 tests passed in 3.23s.
+- `npm run build` exit 0 (`tsc -b && vite build`, vite 1.29s).
+
+
+## 2026-08-20 Task 3: mark required mapping fields
+
+- `ImportMappingForm` derives required dimension fields from `value.dimensionMode`. Separate mode marks length/width/height; combined mode marks the combined size column and split order. Label, name, weight, quantity, color, and business-limit fields stay unmarked. No `requiredFields` prop.
+- Required `*` is a separate `aria-hidden` node plus `sr-only` `mappingRequiredField`. Form top shows `mappingRequiredMarkerHint`. New copy lives in `workbenchCopy.ts` zh/en, including later-flow keys (`templateSelectionTitle`, `templateUseWithout`, `templateSaveAs`, name/config errors).
+- TDD RED: `npx vitest run src/components/ImportMappingForm.test.tsx` — 1 failed file / 3 failed tests in 1.85s (`Unable to find` hint text).
+- TDD GREEN: same command — 1 file / 8 tests passed in 1.83s.
+- `npm run lint` (`eslint .`) exit 1, 446 `tsconfigRootDir` parse errors from `.worktrees/p6-linear-packing-authority`. Targeted eslint on this task's files exit 0. Recorded in `decision.md`; assertions not weakened.
+
+
+## 2026-08-20 Task 2 review: combined order write gate and auto-map tests
+
+- Combined templates with omitted, empty, or invalid `dimensionOrder` now fail `parseImportTemplatePayload` as `invalid-template`. Client `payloadForRequest` no longer rewrites invalid order to LWH before POST/PUT.
+- CargoImportDialog tests no longer expect header-row auto-mapping. Vietnam weight stays blank; pending-import cases map columns explicitly.
+- Covering GREEN: `npx vitest run server/importTemplatePayload.test.mjs src/api/importTemplates.test.ts src/components/CargoImportDialog.test.tsx` — 3 files / 30 tests passed in 2.86s.
+
+
+## 2026-08-20 Task 2: validate import template configurations
+
+- Added client `emptyImportMappingValue`, `validateImportMappingValue`, and `sameImportMappingValue` in `src/lib/importWorkflow.ts`. Blank separate mappings miss length/width/height; combined mode requires combinedColumn plus a unique three-field dimensionOrder; inactive dimension fields are ignored for duplicates; `availableColumns === null` skips missing-column checks, while `[]` reports mapped headers as missing. Weight stays optional.
+- Added server `parseImportTemplatePayload` in `server/importTemplatePayload.mjs`. POST/PUT `/api/import-templates` reject empty names, incomplete dimensions, and duplicate active mappings with HTTP 400 `code: 'invalid-template'`; SQLite UNIQUE conflicts return HTTP 409 `code: 'duplicate-name'`. Unmapped weight is accepted. Removed the old in-file `parseTemplatePayload`.
+- Client `ImportTemplateRequestError` maps HTTP 409 → `duplicate-name`, 400 → `invalid-template`, other write failures → `request-failed`. Deleted `canAutoMap`, `preSelectCol`, `preselectMapping`, and `IMPORT_REQUIRED_FIELDS` with no aliases. CargoImportDialog now starts from empty mapping. Vietnam Excel test uses an explicit mapping. Vitest `include` now covers `server/**/*.test.mjs`.
+- TDD RED: `npx vitest run src/lib/importWorkflow.test.ts server/importTemplatePayload.test.mjs src/api/importTemplates.test.ts` — 3 failed files / 11 failed tests + 1 failed suite in 1.88s. New helpers were undefined; `server/importTemplatePayload.mjs` did not exist.
+- TDD GREEN: same command — 3 files / 30 tests passed in 2.54s after deleting auto-map tests. Intermediate `src/lib/importCargo.test.ts` included run: 4 files / 61 passed in 2.54s.
+- `npm run build` exit 0 (`tsc -b && vite build`, vite 1.13s). Parameter properties on `ImportTemplateRequestError` were rewritten as class fields for `erasableSyntaxOnly`.
+
+## 2026-08-20 Task 1: make cargo weight mapping optional
+
+- Removed `ImportTemplateDefaults.weight` and the default-weight UI/payload path. Unmapped or blank weight now parses as internal `1 kg` with no warning; non-empty invalid, zero, or negative weight still blocks the batch. Optional `mapping.weight` is unchanged.
+- Parser, mapping form, import dialog, template manager fixtures, client `normalizeDefaults`, server `parseTemplatePayload`, and `lastImportConfig` ignore historical `defaultValues.weight` and do not write it back.
+- TDD RED: `npx vitest run src/lib/importCargo.test.ts src/lib/importWorkflow.test.ts src/components/ImportMappingForm.test.tsx src/components/CargoImportDialog.test.tsx src/components/TemplateManagerPage.test.tsx src/api/importTemplates.test.ts` — 5 failed files / 20 failed tests in 29.08s. Missing/blank weight returned `invalid-weight`; default-weight input and payload still present.
+- TDD GREEN: same command — 5 files passed; `TemplateManagerPage.test.tsx` 15 passed / 1 failed (`keeps the newest sample headers…` looking for `datalist#tm-new-map-options-name`). Duration 3.86s. Failure reproduces on unmodified `feat/template-refactor` HEAD; recorded in `decision.md`, assertion not weakened.
+- `npm run build` exit 0 (`tsc -b && vite build`, vite 2.43s). No remaining `ImportTemplateDefaults['weight']` consumers.
+
 ## 2026-08-20 import-template behavior baseline revision
 
 - Confirmed `docs/superpowers/specs/2026-08-19-import-template-behavior-design.md` as the product behavior baseline.

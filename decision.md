@@ -1,5 +1,95 @@
 # Decision Log
 
+
+## 2026-08-20 Task 8 远程 E2E 使用 SSH 回环隧道
+
+- 背景：任务书写明 `PLAYWRIGHT_BASE_URL=http://101.33.232.150`。直接执行被 `e2e/credentials.ts` 拒绝：`PLAYWRIGHT_BASE_URL must use HTTPS or loopback HTTP`（P1-2 / README：生产明文 HTTP 不得携带 E2E 凭据）。
+- 选项：A. 改 credentials 守卫以凑任务书原文；B. 停在远程 E2E 未跑；C. 按仓库生产规则 SSH 转发 `127.0.0.1:18080 -> 127.0.0.1:80`，`PLAYWRIGHT_BASE_URL=http://127.0.0.1:18080/`，凭据走 `E2E_*`。
+- 决策：C。不削弱 URL 守卫。
+- 影响：全量远程 **144 passed / 0 skipped**；模板聚焦再跑 **15 passed / 0 skipped**。
+- 后续：生产配 TLS 后可改用 HTTPS 公网入口。
+
+
+## 2026-08-20 Task 8 npm run lint 全仓失败
+
+- 背景：Task 8 要求按序运行 `npm run lint`。`eslint .` 退出码 1，**449 problems (449 errors, 0 warnings)**，全部是同一解析错误：
+  `Parsing error: No tsconfigRootDir was set, and multiple candidate TSConfigRootDirs are present`（`C:\project\cargo_project` 与 `C:\project\cargo_project\.worktrees\p6-linear-packing-authority`）。代表文件：`.worktrees/p6-linear-packing-authority/benchmark/frontend-architecture.spec.ts` 与仓库根 `src/types.ts`。
+- 核查：与 Task 3 / Task 5 同一 worktree 并存问题；本次 449 条全部是该 parse error，无其它规则失败。`npx eslint src/components/CargoImportDialog.tsx src/components/ImportMappingForm.tsx src/components/TemplateSelectionPanel.tsx src/components/TemplateManagerPage.tsx src/data/workbenchCopy.ts src/lib/importWorkflow.ts src/lib/importCargo.ts` 退出码 0、无输出。
+- 选项：A. 改 ESLint / 删除 worktree 凑绿；B. 削弱或跳过 lint；C. 记录为既有失败，不改配置，继续其余门禁。
+- 决策：C。不宣称 lint 全绿。不修改 ESLint 配置。
+- 影响：全仓 `npm run lint` 在该 worktree 存在时不可作为本任务 GREEN 门禁。
+- 后续：由仓库维护处理 tsconfigRootDir / worktree ignore，不并入模板重构任务。
+
+
+## 2026-08-20 Task 8 npm test 既有 sample-headers datalist 断言仍失败
+
+- 背景：`npm test` → `test:unit` 退出码 1。`Tests  1 failed | 911 passed (912)`，`Test Files  1 failed | 98 passed (99)`，0 skipped。唯一失败：`src/components/TemplateManagerPage.test.tsx` `keeps the newest sample headers when files finish out of order and clears a failed sample`，`datalist#tm-new-map-options-name option[value="Second name"]` 为 null。
+- 核查：与 Task 1 / 6 / 7 同一既有失败。无新增失败。因 `test:unit` 失败，`npm test` 未继续 rollback / packing-performance；单独复跑 `npm run test:rollback` **29 passed / 0 failed**（110.87s），`npm run test:packing-performance` **9 passed / 0 failed**（23.15s）。
+- 决策：不削弱该断言。记录后继续 build / e2e / benchmark。
+- 影响：不能宣称 `npm test` GREEN。
+- 后续：映射输入形态若改回 datalist，再同步该断言。
+
+
+## 2026-08-20 Task 8 遗留 E2E 与新模板合同冲突
+
+- 背景：首次 `npm run test:e2e` 在 144 条套件中失败 4 条（随后被 600s 命令超时截断）：
+  1. `shows import template load failure in the mapping dialog and recovers on retry` 等待已删除的 `import-template-dialog-load-error` / `import-template-select`。
+  2. `keeps a newly created import template when the bootstrap list finishes last` 只填名称，`template-manager-new-save` 因缺尺寸映射保持 disabled。
+  3. `keeps import template update and delete failures visible` 等待更新失败的 `window.alert('更新模板失败')`；更新 409 现为行内 `templateNameDuplicate`。
+  4. `renames and deletes import templates from top-level template manager` 把 length 改成已占用的 `W`，重复映射使保存 disabled。
+- 选项：A. 削弱或跳过；B. 改回旧 UI/校验；C. 按已确认行为稿改写可见合同，不绕过模板选择。
+- 决策：C。加载失败改断言 `template-selection-panel` 文案 + 重试 + `use-without-template` 仍可用，并确认旧 `import-template-select` 不存在。创建补齐 length/width/height。更新失败断言行内 `模板名称已存在`，删除仍走 `window.alert('删除模板失败')`。重命名把 width 改到 `L`，导入尺寸改为 `60 x 80 x 40 mm`（W×L×H），保留 rename/mapping persist/delete 合同。
+- 影响：聚焦 4 条转绿后全量 Playwright **144 passed / 0 failed / 0 skipped**（9.0m）。未改夹具、golden、baseline。
+- 后续：无。
+
+
+## 2026-08-20 Task 8 benchmark russia-volume timing RED
+
+- 背景：完整 `npm run benchmark` 退出码 1：`algorithm.russia-volume.medianMs exceeded 20%` 与 `algorithm.russia-volume.p95Ms exceeded 20%`。实测 samples `3.968, 3.966, 4.014, 3.993, 4.347`，median `3.993`、p95 `4.347`；基线 median `3.07`、p95 `3.156`（约 +30% / +38%）。报告 `test-results/benchmark/frontend-architecture.json`。浏览器 Playwright `1 passed`。未改 baseline、阈值、样本、golden。
+- 核查：五项 contract hash 仍由 packing golden 校验；失败仅 russia-volume 3–4ms 算法微基准，发生在 9 分钟全量 E2E 之后。模板重构不改 packing 算法。其余算法/浏览器/包体门禁未列入本次失败列表。
+- 选项：A. `benchmark:update` 或降阈值；B. 复跑挑选更好样本并宣称 GREEN；C. 保持 RED 记录，不改门禁。
+- 决策：C。当时不宣称 benchmark GREEN，不修改 baseline/阈值/样本/golden。
+- 影响：首次门禁不能称为全绿；部署已按任务执行。
+- 后续 / 关闭：空载复测（CPU ~19%，无 Playwright 负载；清掉远程隧道 `PLAYWRIGHT_BASE_URL`）完整 `npm run benchmark` 退出码 0：`Frontend benchmark passed (timings comparable).` russia-volume samples `3.607, 3.463, 3.393, 3.494, 3.48`，median `3.48`、p95 `3.607`（相对基线 3.07 / 3.156 低于 20%）。未改 baseline。本条 RED 关闭。
+
+## 2026-08-20 Task 7 既有 sample-headers datalist 断言仍失败
+
+- 背景：Task 7 聚焦命令包含 `src/components/TemplateManagerPage.test.tsx`。该文件 23 passed / 1 failed：`keeps the newest sample headers when files finish out of order and clears a failed sample` 在 `datalist#tm-new-map-options-name option[value="Second name"]` 仍为 null。
+- 核查：与 Task 1 / Task 6 记录的同一既有失败。当前 `ImportMappingForm` 在已有文件列时渲染 `<select>` 而非 `datalist#*-map-options-*`。Task 7 只为必填 `*` 增加了 `mapping-required-*` testid，未改样本解析或映射输入形态。
+- 选项：A. 削弱或改写该断言以凑绿；B. 把映射输入改回 datalist；C. 继续记录为既有失败，不改断言。
+- 决策：C。按任务约束不削弱该断言。
+- 影响：聚焦 Vitest 164 passed / 1 failed（9 files）；Playwright `e2e/import-templates.spec.ts` 15 passed / 0 failed / 0 skipped。
+- 后续：不要用改测试来掩盖；若后续任务改映射输入形态，再同步该断言。
+
+
+## 2026-08-20 Task 6 既有 sample-headers datalist 断言仍失败
+
+- 背景：Task 6 聚焦命令 `npx vitest run src/components/TemplateManagerPage.test.tsx`。新有效性合同测试全绿后，该文件 22 passed / 1 failed：`keeps the newest sample headers when files finish out of order and clears a failed sample` 在 `datalist#tm-new-map-options-name option[value="Second name"]` 仍为 null。
+- 核查：与 Task 1 记录的同一既有失败。当前 `ImportMappingForm` 在已有文件列时渲染 `<select>` 而非 `datalist#*-map-options-*`。Task 6 未改样本解析、最后请求获胜或映射输入形态。
+- 选项：A. 削弱或改写该断言以凑绿；B. 在 Task 6 中把映射输入改回 datalist；C. 继续记录为既有失败，不改断言。
+- 决策：C。按任务约束不削弱该断言。失败与模板草稿有效性合同无关。
+- 影响：Task 6 聚焦套件除该既有失败外全绿；`npm run build` 退出码 0。
+- 后续：不要用改测试来掩盖；若后续任务改映射输入形态，再同步该断言。
+
+
+## 2026-08-20 Task 5 npm run lint 全仓失败
+
+- 背景：Task 5 要求运行 `npm run lint`。`eslint .` 退出码 1，448 errors，全部是 `Parsing error: No tsconfigRootDir was set, and multiple candidate TSConfigRootDirs are present`（仓库根与 `.worktrees/p6-linear-packing-authority`）。与 Task 3 记录的同一问题。
+- 核查：`npx eslint src/components/CargoImportDialog.tsx src/components/CargoImportDialog.test.tsx src/hooks/useTemplateCatalogs.test.ts src/Workbench.sessionBoundary.test.ts` 初次因 render 中读取 `selectedImportTemplateNameRef` 失败；改为 `selectedTemplateName` state 后退出码 0、无输出。
+- 决策：不削弱断言，不改 ESLint 配置。全仓失败记入本条；任务文件 eslint 全绿后提交。
+- 影响：全仓 `npm run lint` 在该 worktree 存在时不可作为本任务门禁。
+- 后续：由仓库维护处理 tsconfigRootDir / worktree ignore，不并入模板重构任务。
+
+
+## 2026-08-20 Task 3 npm run lint 全仓失败
+
+- 背景：Task 3 要求运行 `npm run lint`。`eslint .` 退出码 1，446 errors，全部是 `Parsing error: No tsconfigRootDir was set, and multiple candidate TSConfigRootDirs are present`（仓库根与 `.worktrees/p6-linear-packing-authority`）。
+- 核查：`npx eslint src/components/ImportMappingForm.tsx src/components/ImportMappingForm.test.tsx src/data/workbenchCopy.ts src/components/TemplateManagerPage.test.tsx` 退出码 0、无输出。失败来自 worktree 并存，不是本任务文件。
+- 决策：不削弱断言，不改 ESLint 配置。聚焦 Vitest 全绿后仍提交。
+- 影响：全仓 `npm run lint` 在该 worktree 存在时不可作为本任务门禁。
+- 后续：由仓库维护处理 tsconfigRootDir / worktree ignore，不并入模板重构任务。
+
+
 ## 2026-08-20 模板导入重构行为基准
 
 - 背景：`2026-08-19-import-template-behavior-design.md` 原为待确认稿，实施计划对无模板映射、重量默认值、已有模板保存和替换提示存在互相冲突的解释。
@@ -8,6 +98,16 @@
 - 模板保存：选择已有模板并修改完整模板配置后，导入确认同时提供明确的“更新模板”和“另存为模板”；更新保留原 ID 和名称，另存为必须输入新的唯一名称。未选模板时只提供“保存为模板”。三种保存都不触发货物导入。
 - 界面：映射和预览保持同阶段可编辑，不因配置有效自动跳步；本轮不增加已有货物替换警告或二次确认。`CargoImportDialog` 只产生标准货物，替换仍由 `Workbench` 的确认边界负责，保留未来拆分追加/替换模式的接口边界。
 - 语言与验收：新增文案同时接入中英文，优先验收中文效果；旧模板导入验收不再作为新交互基准，按已确认行为稿场景 A–O 重建自动化验收。
+
+
+## 2026-08-20 Task 1 聚焦测试中的既有失败
+
+- 背景：Task 1 重量合同清洁切换的聚焦命令包含 `src/components/TemplateManagerPage.test.tsx`。实现后该文件 15 passed / 1 failed：`keeps the newest sample headers when files finish out of order and clears a failed sample` 在 `datalist#tm-new-map-options-name option[value="Second name"]` 断言为 null。
+- 核查：用 `git stash` 暂时移开 Task 1 改动后，同一条测试在 `feat/template-refactor` HEAD 上同样失败（断言行 278）。当前 `ImportMappingForm` 在已有文件列时渲染 `<select>` 而非 `datalist#*-map-options-*`，该断言与现实现不一致。
+- 选项：A. 削弱或改写该断言以凑绿；B. 在 Task 1 中改回 datalist；C. 记录为既有失败，不改断言。
+- 决策：C。失败与重量合同无关，不削弱断言，不把 datalist 修复并入 Task 1。
+- 影响：Task 1 聚焦套件除该既有失败外全绿；`npm run build` 仍须通过。datalist 与样本表头竞态由后续任务处理。
+- 后续：不要用改测试来掩盖；若后续任务改映射输入形态，再同步该断言。
 
 
 ## 2026-07-31 生产 module worker 的 XLSX namespace 兼容

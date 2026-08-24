@@ -1,165 +1,17 @@
 import { describe, it, expect } from 'vitest'
 import {
-  canAutoMap,
-  preSelectCol,
-  preselectMapping,
   translateImportIssue,
   buildImportMessages,
   importMappingValueFromTemplate,
   mappedColumnsForTemplateValue,
   missingMappedColumns,
+  emptyImportMappingValue,
+  validateImportMappingValue,
+  sameImportMappingValue,
   type ImportIssue,
 } from './importWorkflow'
 import type { ImportTemplate } from '../types'
 import type { ImportMappingValue } from './importMapping'
-import { fields } from './importCargo'
-
-describe('canAutoMap', () => {
-  it('returns false for array row', () => {
-    expect(canAutoMap(['col1', 'col2'])).toBe(false)
-  })
-
-  it('returns true when all required fields match', () => {
-    const row = {
-      '长度': 1000,
-      '宽度': 800,
-      '高度': 600,
-      '重量': 50,
-      '数量': 10,
-    }
-    expect(canAutoMap(row)).toBe(true)
-  })
-
-  it('returns false when length is missing', () => {
-    const row = {
-      'width': 800,
-      'height': 600,
-      'weight': 50,
-      'quantity': 10,
-    }
-    expect(canAutoMap(row)).toBe(false)
-  })
-})
-
-describe('preSelectCol', () => {
-  it('selects length column by Chinese header', () => {
-    const columns = ['标签', '长度', '宽度', '重量']
-    expect(preSelectCol('length', columns)).toBe('长度')
-  })
-
-  it('selects quantity by English header', () => {
-    const columns = ['label', 'name', 'quantity', 'weight']
-    expect(preSelectCol('quantity', columns)).toBe('quantity')
-  })
-
-  it('returns empty string when no match', () => {
-    const columns = ['col1', 'col2']
-    expect(preSelectCol('length', columns)).toBe('')
-  })
-
-  // Regression: these two aliases were dropped when preSelectCol was hand-copied
-  // out of importCargo, silently losing the max-stack-layers and ground-only
-  // rules for workbooks that fall back to manual mapping.
-  it('selects max stack layers by traditional-Chinese header 堆疊層數', () => {
-    expect(preSelectCol('maxStackLayers', ['标签', '堆疊層數', '重量'])).toBe('堆疊層數')
-  })
-
-  it('selects ground only by 不可堆叠在上 header', () => {
-    expect(preSelectCol('groundOnly', ['标签', '不可堆叠在上', '重量'])).toBe('不可堆叠在上')
-  })
-
-  // Structural guard against the two lists drifting again.
-  //
-  // Contract: for every field below, manual-mapping pre-selection must recognise
-  // every alias that auto-mapping accepts — otherwise a workbook that falls back
-  // to manual mapping silently loses that field.
-  //
-  // KNOWN_GAPS records aliases that preSelectCol has *never* recognised (verified
-  // against the pre-extraction implementation). They are pre-existing product
-  // gaps, not refactor regressions, so they are documented here rather than
-  // silently widened. Closing them changes which column gets pre-selected for
-  // existing users' workbooks and needs its own decision.
-  //
-  // P2-4 (2026-07-29): color/canRotate/stackable and the traditional-Chinese
-  // label/name aliases (標籤, 托盤, 代號, 名稱, 貨物名稱) are now recognised.
-  // KNOWN_GAPS is kept as an empty marker so the test structure is preserved.
-  const KNOWN_GAPS: Record<string, string[]> = {}
-
-  it.each([
-    ['label', 'label'],
-    ['name', 'name'],
-    ['weight', 'weight'],
-    ['quantity', 'quantity'],
-    ['color', 'color'],
-    ['canRotate', 'canRotate'],
-    ['stackable', 'stackable'],
-    ['maxStackLayers', 'maxStackLayers'],
-    ['groundOnly', 'groundOnly'],
-    ['length', 'lengthMm'],
-    ['width', 'widthMm'],
-    ['height', 'heightMm'],
-  ])('recognises every auto-map alias for %s (minus documented gaps)', (workflowField, canonicalField) => {
-    const canonicalAliases = fields[canonicalField as keyof typeof fields]
-    const allowed = new Set(KNOWN_GAPS[workflowField] ?? [])
-    const unexpectedGaps = canonicalAliases.filter(
-      (alias) => preSelectCol(workflowField, [alias]) !== alias && !allowed.has(alias),
-    )
-    expect(
-      unexpectedGaps,
-      `preSelectCol('${workflowField}') stopped recognising aliases that importCargo accepts`,
-    ).toEqual([])
-  })
-})
-
-describe('preselectMapping', () => {
-  const vietnamHeader = [
-    '物料代码SKU',
-    '物料名称',
-    '预计发货数量',
-    '箱数',
-    '产品净重（KG)/个',
-    '产品毛重(KG)/箱',
-    '产品总净重（KG)',
-    '产品总毛重(KG)',
-    '外箱尺寸（mm）',
-    '箱规',
-  ]
-
-  it('binds the per-carton gross-weight column when the real header appears', () => {
-    const remapped = preselectMapping(vietnamHeader, { weight: '' })
-    expect(remapped.weight).toBe('产品毛重(KG)/箱')
-    expect(remapped.label).toBe('物料代码SKU')
-  })
-
-  it('prefers carton count over planned shipment quantity', () => {
-    const remapped = preselectMapping(vietnamHeader, { quantity: '' })
-    expect(remapped.quantity).toBe('箱数')
-  })
-
-  it('prefers per-carton gross weight over total gross weight', () => {
-    const remapped = preselectMapping(vietnamHeader, { weight: '' })
-    expect(remapped.weight).toBe('产品毛重(KG)/箱')
-    expect(remapped.weight).not.toBe('产品总毛重(KG)')
-  })
-
-  it('keeps a user-chosen quantity column instead of rebinding it', () => {
-    const remapped = preselectMapping(vietnamHeader, { quantity: '预计发货数量' })
-    expect(remapped.quantity).toBe('预计发货数量')
-  })
-
-
-  it('keeps an existing weight mapping that still exists in the new header', () => {
-    const remapped = preselectMapping(vietnamHeader, { weight: '产品总毛重(KG)' })
-    expect(remapped.weight).toBe('产品总毛重(KG)')
-  })
-
-  it('does not invent a weight column when the header has none', () => {
-    expect(preselectMapping(['标题', '备注'], { weight: '' }).weight).toBe('')
-  })
-})
-
-
-
 
 describe('translateImportIssue', () => {
   it('translates cm-converted to Chinese', () => {
@@ -229,7 +81,7 @@ describe('importMappingValueFromTemplate', () => {
     expect(value.headerRow).toBe(2)
     expect(value.defaults.stackable).toBe(false)
     expect(value.defaults).toEqual({ quantity: 1, canRotate: true, stackable: false })
-    expect(value.defaults.weight).toBeUndefined()
+    expect(value.defaults).not.toHaveProperty('weight')
   })
 })
 
@@ -304,3 +156,184 @@ describe('missingMappedColumns', () => {
     expect(missing).toContain('Qty')
   })
 })
+
+function mappingValue(overrides: Partial<ImportMappingValue> = {}): ImportMappingValue {
+  return {
+    mapping: {},
+    units: { length: 'auto', width: 'auto', height: 'auto' },
+    headerRow: 1,
+    startRow: 2,
+    dimensionMode: 'separate',
+    combinedColumn: '',
+    dimensionOrder: ['length', 'width', 'height'],
+    defaults: { quantity: 1, canRotate: true, stackable: true },
+    ...overrides,
+  }
+}
+
+describe('emptyImportMappingValue', () => {
+  it('starts every source column unmapped in separate mode', () => {
+    const value = emptyImportMappingValue()
+    expect(value.dimensionMode).toBe('separate')
+    expect(value.combinedColumn).toBe('')
+    expect(value.mapping.length).toBe('')
+    expect(value.mapping.width).toBe('')
+    expect(value.mapping.height).toBe('')
+    expect(value.mapping.weight).toBe('')
+    expect(value.mapping.quantity).toBe('')
+    expect(value.headerRow).toBe(1)
+    expect(value.startRow).toBe(2)
+  })
+})
+
+describe('validateImportMappingValue', () => {
+  it('reports missing length, width, and height for a blank separate mapping', () => {
+    const result = validateImportMappingValue(emptyImportMappingValue(), null)
+    expect(result.missingRequired).toEqual(['length', 'width', 'height'])
+    expect(result.duplicateColumns).toEqual([])
+    expect(result.missingColumns).toEqual([])
+    expect(result.valid).toBe(false)
+  })
+
+  it('requires only combinedColumn and a unique three-field dimensionOrder in combined mode', () => {
+    const complete = mappingValue({
+      dimensionMode: 'combined',
+      combinedColumn: 'Size',
+      dimensionOrder: ['height', 'width', 'length'],
+      mapping: { quantity: 'Qty' },
+    })
+    expect(validateImportMappingValue(complete, null)).toEqual({
+      missingRequired: [],
+      duplicateColumns: [],
+      missingColumns: [],
+      valid: true,
+    })
+
+    const incomplete = mappingValue({
+      dimensionMode: 'combined',
+      combinedColumn: '',
+      dimensionOrder: ['length', 'length', 'width'],
+    })
+    expect(validateImportMappingValue(incomplete, null)).toEqual({
+      missingRequired: ['combinedColumn', 'dimensionOrder'],
+      duplicateColumns: [],
+      missingColumns: [],
+      valid: false,
+    })
+  })
+
+  it('ignores inactive dimension mappings when detecting duplicates', () => {
+    const combined = mappingValue({
+      dimensionMode: 'combined',
+      combinedColumn: 'Size',
+      mapping: { length: 'Size', width: 'Size', height: 'Size', quantity: 'Qty' },
+    })
+    expect(validateImportMappingValue(combined, null)).toEqual({
+      missingRequired: [],
+      duplicateColumns: [],
+      missingColumns: [],
+      valid: true,
+    })
+
+    const separate = mappingValue({
+      mapping: { length: 'L', width: 'W', height: 'H', dimensions: 'L' },
+      combinedColumn: 'L',
+    })
+    expect(validateImportMappingValue(separate, null)).toEqual({
+      missingRequired: [],
+      duplicateColumns: [],
+      missingColumns: [],
+      valid: true,
+    })
+  })
+
+  it('returns the source column when two active fields map to it', () => {
+    const result = validateImportMappingValue(mappingValue({
+      mapping: { length: 'W', width: 'W', height: 'H' },
+    }), null)
+    expect(result.duplicateColumns).toEqual(['W'])
+    expect(result.missingRequired).toEqual([])
+    expect(result.valid).toBe(false)
+  })
+
+  it('skips missing-column checks when no sample file is loaded', () => {
+    const value = mappingValue({
+      mapping: { length: 'L', width: 'W', height: 'H' },
+    })
+    expect(validateImportMappingValue(value, null)).toEqual({
+      missingRequired: [],
+      duplicateColumns: [],
+      missingColumns: [],
+      valid: true,
+    })
+  })
+
+  it('reports every mapped column as missing when the loaded file has no headers', () => {
+    const value = mappingValue({
+      mapping: { length: 'L', width: 'W', height: 'H' },
+    })
+    expect(validateImportMappingValue(value, [])).toEqual({
+      missingRequired: [],
+      duplicateColumns: [],
+      missingColumns: ['L', 'W', 'H'],
+      valid: false,
+    })
+  })
+
+  it('returns missingColumns when a selected template references absent file headers', () => {
+    const value = mappingValue({
+      mapping: { length: 'Length', width: 'Width', height: 'Height', quantity: 'Qty' },
+    })
+    const result = validateImportMappingValue(value, ['Length', 'Width'])
+    expect(result.missingColumns).toEqual(['Height', 'Qty'])
+    expect(result.valid).toBe(false)
+  })
+})
+
+describe('sameImportMappingValue', () => {
+  it('treats mapping, units, rows, mode, combined column, order, and defaults as the configuration', () => {
+    const left = mappingValue({
+      mapping: { length: 'L', width: 'W', height: 'H' },
+      units: { length: 'mm', width: 'cm', height: 'auto' },
+      headerRow: 2,
+      startRow: 4,
+      dimensionMode: 'combined',
+      combinedColumn: 'Size',
+      dimensionOrder: ['width', 'height', 'length'],
+      defaults: { quantity: 2, canRotate: false, stackable: true, label: 'BX' },
+    })
+    const matching = mappingValue({
+      mapping: { height: 'H', width: 'W', length: 'L' },
+      units: { height: 'auto', width: 'cm', length: 'mm' },
+      headerRow: 2,
+      startRow: 4,
+      dimensionMode: 'combined',
+      combinedColumn: 'Size',
+      dimensionOrder: ['width', 'height', 'length'],
+      defaults: { label: 'BX', stackable: true, canRotate: false, quantity: 2 },
+    })
+    expect(sameImportMappingValue(left, matching)).toBe(true)
+
+    expect(sameImportMappingValue(left, { ...matching, headerRow: 1 })).toBe(false)
+    expect(sameImportMappingValue(left, { ...matching, startRow: 5 })).toBe(false)
+    expect(sameImportMappingValue(left, { ...matching, dimensionMode: 'separate' })).toBe(false)
+    expect(sameImportMappingValue(left, { ...matching, combinedColumn: 'Other' })).toBe(false)
+    expect(sameImportMappingValue(left, {
+      ...matching,
+      dimensionOrder: ['length', 'width', 'height'],
+    })).toBe(false)
+    expect(sameImportMappingValue(left, {
+      ...matching,
+      units: { ...matching.units, width: 'mm' },
+    })).toBe(false)
+    expect(sameImportMappingValue(left, {
+      ...matching,
+      mapping: { ...matching.mapping, weight: 'Wt' },
+    })).toBe(false)
+    expect(sameImportMappingValue(left, {
+      ...matching,
+      defaults: { ...matching.defaults, quantity: 3 },
+    })).toBe(false)
+  })
+})
+

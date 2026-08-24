@@ -3,6 +3,7 @@ import type { ImportTemplate } from '../types'
 import { fetchWithAuth } from './client'
 import {
   deleteImportTemplate,
+  ImportTemplateRequestError,
   readImportTemplates,
   saveImportTemplate,
   updateImportTemplate,
@@ -62,6 +63,7 @@ const dto = {
   defaultValues: {
     ...template.defaultValues,
     obsoleteDefault: 'discard-me',
+    weight: 12,
   },
 }
 
@@ -137,7 +139,9 @@ describe('import template API', () => {
         maxStackLayers: 3,
         groundOnly: true,
         obsoleteDefault: 'discard-me',
+        weight: 12,
       },
+
     } as ImportTemplatePayload
     mockedFetch
       .mockResolvedValueOnce(new Response(JSON.stringify(dto), { status: 201 }))
@@ -168,7 +172,7 @@ describe('import template API', () => {
   it('rejects list, save, update, and delete failures instead of reporting success', async () => {
     mockedFetch
       .mockResolvedValueOnce(new Response(null, { status: 500 }))
-      .mockResolvedValueOnce(new Response(null, { status: 409 }))
+      .mockResolvedValueOnce(new Response(null, { status: 500 }))
       .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(new Response(null, { status: 500 }))
 
@@ -177,4 +181,50 @@ describe('import template API', () => {
     await expect(updateImportTemplate('missing', payload)).rejects.toThrow('保存模板失败')
     await expect(deleteImportTemplate('missing')).rejects.toThrow('删除模板失败')
   })
+
+  it('maps HTTP 409 to duplicate-name', async () => {
+    mockedFetch.mockResolvedValue(new Response(
+      JSON.stringify({ code: 'duplicate-name', message: 'Template name already exists' }),
+      { status: 409 },
+    ))
+
+    const error = await saveImportTemplate(payload).catch((reason: unknown) => reason)
+    expect(error).toBeInstanceOf(ImportTemplateRequestError)
+    expect(error).toMatchObject({
+      status: 409,
+      code: 'duplicate-name',
+      message: 'Template name already exists',
+    })
+  })
+
+  it('maps HTTP 400 to invalid-template', async () => {
+    mockedFetch.mockResolvedValue(new Response(
+      JSON.stringify({ code: 'invalid-template', message: 'Incomplete dimension mapping' }),
+      { status: 400 },
+    ))
+
+    const error = await updateImportTemplate('tpl-1', payload).catch((reason: unknown) => reason)
+    expect(error).toBeInstanceOf(ImportTemplateRequestError)
+    expect(error).toMatchObject({
+      status: 400,
+      code: 'invalid-template',
+      message: 'Incomplete dimension mapping',
+    })
+  })
+
+  it('does not rewrite an invalid dimensionOrder to LWH before save', async () => {
+    mockedFetch.mockResolvedValue(new Response(JSON.stringify(dto), { status: 201 }))
+
+    await saveImportTemplate({
+      ...payload,
+      dimensionOrder: ['width', 'width', 'height'],
+    } as ImportTemplatePayload)
+
+    expect(JSON.parse(String(mockedFetch.mock.calls[0]?.[1]?.body))).toEqual({
+      ...payload,
+      dimensionOrder: ['width', 'width', 'height'],
+    })
+  })
+
+
 })

@@ -1,6 +1,5 @@
-import type { ImportTemplate, Locale } from '../types'
+import type { ImportTemplate, ImportTemplateDefaults, Locale } from '../types'
 import type { ImportMappingValue } from './importMapping'
-import type { ImportCargoRow } from './importCargo'
 
 const TEMPLATE_MAPPING_FIELDS = [
   'label', 'name', 'length', 'width', 'height', 'weight', 'quantity',
@@ -46,78 +45,6 @@ export function translateImportIssue(issue: ImportIssue, locale: Locale): string
   return issue.message
 }
 
-export function canAutoMap(row: ImportCargoRow): boolean {
-  if (Array.isArray(row)) return false
-  const keys = Object.keys(row).map(k => k.toLowerCase())
-  const fieldsToCheck = {
-    length: ['length', '长', '長', '长度', '長度', 'outer_length_mm', '厘米'],
-    width: ['width', '宽', '寬', '宽度', '寬度', 'outer_width_mm', '厘米'],
-    height: ['height', '高', '高度', 'outer_height_mm', '厘米'],
-    weight: ['weight', '重量', '毛重', 'gross_weight_kg'],
-    quantity: ['quantity', '数量', '數量', '箱数', '箱數', '托数', '托數', 'carton_count'],
-  }
-  return Object.values(fieldsToCheck).every(candidates =>
-    keys.some(key => candidates.some(cand => key.includes(cand))),
-  )
-}
-
-export function preSelectCol(fieldKey: string, columns: string[]): string {
-  const candidates: Record<string, string[]> = {
-    length: ['length', '长', '長', '长度', '長度', 'outer_length_mm'],
-    width: ['width', '宽', '寬', '宽度', '寬度', 'outer_width_mm'],
-    height: ['height', '高', '高度', 'outer_height_mm'],
-    weight: ['weight', '重量', '毛重', 'gross_weight_kg'],
-    quantity: ['quantity', '数量', '數量', '箱数', '箱數', '托数', '托數', 'carton_count'],
-    name: ['name', '名称', '名稱', '品名', '货物名称', '貨物名稱', 'description'],
-    label: ['label', '标签', '標籤', '代码', '代號', '代号', '托盘', '托盤'],
-    color: ['color', 'Color', '颜色', '顏色'],
-    canRotate: ['canrotate', 'rotate', 'rotation_allowed', '可旋转', '可旋轉', '允许旋转', '允許旋轉'],
-    stackable: ['stackable', '可堆叠', '可堆疊', '允许堆叠', '允許堆疊'],
-    maxStackLayers: ['maxstacklayers', 'max stack layers', '最大堆叠层数', '最大堆疊層數', '堆叠层数', '堆疊層數'],
-    groundOnly: ['groundonly', 'ground only', '必须落地', '落地', '不可上托', '不可堆叠在上'],
-  }
-  const list = candidates[fieldKey] ?? []
-  let best: { column: string; score: number } | null = null
-  for (const column of columns) {
-    const score = scoreColumnMatch(fieldKey, column, list)
-    if (score === null) continue
-    if (!best || score < best.score) best = { column, score }
-  }
-  return best?.column ?? ''
-}
-
-function scoreColumnMatch(fieldKey: string, column: string, candidates: string[]): number | null {
-  const lower = column.toLowerCase()
-  const hit = candidates.find((candidate) => lower.includes(candidate.toLowerCase()))
-  if (!hit) return null
-  if (lower === hit.toLowerCase()) return 0
-  let score = 10 + column.length
-  if (fieldKey === 'quantity') {
-    if (/箱数|箱數|carton_count/.test(column)) score -= 8
-    if (/预计|預計|发货|發貨/.test(column)) score += 20
-  }
-  if (fieldKey === 'weight') {
-    if (/总|總/.test(column)) score += 20
-    if (column.includes('箱')) score -= 4
-  }
-  return score
-}
-
-
-export function preselectMapping(
-  columns: string[],
-  current: Record<string, string> = {},
-): Record<string, string> {
-  const next = { ...current }
-  IMPORT_REQUIRED_FIELDS.forEach((field) => {
-    const mapped = next[field]?.trim() ?? ''
-    if (mapped && columns.includes(mapped)) return
-    next[field] = preSelectCol(field, columns)
-  })
-  return next
-}
-
-
 export function importMappingValueFromTemplate(template: ImportTemplate): ImportMappingValue {
   return {
     mapping: { ...template.mapping, dimensions: template.combinedColumn || template.mapping.dimensions || '' },
@@ -152,6 +79,135 @@ export function missingMappedColumns(value: ImportMappingValue, availableColumns
   return mappedColumnsForTemplateValue(value).filter(col => !present.has(col))
 }
 
+export type ImportMappingValidation = {
+  missingRequired: Array<'length' | 'width' | 'height' | 'combinedColumn' | 'dimensionOrder'>
+  duplicateColumns: string[]
+  missingColumns: string[]
+  valid: boolean
+}
+
+const EMPTY_MAPPING_FIELDS = [
+  'label', 'name', 'length', 'width', 'height', 'weight', 'quantity',
+  'color', 'canRotate', 'stackable', 'maxStackLayers', 'groundOnly', 'dimensions',
+] as const
+
+export function emptyImportMappingValue(): ImportMappingValue {
+  const mapping: Record<string, string> = {}
+  for (const field of EMPTY_MAPPING_FIELDS) mapping[field] = ''
+  return {
+    mapping,
+    units: { length: 'auto', width: 'auto', height: 'auto' },
+    headerRow: 1,
+    startRow: 2,
+    dimensionMode: 'separate',
+    combinedColumn: '',
+    dimensionOrder: ['length', 'width', 'height'],
+    defaults: { quantity: 1, canRotate: true, stackable: true },
+  }
+}
+
+function isUniqueDimensionOrder(order: ImportMappingValue['dimensionOrder']): boolean {
+  return Array.isArray(order)
+    && order.length === 3
+    && new Set(order).size === 3
+    && order.every((field) => TEMPLATE_DIMENSION_FIELDS.has(field))
+}
+
+
+function activeMappedColumns(value: ImportMappingValue): string[] {
+  const columns: string[] = []
+  if (value.dimensionMode === 'combined') {
+    columns.push(value.combinedColumn || value.mapping.dimensions || '')
+  }
+  for (const field of TEMPLATE_MAPPING_FIELDS) {
+    if (value.dimensionMode === 'combined' && TEMPLATE_DIMENSION_FIELDS.has(field)) continue
+    columns.push(value.mapping[field] ?? '')
+  }
+  return columns.map((column) => column.trim()).filter(Boolean)
+}
+
+function duplicateActiveColumns(value: ImportMappingValue): string[] {
+  const seen = new Map<string, number>()
+  for (const column of activeMappedColumns(value)) {
+    seen.set(column, (seen.get(column) ?? 0) + 1)
+  }
+  return Array.from(seen.entries()).filter(([, count]) => count > 1).map(([column]) => column)
+}
+
+export function validateImportMappingValue(
+  value: ImportMappingValue,
+  availableColumns: readonly string[] | null,
+): ImportMappingValidation {
+  const missingRequired: ImportMappingValidation['missingRequired'] = []
+  if (value.dimensionMode === 'combined') {
+    if (!(value.combinedColumn || value.mapping.dimensions || '').trim()) {
+      missingRequired.push('combinedColumn')
+    }
+    if (!isUniqueDimensionOrder(value.dimensionOrder)) {
+      missingRequired.push('dimensionOrder')
+    }
+  } else {
+    for (const field of ['length', 'width', 'height'] as const) {
+      if (!(value.mapping[field] ?? '').trim()) missingRequired.push(field)
+    }
+  }
+  const duplicateColumns = duplicateActiveColumns(value)
+  const missingColumns = availableColumns === null
+    ? []
+    : missingMappedColumns(value, [...availableColumns])
+  return {
+    missingRequired,
+    duplicateColumns,
+    missingColumns,
+    valid: missingRequired.length === 0 && duplicateColumns.length === 0 && missingColumns.length === 0,
+  }
+}
+
+function canonicalMapping(mapping: Record<string, string>): Record<string, string> {
+  const canonical: Record<string, string> = {}
+  for (const key of Object.keys(mapping).sort()) {
+    const column = mapping[key]?.trim() ?? ''
+    if (column) canonical[key] = column
+  }
+  return canonical
+}
+
+function canonicalDefaults(defaults: ImportTemplateDefaults): ImportTemplateDefaults {
+  const canonical: ImportTemplateDefaults = {}
+  for (const key of (Object.keys(defaults) as Array<keyof ImportTemplateDefaults>).sort()) {
+    if (defaults[key] !== undefined) {
+      (canonical as Record<string, unknown>)[key] = defaults[key]
+    }
+  }
+  return canonical
+}
+
+export function sameImportMappingValue(
+  left: ImportMappingValue,
+  right: ImportMappingValue,
+): boolean {
+  return JSON.stringify({
+    mapping: canonicalMapping(left.mapping),
+    units: { length: left.units.length, width: left.units.width, height: left.units.height },
+    headerRow: left.headerRow,
+    startRow: left.startRow,
+    dimensionMode: left.dimensionMode,
+    combinedColumn: left.combinedColumn.trim(),
+    dimensionOrder: left.dimensionOrder,
+    defaults: canonicalDefaults(left.defaults),
+  }) === JSON.stringify({
+    mapping: canonicalMapping(right.mapping),
+    units: { length: right.units.length, width: right.units.width, height: right.units.height },
+    headerRow: right.headerRow,
+    startRow: right.startRow,
+    dimensionMode: right.dimensionMode,
+    combinedColumn: right.combinedColumn.trim(),
+    dimensionOrder: right.dimensionOrder,
+    defaults: canonicalDefaults(right.defaults),
+  })
+}
+
+
 export type BuildImportMessagesLabels = {
   importSuccess: string
   importMappedFields: string
@@ -180,7 +236,4 @@ export function buildImportMessages(
   ]
 }
 
-export const IMPORT_REQUIRED_FIELDS = [
-  'label', 'name', 'length', 'width', 'height', 'weight', 'quantity',
-  'color', 'canRotate', 'stackable', 'maxStackLayers', 'groundOnly', 'dimensions',
-] as const
+

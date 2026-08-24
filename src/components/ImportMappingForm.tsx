@@ -15,7 +15,6 @@ export type ImportMappingFormLabels = {
   templateHelpStartRow: string
   templateDefaultLabel: string
   templateDefaultQuantity: string
-  templateDefaultWeight: string
   templateDefaultColor: string
   templateDefaultRotate: string
   templateDefaultStackable: string
@@ -52,6 +51,9 @@ export type ImportMappingFormLabels = {
   mappingUnit: string
   mappingAutoUnit: string
   mappingConvertHint: string
+  mappingRequiredMarkerHint: string
+  mappingRequiredField: string
+  mappingDuplicateConflict: string
 }
 
 // Fixed, ordered field set so the import dialog and the template manager page
@@ -81,9 +83,10 @@ type Props = {
   testIdPrefix?: string
   previewSlot?: ReactNode
   missingColumns?: string[]
+  duplicateColumns?: string[]
 }
 
-export function ImportMappingForm({ value, onChange, availableColumns, labels, testIdPrefix = '', previewSlot, missingColumns = [] }: Props) {
+export function ImportMappingForm({ value, onChange, availableColumns, labels, testIdPrefix = '', previewSlot, missingColumns = [], duplicateColumns = [] }: Props) {
   const tid = (id: string) => `${testIdPrefix}${id}`
 
   // Keep already-selected columns selectable even when the live header list does
@@ -92,11 +95,16 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
   const columns = Array.from(new Set([...availableColumns, ...usedValues]))
   const hasFileColumns = availableColumns.length > 0
   const missingColumnSet = new Set(missingColumns.map((column) => column.trim()).filter(Boolean))
+  const duplicateColumnSet = new Set(duplicateColumns.map((column) => column.trim()).filter(Boolean))
   const missingColumnMessage = 'Column not found in file / 列在文件中未找到'
 
   const columnMissing = (column: string | undefined) => {
     const trimmed = column?.trim() ?? ''
     return trimmed !== '' && missingColumnSet.has(trimmed)
+  }
+  const columnDuplicate = (column: string | undefined) => {
+    const trimmed = column?.trim() ?? ''
+    return trimmed !== '' && duplicateColumnSet.has(trimmed)
   }
   const inputClass = (invalid: boolean) => `mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-1 ${invalid ? 'border-red-500 ring-1 ring-red-400 focus:border-red-500 focus:ring-red-400' : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-500'}`
 
@@ -116,6 +124,20 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
     groundOnly: labels.mappingFieldGroundOnly,
   }
 
+  const fieldsForDuplicateColumn = (column: string): string[] => {
+    const trimmed = column.trim()
+    const names: string[] = []
+    if (value.dimensionMode === 'combined') {
+      const combined = (value.combinedColumn || value.mapping.dimensions || '').trim()
+      if (combined === trimmed) names.push(labels.templateCombinedColumn)
+    }
+    for (const fieldKey of FIELD_KEYS) {
+      if (value.dimensionMode === 'combined' && DIMENSION_FIELDS[fieldKey]) continue
+      if ((value.mapping[fieldKey] ?? '').trim() === trimmed) names.push(fieldLabel[fieldKey] || fieldKey)
+    }
+    return names
+  }
+
   const patchDefaults = (partial: Partial<ImportTemplateDefaults>) =>
     onChange({ ...value, defaults: { ...value.defaults, ...partial } })
 
@@ -129,20 +151,27 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
           return null
         }
         const fieldMissing = columnMissing(value.mapping[fieldKey])
+        const fieldInvalid = fieldMissing || columnDuplicate(value.mapping[fieldKey])
         return (
           <div key={fieldKey} className="rounded-md border border-slate-200 bg-white p-3">
             <label className="block text-sm font-semibold text-slate-700">
               <span className="inline-flex items-center gap-1.5">
+                {dimensionKey ? (
+                  <>
+                    <span aria-hidden="true" className="text-red-600" data-testid={tid(`mapping-required-${fieldKey}`)}>*</span>
+                    <span className="sr-only">{labels.mappingRequiredField}</span>
+                  </>
+                ) : null}
                 {fieldLabel[fieldKey] || fieldKey}
                 {fieldKey === 'label' && <HelpTooltip text={labels.templateHelpLabelColumn} testId={tid('help-tooltip-label-column')} />}
               </span>
               {hasFileColumns ? (
                 <select
-                  className={inputClass(fieldMissing)}
+                  className={inputClass(fieldInvalid)}
                   value={value.mapping[fieldKey] ?? ''}
                   onChange={(event) => onChange({ ...value, mapping: { ...value.mapping, [fieldKey]: event.target.value } })}
                   data-testid={tid(`map-select-${fieldKey}`)}
-                  data-invalid={fieldMissing ? 'true' : undefined}
+                  data-invalid={fieldInvalid ? 'true' : undefined}
                 >
                   <option value="">{labels.mappingSelectColumn}</option>
                   {columns.map((col) => (
@@ -154,12 +183,12 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
                 </select>
               ) : (
                 <input
-                  className={inputClass(fieldMissing)}
+                  className={inputClass(fieldInvalid)}
                   value={value.mapping[fieldKey] ?? ''}
                   placeholder={labels.mappingSelectColumn}
                   onChange={(event) => onChange({ ...value, mapping: { ...value.mapping, [fieldKey]: event.target.value } })}
                   data-testid={tid(`map-select-${fieldKey}`)}
-                  data-invalid={fieldMissing ? 'true' : undefined}
+                  data-invalid={fieldInvalid ? 'true' : undefined}
                 />
               )}
             </label>
@@ -192,6 +221,22 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
 
   return (
     <>
+      <p className="mb-2 text-xs font-medium text-slate-600">{labels.mappingRequiredMarkerHint}</p>
+      {duplicateColumns.length > 0 && (
+        <div
+          className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800"
+          data-testid={tid('mapping-duplicate-hint')}
+          role="alert"
+        >
+          {duplicateColumns.map((column) => (
+            <p key={column}>
+              {labels.mappingDuplicateConflict
+                .replaceAll('{column}', column)
+                .replaceAll('{fields}', fieldsForDuplicateColumn(column).join(', '))}
+            </p>
+          ))}
+        </div>
+      )}
       <div className="mb-4 grid gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm md:grid-cols-4" data-testid={tid('import-template-manager')}>
         <label className="font-semibold text-slate-700">
           <span className="inline-flex items-center gap-1.5">
@@ -239,21 +284,6 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
             value={value.defaults.quantity ?? 1}
             data-testid={tid('template-default-quantity')}
             onChange={(event) => patchDefaults({ quantity: Math.max(1, Number(event.target.value) || 1) })}
-          />
-        </label>
-        <label className="font-semibold text-slate-700">
-          {labels.templateDefaultWeight}
-          <input
-            className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-            type="number"
-            min={0}
-            step="any"
-            value={value.defaults.weight ?? ''}
-            data-testid={tid('template-default-weight')}
-            onChange={(event) => {
-              const parsed = Number(event.target.value)
-              patchDefaults({ weight: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined })
-            }}
           />
         </label>
         <label className="font-semibold text-slate-700">
@@ -326,19 +356,22 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
         </label>
         {value.dimensionMode === 'combined' && (() => {
           const combinedMissing = columnMissing(value.combinedColumn)
+          const combinedInvalid = combinedMissing || columnDuplicate(value.combinedColumn)
           return (
             <div>
               <label className="font-semibold text-slate-700">
                 <span className="inline-flex items-center gap-1.5">
+                  <span aria-hidden="true" className="text-red-600" data-testid={tid('mapping-required-combinedColumn')}>*</span>
+                  <span className="sr-only">{labels.mappingRequiredField}</span>
                   {labels.templateCombinedColumn}
                   <HelpTooltip text={labels.templateHelpCombinedColumn} testId={tid('help-tooltip-combined-column')} />
                 </span>
                 {hasFileColumns ? (
                   <select
-                    className={inputClass(combinedMissing)}
+                    className={inputClass(combinedInvalid)}
                     value={value.combinedColumn}
                     data-testid={tid('template-combined-column')}
-                    data-invalid={combinedMissing ? 'true' : undefined}
+                    data-invalid={combinedInvalid ? 'true' : undefined}
                     onChange={(event) => onChange({ ...value, combinedColumn: event.target.value, mapping: { ...value.mapping, dimensions: event.target.value } })}
                   >
                     <option value="">{labels.mappingSelectColumn}</option>
@@ -351,11 +384,11 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
                   </select>
                 ) : (
                   <input
-                    className={inputClass(combinedMissing)}
+                    className={inputClass(combinedInvalid)}
                     value={value.combinedColumn}
                     placeholder={labels.mappingSelectColumn}
                     data-testid={tid('template-combined-column')}
-                    data-invalid={combinedMissing ? 'true' : undefined}
+                    data-invalid={combinedInvalid ? 'true' : undefined}
                     onChange={(event) => onChange({ ...value, combinedColumn: event.target.value, mapping: { ...value.mapping, dimensions: event.target.value } })}
                   />
                 )}
@@ -365,6 +398,8 @@ export function ImportMappingForm({ value, onChange, availableColumns, labels, t
               )}
               <label className="font-semibold text-slate-700">
                 <span className="inline-flex items-center gap-1.5">
+                  <span aria-hidden="true" className="text-red-600" data-testid={tid('mapping-required-dimensionOrder')}>*</span>
+                  <span className="sr-only">{labels.mappingRequiredField}</span>
                   {labels.templateDimensionOrder}
                 </span>
                 <select

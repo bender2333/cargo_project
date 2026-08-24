@@ -9,7 +9,9 @@ import authRouter from './auth.mjs'
 import { authenticate, requireAdmin } from './middleware.mjs'
 import { parseCustomCargoPayload, serializeCustomCargo } from './customCargo.mjs'
 import { parseCustomContainerPayload } from './customContainers.mjs'
+import { parseImportTemplatePayload } from './importTemplatePayload.mjs'
 import { createHistoryRouter, HISTORY_JSON_BODY_LIMIT } from './historyRoutes.mjs'
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -267,61 +269,7 @@ app.delete('/api/custom-cargo/:id', authenticate, (req, res) => {
 })
 
 // 5. Excel import templates (user-scoped deterministic mappings)
-const TEMPLATE_FIELDS = new Set(['label', 'name', 'length', 'width', 'height', 'weight', 'quantity', 'color', 'canRotate', 'stackable', 'maxStackLayers', 'groundOnly', 'loadingPriority', 'dimensions'])
-const TEMPLATE_UNITS = new Set(['auto', 'mm', 'cm'])
-const TEMPLATE_MERGE_ROWS = new Set(['none', 'by-label'])
-const TEMPLATE_DIMENSION_MODES = new Set(['separate', 'combined'])
-const TEMPLATE_DIMENSION_FIELDS = new Set(['length', 'width', 'height'])
 
-function parseTemplatePayload(body) {
-  const name = String(body?.name ?? '').trim().slice(0, 80)
-  const mapping = body?.mapping && typeof body.mapping === 'object' ? body.mapping : null
-  const units = body?.units && typeof body.units === 'object' ? body.units : {}
-  const defaults = body?.defaultValues && typeof body.defaultValues === 'object' ? body.defaultValues : {}
-  if (!name || !mapping) return null
-  const cleanMapping = {}
-  for (const [key, value] of Object.entries(mapping)) {
-    if (!TEMPLATE_FIELDS.has(key)) continue
-    cleanMapping[key] = value == null ? '' : String(value).slice(0, 120)
-  }
-  const cleanUnits = {}
-  for (const key of ['length', 'width', 'height']) {
-    const value = String(units[key] ?? 'auto')
-    cleanUnits[key] = TEMPLATE_UNITS.has(value) ? value : 'auto'
-  }
-  const headerRow = Math.max(1, Math.min(50, Math.floor(Number(body?.headerRow ?? 1))))
-  const startRow = Math.max(headerRow + 1, Math.min(500, Math.floor(Number(body?.startRow ?? 2))))
-  const mergeRows = TEMPLATE_MERGE_ROWS.has(String(body?.mergeRows ?? 'none')) ? String(body?.mergeRows ?? 'none') : 'none'
-  const dimensionMode = TEMPLATE_DIMENSION_MODES.has(String(body?.dimensionMode ?? 'separate')) ? String(body?.dimensionMode ?? 'separate') : 'separate'
-  const combinedColumn = body?.combinedColumn != null ? String(body.combinedColumn).trim().slice(0, 120) : ''
-  const requestedOrder = Array.isArray(body?.dimensionOrder) ? body.dimensionOrder.map(String) : []
-  const dimensionOrder = requestedOrder.length === 3 && new Set(requestedOrder).size === 3 && requestedOrder.every((field) => TEMPLATE_DIMENSION_FIELDS.has(field))
-    ? requestedOrder
-    : ['length', 'width', 'height']
-  const cleanDefaults = {}
-  if (defaults.label != null) cleanDefaults.label = String(defaults.label).trim().slice(0, 12)
-  if (defaults.name != null) cleanDefaults.name = String(defaults.name).trim().slice(0, 120)
-  if (defaults.quantity != null && Number.isFinite(Number(defaults.quantity))) cleanDefaults.quantity = Math.max(1, Math.floor(Number(defaults.quantity)))
-  if (defaults.weight != null && Number.isFinite(Number(defaults.weight)) && Number(defaults.weight) > 0) cleanDefaults.weight = Number(defaults.weight)
-  if (defaults.color != null) cleanDefaults.color = String(defaults.color).trim().slice(0, 40)
-  if (defaults.canRotate != null) cleanDefaults.canRotate = Boolean(defaults.canRotate)
-  if (defaults.stackable != null) cleanDefaults.stackable = Boolean(defaults.stackable)
-  if (defaults.maxStackLayers != null && Number.isFinite(Number(defaults.maxStackLayers))) cleanDefaults.maxStackLayers = Math.max(1, Math.floor(Number(defaults.maxStackLayers)))
-  if (defaults.groundOnly != null) cleanDefaults.groundOnly = Boolean(defaults.groundOnly)
-  if (defaults.loadingPriority != null) cleanDefaults.loadingPriority = defaults.loadingPriority === 'first' ? 'first' : 'normal'
-  return {
-    name,
-    mapping: cleanMapping,
-    units: cleanUnits,
-    headerRow,
-    startRow,
-    mergeRows,
-    dimensionMode,
-    combinedColumn,
-    dimensionOrder,
-    defaultValues: cleanDefaults,
-  }
-}
 
 function parseExportTemplatePayload(body) {
   if (typeof body?.name !== 'string' || !body.name.trim() || !Array.isArray(body?.columns)) return null
@@ -389,10 +337,11 @@ app.get('/api/import-templates', authenticate, (req, res) => {
 })
 
 app.post('/api/import-templates', authenticate, (req, res) => {
-  const payload = parseTemplatePayload(req.body)
-  if (!payload) {
-    return res.status(400).json({ error: 'Missing template name or mapping' })
+  const parsed = parseImportTemplatePayload(req.body)
+  if (!parsed.ok) {
+    return res.status(400).json({ code: parsed.code, message: parsed.message })
   }
+  const payload = parsed.value
   const id = randomUUID()
   const now = new Date().toISOString()
   try {
@@ -404,17 +353,19 @@ app.post('/api/import-templates', authenticate, (req, res) => {
     res.status(201).json(serializeTemplate(created))
   } catch (err) {
     if (String(err?.message ?? '').includes('UNIQUE')) {
-      return res.status(409).json({ error: 'Template name already exists' })
+      return res.status(409).json({ code: 'duplicate-name', message: 'Template name already exists' })
     }
     sendServerError(res, req.path, err)
   }
 })
 
+
 app.put('/api/import-templates/:id', authenticate, (req, res) => {
-  const payload = parseTemplatePayload(req.body)
-  if (!payload) {
-    return res.status(400).json({ error: 'Missing template name or mapping' })
+  const parsed = parseImportTemplatePayload(req.body)
+  if (!parsed.ok) {
+    return res.status(400).json({ code: parsed.code, message: parsed.message })
   }
+  const payload = parsed.value
   try {
     const existing = db.prepare('SELECT * FROM import_templates WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id)
     if (!existing) {
@@ -429,11 +380,12 @@ app.put('/api/import-templates/:id', authenticate, (req, res) => {
     res.json(serializeTemplate(updated))
   } catch (err) {
     if (String(err?.message ?? '').includes('UNIQUE')) {
-      return res.status(409).json({ error: 'Template name already exists' })
+      return res.status(409).json({ code: 'duplicate-name', message: 'Template name already exists' })
     }
     sendServerError(res, req.path, err)
   }
 })
+
 
 app.delete('/api/import-templates/:id', authenticate, (req, res) => {
   try {
