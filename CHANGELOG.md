@@ -8,6 +8,7 @@
 - Verification: compactness 3/3 (corridor < 200mm on the 20GP mixed load; L leftover legal; tilt still places). packing.test 57/57. packingInvariants 15/15. blockEngine 6/6 including 0802 877/877 and Vietnam 40HQ 864/864. Contracts refreshed: 20GP qty 464 (+1), vol 468 (+6); 40HQ qty 864 (+25), vol 864 (+41). eslint on touched packing files exit 0.
 - Tradeoff: Vietnam 20GP quantity util 86.9% (was 90.6%) with envelope still >88% and corridor 0. 40HQ util 80.9% (was 77.9%) and fully placed. Volume may place a few more leftover pieces than quantity; count-order assertion dropped (`decision.md`).
 - Lookahead not added: generating the max block for the current EMS already filled the residual strip. 40HQ can still show ~1.8m empty runs on some floor rows after a full pack.
+- Local E2E `e2e/container-calc.spec.ts` **52 passed**, including 0802 Vietnam 40HQ **877/877**. Deploy 7/7. Backup `/root/cargo_project-backup-20260824-074052`. Health `curl http://127.0.0.1/` passed. Live Workbench `Workbench-BjnVqvFI.js`. Full remote Playwright not run this round.
 
 
 ## 2026-08-24 packing compactness diagnosis and algorithm survey (no engine change)
