@@ -8,7 +8,16 @@
 - 选项：A. 为凑绿改 eslint 配置或削弱 rollback 断言；B. 记录为既有环境 RED，本轮以触及文件 eslint、unit、build、全量 Playwright 为验收。
 - 决策：B。不改 eslint、不改 rollback 测试。
 - 影响：不能宣称 `npm run lint` / 完整 `npm test` 全绿。本轮产品路径以 149/149 本地 E2E 和场景焦点修复为准。
-- 后续：eslint 排除 `.worktrees` 或设 `tsconfigRootDir`；rollback 离线脚本在 Windows 上需要 bash 环境。0824 大批量现场复测在部署后用生产构建哈希核对。
+- 后续：eslint 排除 `.worktrees` 或设 `tsconfigRootDir`；rollback 离线脚本在 Windows 上需要 bash 环境。
+
+
+## 2026-08-24 3D 热键修复后的 SQLite 备份与远程 E2E（已决策）
+
+- 背景：`npm run deploy` 7/7 已完成（backup `/root/cargo_project-backup-20260824-095348`，live `ContainerScene-BLC6bvKQ.js`）。README 还要求部署前独立 SQLite `.backup`，以及 SSH 回环隧道上的远程 Playwright。
+- 选项：A. 在本会话绕过 SSH 限制去连生产；B. 记录未做，不把本地 E2E 写成生产已验证。
+- 决策：B。本会话直接 `ssh cargo-server`（数据库备份、隧道、现场文件核对）被拦截；不绕过。
+- 影响：生产静态已更新，但没有本次 SQLite 备份路径，也没有远程 149 条 E2E。0824 大批量「自动→手动→3D 选箱→余量测量→Delete」需用线上 `ContainerScene-BLC6bvKQ.js` 做现场核对。
+- 后续：有 SSH 的环境补 `/root/cargo-database-*.db` 备份，并按 README 用 `127.0.0.1:18080` 隧道跑远程 `test:e2e`。
 
 
 ## 2026-08-24 自动装箱缝隙定位 + 可旋转算法选型（已决策）

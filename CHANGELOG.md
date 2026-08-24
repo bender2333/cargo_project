@@ -5,10 +5,12 @@
 
 - Root cause: manual 3D `pointerdown` selected a box but did not give the scene keyboard focus. `useWorkspaceHotkeys` then dropped `M`/`Delete`/`Backspace` when `event.target` was still outside `workspaceRef` (report panel, cargo form, or `body`).
 - Change: `ContainerScene` is `tabIndex=0` in manual mode. A successful box pick `preventDefault`s the pointer and focuses the scene root. Auto mode does not steal focus. No second keydown listener.
-- Verification: new E2E first RED (`toBeFocused` inactive after a real canvas hit), then GREEN. Focused vitest `workspaceHotkeys` 8/8, `sessionBoundary` 14/14, `VisualizationWorkspace` 3/3. `npx eslint` on the two touched files exit 0. `npx tsc -b` + `vite build` exit 0. Live chunk `ContainerScene-B8kDOhsG.js`.
-- Unit: `npm run test:unit` **101 files / 927 passed**. Packing performance 9/9. Full `npm run test:e2e` **149 passed / 0 failed / 0 skipped** in 8.9m, including 3D hit → M → Delete, 余量测量 → Backspace, 2D Delete, quick-place Delete, auto M, Esc maximize, history-nav guard.
+- Verification: new E2E first RED (`toBeFocused` inactive after a real canvas hit), then GREEN. Focused vitest `workspaceHotkeys` 8/8, `sessionBoundary` 14/14, `VisualizationWorkspace` 3/3. `npx eslint` on the two touched files exit 0. `npx tsc -b` + `vite build` exit 0.
+- Unit: `npm run test:unit` **101 files / 927 passed**. Packing performance 9/9. Full local `npm run test:e2e` **149 passed / 0 failed / 0 skipped** in 8.9m, including 3D hit → M → Delete, 余量测量 → Backspace, 2D Delete, quick-place Delete, auto M, Esc maximize, history-nav guard. Release-note unread badge re-run 1/1 after r71.
 - Not weakened: editable-field and off-workspace guards unchanged. Scene still has no `window.keydown`.
 - Known gate RED (pre-existing, recorded in `decision.md`): full `eslint .` 452 `tsconfigRootDir` parse errors from `.worktrees/`; `scripts/rollback.test.mjs` 16 failed on Windows offline bash fixtures. Assertions not changed.
+- Deploy 7/7. Backup `/root/cargo_project-backup-20260824-095348`. Health `curl http://127.0.0.1/` passed. Live `index-5vgHFTxO.js`, Workbench `Workbench-CQ5pLNAh.js`, scene `ContainerScene-BLC6bvKQ.js`. Release note `2026-08-24-r71-3d-selection-hotkeys`.
+- SQLite backup and remote Playwright were not run from this session: direct `ssh cargo-server` for `.backup` / tunnel is blocked here. Do not treat local 149/149 as production-already-verified. Field retest of 0824 should confirm live `ContainerScene-BLC6bvKQ.js`.
 
 
 ## 2026-08-24 upper-gap packing solution plan
