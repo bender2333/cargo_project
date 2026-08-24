@@ -1,6 +1,19 @@
 # Changelog
 
 
+## 2026-08-24 upper-gap one-step leftover scoring
+
+- Root cause: `bestBlocksForSpace` returned only the max-count block per orientation; `compareBlockChoices` ranked max axis-fill first. Equal-count `TB-C13` `WLH 18×3` (5490×1590) beat `LWH 9×6` (4770×1830), then `TB-C10` filled a 410 mm strip and left a 400 mm inter-cargo slot at `x=5300 y=1600 z=2050`.
+- Change: bounded nx/ny/nz-1 frontier; on quantity single-layer leftover EMS, same-SKU equal-count blocks are ranked by leftover narrow/dead volume after a simulated `splitEMS`. Deep spaces still use one max block per orientation. Six orientations kept. Residual gap-fill unchanged.
+- Verification: compactness 7/7 (0824 inter-cargo 400 to under 200 mm, C13 y-span 1830, internal_notch 0, seeded 3/3 no cavities). Lookahead 4/4. Blocks 7/7. blockEngine 6/6 (0802 877/877, 20GP envelope 89.4% floor empty 4.2%, 40HQ 864/864). packingInvariants 15/15. 20GP quantity contract hash refreshed, placed 464 unchanged. 0824 placed 506→504.
+- Tradeoff: leftover scoring is quantity-only and only for EMS shorter than two unit heights. Ranking next-count first would have kept the 410 mm strip. Recorded in `decision.md`.
+- Not weakened: support 0.5, geometry, 40HQ full pack, 20GP placed floors. Residual stage not mixed in.
+- Unit: `npm run test:unit` **102 files / 936 passed**. Packing performance 9/9. Touched-file eslint exit 0. `npx tsc -b` + `vite build` exit 0. Full local `npm run test:e2e` **149 passed / 0 failed / 0 skipped** in 9.5m, including 0802 Vietnam 40HQ 877/877.
+- Known gate RED (pre-existing, recorded in `decision.md`): full `eslint .` `tsconfigRootDir` parse errors from `.worktrees/`; `scripts/rollback.test.mjs` 16 failed on Windows offline bash fixtures. Assertions not changed.
+- Deploy 7/7. Backup `/root/cargo_project-backup-20260824-105824`. Health `curl http://127.0.0.1/` passed. Live Workbench `Workbench-LQp4y6RE.js`, scene `ContainerScene-BGeVlGXm.js`. Release note `2026-08-24-r72-upper-gap-packing`.
+- Independent SQLite `.backup` and remote Playwright tunnel were not run this round. Local 149/149 is not production-already-verified.
+
+
 ## 2026-08-24 3D selection hotkey fix
 
 - Root cause: manual 3D `pointerdown` selected a box but did not give the scene keyboard focus. `useWorkspaceHotkeys` then dropped `M`/`Delete`/`Backspace` when `event.target` was still outside `workspaceRef` (report panel, cargo form, or `body`).

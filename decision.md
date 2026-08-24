@@ -1,6 +1,17 @@
 # Decision Log
 
 
+## 2026-08-24 上层外开口槽：一步剩余评分只用于浅层 quantity（已决策）
+
+- 背景：0824 上层 `z=2025` 的 400 mm 槽来自 quantity 下同件数 `TB-C13` 的 `WLH 18×3`（5490×1590）优于 `LWH 9×6`（4770×1830）。`nextCountBound` 会把 410 mm 窄条判成更好（还能塞 10 件 C10），因此不能把「下一步件数上界」放在剩余质量的第一位。
+- 选项：
+  - A. 对所有 EMS、所有模式做 leftover 评分并扩大候选前沿
+  - B. 只在 quantity 且空区高度放不下一件货的两层时评分；深空区每朝向只取最大块
+- 决策：B。A 曾把越南 20GP quantity 打到 480、40HQ volume 从 864 打到 860，并在中层制造 1.9 m 槽。B 保持越南 20GP 464/468、40HQ 864/864，只改浅层同 SKU 同件数的脚印。
+- 影响：0824 复算 placed 506→504（-2），上层 C13 改为 `LWH 9×6`，400 mm 货物间槽消失。越南 20GP quantity golden 的 workStep 有变、件数不变。体积模式不走 leftover 评分。`QUANTITY_COUNT_NEAR_WINDOW=1` 仅在多一件会留下可进入窄条时覆盖件数。
+- 后续：若产品要求 0824 外部开口也必须铺满，或 504 相对 506 不可接受，再单独评估残件阶段。不得把 leftover 评分扩到深空区除非重新量 40HQ volume。
+
+
 ## 2026-08-24 3D 选箱快捷键门禁缺口（已决策）
 
 - 背景：本轮按 `plans/2026-08-24-3d-selection-hotkeys.md` 修手动 3D 选箱后 M/Delete 失效。完整门禁要求 `npm run lint` 与 `npm test`。

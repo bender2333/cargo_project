@@ -14,6 +14,25 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-08-24-r72-upper-gap-packing',
+    date: '2026-08-24',
+    title: {
+      en: 'Automatic packing no longer leaves a 400 mm slot between cartons on the top layer',
+      zh: '自动装箱不再在上层货物之间留下 400 mm 的槽',
+    },
+    items: {
+      en: [
+        'When two carton layouts hold the same number of pieces, packing now prefers the leftover space that can still take a useful next block instead of a long narrow channel.',
+        'Door-end and side-wall leftover is still allowed. Mixed orientations stay legal so a carton can tilt when the remaining height is short.',
+      ],
+      zh: [
+        '同样件数的两种摆法里，现在会选后续还能继续装的剩余空区，而不是留下一条又长又窄的槽。',
+        '门端和侧壁的合法余量仍然保留。高度不够时仍允许换朝向侧立。',
+      ],
+    },
+  },
+
+  {
     version: '2026-08-24-r71-3d-selection-hotkeys',
     date: '2026-08-24',
     title: {
