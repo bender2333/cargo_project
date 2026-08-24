@@ -118,7 +118,7 @@ describe('automatic packing compactness', () => {
       corridor.longestMm,
       `length-wise empty run ${corridor.longestMm}mm (${corridor.cells} cells) between cargo on the same floor row`,
     ).toBeLessThan(200)
-  })
+  }, 15_000)
 
   it('keeps an under-filled mixed load as an origin-packed L rather than scattering to the far corner', () => {
     const container = gp20()

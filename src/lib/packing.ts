@@ -2,7 +2,7 @@ import type { CargoItem, ContainerSpec, LoadingMode, PackingDiagnostic, PackingR
 import { effectiveContainer, getContainerVolume } from '../data/containers'
 import { finalizePlacementGeometry } from './finalizePackingResult'
 import { stackCapacity, violatesStackChain, type StackChainNode } from './stackCapacity'
-import { generateBlockCandidates, type BlockCandidate } from './blocks'
+import { bestBlocksForSpace, type BlockCandidate } from './blocks'
 import { initEMS, splitEMS, type EmptyMaximalSpace } from './emsSpace'
 import { GAP_FILL_SOURCE } from './placementSource'
 import { buildLabelStats } from './labels'
@@ -49,7 +49,6 @@ type CargoPackingState = {
   label: string
   remaining: number
   nextIndex: number
-  catalog: BlockCandidate[]
 }
 
 type BlockPlacementChoice = {
@@ -77,7 +76,6 @@ export const MINIMUM_SUPPORT_RATIO = 0.5
 export function isSupportRatioAccepted(supportRatio: number, minimumSupportRatio = MINIMUM_SUPPORT_RATIO) {
   return !(supportRatio < minimumSupportRatio)
 }
-const MAX_BLOCK_CATALOG_SIZE = 120
 const MAX_BLOCK_REJECTIONS_PER_STEP = 40
 
 function labelForIndex(index: number) {
@@ -836,34 +834,32 @@ function cargoVolume(item: CargoItem) {
   return item.length * item.width * item.height
 }
 
-function compareBlockCatalog(a: BlockCandidate, b: BlockCandidate, loadingMode: LoadingMode) {
-  if (loadingMode === 'quantity') {
-    return b.count - a.count
-      || b.volume - a.volume
-      || b.footprintArea - a.footprintArea
-  }
-  if (loadingMode === 'weight') {
-    return b.weight - a.weight
-      || b.volume - a.volume
-      || b.count - a.count
-  }
-  return b.volume - a.volume
-    || b.count - a.count
-    || b.footprintArea - a.footprintArea
+function emsAxisFill(choice: BlockPlacementChoice) {
+  const fillLength = choice.block.length / choice.ems.length
+  const fillWidth = choice.block.width / choice.ems.width
+  return Math.max(fillLength, fillWidth)
+}
+
+function emsMinAxisFill(choice: BlockPlacementChoice) {
+  return Math.min(choice.block.length / choice.ems.length, choice.block.width / choice.ems.width)
 }
 
 function compareBlockChoices(a: BlockPlacementChoice, b: BlockPlacementChoice, loadingMode: LoadingMode) {
   if (loadingMode === 'quantity') {
     return b.block.count - a.block.count
       || b.block.volume - a.block.volume
+      || emsAxisFill(b) - emsAxisFill(a)
+      || emsMinAxisFill(b) - emsMinAxisFill(a)
+      || b.block.footprintArea - a.block.footprintArea
+      || a.waste - b.waste
       || a.point.z - b.point.z
       || a.point.x - b.point.x
       || a.point.y - b.point.y
-      || b.block.footprintArea - a.block.footprintArea
-      || a.waste - b.waste
   }
   return b.block.volume - a.block.volume
     || b.block.count - a.block.count
+    || emsAxisFill(b) - emsAxisFill(a)
+    || emsMinAxisFill(b) - emsMinAxisFill(a)
     || a.waste - b.waste
     || a.point.z - b.point.z
     || a.point.x - b.point.x
@@ -882,38 +878,6 @@ function blockPlacementKey(choice: Pick<BlockPlacementChoice, 'state' | 'block' 
     point.y,
     point.z,
   ].join(':')
-}
-
-function blockCandidateKey(block: BlockCandidate) {
-  return [
-    block.orientationKey,
-    block.nx,
-    block.ny,
-    block.nz,
-  ].join(':')
-}
-
-function trimBlockCatalog(blocks: BlockCandidate[]) {
-  const selected = new Map<string, BlockCandidate>()
-  for (const block of blocks.slice(0, MAX_BLOCK_CATALOG_SIZE)) {
-    selected.set(blockCandidateKey(block), block)
-  }
-  for (const block of blocks) {
-    if (block.count === 1) selected.set(blockCandidateKey(block), block)
-  }
-  return [...selected.values()]
-}
-
-function emsFitsForBlock(emsList: EmptyMaximalSpace[], block: BlockCandidate) {
-  const blockVolume = block.length * block.width * block.height
-  return emsList
-    .filter((ems) => block.length <= ems.length + EPSILON && block.width <= ems.width + EPSILON && block.height <= ems.height + EPSILON)
-    .map((ems) => ({
-      ems,
-      point: { x: ems.x, y: ems.y, z: ems.z },
-      waste: ems.length * ems.width * ems.height - blockVolume,
-    }))
-    .sort((a, b) => a.waste - b.waste || a.point.z - b.point.z || a.point.x - b.point.x || a.point.y - b.point.y)
 }
 
 function canUseTopSurfacePoints(item: CargoItem) {
@@ -1026,16 +990,12 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       ...item,
       maxStackLayers: effectiveMaxStackLayers(item, defaultMaxStackLayers),
     }
-    const catalog = generateBlockCandidates(effectiveItem, effective)
-      .sort((a, b) => compareBlockCatalog(a, b, loadingMode))
-    const trimmedCatalog = trimBlockCatalog(catalog)
     return {
       item: effectiveItem,
       itemIndex,
       label: labelForCargoItem(item, itemIndex),
       remaining: item.quantity,
       nextIndex: 1,
-      catalog: trimmedCatalog,
     }
   })
 
@@ -1218,21 +1178,28 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     rejected: Set<string>,
     accepts: (choice: BlockPlacementChoice) => boolean,
   ): BlockPlacementChoice | undefined => {
-    let best: BlockPlacementChoice | undefined
-    for (const state of cargoStates) {
-      if (state.remaining <= 0) continue
-      for (const block of state.catalog) {
-        if (block.count > state.remaining) continue
-        if (usedWeight + block.weight > effective.maxWeight + EPSILON) continue
-        for (const fit of emsFitsForBlock(emsList, block)) {
-          const choice = { state, block, ems: fit.ems, point: fit.point, waste: fit.waste }
+    const spaces = emsList.slice().sort((a, b) => a.x - b.x || a.z - b.z || a.y - b.y)
+    for (const ems of spaces) {
+      let best: BlockPlacementChoice | undefined
+      const emsVolume = ems.length * ems.width * ems.height
+      for (const state of cargoStates) {
+        if (state.remaining <= 0) continue
+        for (const block of bestBlocksForSpace(state.item, state.remaining, ems)) {
+          if (usedWeight + block.weight > effective.maxWeight + EPSILON) continue
+          const choice: BlockPlacementChoice = {
+            state,
+            block,
+            ems,
+            point: { x: ems.x, y: ems.y, z: ems.z },
+            waste: emsVolume - block.length * block.width * block.height,
+          }
           if (rejected.has(blockPlacementKey(choice)) || !accepts(choice)) continue
           if (!best || compareBlockChoices(choice, best, loadingMode) < 0) best = choice
-          break
         }
       }
+      if (best) return best
     }
-    return best
+    return undefined
   }
 
   const placeBlocks = (accepts: (choice: BlockPlacementChoice) => boolean) => {
@@ -1268,18 +1235,18 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     // Precompute top-surface candidates once per residual SKU, then only recompute after a place
     // that actually changes the placed set (every successful placeEntry). This still matches
     // full topSurfacePoints(placed, item) because the function is pure over the placed array.
+    const emsOriginPoints = () => emsList.map((space) => ({ x: space.x, y: space.y, z: space.z }))
     for (const state of fallbackStates) {
       const usesTops = canUseTopSurfacePoints(state.item)
-      let residualPoints = usesTops
-        ? normalizePoints([...extremePoints, ...topSurfacePoints(placed, state.item)], effective)
-        : extremePoints
+      const residualPointsFor = () => usesTops
+        ? normalizePoints([...extremePoints, ...emsOriginPoints(), ...topSurfacePoints(placed, state.item)], effective)
+        : normalizePoints([...extremePoints, ...emsOriginPoints()], effective)
+      let residualPoints = residualPointsFor()
       let pointsAtPlacedLen = placed.length
       while (state.remaining > 0) {
         if (usedWeight + state.item.weight > effective.maxWeight + EPSILON) break
         if (pointsAtPlacedLen !== placed.length) {
-          residualPoints = usesTops
-            ? normalizePoints([...extremePoints, ...topSurfacePoints(placed, state.item)], effective)
-            : extremePoints
+          residualPoints = residualPointsFor()
           pointsAtPlacedLen = placed.length
         }
         const placement = bestPlacement(
@@ -1303,6 +1270,14 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
           label: state.label,
           index: state.nextIndex,
         }, placement, GAP_FILL_SOURCE)
+        emsList = splitEMS(emsList, {
+          x: placement.point.x,
+          y: placement.point.y,
+          z: placement.point.z,
+          length: placement.box.length,
+          width: placement.box.width,
+          height: placement.box.height,
+        })
         state.remaining -= 1
         state.nextIndex += 1
       }

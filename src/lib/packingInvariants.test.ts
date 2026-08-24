@@ -333,17 +333,18 @@ describe('PackingResult depth invariants (loading from the far end outward)', ()
 })
 
 describe('PackingResult geometry is unchanged by the layering fix', () => {
-  // Guards the fix from altering placement: these numbers come from the golden
-  // contract as it stood before the layer/support split.
+  // Placed counts after 2026-08-24 compact space-first block selection.
+  // 40HQ mixed cartons now pack completely; 20GP places more pieces than the
+  // 2026-07-28 layering baseline (463/462/839/823).
   const expectedPlacement: Record<string, { placed: number; total: number }> = {
     'russia-volume': { placed: 31, total: 31 },
-    'vietnam-20gp-quantity': { placed: 463, total: 864 },
-    'vietnam-20gp-volume': { placed: 462, total: 864 },
-    'vietnam-40hq-quantity': { placed: 839, total: 864 },
-    'vietnam-40hq-volume': { placed: 823, total: 864 },
+    'vietnam-20gp-quantity': { placed: 464, total: 864 },
+    'vietnam-20gp-volume': { placed: 468, total: 864 },
+    'vietnam-40hq-quantity': { placed: 864, total: 864 },
+    'vietnam-40hq-volume': { placed: 864, total: 864 },
   }
 
-  it('keeps placed and planned counts identical to the pre-fix baseline', () => {
+  it('keeps placed and planned counts identical to the compactness baseline', () => {
     for (const { name, result } of cases) {
       const expected = expectedPlacement[name]
       expect(expected, `${name}: missing expected placement`).toBeDefined()

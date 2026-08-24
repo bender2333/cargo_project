@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CargoItem, ContainerSpec } from '../types'
-import { generateBlockCandidates } from './blocks'
+import { bestBlocksForSpace, generateBlockCandidates } from './blocks'
 
 function container(overrides: Partial<ContainerSpec> = {}): ContainerSpec {
   return {
@@ -82,5 +82,19 @@ describe('generateBlockCandidates', () => {
       expect(block.volume).toBe(block.box.length * block.box.width * block.box.height * block.nx * block.ny * block.nz)
       expect(block.volume).toBe(cargo().length * cargo().width * cargo().height * block.count)
     }
+  })
+})
+
+describe('bestBlocksForSpace', () => {
+  it('fills a narrow residual strip with a long one-row block instead of dropping to a single leftover carton', () => {
+    const strip = { length: 5758, width: 312, height: 2385 }
+    const item = cargo({ length: 350, width: 250, height: 360, quantity: 207 })
+    const blocks = bestBlocksForSpace(item, 207, strip)
+    const best = [...blocks].sort((a, b) => b.count - a.count || b.footprintArea - a.footprintArea)[0]
+
+    expect(best).toBeDefined()
+    expect(best.width).toBeLessThanOrEqual(strip.width)
+    expect(best.length).toBeGreaterThanOrEqual(350 * 10)
+    expect(best.count).toBeGreaterThanOrEqual(90)
   })
 })

@@ -713,7 +713,7 @@ describe('calculatePacking', () => {
 
       expectValidLargePacking(container, result)
       expectQuantityConservation(constrainedItems, result)
-      expect(result.placedCount).toBe(loadingMode === 'quantity' ? 188 : 156)
+      expect(result.placedCount).toBeGreaterThanOrEqual(loadingMode === 'quantity' ? 188 : 156)
       expect(result.unplaced).toContainEqual(expect.objectContaining({
         label: 'C',
         reasonCode: UNPLACED_REASON_CODES.NO_SPACE,

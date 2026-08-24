@@ -344,6 +344,7 @@ describe('block-building packing engine', () => {
       const elapsedMs = Date.now() - startedAt
       const metrics = packingMetrics(result.placed, container)
 
+      expect(result.placedCount).toBe(result.totalCargoCount)
       expect(metrics.utilPct).toBeGreaterThan(76.5)
       expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
       expectNoOverlapOrBounds(container, result.placed)
