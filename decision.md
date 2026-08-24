@@ -1,6 +1,16 @@
 # Decision Log
 
 
+## 2026-08-24 3D 选箱快捷键门禁缺口（已决策）
+
+- 背景：本轮按 `plans/2026-08-24-3d-selection-hotkeys.md` 修手动 3D 选箱后 M/Delete 失效。完整门禁要求 `npm run lint` 与 `npm test`。
+- 证据：`npm run lint` 452 条 `tsconfigRootDir` 解析失败，候选根目录是仓库根和 `.worktrees/p6-linear-packing-authority`，与本轮改动无关。对 `e2e/manual-3d.spec.ts` 和 `src/components/ContainerScene.tsx` 单独 eslint 为 0。`npm test` 的 unit 927/927、packing-performance 9/9 通过；`scripts/rollback.test.mjs` 在 Windows 上 16 条失败，字段 `RUN_STATUS` 为 `undefined`（离线 bash fixture），非本轮文件。
+- 选项：A. 为凑绿改 eslint 配置或削弱 rollback 断言；B. 记录为既有环境 RED，本轮以触及文件 eslint、unit、build、全量 Playwright 为验收。
+- 决策：B。不改 eslint、不改 rollback 测试。
+- 影响：不能宣称 `npm run lint` / 完整 `npm test` 全绿。本轮产品路径以 149/149 本地 E2E 和场景焦点修复为准。
+- 后续：eslint 排除 `.worktrees` 或设 `tsconfigRootDir`；rollback 离线脚本在 Windows 上需要 bash 环境。0824 大批量现场复测在部署后用生产构建哈希核对。
+
+
 ## 2026-08-24 自动装箱缝隙定位 + 可旋转算法选型（已决策）
 
 - 背景：自动装箱常出现内部缝。用户要求内部紧凑、空隙留在外部（门端/侧壁/顶）。混朝向必须允许，否则高度不够时经常装不进去；主空间还大时同一 SKU 统一朝向更符合认知。本轮只诊断和调研，不改装箱代码。

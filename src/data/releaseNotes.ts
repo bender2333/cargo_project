@@ -14,6 +14,25 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-08-24-r71-3d-selection-hotkeys',
+    date: '2026-08-24',
+    title: {
+      en: 'Selecting a box in 3D now lets Delete and the clearance ruler work immediately',
+      zh: '3D 里点选箱体后，Delete 和余量测量立刻可用',
+    },
+    items: {
+      en: [
+        'After you click a carton in the manual 3D view, M toggles the clearance ruler on the first keypress.',
+        'Delete and Backspace remove that one carton. Clicking Clearance first, then Delete, still works.',
+      ],
+      zh: [
+        '手动 3D 里点选箱体后，按一次 M 就会打开余量标注。',
+        'Delete / Backspace 删除当前这一件。先点“余量测量”再按 Delete 同样有效。',
+      ],
+    },
+  },
+
+  {
     version: '2026-08-24-r70-compact-packing',
     date: '2026-08-24',
     title: {

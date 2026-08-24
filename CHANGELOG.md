@@ -1,6 +1,16 @@
 # Changelog
 
 
+## 2026-08-24 3D selection hotkey fix
+
+- Root cause: manual 3D `pointerdown` selected a box but did not give the scene keyboard focus. `useWorkspaceHotkeys` then dropped `M`/`Delete`/`Backspace` when `event.target` was still outside `workspaceRef` (report panel, cargo form, or `body`).
+- Change: `ContainerScene` is `tabIndex=0` in manual mode. A successful box pick `preventDefault`s the pointer and focuses the scene root. Auto mode does not steal focus. No second keydown listener.
+- Verification: new E2E first RED (`toBeFocused` inactive after a real canvas hit), then GREEN. Focused vitest `workspaceHotkeys` 8/8, `sessionBoundary` 14/14, `VisualizationWorkspace` 3/3. `npx eslint` on the two touched files exit 0. `npx tsc -b` + `vite build` exit 0. Live chunk `ContainerScene-B8kDOhsG.js`.
+- Unit: `npm run test:unit` **101 files / 927 passed**. Packing performance 9/9. Full `npm run test:e2e` **149 passed / 0 failed / 0 skipped** in 8.9m, including 3D hit → M → Delete, 余量测量 → Backspace, 2D Delete, quick-place Delete, auto M, Esc maximize, history-nav guard.
+- Not weakened: editable-field and off-workspace guards unchanged. Scene still has no `window.keydown`.
+- Known gate RED (pre-existing, recorded in `decision.md`): full `eslint .` 452 `tsconfigRootDir` parse errors from `.worktrees/`; `scripts/rollback.test.mjs` 16 failed on Windows offline bash fixtures. Assertions not changed.
+
+
 ## 2026-08-24 upper-gap packing solution plan
 
 - Diagnosis: the 0824 400 mm slot is an upper-layer external-opening residual created by selecting a maximum `TB-C13` block (`5490 x 1590`) before a `TB-C10` block; all affected boxes come from block placement, not residual single-box gap fill.
