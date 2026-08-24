@@ -1,6 +1,15 @@
 # Changelog
 
 
+## 2026-08-24 packing compactness diagnosis and algorithm survey (no engine change)
+
+- User report: automatic packing leaves interior gaps; cargo should be compact inside with leftover on the outside. Mixed orientations must stay legal so height-limited leftover can still take a tilted box.
+- Read-only audit (31 fixture/random loads, 50mm voxels): trapped cavities ≈ 0. Vietnam 20GP quantity envelope fill 92.8% with no interior notches. Full-floor 40HQ and random 20GP loads repeatedly show a length-wise side corridor: a high-count block that does not span container width, then the next block best-fits into the +x remainder and is wider.
+- Code: `emsFitsForBlock` + `selectBlockPlacement` break = largest block into smallest EMS; quantity `compareBlockChoices` ranks waste last; residual fill drops EMS for extreme points. Block catalog already has six orientations (literature C3 / K2).
+- Survey: keep simple block-building + EMS. Do not switch to wall/GA/RL. Fix K3/K4 as space-block pair selection with residual-space quality and 1-step lookahead. Do not hard-lock same-SKU orientation.
+- Decision: `decision.md` 2026-08-24. Execution plan for the next round: `plans/2026-08-24-packing-compact-interior.md`. Packing engine not changed this round. No lint/test/build/e2e/deploy — docs only.
+
+
 ## 2026-08-24 workspace hotkeys single listener
 
 - Root cause: Delete/arrows lived on `ContainerScene` `window.keydown` with `mount.contains(target)` (canvas only). R/undo lived on a second listener with `workspaceRef.contains`. Overlay delete button was already gone. Auto help listed M/Ctrl+Z that the manual-only listener never ran.
