@@ -1,6 +1,12 @@
 # Changelog
 
 
+## 2026-08-20 merge r68 into main
+
+- Merged `feat/template-refactor` into `main` as `1ed4ddd` (`merge: import template flow refactor (r68)`). In-app release note `2026-08-20-r68-import-template-flow`.
+- Merged-tree serial `test:unit`: **99 files / 915 passed**. Parallel `npm test` hit a 30s `spawnSync` timeout in unchanged `scripts/updatePackingContracts.test.mjs` (isolated re-run passed). Rollback / packing-performance then timed out under load; recorded in `decision.md`. Assertions not changed.
+
+
 ## 2026-08-20 r68 import template flow release note
 
 - Added in-app release note `2026-08-20-r68-import-template-flow` at the top of `src/data/releaseNotes.ts`.

@@ -1,6 +1,16 @@
 # Decision Log
 
 
+## 2026-08-20 merge verification timeouts after r68
+
+- 背景：`feat/template-refactor` 已无快进合入 `main`（`1ed4ddd`）。合入后复验 `npm test`。
+- 证据：串行 `test:unit` **99 files / 915 passed**。`scripts/updatePackingContracts.test.mjs` 在并行 `npm test` 下两次 `spawnSync` 30s `ETIMEDOUT`，单独复跑 **1 passed / 26.46s**。`test:rollback` 先 2 条环境断言失败（`STATIC_INDEX`/`RUN_STATE` 为 undefined），再跑 180s 无输出超时。`test:packing-performance` 在 60s 墙钟内未跑完（Vietnam 40HQ 一项 25s 后仍失败/超时）。合入未改 rollback / packing-performance / packing-contracts 脚本。
+- 选项：A. 放宽 spawn 超时或削弱 rollback 断言凑绿；B. 阻塞推送；C. 记录为合入后机器负载超时，以串行 915 与合入前功能分支全绿 `npm test` 为合入证据，不改测试。
+- 决策：C。不修改测试或夹具。
+- 影响：`origin/main` 推送时 rollback / packing-performance 本轮无完整 GREEN 复跑。
+- 后续：空闲机再跑 `npm test`。
+
+
 ## 2026-08-20 Task 8 远程 E2E 使用 SSH 回环隧道
 
 - 背景：任务书写明 `PLAYWRIGHT_BASE_URL=http://101.33.232.150`。直接执行被 `e2e/credentials.ts` 拒绝：`PLAYWRIGHT_BASE_URL must use HTTPS or loopback HTTP`（P1-2 / README：生产明文 HTTP 不得携带 E2E 凭据）。
