@@ -1781,7 +1781,7 @@
       }
     },
     "vietnam-20gp-quantity": {
-      "sha256": "4b06121dea1e9c37763eac5a04305444d72528127942d3cace77e7ea0e73c2af",
+      "sha256": "b6d1ad185a8c13b366bc2ddc24ff97e8d70e7dd29ddcdac33929832efa85f64a",
       "summary": {
         "totals": {
           "totalCargoCount": 864,
@@ -2698,7 +2698,11 @@
               "vietnam-01-112",
               "vietnam-01-113",
               "vietnam-01-114",
-              "vietnam-01-115"
+              "vietnam-01-115",
+              "vietnam-01-116",
+              "vietnam-01-117",
+              "vietnam-01-118",
+              "vietnam-01-119"
             ]
           }
         ],
@@ -3217,14 +3221,6 @@
           },
           {
             "step": 65,
-            "boxId": "vietnam-16-62",
-            "cargoId": "vietnam-16",
-            "label": "TC-A02-EV_v1.0",
-            "physicalLayer": 8,
-            "supportType": "partially-supported"
-          },
-          {
-            "step": 66,
             "boxId": "vietnam-04-11",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3232,7 +3228,7 @@
             "supportType": "floor"
           },
           {
-            "step": 67,
+            "step": 66,
             "boxId": "vietnam-04-76",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3240,7 +3236,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 68,
+            "step": 67,
             "boxId": "vietnam-04-12",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3248,7 +3244,7 @@
             "supportType": "floor"
           },
           {
-            "step": 69,
+            "step": 68,
             "boxId": "vietnam-04-77",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3256,7 +3252,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 70,
+            "step": 69,
             "boxId": "vietnam-15-3",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3264,7 +3260,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 71,
+            "step": 70,
             "boxId": "vietnam-15-25",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3272,7 +3268,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 72,
+            "step": 71,
             "boxId": "vietnam-15-47",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3280,7 +3276,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 73,
+            "step": 72,
             "boxId": "vietnam-04-13",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3288,7 +3284,7 @@
             "supportType": "floor"
           },
           {
-            "step": 74,
+            "step": 73,
             "boxId": "vietnam-04-78",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3296,7 +3292,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 75,
+            "step": 74,
             "boxId": "vietnam-04-14",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3304,7 +3300,7 @@
             "supportType": "floor"
           },
           {
-            "step": 76,
+            "step": 75,
             "boxId": "vietnam-04-79",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3312,7 +3308,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 77,
+            "step": 76,
             "boxId": "vietnam-15-4",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3320,7 +3316,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 78,
+            "step": 77,
             "boxId": "vietnam-15-26",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3328,7 +3324,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 79,
+            "step": 78,
             "boxId": "vietnam-15-48",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3336,7 +3332,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 80,
+            "step": 79,
             "boxId": "vietnam-04-15",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3344,7 +3340,7 @@
             "supportType": "floor"
           },
           {
-            "step": 81,
+            "step": 80,
             "boxId": "vietnam-04-80",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3352,7 +3348,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 82,
+            "step": 81,
             "boxId": "vietnam-02-2",
             "cargoId": "vietnam-02",
             "label": "TB-C11-EV_v1.1",
@@ -3360,7 +3356,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 83,
+            "step": 82,
             "boxId": "vietnam-02-10",
             "cargoId": "vietnam-02",
             "label": "TB-C11-EV_v1.1",
@@ -3368,7 +3364,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 84,
+            "step": 83,
             "boxId": "vietnam-02-18",
             "cargoId": "vietnam-02",
             "label": "TB-C11-EV_v1.1",
@@ -3376,7 +3372,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 85,
+            "step": 84,
             "boxId": "vietnam-11-2",
             "cargoId": "vietnam-11",
             "label": "TP-B10-EV_v1.0",
@@ -3384,7 +3380,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 86,
+            "step": 85,
             "boxId": "vietnam-11-3",
             "cargoId": "vietnam-11",
             "label": "TP-B10-EV_v1.0",
@@ -3392,7 +3388,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 87,
+            "step": 86,
             "boxId": "vietnam-01-4",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3400,7 +3396,7 @@
             "supportType": "floor"
           },
           {
-            "step": 88,
+            "step": 87,
             "boxId": "vietnam-01-22",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3408,7 +3404,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 89,
+            "step": 88,
             "boxId": "vietnam-01-40",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3416,7 +3412,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 90,
+            "step": 89,
             "boxId": "vietnam-01-58",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3424,7 +3420,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 91,
+            "step": 90,
             "boxId": "vietnam-01-76",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3432,7 +3428,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 92,
+            "step": 91,
             "boxId": "vietnam-01-94",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3440,7 +3436,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 93,
+            "step": 92,
             "boxId": "vietnam-01-112",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3448,15 +3444,15 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 94,
-            "boxId": "vietnam-16-63",
+            "step": 93,
+            "boxId": "vietnam-16-62",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
             "physicalLayer": 8,
             "supportType": "partially-supported"
           },
           {
-            "step": 95,
+            "step": 94,
             "boxId": "vietnam-04-16",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3464,7 +3460,7 @@
             "supportType": "floor"
           },
           {
-            "step": 96,
+            "step": 95,
             "boxId": "vietnam-04-81",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3472,7 +3468,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 97,
+            "step": 96,
             "boxId": "vietnam-04-17",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3480,7 +3476,7 @@
             "supportType": "floor"
           },
           {
-            "step": 98,
+            "step": 97,
             "boxId": "vietnam-04-82",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3488,7 +3484,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 99,
+            "step": 98,
             "boxId": "vietnam-15-5",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3496,7 +3492,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 100,
+            "step": 99,
             "boxId": "vietnam-15-27",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3504,7 +3500,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 101,
+            "step": 100,
             "boxId": "vietnam-15-49",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3512,7 +3508,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 102,
+            "step": 101,
             "boxId": "vietnam-04-18",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3520,7 +3516,7 @@
             "supportType": "floor"
           },
           {
-            "step": 103,
+            "step": 102,
             "boxId": "vietnam-04-83",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3528,7 +3524,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 104,
+            "step": 103,
             "boxId": "vietnam-04-19",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3536,7 +3532,7 @@
             "supportType": "floor"
           },
           {
-            "step": 105,
+            "step": 104,
             "boxId": "vietnam-04-84",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3544,7 +3540,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 106,
+            "step": 105,
             "boxId": "vietnam-15-6",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3552,7 +3548,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 107,
+            "step": 106,
             "boxId": "vietnam-15-28",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3560,7 +3556,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 108,
+            "step": 107,
             "boxId": "vietnam-15-50",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3568,7 +3564,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 109,
+            "step": 108,
             "boxId": "vietnam-04-20",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3576,7 +3572,7 @@
             "supportType": "floor"
           },
           {
-            "step": 110,
+            "step": 109,
             "boxId": "vietnam-04-85",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3584,7 +3580,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 111,
+            "step": 110,
             "boxId": "vietnam-16-3",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -3592,7 +3588,7 @@
             "supportType": "floor"
           },
           {
-            "step": 112,
+            "step": 111,
             "boxId": "vietnam-16-13",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -3600,7 +3596,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 113,
+            "step": 112,
             "boxId": "vietnam-16-23",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -3608,7 +3604,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 114,
+            "step": 113,
             "boxId": "vietnam-16-33",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -3616,7 +3612,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 115,
+            "step": 114,
             "boxId": "vietnam-16-43",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -3624,7 +3620,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 116,
+            "step": 115,
             "boxId": "vietnam-16-53",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -3632,7 +3628,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 117,
+            "step": 116,
             "boxId": "vietnam-01-5",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3640,7 +3636,7 @@
             "supportType": "floor"
           },
           {
-            "step": 118,
+            "step": 117,
             "boxId": "vietnam-01-23",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3648,7 +3644,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 119,
+            "step": 118,
             "boxId": "vietnam-01-41",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3656,7 +3652,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 120,
+            "step": 119,
             "boxId": "vietnam-01-59",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3664,7 +3660,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 121,
+            "step": 120,
             "boxId": "vietnam-01-77",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3672,7 +3668,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 122,
+            "step": 121,
             "boxId": "vietnam-01-95",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3680,7 +3676,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 123,
+            "step": 122,
             "boxId": "vietnam-01-113",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3688,15 +3684,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 124,
-            "boxId": "vietnam-16-64",
-            "cargoId": "vietnam-16",
-            "label": "TC-A02-EV_v1.0",
-            "physicalLayer": 8,
-            "supportType": "partially-supported"
-          },
-          {
-            "step": 125,
+            "step": 123,
             "boxId": "vietnam-04-21",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3704,7 +3692,7 @@
             "supportType": "floor"
           },
           {
-            "step": 126,
+            "step": 124,
             "boxId": "vietnam-04-86",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3712,7 +3700,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 127,
+            "step": 125,
             "boxId": "vietnam-04-22",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3720,7 +3708,7 @@
             "supportType": "floor"
           },
           {
-            "step": 128,
+            "step": 126,
             "boxId": "vietnam-04-87",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3728,7 +3716,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 129,
+            "step": 127,
             "boxId": "vietnam-15-7",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3736,7 +3724,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 130,
+            "step": 128,
             "boxId": "vietnam-15-29",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3744,7 +3732,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 131,
+            "step": 129,
             "boxId": "vietnam-15-51",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3752,7 +3740,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 132,
+            "step": 130,
             "boxId": "vietnam-04-23",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3760,7 +3748,7 @@
             "supportType": "floor"
           },
           {
-            "step": 133,
+            "step": 131,
             "boxId": "vietnam-04-88",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3768,7 +3756,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 134,
+            "step": 132,
             "boxId": "vietnam-04-24",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3776,7 +3764,7 @@
             "supportType": "floor"
           },
           {
-            "step": 135,
+            "step": 133,
             "boxId": "vietnam-04-89",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3784,7 +3772,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 136,
+            "step": 134,
             "boxId": "vietnam-15-8",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3792,7 +3780,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 137,
+            "step": 135,
             "boxId": "vietnam-15-30",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3800,7 +3788,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 138,
+            "step": 136,
             "boxId": "vietnam-15-52",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -3808,7 +3796,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 139,
+            "step": 137,
             "boxId": "vietnam-04-25",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3816,7 +3804,7 @@
             "supportType": "floor"
           },
           {
-            "step": 140,
+            "step": 138,
             "boxId": "vietnam-04-90",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3824,7 +3812,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 141,
+            "step": 139,
             "boxId": "vietnam-02-3",
             "cargoId": "vietnam-02",
             "label": "TB-C11-EV_v1.1",
@@ -3832,7 +3820,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 142,
+            "step": 140,
             "boxId": "vietnam-02-11",
             "cargoId": "vietnam-02",
             "label": "TB-C11-EV_v1.1",
@@ -3840,7 +3828,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 143,
+            "step": 141,
             "boxId": "vietnam-02-19",
             "cargoId": "vietnam-02",
             "label": "TB-C11-EV_v1.1",
@@ -3848,7 +3836,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 144,
+            "step": 142,
             "boxId": "vietnam-11-4",
             "cargoId": "vietnam-11",
             "label": "TP-B10-EV_v1.0",
@@ -3856,7 +3844,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 145,
+            "step": 143,
             "boxId": "vietnam-01-6",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3864,7 +3852,7 @@
             "supportType": "floor"
           },
           {
-            "step": 146,
+            "step": 144,
             "boxId": "vietnam-01-24",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3872,7 +3860,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 147,
+            "step": 145,
             "boxId": "vietnam-01-42",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3880,7 +3868,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 148,
+            "step": 146,
             "boxId": "vietnam-01-60",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3888,7 +3876,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 149,
+            "step": 147,
             "boxId": "vietnam-01-78",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3896,7 +3884,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 150,
+            "step": 148,
             "boxId": "vietnam-01-96",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3904,7 +3892,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 151,
+            "step": 149,
             "boxId": "vietnam-01-114",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -3912,15 +3900,15 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 152,
-            "boxId": "vietnam-16-65",
+            "step": 150,
+            "boxId": "vietnam-16-63",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
             "physicalLayer": 8,
             "supportType": "partially-supported"
           },
           {
-            "step": 153,
+            "step": 151,
             "boxId": "vietnam-16-4",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -3928,7 +3916,7 @@
             "supportType": "floor"
           },
           {
-            "step": 154,
+            "step": 152,
             "boxId": "vietnam-16-14",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -3936,7 +3924,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 155,
+            "step": 153,
             "boxId": "vietnam-16-24",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -3944,7 +3932,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 156,
+            "step": 154,
             "boxId": "vietnam-16-34",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -3952,7 +3940,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 157,
+            "step": 155,
             "boxId": "vietnam-16-44",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -3960,7 +3948,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 158,
+            "step": 156,
             "boxId": "vietnam-16-54",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -3968,7 +3956,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 159,
+            "step": 157,
             "boxId": "vietnam-04-26",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3976,7 +3964,7 @@
             "supportType": "floor"
           },
           {
-            "step": 160,
+            "step": 158,
             "boxId": "vietnam-04-91",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3984,7 +3972,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 161,
+            "step": 159,
             "boxId": "vietnam-04-27",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -3992,7 +3980,7 @@
             "supportType": "floor"
           },
           {
-            "step": 162,
+            "step": 160,
             "boxId": "vietnam-04-92",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4000,7 +3988,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 163,
+            "step": 161,
             "boxId": "vietnam-15-9",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4008,7 +3996,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 164,
+            "step": 162,
             "boxId": "vietnam-15-31",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4016,7 +4004,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 165,
+            "step": 163,
             "boxId": "vietnam-15-53",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4024,7 +4012,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 166,
+            "step": 164,
             "boxId": "vietnam-04-28",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4032,7 +4020,7 @@
             "supportType": "floor"
           },
           {
-            "step": 167,
+            "step": 165,
             "boxId": "vietnam-04-93",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4040,7 +4028,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 168,
+            "step": 166,
             "boxId": "vietnam-04-29",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4048,7 +4036,7 @@
             "supportType": "floor"
           },
           {
-            "step": 169,
+            "step": 167,
             "boxId": "vietnam-04-94",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4056,7 +4044,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 170,
+            "step": 168,
             "boxId": "vietnam-15-10",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4064,7 +4052,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 171,
+            "step": 169,
             "boxId": "vietnam-15-32",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4072,7 +4060,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 172,
+            "step": 170,
             "boxId": "vietnam-15-54",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4080,7 +4068,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 173,
+            "step": 171,
             "boxId": "vietnam-04-30",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4088,7 +4076,7 @@
             "supportType": "floor"
           },
           {
-            "step": 174,
+            "step": 172,
             "boxId": "vietnam-04-95",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4096,7 +4084,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 175,
+            "step": 173,
             "boxId": "vietnam-02-4",
             "cargoId": "vietnam-02",
             "label": "TB-C11-EV_v1.1",
@@ -4104,7 +4092,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 176,
+            "step": 174,
             "boxId": "vietnam-02-12",
             "cargoId": "vietnam-02",
             "label": "TB-C11-EV_v1.1",
@@ -4112,7 +4100,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 177,
+            "step": 175,
             "boxId": "vietnam-02-20",
             "cargoId": "vietnam-02",
             "label": "TB-C11-EV_v1.1",
@@ -4120,7 +4108,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 178,
+            "step": 176,
             "boxId": "vietnam-11-5",
             "cargoId": "vietnam-11",
             "label": "TP-B10-EV_v1.0",
@@ -4128,7 +4116,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 179,
+            "step": 177,
             "boxId": "vietnam-11-6",
             "cargoId": "vietnam-11",
             "label": "TP-B10-EV_v1.0",
@@ -4136,7 +4124,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 180,
+            "step": 178,
             "boxId": "vietnam-01-7",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4144,7 +4132,7 @@
             "supportType": "floor"
           },
           {
-            "step": 181,
+            "step": 179,
             "boxId": "vietnam-01-25",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4152,7 +4140,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 182,
+            "step": 180,
             "boxId": "vietnam-01-43",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4160,7 +4148,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 183,
+            "step": 181,
             "boxId": "vietnam-01-61",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4168,7 +4156,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 184,
+            "step": 182,
             "boxId": "vietnam-01-79",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4176,7 +4164,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 185,
+            "step": 183,
             "boxId": "vietnam-01-97",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4184,7 +4172,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 186,
+            "step": 184,
             "boxId": "vietnam-01-115",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4192,15 +4180,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 187,
-            "boxId": "vietnam-16-66",
-            "cargoId": "vietnam-16",
-            "label": "TC-A02-EV_v1.0",
-            "physicalLayer": 8,
-            "supportType": "partially-supported"
-          },
-          {
-            "step": 188,
+            "step": 185,
             "boxId": "vietnam-04-31",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4208,7 +4188,7 @@
             "supportType": "floor"
           },
           {
-            "step": 189,
+            "step": 186,
             "boxId": "vietnam-04-96",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4216,7 +4196,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 190,
+            "step": 187,
             "boxId": "vietnam-04-32",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4224,7 +4204,7 @@
             "supportType": "floor"
           },
           {
-            "step": 191,
+            "step": 188,
             "boxId": "vietnam-04-97",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4232,7 +4212,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 192,
+            "step": 189,
             "boxId": "vietnam-15-11",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4240,7 +4220,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 193,
+            "step": 190,
             "boxId": "vietnam-15-33",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4248,7 +4228,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 194,
+            "step": 191,
             "boxId": "vietnam-15-55",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4256,7 +4236,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 195,
+            "step": 192,
             "boxId": "vietnam-04-33",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4264,7 +4244,7 @@
             "supportType": "floor"
           },
           {
-            "step": 196,
+            "step": 193,
             "boxId": "vietnam-04-98",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4272,7 +4252,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 197,
+            "step": 194,
             "boxId": "vietnam-04-34",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4280,7 +4260,7 @@
             "supportType": "floor"
           },
           {
-            "step": 198,
+            "step": 195,
             "boxId": "vietnam-04-99",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4288,7 +4268,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 199,
+            "step": 196,
             "boxId": "vietnam-15-12",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4296,7 +4276,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 200,
+            "step": 197,
             "boxId": "vietnam-15-34",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4304,7 +4284,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 201,
+            "step": 198,
             "boxId": "vietnam-15-56",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4312,7 +4292,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 202,
+            "step": 199,
             "boxId": "vietnam-04-35",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4320,7 +4300,7 @@
             "supportType": "floor"
           },
           {
-            "step": 203,
+            "step": 200,
             "boxId": "vietnam-04-100",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4328,7 +4308,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 204,
+            "step": 201,
             "boxId": "vietnam-01-8",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4336,7 +4316,7 @@
             "supportType": "floor"
           },
           {
-            "step": 205,
+            "step": 202,
             "boxId": "vietnam-01-26",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4344,7 +4324,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 206,
+            "step": 203,
             "boxId": "vietnam-01-44",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4352,7 +4332,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 207,
+            "step": 204,
             "boxId": "vietnam-01-62",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4360,7 +4340,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 208,
+            "step": 205,
             "boxId": "vietnam-01-80",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4368,7 +4348,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 209,
+            "step": 206,
             "boxId": "vietnam-01-98",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4376,7 +4356,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 210,
+            "step": 207,
             "boxId": "vietnam-01-116",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4384,7 +4364,15 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 211,
+            "step": 208,
+            "boxId": "vietnam-16-64",
+            "cargoId": "vietnam-16",
+            "label": "TC-A02-EV_v1.0",
+            "physicalLayer": 8,
+            "supportType": "partially-supported"
+          },
+          {
+            "step": 209,
             "boxId": "vietnam-16-5",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -4392,7 +4380,7 @@
             "supportType": "floor"
           },
           {
-            "step": 212,
+            "step": 210,
             "boxId": "vietnam-16-15",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -4400,7 +4388,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 213,
+            "step": 211,
             "boxId": "vietnam-16-25",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -4408,7 +4396,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 214,
+            "step": 212,
             "boxId": "vietnam-16-35",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -4416,7 +4404,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 215,
+            "step": 213,
             "boxId": "vietnam-16-45",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -4424,7 +4412,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 216,
+            "step": 214,
             "boxId": "vietnam-16-55",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -4432,7 +4420,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 217,
+            "step": 215,
             "boxId": "vietnam-01-9",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4440,7 +4428,7 @@
             "supportType": "floor"
           },
           {
-            "step": 218,
+            "step": 216,
             "boxId": "vietnam-01-27",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4448,7 +4436,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 219,
+            "step": 217,
             "boxId": "vietnam-01-45",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4456,7 +4444,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 220,
+            "step": 218,
             "boxId": "vietnam-01-63",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4464,7 +4452,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 221,
+            "step": 219,
             "boxId": "vietnam-01-81",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4472,7 +4460,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 222,
+            "step": 220,
             "boxId": "vietnam-01-99",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4480,7 +4468,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 223,
+            "step": 221,
             "boxId": "vietnam-01-117",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4488,7 +4476,15 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 224,
+            "step": 222,
+            "boxId": "vietnam-16-65",
+            "cargoId": "vietnam-16",
+            "label": "TC-A02-EV_v1.0",
+            "physicalLayer": 8,
+            "supportType": "partially-supported"
+          },
+          {
+            "step": 223,
             "boxId": "vietnam-04-36",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4496,7 +4492,7 @@
             "supportType": "floor"
           },
           {
-            "step": 225,
+            "step": 224,
             "boxId": "vietnam-04-101",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4504,7 +4500,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 226,
+            "step": 225,
             "boxId": "vietnam-04-37",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4512,7 +4508,7 @@
             "supportType": "floor"
           },
           {
-            "step": 227,
+            "step": 226,
             "boxId": "vietnam-04-102",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4520,7 +4516,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 228,
+            "step": 227,
             "boxId": "vietnam-15-13",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4528,7 +4524,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 229,
+            "step": 228,
             "boxId": "vietnam-15-35",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4536,7 +4532,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 230,
+            "step": 229,
             "boxId": "vietnam-15-57",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4544,7 +4540,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 231,
+            "step": 230,
             "boxId": "vietnam-04-38",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4552,7 +4548,7 @@
             "supportType": "floor"
           },
           {
-            "step": 232,
+            "step": 231,
             "boxId": "vietnam-04-103",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4560,7 +4556,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 233,
+            "step": 232,
             "boxId": "vietnam-04-39",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4568,7 +4564,7 @@
             "supportType": "floor"
           },
           {
-            "step": 234,
+            "step": 233,
             "boxId": "vietnam-04-104",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4576,7 +4572,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 235,
+            "step": 234,
             "boxId": "vietnam-15-14",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4584,7 +4580,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 236,
+            "step": 235,
             "boxId": "vietnam-15-36",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4592,7 +4588,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 237,
+            "step": 236,
             "boxId": "vietnam-15-58",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4600,7 +4596,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 238,
+            "step": 237,
             "boxId": "vietnam-04-40",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4608,7 +4604,7 @@
             "supportType": "floor"
           },
           {
-            "step": 239,
+            "step": 238,
             "boxId": "vietnam-04-105",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4616,7 +4612,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 240,
+            "step": 239,
             "boxId": "vietnam-02-5",
             "cargoId": "vietnam-02",
             "label": "TB-C11-EV_v1.1",
@@ -4624,7 +4620,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 241,
+            "step": 240,
             "boxId": "vietnam-02-13",
             "cargoId": "vietnam-02",
             "label": "TB-C11-EV_v1.1",
@@ -4632,7 +4628,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 242,
+            "step": 241,
             "boxId": "vietnam-02-21",
             "cargoId": "vietnam-02",
             "label": "TB-C11-EV_v1.1",
@@ -4640,7 +4636,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 243,
+            "step": 242,
             "boxId": "vietnam-11-7",
             "cargoId": "vietnam-11",
             "label": "TP-B10-EV_v1.0",
@@ -4648,7 +4644,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 244,
+            "step": 243,
             "boxId": "vietnam-16-6",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -4656,7 +4652,7 @@
             "supportType": "floor"
           },
           {
-            "step": 245,
+            "step": 244,
             "boxId": "vietnam-16-16",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -4664,7 +4660,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 246,
+            "step": 245,
             "boxId": "vietnam-16-26",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -4672,7 +4668,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 247,
+            "step": 246,
             "boxId": "vietnam-16-36",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -4680,7 +4676,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 248,
+            "step": 247,
             "boxId": "vietnam-16-46",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -4688,7 +4684,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 249,
+            "step": 248,
             "boxId": "vietnam-16-56",
             "cargoId": "vietnam-16",
             "label": "TC-A02-EV_v1.0",
@@ -4696,7 +4692,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 250,
+            "step": 249,
             "boxId": "vietnam-01-10",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4704,7 +4700,7 @@
             "supportType": "floor"
           },
           {
-            "step": 251,
+            "step": 250,
             "boxId": "vietnam-01-28",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4712,7 +4708,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 252,
+            "step": 251,
             "boxId": "vietnam-01-46",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4720,7 +4716,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 253,
+            "step": 252,
             "boxId": "vietnam-01-64",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4728,7 +4724,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 254,
+            "step": 253,
             "boxId": "vietnam-01-82",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4736,7 +4732,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 255,
+            "step": 254,
             "boxId": "vietnam-01-100",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4744,7 +4740,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 256,
+            "step": 255,
             "boxId": "vietnam-01-118",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4752,7 +4748,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 257,
+            "step": 256,
             "boxId": "vietnam-04-41",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4760,7 +4756,7 @@
             "supportType": "floor"
           },
           {
-            "step": 258,
+            "step": 257,
             "boxId": "vietnam-04-106",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4768,7 +4764,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 259,
+            "step": 258,
             "boxId": "vietnam-04-42",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4776,7 +4772,7 @@
             "supportType": "floor"
           },
           {
-            "step": 260,
+            "step": 259,
             "boxId": "vietnam-04-107",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4784,7 +4780,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 261,
+            "step": 260,
             "boxId": "vietnam-15-15",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4792,7 +4788,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 262,
+            "step": 261,
             "boxId": "vietnam-15-37",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4800,7 +4796,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 263,
+            "step": 262,
             "boxId": "vietnam-15-59",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4808,7 +4804,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 264,
+            "step": 263,
             "boxId": "vietnam-04-43",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4816,7 +4812,7 @@
             "supportType": "floor"
           },
           {
-            "step": 265,
+            "step": 264,
             "boxId": "vietnam-04-108",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4824,7 +4820,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 266,
+            "step": 265,
             "boxId": "vietnam-04-44",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4832,7 +4828,7 @@
             "supportType": "floor"
           },
           {
-            "step": 267,
+            "step": 266,
             "boxId": "vietnam-04-109",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4840,7 +4836,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 268,
+            "step": 267,
             "boxId": "vietnam-15-16",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4848,7 +4844,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 269,
+            "step": 268,
             "boxId": "vietnam-15-38",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4856,7 +4852,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 270,
+            "step": 269,
             "boxId": "vietnam-15-60",
             "cargoId": "vietnam-15",
             "label": "TF-A01-EV_v1.0",
@@ -4864,7 +4860,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 271,
+            "step": 270,
             "boxId": "vietnam-04-45",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4872,7 +4868,7 @@
             "supportType": "floor"
           },
           {
-            "step": 272,
+            "step": 271,
             "boxId": "vietnam-04-110",
             "cargoId": "vietnam-04",
             "label": "TB-C13-EV_v1.1",
@@ -4880,7 +4876,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 273,
+            "step": 272,
             "boxId": "vietnam-02-6",
             "cargoId": "vietnam-02",
             "label": "TB-C11-EV_v1.1",
@@ -4888,7 +4884,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 274,
+            "step": 273,
             "boxId": "vietnam-02-14",
             "cargoId": "vietnam-02",
             "label": "TB-C11-EV_v1.1",
@@ -4896,7 +4892,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 275,
+            "step": 274,
             "boxId": "vietnam-02-22",
             "cargoId": "vietnam-02",
             "label": "TB-C11-EV_v1.1",
@@ -4904,7 +4900,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 276,
+            "step": 275,
             "boxId": "vietnam-11-8",
             "cargoId": "vietnam-11",
             "label": "TP-B10-EV_v1.0",
@@ -4912,7 +4908,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 277,
+            "step": 276,
             "boxId": "vietnam-11-9",
             "cargoId": "vietnam-11",
             "label": "TP-B10-EV_v1.0",
@@ -4920,7 +4916,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 278,
+            "step": 277,
             "boxId": "vietnam-01-11",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4928,7 +4924,7 @@
             "supportType": "floor"
           },
           {
-            "step": 279,
+            "step": 278,
             "boxId": "vietnam-01-29",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4936,7 +4932,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 280,
+            "step": 279,
             "boxId": "vietnam-01-47",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4944,7 +4940,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 281,
+            "step": 280,
             "boxId": "vietnam-01-65",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4952,7 +4948,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 282,
+            "step": 281,
             "boxId": "vietnam-01-83",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4960,7 +4956,7 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 283,
+            "step": 282,
             "boxId": "vietnam-01-101",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
@@ -4968,12 +4964,20 @@
             "supportType": "fully-supported"
           },
           {
-            "step": 284,
+            "step": 283,
             "boxId": "vietnam-01-119",
             "cargoId": "vietnam-01",
             "label": "TB-C10-EV_v1.1",
             "physicalLayer": 7,
             "supportType": "fully-supported"
+          },
+          {
+            "step": 284,
+            "boxId": "vietnam-16-66",
+            "cargoId": "vietnam-16",
+            "label": "TC-A02-EV_v1.0",
+            "physicalLayer": 8,
+            "supportType": "partially-supported"
           },
           {
             "step": 285,
@@ -6475,7 +6479,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 10,
-            "workStep": 250,
+            "workStep": 249,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -6506,7 +6510,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 10,
-            "workStep": 255,
+            "workStep": 254,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-82"
@@ -6539,7 +6543,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 11,
-            "workStep": 283,
+            "workStep": 282,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-83"
@@ -6836,7 +6840,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 11,
-            "workStep": 278,
+            "workStep": 277,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -6933,7 +6937,7 @@
             "blockingInvalid": false,
             "physicalLayer": 7,
             "depthLayer": 4,
-            "workStep": 93,
+            "workStep": 92,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-94"
@@ -6966,7 +6970,7 @@
             "blockingInvalid": false,
             "physicalLayer": 7,
             "depthLayer": 5,
-            "workStep": 123,
+            "workStep": 122,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-95"
@@ -6999,7 +7003,7 @@
             "blockingInvalid": false,
             "physicalLayer": 7,
             "depthLayer": 6,
-            "workStep": 151,
+            "workStep": 149,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-96"
@@ -7032,7 +7036,7 @@
             "blockingInvalid": false,
             "physicalLayer": 7,
             "depthLayer": 7,
-            "workStep": 186,
+            "workStep": 184,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-97"
@@ -7065,7 +7069,7 @@
             "blockingInvalid": false,
             "physicalLayer": 7,
             "depthLayer": 8,
-            "workStep": 210,
+            "workStep": 207,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-98"
@@ -7098,7 +7102,7 @@
             "blockingInvalid": false,
             "physicalLayer": 7,
             "depthLayer": 9,
-            "workStep": 223,
+            "workStep": 221,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-99"
@@ -7131,7 +7135,7 @@
             "blockingInvalid": false,
             "physicalLayer": 7,
             "depthLayer": 10,
-            "workStep": 256,
+            "workStep": 255,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-100"
@@ -7164,7 +7168,7 @@
             "blockingInvalid": false,
             "physicalLayer": 7,
             "depthLayer": 11,
-            "workStep": 284,
+            "workStep": 283,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-101"
@@ -7775,7 +7779,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 4,
-            "workStep": 88,
+            "workStep": 87,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-4"
@@ -7808,7 +7812,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 5,
-            "workStep": 118,
+            "workStep": 117,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-5"
@@ -7841,7 +7845,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 6,
-            "workStep": 146,
+            "workStep": 144,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-6"
@@ -7874,7 +7878,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 7,
-            "workStep": 181,
+            "workStep": 179,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-7"
@@ -7907,7 +7911,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 8,
-            "workStep": 205,
+            "workStep": 202,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-8"
@@ -7940,7 +7944,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 9,
-            "workStep": 218,
+            "workStep": 216,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-9"
@@ -7973,7 +7977,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 10,
-            "workStep": 251,
+            "workStep": 250,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-10"
@@ -8006,7 +8010,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 11,
-            "workStep": 279,
+            "workStep": 278,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-11"
@@ -8400,7 +8404,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 4,
-            "workStep": 87,
+            "workStep": 86,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -8431,7 +8435,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 4,
-            "workStep": 89,
+            "workStep": 88,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-22"
@@ -8464,7 +8468,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 5,
-            "workStep": 119,
+            "workStep": 118,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-23"
@@ -8497,7 +8501,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 6,
-            "workStep": 147,
+            "workStep": 145,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-24"
@@ -8530,7 +8534,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 7,
-            "workStep": 182,
+            "workStep": 180,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-25"
@@ -8563,7 +8567,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 8,
-            "workStep": 206,
+            "workStep": 203,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-26"
@@ -8596,7 +8600,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 9,
-            "workStep": 219,
+            "workStep": 217,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-27"
@@ -8629,7 +8633,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 10,
-            "workStep": 252,
+            "workStep": 251,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-28"
@@ -8662,7 +8666,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 11,
-            "workStep": 280,
+            "workStep": 279,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-29"
@@ -8761,7 +8765,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 5,
-            "workStep": 117,
+            "workStep": 116,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -9056,7 +9060,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 4,
-            "workStep": 90,
+            "workStep": 89,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-40"
@@ -9089,7 +9093,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 5,
-            "workStep": 120,
+            "workStep": 119,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-41"
@@ -9122,7 +9126,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 6,
-            "workStep": 145,
+            "workStep": 143,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -9153,7 +9157,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 6,
-            "workStep": 148,
+            "workStep": 146,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-42"
@@ -9186,7 +9190,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 7,
-            "workStep": 183,
+            "workStep": 181,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-43"
@@ -9219,7 +9223,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 8,
-            "workStep": 207,
+            "workStep": 204,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-44"
@@ -9252,7 +9256,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 9,
-            "workStep": 220,
+            "workStep": 218,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-45"
@@ -9285,7 +9289,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 10,
-            "workStep": 253,
+            "workStep": 252,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-46"
@@ -9318,7 +9322,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 11,
-            "workStep": 281,
+            "workStep": 280,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-47"
@@ -9483,7 +9487,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 7,
-            "workStep": 180,
+            "workStep": 178,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -9712,7 +9716,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 4,
-            "workStep": 91,
+            "workStep": 90,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-58"
@@ -9745,7 +9749,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 5,
-            "workStep": 121,
+            "workStep": 120,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-59"
@@ -9778,7 +9782,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 6,
-            "workStep": 149,
+            "workStep": 147,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-60"
@@ -9811,7 +9815,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 7,
-            "workStep": 184,
+            "workStep": 182,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-61"
@@ -9844,7 +9848,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 8,
-            "workStep": 204,
+            "workStep": 201,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -9875,7 +9879,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 8,
-            "workStep": 208,
+            "workStep": 205,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-62"
@@ -9908,7 +9912,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 9,
-            "workStep": 221,
+            "workStep": 219,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-63"
@@ -9941,7 +9945,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 10,
-            "workStep": 254,
+            "workStep": 253,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-64"
@@ -9974,7 +9978,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 11,
-            "workStep": 282,
+            "workStep": 281,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-65"
@@ -10205,7 +10209,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 9,
-            "workStep": 217,
+            "workStep": 215,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -10368,7 +10372,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 4,
-            "workStep": 92,
+            "workStep": 91,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-76"
@@ -10401,7 +10405,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 5,
-            "workStep": 122,
+            "workStep": 121,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-77"
@@ -10434,7 +10438,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 6,
-            "workStep": 150,
+            "workStep": 148,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-78"
@@ -10467,7 +10471,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 7,
-            "workStep": 185,
+            "workStep": 183,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-79"
@@ -10500,7 +10504,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 8,
-            "workStep": 209,
+            "workStep": 206,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-80"
@@ -10533,7 +10537,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 9,
-            "workStep": 222,
+            "workStep": 220,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-01-81"
@@ -10602,7 +10606,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 2,
-            "workStep": 83,
+            "workStep": 82,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-2"
@@ -10635,7 +10639,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 3,
-            "workStep": 142,
+            "workStep": 140,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-3"
@@ -10668,7 +10672,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 4,
-            "workStep": 176,
+            "workStep": 174,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-4"
@@ -10701,7 +10705,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 5,
-            "workStep": 241,
+            "workStep": 240,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-5"
@@ -10734,7 +10738,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 6,
-            "workStep": 274,
+            "workStep": 273,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-6"
@@ -10866,7 +10870,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 2,
-            "workStep": 84,
+            "workStep": 83,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-10"
@@ -10899,7 +10903,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 3,
-            "workStep": 143,
+            "workStep": 141,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-11"
@@ -10932,7 +10936,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 2,
-            "workStep": 82,
+            "workStep": 81,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-74",
@@ -10968,7 +10972,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 4,
-            "workStep": 177,
+            "workStep": 175,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-12"
@@ -11001,7 +11005,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 5,
-            "workStep": 242,
+            "workStep": 241,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-13"
@@ -11034,7 +11038,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 6,
-            "workStep": 275,
+            "workStep": 274,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-14"
@@ -11166,7 +11170,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 3,
-            "workStep": 141,
+            "workStep": 139,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-79",
@@ -11204,7 +11208,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 4,
-            "workStep": 175,
+            "workStep": 173,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-89",
@@ -11240,7 +11244,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 5,
-            "workStep": 240,
+            "workStep": 239,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-100",
@@ -11278,7 +11282,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 6,
-            "workStep": 273,
+            "workStep": 272,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-104",
@@ -11644,7 +11648,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 7,
-            "workStep": 203,
+            "workStep": 200,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-35"
@@ -11677,7 +11681,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 8,
-            "workStep": 225,
+            "workStep": 224,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-36"
@@ -11710,7 +11714,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 8,
-            "workStep": 227,
+            "workStep": 226,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-37"
@@ -11743,7 +11747,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 8,
-            "workStep": 232,
+            "workStep": 231,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-38"
@@ -11776,7 +11780,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 8,
-            "workStep": 234,
+            "workStep": 233,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-39"
@@ -11809,7 +11813,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 8,
-            "workStep": 239,
+            "workStep": 238,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-40"
@@ -11842,7 +11846,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 9,
-            "workStep": 258,
+            "workStep": 257,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-41"
@@ -11875,7 +11879,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 9,
-            "workStep": 260,
+            "workStep": 259,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-42"
@@ -11908,7 +11912,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 9,
-            "workStep": 265,
+            "workStep": 264,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-43"
@@ -11941,7 +11945,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 9,
-            "workStep": 267,
+            "workStep": 266,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-44"
@@ -11974,7 +11978,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 3,
-            "workStep": 66,
+            "workStep": 65,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -12005,7 +12009,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 9,
-            "workStep": 272,
+            "workStep": 271,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-45"
@@ -12335,7 +12339,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 3,
-            "workStep": 68,
+            "workStep": 67,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -12696,7 +12700,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 3,
-            "workStep": 73,
+            "workStep": 72,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -12796,7 +12800,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 3,
-            "workStep": 75,
+            "workStep": 74,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -12827,7 +12831,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 3,
-            "workStep": 80,
+            "workStep": 79,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -12858,7 +12862,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 4,
-            "workStep": 95,
+            "workStep": 94,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -12889,7 +12893,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 4,
-            "workStep": 97,
+            "workStep": 96,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -12920,7 +12924,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 4,
-            "workStep": 102,
+            "workStep": 101,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -12951,7 +12955,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 4,
-            "workStep": 104,
+            "workStep": 103,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13013,7 +13017,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 4,
-            "workStep": 109,
+            "workStep": 108,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13044,7 +13048,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 5,
-            "workStep": 125,
+            "workStep": 123,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13075,7 +13079,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 5,
-            "workStep": 127,
+            "workStep": 125,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13106,7 +13110,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 5,
-            "workStep": 132,
+            "workStep": 130,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13137,7 +13141,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 5,
-            "workStep": 134,
+            "workStep": 132,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13168,7 +13172,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 5,
-            "workStep": 139,
+            "workStep": 137,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13199,7 +13203,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 6,
-            "workStep": 159,
+            "workStep": 157,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13230,7 +13234,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 6,
-            "workStep": 161,
+            "workStep": 159,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13261,7 +13265,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 6,
-            "workStep": 166,
+            "workStep": 164,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13292,7 +13296,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 6,
-            "workStep": 168,
+            "workStep": 166,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13354,7 +13358,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 6,
-            "workStep": 173,
+            "workStep": 171,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13385,7 +13389,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 7,
-            "workStep": 188,
+            "workStep": 185,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13416,7 +13420,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 7,
-            "workStep": 190,
+            "workStep": 187,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13447,7 +13451,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 7,
-            "workStep": 195,
+            "workStep": 192,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13478,7 +13482,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 7,
-            "workStep": 197,
+            "workStep": 194,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13509,7 +13513,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 7,
-            "workStep": 202,
+            "workStep": 199,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13540,7 +13544,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 8,
-            "workStep": 224,
+            "workStep": 223,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13571,7 +13575,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 8,
-            "workStep": 226,
+            "workStep": 225,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13602,7 +13606,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 8,
-            "workStep": 231,
+            "workStep": 230,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13633,7 +13637,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 8,
-            "workStep": 233,
+            "workStep": 232,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13695,7 +13699,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 8,
-            "workStep": 238,
+            "workStep": 237,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13726,7 +13730,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 9,
-            "workStep": 257,
+            "workStep": 256,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13757,7 +13761,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 9,
-            "workStep": 259,
+            "workStep": 258,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13788,7 +13792,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 9,
-            "workStep": 264,
+            "workStep": 263,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13819,7 +13823,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 9,
-            "workStep": 266,
+            "workStep": 265,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -13850,7 +13854,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 9,
-            "workStep": 271,
+            "workStep": 270,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -14924,7 +14928,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 3,
-            "workStep": 67,
+            "workStep": 66,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-11"
@@ -14957,7 +14961,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 3,
-            "workStep": 69,
+            "workStep": 68,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-12"
@@ -14990,7 +14994,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 3,
-            "workStep": 74,
+            "workStep": 73,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-13"
@@ -15023,7 +15027,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 3,
-            "workStep": 76,
+            "workStep": 75,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-14"
@@ -15087,7 +15091,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 3,
-            "workStep": 81,
+            "workStep": 80,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-15"
@@ -15120,7 +15124,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 4,
-            "workStep": 96,
+            "workStep": 95,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-16"
@@ -15153,7 +15157,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 4,
-            "workStep": 98,
+            "workStep": 97,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-17"
@@ -15186,7 +15190,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 4,
-            "workStep": 103,
+            "workStep": 102,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-18"
@@ -15219,7 +15223,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 4,
-            "workStep": 105,
+            "workStep": 104,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-19"
@@ -15252,7 +15256,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 4,
-            "workStep": 110,
+            "workStep": 109,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-20"
@@ -15285,7 +15289,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 5,
-            "workStep": 126,
+            "workStep": 124,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-21"
@@ -15318,7 +15322,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 5,
-            "workStep": 128,
+            "workStep": 126,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-22"
@@ -15351,7 +15355,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 5,
-            "workStep": 133,
+            "workStep": 131,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-23"
@@ -15384,7 +15388,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 5,
-            "workStep": 135,
+            "workStep": 133,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-24"
@@ -15448,7 +15452,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 5,
-            "workStep": 140,
+            "workStep": 138,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-25"
@@ -15481,7 +15485,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 6,
-            "workStep": 160,
+            "workStep": 158,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-26"
@@ -15514,7 +15518,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 6,
-            "workStep": 162,
+            "workStep": 160,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-27"
@@ -15547,7 +15551,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 6,
-            "workStep": 167,
+            "workStep": 165,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-28"
@@ -15580,7 +15584,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 6,
-            "workStep": 169,
+            "workStep": 167,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-29"
@@ -15613,7 +15617,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 6,
-            "workStep": 174,
+            "workStep": 172,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-30"
@@ -15646,7 +15650,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 7,
-            "workStep": 189,
+            "workStep": 186,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-31"
@@ -15679,7 +15683,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 7,
-            "workStep": 191,
+            "workStep": 188,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-32"
@@ -15712,7 +15716,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 7,
-            "workStep": 196,
+            "workStep": 193,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-33"
@@ -15745,7 +15749,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 7,
-            "workStep": 198,
+            "workStep": 195,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-34"
@@ -16994,7 +16998,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 2,
-            "workStep": 85,
+            "workStep": 84,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-17",
@@ -17028,7 +17032,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 3,
-            "workStep": 86,
+            "workStep": 85,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-18"
@@ -17061,7 +17065,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 4,
-            "workStep": 144,
+            "workStep": 142,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-18",
@@ -17095,7 +17099,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 5,
-            "workStep": 178,
+            "workStep": 176,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-19",
@@ -17129,7 +17133,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 6,
-            "workStep": 179,
+            "workStep": 177,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-20"
@@ -17162,7 +17166,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 7,
-            "workStep": 243,
+            "workStep": 242,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-20",
@@ -17196,7 +17200,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 8,
-            "workStep": 276,
+            "workStep": 275,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-21",
@@ -17230,7 +17234,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 9,
-            "workStep": 277,
+            "workStep": 276,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-02-22"
@@ -17299,7 +17303,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 5,
-            "workStep": 170,
+            "workStep": 168,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-87",
@@ -17337,7 +17341,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 6,
-            "workStep": 192,
+            "workStep": 189,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-91",
@@ -17373,7 +17377,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 6,
-            "workStep": 199,
+            "workStep": 196,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-92",
@@ -17411,7 +17415,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 7,
-            "workStep": 228,
+            "workStep": 227,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-101",
@@ -17447,7 +17451,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 7,
-            "workStep": 235,
+            "workStep": 234,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-102",
@@ -17485,7 +17489,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 8,
-            "workStep": 261,
+            "workStep": 260,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-101",
@@ -17521,7 +17525,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 8,
-            "workStep": 268,
+            "workStep": 267,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-102",
@@ -17885,7 +17889,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 2,
-            "workStep": 71,
+            "workStep": 70,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-3"
@@ -17918,7 +17922,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 2,
-            "workStep": 78,
+            "workStep": 77,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-4"
@@ -17951,7 +17955,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 3,
-            "workStep": 100,
+            "workStep": 99,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-5"
@@ -17984,7 +17988,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 3,
-            "workStep": 107,
+            "workStep": 106,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-6"
@@ -18017,7 +18021,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 4,
-            "workStep": 130,
+            "workStep": 128,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-7"
@@ -18050,7 +18054,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 2,
-            "workStep": 70,
+            "workStep": 69,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-71",
@@ -18086,7 +18090,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 4,
-            "workStep": 137,
+            "workStep": 135,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-8"
@@ -18119,7 +18123,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 5,
-            "workStep": 164,
+            "workStep": 162,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-9"
@@ -18152,7 +18156,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 5,
-            "workStep": 171,
+            "workStep": 169,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-10"
@@ -18185,7 +18189,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 6,
-            "workStep": 193,
+            "workStep": 190,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-11"
@@ -18218,7 +18222,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 6,
-            "workStep": 200,
+            "workStep": 197,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-12"
@@ -18251,7 +18255,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 7,
-            "workStep": 229,
+            "workStep": 228,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-13"
@@ -18284,7 +18288,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 7,
-            "workStep": 236,
+            "workStep": 235,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-14"
@@ -18317,7 +18321,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 8,
-            "workStep": 262,
+            "workStep": 261,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-15"
@@ -18350,7 +18354,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 8,
-            "workStep": 269,
+            "workStep": 268,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-16"
@@ -18416,7 +18420,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 2,
-            "workStep": 77,
+            "workStep": 76,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-72",
@@ -18685,7 +18689,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 2,
-            "workStep": 72,
+            "workStep": 71,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-25"
@@ -18718,7 +18722,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 2,
-            "workStep": 79,
+            "workStep": 78,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-26"
@@ -18751,7 +18755,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 3,
-            "workStep": 101,
+            "workStep": 100,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-27"
@@ -18784,7 +18788,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 3,
-            "workStep": 99,
+            "workStep": 98,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-76",
@@ -18820,7 +18824,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 3,
-            "workStep": 108,
+            "workStep": 107,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-28"
@@ -18853,7 +18857,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 4,
-            "workStep": 131,
+            "workStep": 129,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-29"
@@ -18886,7 +18890,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 4,
-            "workStep": 138,
+            "workStep": 136,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-30"
@@ -18919,7 +18923,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 5,
-            "workStep": 165,
+            "workStep": 163,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-31"
@@ -18952,7 +18956,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 5,
-            "workStep": 172,
+            "workStep": 170,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-32"
@@ -18985,7 +18989,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 6,
-            "workStep": 194,
+            "workStep": 191,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-33"
@@ -19018,7 +19022,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 6,
-            "workStep": 201,
+            "workStep": 198,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-34"
@@ -19051,7 +19055,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 7,
-            "workStep": 230,
+            "workStep": 229,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-35"
@@ -19084,7 +19088,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 7,
-            "workStep": 237,
+            "workStep": 236,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-36"
@@ -19117,7 +19121,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 8,
-            "workStep": 263,
+            "workStep": 262,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-37"
@@ -19150,7 +19154,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 3,
-            "workStep": 106,
+            "workStep": 105,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-77",
@@ -19188,7 +19192,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 8,
-            "workStep": 270,
+            "workStep": 269,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-15-38"
@@ -19419,7 +19423,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 4,
-            "workStep": 129,
+            "workStep": 127,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-81",
@@ -19455,7 +19459,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 4,
-            "workStep": 136,
+            "workStep": 134,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-82",
@@ -19493,7 +19497,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 5,
-            "workStep": 163,
+            "workStep": 161,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-04-86",
@@ -19657,7 +19661,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 3,
-            "workStep": 112,
+            "workStep": 111,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-3"
@@ -19690,7 +19694,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 4,
-            "workStep": 154,
+            "workStep": 152,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-4"
@@ -19723,7 +19727,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 5,
-            "workStep": 212,
+            "workStep": 210,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-5"
@@ -19756,7 +19760,7 @@
             "blockingInvalid": false,
             "physicalLayer": 2,
             "depthLayer": 6,
-            "workStep": 245,
+            "workStep": 244,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-6"
@@ -20018,7 +20022,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 3,
-            "workStep": 113,
+            "workStep": 112,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-13"
@@ -20051,7 +20055,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 4,
-            "workStep": 155,
+            "workStep": 153,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-14"
@@ -20084,7 +20088,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 5,
-            "workStep": 213,
+            "workStep": 211,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-15"
@@ -20117,7 +20121,7 @@
             "blockingInvalid": false,
             "physicalLayer": 3,
             "depthLayer": 6,
-            "workStep": 246,
+            "workStep": 245,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-16"
@@ -20249,7 +20253,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 3,
-            "workStep": 111,
+            "workStep": 110,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -20379,7 +20383,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 3,
-            "workStep": 114,
+            "workStep": 113,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-23"
@@ -20412,7 +20416,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 4,
-            "workStep": 156,
+            "workStep": 154,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-24"
@@ -20445,7 +20449,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 5,
-            "workStep": 214,
+            "workStep": 212,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-25"
@@ -20478,7 +20482,7 @@
             "blockingInvalid": false,
             "physicalLayer": 4,
             "depthLayer": 6,
-            "workStep": 247,
+            "workStep": 246,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-26"
@@ -20610,7 +20614,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 4,
-            "workStep": 153,
+            "workStep": 151,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -20740,7 +20744,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 3,
-            "workStep": 115,
+            "workStep": 114,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-33"
@@ -20773,7 +20777,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 4,
-            "workStep": 157,
+            "workStep": 155,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-34"
@@ -20806,7 +20810,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 5,
-            "workStep": 215,
+            "workStep": 213,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-35"
@@ -20839,7 +20843,7 @@
             "blockingInvalid": false,
             "physicalLayer": 5,
             "depthLayer": 6,
-            "workStep": 248,
+            "workStep": 247,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-36"
@@ -20971,7 +20975,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 5,
-            "workStep": 211,
+            "workStep": 209,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -21101,7 +21105,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 3,
-            "workStep": 116,
+            "workStep": 115,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-43"
@@ -21134,7 +21138,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 4,
-            "workStep": 158,
+            "workStep": 156,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-44"
@@ -21167,7 +21171,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 5,
-            "workStep": 216,
+            "workStep": 214,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-45"
@@ -21200,7 +21204,7 @@
             "blockingInvalid": false,
             "physicalLayer": 6,
             "depthLayer": 6,
-            "workStep": 249,
+            "workStep": 248,
             "supportType": "fully-supported",
             "supportedBy": [
               "vietnam-16-46"
@@ -21332,7 +21336,7 @@
             "blockingInvalid": false,
             "physicalLayer": 1,
             "depthLayer": 6,
-            "workStep": 244,
+            "workStep": 243,
             "supportType": "floor",
             "supportedBy": []
           },
@@ -21378,11 +21382,11 @@
             "x": 0,
             "y": 1460,
             "z": 2135,
-            "length": 360,
-            "width": 550,
+            "length": 550,
+            "width": 360,
             "height": 250,
-            "orientationKey": "WLH",
-            "labelRotationDeg": 90,
+            "orientationKey": "LWH",
+            "labelRotationDeg": 0,
             "yawQuarterTurn": null,
             "pitchQuarterTurn": null,
             "orientationAxes": null,
@@ -21409,14 +21413,14 @@
             "name": "世喜新生儿软软勺两只装越南版",
             "label": "TC-A02-EV_v1.0",
             "index": 62,
-            "x": 360,
+            "x": 550,
             "y": 1460,
             "z": 2135,
-            "length": 360,
-            "width": 550,
+            "length": 550,
+            "width": 360,
             "height": 250,
-            "orientationKey": "WLH",
-            "labelRotationDeg": 90,
+            "orientationKey": "LWH",
+            "labelRotationDeg": 0,
             "yawQuarterTurn": null,
             "pitchQuarterTurn": null,
             "orientationAxes": null,
@@ -21430,11 +21434,12 @@
             "blockingInvalid": false,
             "physicalLayer": 8,
             "depthLayer": 2,
-            "workStep": 65,
+            "workStep": 93,
             "supportType": "partially-supported",
             "supportedBy": [
               "vietnam-01-110",
-              "vietnam-01-111"
+              "vietnam-01-111",
+              "vietnam-01-112"
             ]
           },
           {
@@ -21443,14 +21448,14 @@
             "name": "世喜新生儿软软勺两只装越南版",
             "label": "TC-A02-EV_v1.0",
             "index": 63,
-            "x": 720,
+            "x": 1100,
             "y": 1460,
             "z": 2135,
-            "length": 360,
-            "width": 550,
+            "length": 550,
+            "width": 360,
             "height": 250,
-            "orientationKey": "WLH",
-            "labelRotationDeg": 90,
+            "orientationKey": "LWH",
+            "labelRotationDeg": 0,
             "yawQuarterTurn": null,
             "pitchQuarterTurn": null,
             "orientationAxes": null,
@@ -21464,11 +21469,12 @@
             "blockingInvalid": false,
             "physicalLayer": 8,
             "depthLayer": 3,
-            "workStep": 94,
+            "workStep": 150,
             "supportType": "partially-supported",
             "supportedBy": [
-              "vietnam-01-111",
-              "vietnam-01-112"
+              "vietnam-01-112",
+              "vietnam-01-113",
+              "vietnam-01-114"
             ]
           },
           {
@@ -21477,14 +21483,14 @@
             "name": "世喜新生儿软软勺两只装越南版",
             "label": "TC-A02-EV_v1.0",
             "index": 64,
-            "x": 1080,
+            "x": 1650,
             "y": 1460,
             "z": 2135,
-            "length": 360,
-            "width": 550,
+            "length": 550,
+            "width": 360,
             "height": 250,
-            "orientationKey": "WLH",
-            "labelRotationDeg": 90,
+            "orientationKey": "LWH",
+            "labelRotationDeg": 0,
             "yawQuarterTurn": null,
             "pitchQuarterTurn": null,
             "orientationAxes": null,
@@ -21498,11 +21504,12 @@
             "blockingInvalid": false,
             "physicalLayer": 8,
             "depthLayer": 4,
-            "workStep": 124,
+            "workStep": 208,
             "supportType": "partially-supported",
             "supportedBy": [
-              "vietnam-01-112",
-              "vietnam-01-113"
+              "vietnam-01-114",
+              "vietnam-01-115",
+              "vietnam-01-116"
             ]
           },
           {
@@ -21511,14 +21518,14 @@
             "name": "世喜新生儿软软勺两只装越南版",
             "label": "TC-A02-EV_v1.0",
             "index": 65,
-            "x": 1440,
+            "x": 2200,
             "y": 1460,
             "z": 2135,
-            "length": 360,
-            "width": 550,
+            "length": 550,
+            "width": 360,
             "height": 250,
-            "orientationKey": "WLH",
-            "labelRotationDeg": 90,
+            "orientationKey": "LWH",
+            "labelRotationDeg": 0,
             "yawQuarterTurn": null,
             "pitchQuarterTurn": null,
             "orientationAxes": null,
@@ -21532,11 +21539,11 @@
             "blockingInvalid": false,
             "physicalLayer": 8,
             "depthLayer": 5,
-            "workStep": 152,
+            "workStep": 222,
             "supportType": "partially-supported",
             "supportedBy": [
-              "vietnam-01-113",
-              "vietnam-01-114"
+              "vietnam-01-116",
+              "vietnam-01-117"
             ]
           },
           {
@@ -21545,14 +21552,14 @@
             "name": "世喜新生儿软软勺两只装越南版",
             "label": "TC-A02-EV_v1.0",
             "index": 66,
-            "x": 1800,
+            "x": 2750,
             "y": 1460,
             "z": 2135,
-            "length": 360,
-            "width": 550,
+            "length": 550,
+            "width": 360,
             "height": 250,
-            "orientationKey": "WLH",
-            "labelRotationDeg": 90,
+            "orientationKey": "LWH",
+            "labelRotationDeg": 0,
             "yawQuarterTurn": null,
             "pitchQuarterTurn": null,
             "orientationAxes": null,
@@ -21566,11 +21573,12 @@
             "blockingInvalid": false,
             "physicalLayer": 8,
             "depthLayer": 6,
-            "workStep": 187,
+            "workStep": 284,
             "supportType": "partially-supported",
             "supportedBy": [
-              "vietnam-01-114",
-              "vietnam-01-115"
+              "vietnam-01-117",
+              "vietnam-01-118",
+              "vietnam-01-119"
             ]
           },
           {
