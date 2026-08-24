@@ -1,6 +1,13 @@
 # Changelog
 
 
+## 2026-08-24 r68 production deploy
+
+- SQLite backup `/root/cargo-database-20260824-014523.db` (mode 600, `PRAGMA quick_check=ok`).
+- `npm run deploy` 7/7. Backup `/root/cargo_project-backup-20260824-014528`. Health: homepage 200, unauthenticated `/api/import-templates` 401. Live assets `index-57kUSVjx.js` / `index-Bxzrmups.css`; Workbench `Workbench-COAj_7Bw.js`. Release note `2026-08-20-r68-import-template-flow`.
+- Remote E2E via SSH tunnel `127.0.0.1:18080 -> cargo-server:80` (not public HTTP). Full `npm run test:e2e` hit the 1200s wall after 127/144 tests: auth-isolation mostly RED; container-calc/import/manual mostly GREEN including O Russian **31/31** and Vietnam **24**. Isolated `npx playwright test e2e/import-templates.spec.ts`: **15 passed / 0 failed / 0 skipped** in 2.6m. Assertions not weakened. Recorded in `decision.md`.
+
+
 ## 2026-08-20 merge r68 into main
 
 - Merged `feat/template-refactor` into `main` as `1ed4ddd` (`merge: import template flow refactor (r68)`). In-app release note `2026-08-20-r68-import-template-flow`.

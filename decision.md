@@ -1,6 +1,16 @@
 # Decision Log
 
 
+## 2026-08-24 r68 远程全量 E2E 未在 1200s 内收口
+
+- 背景：生产部署后按 README 走 SSH 回环跑全量 Playwright。
+- 证据：`PLAYWRIGHT_BASE_URL=http://127.0.0.1:18080/`。全量套件 20 分钟墙钟后停在 127/144。`auth-isolation` 大量失败（约 6s/条）；`e2e/import-templates.spec.ts` 在全量中 D/F/G/H/I/J 失败，但独立复跑 **15/15**。O 俄罗斯 31/31、越南 24 在全量中已通过。
+- 选项：A. 削弱或跳过失败用例；B. 再跑 20 分钟全量；C. 记录为未完成全量 GREEN，以模板聚焦 15/15 为本次部署验收，不改测试。
+- 决策：C。不宣称全量远程 E2E 全绿。
+- 影响：auth-isolation 远程失败未根因定位。
+- 后续：空闲时段重跑全量远程 E2E。
+
+
 ## 2026-08-20 merge verification timeouts after r68
 
 - 背景：`feat/template-refactor` 已无快进合入 `main`（`1ed4ddd`）。合入后复验 `npm test`。
