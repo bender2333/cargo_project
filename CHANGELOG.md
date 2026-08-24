@@ -1,6 +1,13 @@
 # Changelog
 
 
+## 2026-08-24 workspace hotkeys single listener
+
+- Root cause: Delete/arrows lived on `ContainerScene` `window.keydown` with `mount.contains(target)` (canvas only). R/undo lived on a second listener with `workspaceRef.contains`. Overlay delete button was already gone. Auto help listed M/Ctrl+Z that the manual-only listener never ran.
+- Change: `resolveWorkspaceHotkey` in `src/lib/workspaceHotkeys.ts`; one `useWorkspaceHotkeys` on the visualization workspace. Scene is pointer-only (`onManualDelete` / `manualKeyboardEnabled` / scene keydown deleted). Rotate keyboard reuses `handleManualRotateBox`. Auto M works. Auto help only lists M. Esc: maximize first, then clear selection.
+- Verification: vitest `workspaceHotkeys.test.ts` 8/8, sessionBoundary 14/14, VisualizationWorkspace 3/3. `npx tsc -b` exit 0. eslint on touched files exit 0 (pre-existing Workbench hooks warning). Playwright `e2e/manual-3d.spec.ts` **54 passed / 0 failed** including quick-place Delete without canvas focus, 2D Delete, auto M, Esc maximize layering, floating PageUp.
+- Not weakened: history-nav still must not mutate the draft. Assertions encode the new product contract (workspace contains), not canvas focus.
+
 ## 2026-08-24 r68 production deploy
 
 - SQLite backup `/root/cargo-database-20260824-014523.db` (mode 600, `PRAGMA quick_check=ok`).

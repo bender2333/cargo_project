@@ -1,6 +1,15 @@
 # Decision Log
 
 
+## 2026-08-24 工作区快捷键收成一条监听
+
+- 背景：手动 Delete 失效。R 在工作区热键里，Delete/方向键在 3D 场景 `mount.contains` 里。自动帮助写了 M 和 Ctrl+Z，代码却要求 manual。Esc 三处监听。
+- 选项：A. 只把场景门改成 workspaceContains（仍两条监听）；B. 键位注册表；C. 一个纯函数 + 一条 window 监听，场景不再听键盘。
+- 决策：C。解析在 `resolveWorkspaceHotkey`。焦点：overview 且工作区 contains，不再要求 canvas。自动/手动都响应 M。自动帮助去掉并不存在的撤销。Esc 一次一层：最大化则只退出最大化。键盘旋转走已有 `handleManualRotateBox`，不再第二份 notice。
+- 影响：2D 与快速放置后 Delete/微移可用。`manualKeyboardEnabled` 删除。钉 `mount.contains` 的 sessionBoundary 源码断言改为「场景无 keydown」。
+- 后续：3D/2D 是否常驻挂载仍不在本轮。Debug 面板与导入弹窗键盘保持独立。
+
+
 ## 2026-08-24 r68 远程全量 E2E 未在 1200s 内收口
 
 - 背景：生产部署后按 README 走 SSH 回环跑全量 Playwright。

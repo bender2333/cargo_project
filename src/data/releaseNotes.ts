@@ -14,6 +14,27 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-08-24-r69-workspace-hotkeys',
+    date: '2026-08-24',
+    title: {
+      en: 'Manual Delete and arrows work from the workspace, not only the 3D canvas',
+      zh: '手动 Delete 和方向键在工作区内即可用，不必点进 3D 画布',
+    },
+    items: {
+      en: [
+        'After quick-place or while editing in 2D, Delete removes the selected cargo. Arrow keys and PageUp/PageDown nudge it the same way.',
+        'Escape peels one layer: leave maximized view first, then clear the selection.',
+        'In automatic mode, M toggles the clearance ruler. The automatic help list no longer mentions undo keys that did not exist.',
+      ],
+      zh: [
+        '一键放置后或在 2D 编辑时，Delete 即可删除选中货物。方向键和 PageUp/PageDown 同样可微调位置。',
+        'Esc 一次只退一层：先退出最大化，再取消选中。',
+        '自动模式下 M 切换尺规。自动模式帮助不再列出并不存在的撤销快捷键。',
+      ],
+    },
+  },
+
+  {
     version: '2026-08-20-r68-import-template-flow',
     date: '2026-08-20',
     title: {
