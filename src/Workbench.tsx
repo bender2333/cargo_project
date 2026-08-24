@@ -7,7 +7,6 @@ import { buildLoadingTaskGroups } from './lib/loadingTaskGroups'
 import { usePlaybackController } from './hooks/usePlaybackController'
 import { usePackingSession } from './hooks/usePackingSession'
 import { useManualPlacementSession } from './hooks/useManualPlacementSession'
-import { useManualWorkspaceHotkeys } from './hooks/useManualWorkspaceHotkeys'
 import { useHistoryPlans } from './hooks/useHistoryPlans'
 import type { HistoryPlan } from './hooks/useHistoryPlans'
 import { useCustomCargoLibrary } from './hooks/useCustomCargoLibrary'
@@ -176,7 +175,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     planViewMode: 'top',
     clearanceEnabled: false,
   })
-  const [clearanceToggleToken, setClearanceToggleToken] = useState(0)
   const {
     workspaceMaximized,
     workspaceView,
@@ -276,7 +274,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     }
   }, [exportTemplateLoadFailed, exportTemplates, selectedExportTemplateId])
 
-  const workspaceRef = useRef<HTMLDivElement | null>(null)
   const reportRef = useRef<HTMLElement | null>(null)
   const cargoRef = useRef<HTMLFormElement | null>(null)
   const containerRef = useRef<HTMLElement | null>(null)
@@ -556,22 +553,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     resultsPanelRef.current?.resetFilters()
     setHoverInfo(null)
   }, [placementMode])
-
-  useManualWorkspaceHotkeys({
-    activeNav,
-    placementMode,
-    workspaceRef,
-    manualSelectedId,
-    renderingContainer,
-    locale,
-    rotateManualBox,
-    undoManualPlacement,
-    redoManualPlacement,
-    selectManualBox,
-    setRotationNotice,
-    setManualNotice,
-    setClearanceToggleToken,
-  })
 
   useEffect(() => {
     if (!manualNotice) return
@@ -1281,7 +1262,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
           />
 
         <section className="flex-1 min-w-0 space-y-4">
-        <div ref={workspaceRef} tabIndex={activeNav === 'overview' && placementMode === 'manual' ? 0 : undefined}>
         <VisualizationWorkspace
             activeResult={activeResult}
             formatCubicMeters={formatCubicMeters}
@@ -1297,7 +1277,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             locale={locale}
             calculateAndShowPlacement={calculateAndShowPlacement}
             onChromeChange={setVisualizationChrome}
-            clearanceToggleToken={clearanceToggleToken}
+            hotkeysEnabled={activeNav === 'overview'}
             manual={{
               manualNotice,
               setManualNotice,
@@ -1323,6 +1303,8 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
               handleManualMoveBox,
               notifyManualRejected,
               handleManualRotateBox,
+              undoManualPlacement,
+              redoManualPlacement,
               clearanceAnnotations,
               manualDraft,
               autoHelpOpen,
@@ -1338,7 +1320,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             }}
             render={{
               placementMode,
-              manualKeyboardEnabled: activeNav === 'overview' && placementMode === 'manual',
               setPlacementMode,
               renderingContainer,
               gridSnap,
@@ -1354,7 +1335,6 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
               setSelectedBoxId,
             }}
           />
-        </div>
 
           <ResultsPanel
             ref={resultsPanelRef}

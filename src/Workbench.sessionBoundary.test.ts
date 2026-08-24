@@ -219,22 +219,18 @@ describe('Workbench packing-session boundary', () => {
     expect(source).toMatch(/placementMode(?:=\{placementMode\}|,)/)
   })
 
-  it('scopes manual keyboard commands to the focused overview workspace', () => {
+  it('dispatches workspace keys from one hook and keeps the scene pointer-only', () => {
     const workbenchSource = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
-    const hotkeysSource = readFileSync(path.resolve(process.cwd(), 'src/hooks/useManualWorkspaceHotkeys.ts'), 'utf8')
+    const hotkeysSource = readFileSync(path.resolve(process.cwd(), 'src/hooks/useWorkspaceHotkeys.ts'), 'utf8')
     const workspaceSource = readFileSync(path.resolve(process.cwd(), 'src/components/VisualizationWorkspace.tsx'), 'utf8')
     const sceneSource = readFileSync(path.resolve(process.cwd(), 'src/components/ContainerScene.tsx'), 'utf8')
 
-    expect(workbenchSource).toContain('useManualWorkspaceHotkeys({')
-    expect(hotkeysSource).toMatch(/const isManualWorkspaceTarget =\s*activeNav === 'overview'\s*&& placementMode === 'manual'\s*&& target !== null\s*&& workspaceRef\.current\?\.contains\(target\)/)
-    expect(hotkeysSource).toMatch(/if \(!isManualWorkspaceTarget\) return/)
-    expect(workbenchSource).toContain("tabIndex={activeNav === 'overview' && placementMode === 'manual' ? 0 : undefined}")
-    expect(workbenchSource).toContain("manualKeyboardEnabled: activeNav === 'overview' && placementMode === 'manual'")
-    expect(workspaceSource).toContain('manualKeyboardEnabled={manualKeyboardEnabled}')
-    expect(sceneSource).toContain('if (!manualEditableRef.current || !manualKeyboardEnabledRef.current) return')
-    expect(sceneSource).toContain('if (!mount.contains(target)) return')
-    expect(sceneSource).toContain('renderer.domElement.tabIndex = manualKeyboardEnabled ? 0 : -1')
-    expect(sceneSource).toContain('onManualDeleteRef.current?.(boxId)')
+    expect(workbenchSource).not.toContain('useManualWorkspaceHotkeys')
+    expect(workspaceSource).toContain('useWorkspaceHotkeys({')
+    expect(hotkeysSource).toContain('resolveWorkspaceHotkey')
+    expect(sceneSource).not.toContain('onManualDelete')
+    expect(sceneSource).not.toContain("window.addEventListener('keydown'")
+    expect(sceneSource).not.toContain('manualKeyboardEnabled')
   })
 
   it('delegates activeResultTab, activeLayerId, and activeLabelId ownership to ResultsPanel', () => {

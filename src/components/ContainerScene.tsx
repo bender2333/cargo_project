@@ -63,12 +63,10 @@ type ContainerSceneProps = {
   onSelectBox?: (boxId: string) => void
   invalidBoxIds?: Set<string>
   manualEditable?: boolean
-  manualKeyboardEnabled?: boolean
   renderEnabled?: boolean
   onManualMove?: (boxId: string, x: number, y: number, z?: number) => void
   onManualDropFromPool?: (cargoId: string, x: number, y: number, z?: number) => void
   onManualRotate?: (boxId: string, direction?: ManualRotationDirection) => void
-  onManualDelete?: (boxId: string) => void
   onManualOperationRejected?: (operation: 'move' | 'drop', boxId?: string, cargoId?: string, issues?: ValidationIssue[]) => void
   selectedManualBoxId?: string | null
   onClearSelection?: () => void
@@ -123,12 +121,10 @@ export function ContainerScene({
   onSelectBox,
   invalidBoxIds,
   manualEditable,
-  manualKeyboardEnabled = false,
   renderEnabled = true,
   onManualMove,
   onManualDropFromPool,
   onManualRotate,
-  onManualDelete,
   onManualOperationRejected,
   selectedManualBoxId,
   onClearSelection,
@@ -143,7 +139,6 @@ export function ContainerScene({
   const sceneStateRef = useRef<SceneState | null>(null)
   const invalidBoxIdsRef = useRef<Set<string>>(invalidBoxIds ?? new Set())
   const manualEditableRef = useRef<boolean>(manualEditable ?? false)
-  const manualKeyboardEnabledRef = useRef(manualKeyboardEnabled)
   const renderEnabledRef = useRef(renderEnabled)
   const animationFrameRef = useRef<number | null>(null)
   const startAnimationRef = useRef<(() => void) | null>(null)
@@ -159,7 +154,6 @@ export function ContainerScene({
   const onManualMoveRef = useRef<typeof onManualMove>(onManualMove)
   const onManualDropFromPoolRef = useRef<typeof onManualDropFromPool>(onManualDropFromPool)
   const onManualRotateRef = useRef<typeof onManualRotate>(onManualRotate)
-  const onManualDeleteRef = useRef<typeof onManualDelete>(onManualDelete)
   const onManualOperationRejectedRef = useRef<typeof onManualOperationRejected>(onManualOperationRejected)
   const onSelectBoxRef = useRef<typeof onSelectBox>(onSelectBox)
   const onClearSelectionRef = useRef<typeof onClearSelection>(onClearSelection)
@@ -182,12 +176,6 @@ export function ContainerScene({
     manualEditableRef.current = manualEditable ?? false
   }, [manualEditable])
 
-  useEffect(() => {
-    manualKeyboardEnabledRef.current = manualKeyboardEnabled
-    if (sceneStateRef.current) {
-      sceneStateRef.current.renderer.domElement.tabIndex = manualKeyboardEnabled ? 0 : -1
-    }
-  }, [manualKeyboardEnabled])
   useEffect(() => {
     renderEnabledRef.current = renderEnabled
     if (renderEnabled) {
@@ -243,10 +231,6 @@ export function ContainerScene({
   useEffect(() => {
     onManualRotateRef.current = onManualRotate
   }, [onManualRotate])
-
-  useEffect(() => {
-    onManualDeleteRef.current = onManualDelete
-  }, [onManualDelete])
 
   useEffect(() => {
     onManualOperationRejectedRef.current = onManualOperationRejected
@@ -312,7 +296,6 @@ export function ContainerScene({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(mount.clientWidth, mount.clientHeight)
     renderer.shadowMap.enabled = true
-    renderer.domElement.tabIndex = manualKeyboardEnabled ? 0 : -1
     mount.appendChild(renderer.domElement)
 
     const controls = new OrbitControls(camera, renderer.domElement)
@@ -865,50 +848,6 @@ export function ContainerScene({
       onManualDropFromPoolRef.current?.(cargoId, snappedX, snappedY, finalDrop.z)
     }
 
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!manualEditableRef.current || !manualKeyboardEnabledRef.current) return
-      const target = event.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
-      if (!mount.contains(target)) return
-      const boxId = selectedManualBoxIdRef.current
-      if (!boxId) return
-      const entry = sceneState.meshEntries.get(boxId)
-      if (!entry) return
-      const step = event.shiftKey ? 100 : event.ctrlKey || event.metaKey ? 1 : 10
-      let handled = true
-      switch (event.key) {
-        case 'Delete':
-        case 'Backspace':
-          onManualDeleteRef.current?.(boxId)
-          break
-        case 'Escape':
-          setSceneGizmoVisible(false)
-          onClearSelectionRef.current?.()
-          break
-        case 'ArrowLeft':
-          onManualMoveRef.current?.(boxId, entry.box.x - step, entry.box.y)
-          break
-        case 'ArrowRight':
-          onManualMoveRef.current?.(boxId, entry.box.x + step, entry.box.y)
-          break
-        case 'ArrowDown':
-          onManualMoveRef.current?.(boxId, entry.box.x, entry.box.y - step)
-          break
-        case 'ArrowUp':
-          onManualMoveRef.current?.(boxId, entry.box.x, entry.box.y + step)
-          break
-        case 'PageUp':
-          onManualMoveRef.current?.(boxId, entry.box.x, entry.box.y, Math.max(0, entry.box.z + step))
-          break
-        case 'PageDown':
-          onManualMoveRef.current?.(boxId, entry.box.x, entry.box.y, Math.max(0, entry.box.z - step))
-          break
-        default:
-          handled = false
-      }
-      if (handled) event.preventDefault()
-    }
-
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
     renderer.domElement.addEventListener('dblclick', onDoubleClick)
     renderer.domElement.addEventListener('pointermove', onPointerMove)
@@ -926,7 +865,6 @@ export function ContainerScene({
       controls.update()
     }
     mount.addEventListener('test-camera-command', onTestCameraCommand)
-    window.addEventListener('keydown', onKeyDown)
 
     const animate = () => {
       animationFrameRef.current = null
@@ -1004,7 +942,6 @@ export function ContainerScene({
       renderer.domElement.removeEventListener('dragleave', onDragLeave)
       renderer.domElement.removeEventListener('drop', onDrop)
       mount.removeEventListener('test-camera-command', onTestCameraCommand)
-      window.removeEventListener('keydown', onKeyDown)
       mount.removeChild(renderer.domElement)
       if (sceneStateRef.current === sceneState) {
         sceneStateRef.current = null

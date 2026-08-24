@@ -79,6 +79,8 @@ export type ManualWorkspaceProps = {
     reasonCode?: ManualOperationNotice['reasonCode'],
   ) => void
   handleManualRotateBox: (boxId: string, direction?: ManualRotationDirection) => void
+  undoManualPlacement: () => void
+  redoManualPlacement: () => void
   clearanceAnnotations: ClearanceAnnotation[]
   manualDraft: ManualDraft
   autoHelpOpen: boolean
@@ -96,7 +98,6 @@ export type PlaybackWorkspaceProps = {
 
 export type SceneRenderWorkspaceProps = {
   placementMode: PlacementMode
-  manualKeyboardEnabled: boolean
   setPlacementMode: (mode: PlacementMode) => void
   renderingContainer: ContainerSpec
   gridSnap: boolean
@@ -171,7 +172,7 @@ export type VisualizationWorkspaceProps = {
   locale: Locale
   calculateAndShowPlacement: () => void
   onChromeChange?: (chrome: VisualizationChrome) => void
-  clearanceToggleToken?: number
+  hotkeysEnabled: boolean
   manual: ManualWorkspaceProps
   playback: PlaybackWorkspaceProps
   render: SceneRenderWorkspaceProps

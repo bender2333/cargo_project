@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ContainerScene } from './ContainerScene'
 import type { SceneViewMode } from './ContainerScene'
 import { ContainerPlan2D } from './ContainerPlan2D'
 import type { PlanViewMode } from './ContainerPlan2D'
 import { ManualPlacement2D } from './ManualPlacement2D'
 import { deriveVisibleWorkspaceBoxes } from '../lib/visibleWorkspaceBoxes'
+import { useWorkspaceHotkeys } from '../hooks/useWorkspaceHotkeys'
 import type {
   VisualizationWorkspaceProps,
   WorkspaceView,
@@ -44,7 +45,7 @@ export function VisualizationWorkspace({
   locale,
   calculateAndShowPlacement,
   onChromeChange,
-  clearanceToggleToken = 0,
+  hotkeysEnabled,
   manual,
   playback,
   render,
@@ -75,6 +76,8 @@ export function VisualizationWorkspace({
     handleManualMoveBox,
     notifyManualRejected,
     handleManualRotateBox,
+    undoManualPlacement,
+    redoManualPlacement,
     clearanceAnnotations,
     manualDraft,
     autoHelpOpen,
@@ -90,7 +93,6 @@ export function VisualizationWorkspace({
   } = playback
   const {
     placementMode,
-    manualKeyboardEnabled,
     setPlacementMode,
     renderingContainer,
     gridSnap,
@@ -112,6 +114,13 @@ export function VisualizationWorkspace({
   const [clearanceEnabled, setClearanceEnabled] = useState(false)
   const [workspaceMaximized, setWorkspaceMaximized] = useState(false)
   const [resetViewTick, setResetViewTick] = useState(0)
+  const workspaceRef = useRef<HTMLDivElement | null>(null)
+  const selectedHotkeyBox = useMemo(() => {
+    if (!manualSelectedId) return null
+    const box = manualDraft.boxes.find((candidate) => candidate.id === manualSelectedId)
+    if (!box) return null
+    return { id: box.id, x: box.x, y: box.y, z: box.z }
+  }, [manualDraft.boxes, manualSelectedId])
 
   const { visibleAutoBoxes, visibleManualBoxes } = useMemo(
     () => deriveVisibleWorkspaceBoxes({
@@ -151,19 +160,21 @@ export function VisualizationWorkspace({
     workspaceView,
   ])
 
-  useEffect(() => {
-    if (!clearanceToggleToken) return
-    setClearanceEnabled((enabled) => !enabled)
-  }, [clearanceToggleToken])
-
-  useEffect(() => {
-    if (!workspaceMaximized) return
-    const handle = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setWorkspaceMaximized(false)
-    }
-    window.addEventListener('keydown', handle)
-    return () => window.removeEventListener('keydown', handle)
-  }, [workspaceMaximized])
+  useWorkspaceHotkeys({
+    enabled: hotkeysEnabled,
+    placementMode,
+    workspaceRef,
+    selectedBox: selectedHotkeyBox,
+    maximized: workspaceMaximized,
+    onUndo: undoManualPlacement,
+    onRedo: redoManualPlacement,
+    onRotate: handleManualRotateBox,
+    onDelete: handleManualDeleteBox,
+    onMove: handleManualMoveBox,
+    onClearSelection: () => selectManualBox(null),
+    onToggleClearance: () => setClearanceEnabled((enabled) => !enabled),
+    onExitMaximize: () => setWorkspaceMaximized(false),
+  })
 
   const selectSceneView = (view: SceneViewMode) => {
     setSceneViewMode(view)
@@ -218,7 +229,10 @@ export function VisualizationWorkspace({
     if (workspaceView === '3d') setHasMounted3d(true)
   }, [workspaceView])
   return (
-    <>
+    <div
+      ref={workspaceRef}
+      tabIndex={hotkeysEnabled ? 0 : undefined}
+    >
       <div className={`grid grid-cols-5 gap-3 max-xl:grid-cols-2 ${workspaceMaximized ? 'hidden' : ''}`} data-testid="archive-stat-grid">
         <div className="archive-stat"><div className="archive-stat-value">{activeResult.placedCount}</div><div className="archive-stat-key">{t.loaded}</div></div>
         <div className="archive-stat"><div className="archive-stat-value">{Math.round(activeResult.usedWeight)}</div><div className="archive-stat-key">{t.weight}</div></div>
@@ -481,7 +495,6 @@ export function VisualizationWorkspace({
                       placementSettings={placementSettings}
                       invalidBoxIds={manualInvalidBoxIds}
                       manualEditable
-                      manualKeyboardEnabled={manualKeyboardEnabled}
                       poolDragInfo={poolDragInfo}
                       highlightBoxIds={loadingStepsActive ? activeLoadingGroupBoxIds : undefined}
                       resetViewTick={resetViewTick}
@@ -490,7 +503,6 @@ export function VisualizationWorkspace({
                       viewMode={sceneViewMode}
                       onClearSelection={() => selectManualBox(null)}
                       onHoverBox={setHoverInfo}
-                      onManualDelete={handleManualDeleteBox}
                       onManualDropFromPool={handleManualDropFromPool}
                       onManualMove={handleManualMoveBox}
                       onManualOperationRejected={(operation, boxId, cargoId, issues) => notifyManualRejected(operation, boxId, cargoId, issues)}
@@ -580,7 +592,7 @@ export function VisualizationWorkspace({
           )}
         </div>
       </section>
-    </>
+    </div>
   )
 }
 

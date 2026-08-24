@@ -35,6 +35,7 @@ function props(overrides: Partial<VisualizationWorkspaceProps> = {}): Visualizat
     customContainerLoadFailed: false,
     locale: 'en',
     calculateAndShowPlacement: vi.fn(),
+    hotkeysEnabled: false,
     manual: {
       manualNotice: null,
       setManualNotice: vi.fn(),
@@ -60,6 +61,8 @@ function props(overrides: Partial<VisualizationWorkspaceProps> = {}): Visualizat
       handleManualMoveBox: vi.fn(),
       notifyManualRejected: vi.fn(),
       handleManualRotateBox: vi.fn(),
+      undoManualPlacement: vi.fn(),
+      redoManualPlacement: vi.fn(),
       clearanceAnnotations: [],
       manualDraft: { boxes: [] },
       autoHelpOpen: false,
@@ -75,7 +78,6 @@ function props(overrides: Partial<VisualizationWorkspaceProps> = {}): Visualizat
     },
     render: {
       placementMode: 'auto',
-      manualKeyboardEnabled: false,
       setPlacementMode: vi.fn(),
       renderingContainer: container,
       gridSnap: true,

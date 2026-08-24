@@ -310,8 +310,6 @@ export const workbenchCopy = {
     autoKeyboardHelp: 'Keyboard help',
     autoKeyboardHelpItems: [
       'M: toggle clearance ruler',
-      'Ctrl/Cmd + Z: undo',
-      'Ctrl/Cmd + Y: redo',
     ],
     containerChangedNotice: 'Container changed. Recalculate to refresh the automatic placement.',
     manualIssueBoundary: 'exceeds the effective container bounds',
@@ -639,8 +637,6 @@ export const workbenchCopy = {
     autoKeyboardHelp: '键盘帮助',
     autoKeyboardHelpItems: [
       'M：尺规开关',
-      'Ctrl/Cmd + Z：撤销',
-      'Ctrl/Cmd + Y：重做',
     ],
     containerChangedNotice: '已更换货柜，请重新计算以刷新自动排布。',
     manualIssueBoundary: '超出有效货柜边界',
