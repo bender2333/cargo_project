@@ -28,6 +28,8 @@ export type BlockCandidate = {
   weight: number
 }
 
+const MAX_BLOCKS_PER_ORIENTATION = 4
+
 export function bestBlocksForSpace(
   item: CargoItem,
   remaining: number,
@@ -57,7 +59,28 @@ export function bestBlocksForSpace(
       if (best?.count === remaining) break
     }
     if (!best) continue
-    blocks.push(makeBlockCandidate(item, box, best.nx, best.ny, best.nz))
+
+    const seen = new Set<string>()
+    const add = (nx: number, ny: number, nz: number) => {
+      if (nx < 1 || ny < 1 || nz < 1 || nx > maxNx || ny > maxNy || nz > maxNz) return
+      const count = nx * ny * nz
+      if (count < 1 || count > remaining) return
+      const key = `${nx}x${ny}x${nz}`
+      if (seen.has(key) || seen.size >= MAX_BLOCKS_PER_ORIENTATION) return
+      seen.add(key)
+      blocks.push(makeBlockCandidate(item, box, nx, ny, nz))
+    }
+
+    add(best.nx, best.ny, best.nz)
+    if (best.ny > 1) {
+      const ny = best.ny - 1
+      add(Math.min(maxNx, Math.floor(remaining / (ny * best.nz))), ny, best.nz)
+    }
+    if (best.nx > 1) add(best.nx - 1, best.ny, best.nz)
+    if (best.nz > 1) {
+      const nz = best.nz - 1
+      add(Math.min(maxNx, Math.floor(remaining / (best.ny * nz))), best.ny, nz)
+    }
   }
   return blocks
 }
