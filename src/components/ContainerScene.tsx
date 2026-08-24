@@ -489,6 +489,10 @@ export function ContainerScene({
       const boxId = hit ? sceneState.boxByUuid.get(hit.object.uuid) : undefined
       if (boxId) {
         onSelectBoxRef.current?.(boxId)
+        if (manualEditableRef.current) {
+          event.preventDefault()
+          mountRef.current?.focus({ preventScroll: true })
+        }
       }
       if (!manualEditableRef.current || !boxId) return
       const entry = sceneState.meshEntries.get(boxId)
@@ -521,6 +525,7 @@ export function ContainerScene({
       if (hitBoxId) {
         selectedManualBoxIdRef.current = hitBoxId
         onSelectBoxRef.current?.(hitBoxId)
+        mountRef.current?.focus({ preventScroll: true })
       }
       event.preventDefault()
       event.stopPropagation()
@@ -1290,7 +1295,8 @@ export function ContainerScene({
   return (
     <div
       ref={mountRef}
-      className="h-full min-h-[420px] w-full"
+      className="h-full min-h-[420px] w-full outline-none"
+      tabIndex={manualEditable ? 0 : undefined}
       data-testid="container-scene"
       data-controls-enabled="true"
       data-interaction-mode={interactionMode}
