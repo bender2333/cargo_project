@@ -14,6 +14,27 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-08-20-r68-import-template-flow',
+    date: '2026-08-20',
+    title: {
+      en: 'Import starts with template choice and blank mapping',
+      zh: '导入先选模板，不用模板则空白映射',
+    },
+    items: {
+      en: [
+        'After a file is read, choose an existing template or “Don’t use a template”. Without a template, every source column starts blank — nothing is auto-mapped.',
+        'Required fields show *. Weight is optional: missing or blank becomes 1 kg; a non-empty invalid, zero, or negative weight blocks the whole import.',
+        'Update template and Save as are separate actions. Saving a template never imports cargo. Confirm is blocked when columns conflict or a template column is missing.',
+      ],
+      zh: [
+        '文件读入后先选已有模板或“不使用模板”。不使用模板时所有源列从空白开始，不会自动映射。',
+        '必填字段带 *。重量可选：未映射或空白按内部 1 kg；非空非法、零或负数整批阻止导入。',
+        '“更新模板”和“另存为模板”是两个独立动作。保存模板不会导入货物。列冲突或模板缺列时不能确认导入。',
+      ],
+    },
+  },
+
+  {
     version: '2026-08-18-r67-import-mapping-columns',
     date: '2026-08-18',
     title: {

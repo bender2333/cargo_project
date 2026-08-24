@@ -1,6 +1,11 @@
 # Changelog
 
 
+## 2026-08-20 r68 import template flow release note
+
+- Added in-app release note `2026-08-20-r68-import-template-flow` at the top of `src/data/releaseNotes.ts`.
+- User-facing: template selection first; no auto-map without a template; required `*`; optional weight with internal 1 kg; explicit update vs save-as; confirm blocked on conflicts or missing columns.
+
 ## 2026-08-20 Final review: block confirm on invalid mapping
 
 - Confirm now requires `mappingValidation.valid` (duplicates + missingColumns) as well as required-field checks and parse errors. Mapping length and width to the same column, or selecting a template whose optional mapped column is missing, disables Confirm; `confirmMappingImport` also returns without calling `onConfirm`.
