@@ -111,6 +111,56 @@ async function enterManualModeEmpty(page: Page) {
   await expect(page.getByTestId('container-scene')).toHaveAttribute('data-box-count', '0')
 }
 
+async function waitTwoAnimationFrames(page: Page) {
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  }))
+}
+
+async function aimSceneNearTop(page: Page) {
+  const scene = page.getByTestId('container-scene')
+  await scene.evaluate((element) => {
+    element.setAttribute('data-camera-command', 'near-top')
+    element.dispatchEvent(new Event('test-camera-command'))
+  })
+  await waitTwoAnimationFrames(page)
+}
+
+async function poolRemainingTotal(page: Page) {
+  return page.getByTestId('manual-pool-item').evaluateAll((els) => (
+    els.reduce((sum, el) => sum + Number(el.getAttribute('data-remaining') ?? 0), 0)
+  ))
+}
+
+/** Real 3D canvas pointer hit. Do not use 2D dispatchEvent as a stand-in. */
+async function selectBoxBy3dCanvasHit(page: Page) {
+  const scene = page.getByTestId('container-scene')
+  const canvas = scene.locator('canvas')
+  await expect(canvas).toBeVisible()
+  const box = await canvas.boundingBox()
+  if (!box) throw new Error('3D canvas has no bounding box')
+
+  const candidates: Array<{ x: number; y: number }> = []
+  const cols = 6
+  const rows = 4
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      candidates.push({
+        x: box.width * (0.22 + (0.56 * col) / (cols - 1)),
+        y: box.height * (0.28 + (0.52 * row) / (rows - 1)),
+      })
+    }
+  }
+
+  for (const position of candidates) {
+    await aimSceneNearTop(page)
+    await canvas.click({ position })
+    const selected = await scene.getAttribute('data-selected-orientation')
+    if (selected) return
+  }
+  throw new Error('3D canvas pointer hit did not select a box')
+}
+
 async function placeSingleManualBoxForRotation(page: Page) {
   await enterManualModeEmpty(page)
   await page.getByRole('button', { name: '2D', exact: true }).click()
@@ -379,6 +429,63 @@ test('手动 2D 选中后按 Delete 移除箱体', async ({ page }) => {
 
   await page.getByRole('button', { name: '3D', exact: true }).click()
   await expect(page.getByTestId('container-scene')).toHaveAttribute('data-box-count', '0')
+})
+
+test('手动 3D 真实选箱后 M 与 Delete 立即生效', async ({ page }) => {
+  await ensureChinese(page)
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-box-count', /^[1-9]\d*$/)
+  const inheritedCount = Number(await scene.getAttribute('data-box-count'))
+
+  await enterManualMode(page)
+  await expect(scene).toHaveAttribute('data-box-count', String(inheritedCount))
+  await expect(scene).toHaveAttribute('data-selected-orientation', '')
+
+  await page.getByTestId('export-excel').focus()
+  await expect(page.getByTestId('export-excel')).toBeFocused()
+
+  const remainingBefore = await poolRemainingTotal(page)
+  await selectBoxBy3dCanvasHit(page)
+  await expect(scene).not.toHaveAttribute('data-selected-orientation', '')
+  await expect(scene).toBeFocused()
+
+  await page.keyboard.press('m')
+  await expect(scene).toHaveAttribute('data-clearance-enabled', 'true')
+  await expect(scene).not.toHaveAttribute('data-clearance-annotation-count', '0')
+
+  await page.keyboard.press('Delete')
+  await expect(scene).toHaveAttribute('data-box-count', String(inheritedCount - 1))
+  await expect(scene).toHaveAttribute('data-selected-orientation', '')
+  await expect(page.getByTestId('archive-stat-grid').locator('.archive-stat-value').first()).toHaveText(String(inheritedCount - 1))
+  await expect(page.getByTestId('report-panel')).toContainText(`已装载: ${inheritedCount - 1} / ${inheritedCount}`)
+  expect(await poolRemainingTotal(page)).toBe(remainingBefore + 1)
+
+  await page.keyboard.press('Control+z')
+  await expect(scene).toHaveAttribute('data-box-count', String(inheritedCount))
+  await page.keyboard.press('Control+y')
+  await expect(scene).toHaveAttribute('data-box-count', String(inheritedCount - 1))
+})
+
+test('手动 3D 选箱后点击余量测量再按 Backspace 仍删除', async ({ page }) => {
+  await ensureChinese(page)
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-box-count', /^[1-9]\d*$/)
+  const inheritedCount = Number(await scene.getAttribute('data-box-count'))
+
+  await enterManualMode(page)
+  await expect(scene).toHaveAttribute('data-box-count', String(inheritedCount))
+
+  await page.getByTestId('export-excel').focus()
+  await expect(page.getByTestId('export-excel')).toBeFocused()
+  await selectBoxBy3dCanvasHit(page)
+  await expect(scene).not.toHaveAttribute('data-selected-orientation', '')
+  await expect(scene).toBeFocused()
+
+  await page.getByTestId('toggle-clearance').click()
+  await expect(scene).toHaveAttribute('data-clearance-enabled', 'true')
+  await page.keyboard.press('Backspace')
+  await expect(scene).toHaveAttribute('data-box-count', String(inheritedCount - 1))
+  await expect(scene).toHaveAttribute('data-selected-orientation', '')
 })
 
 test('自动模式工作区按 M 切换余量', async ({ page }) => {
