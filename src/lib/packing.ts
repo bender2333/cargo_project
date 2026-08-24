@@ -2,8 +2,9 @@ import type { CargoItem, ContainerSpec, LoadingMode, PackingDiagnostic, PackingR
 import { effectiveContainer, getContainerVolume } from '../data/containers'
 import { finalizePlacementGeometry } from './finalizePackingResult'
 import { stackCapacity, violatesStackChain, type StackChainNode } from './stackCapacity'
-import { bestBlocksForSpace, type BlockCandidate } from './blocks'
+import { bestBlocksForSpace, maxBlocksForSpace, type BlockCandidate } from './blocks'
 import { initEMS, splitEMS, type EmptyMaximalSpace } from './emsSpace'
+import { assignRemainingQuality, compareBlockPlacement, type RemainingEmsQuality } from './packingLookahead'
 import { GAP_FILL_SOURCE } from './placementSource'
 import { buildLabelStats } from './labels'
 import { SpatialGrid, type SpatialAabb } from './spatialGrid'
@@ -57,6 +58,7 @@ type BlockPlacementChoice = {
   ems: EmptyMaximalSpace
   point: PackingPoint
   waste: number
+  remainingQuality?: RemainingEmsQuality
 }
 
 export type BoxOrientation = BoxSize & {
@@ -844,26 +846,31 @@ function emsMinAxisFill(choice: BlockPlacementChoice) {
   return Math.min(choice.block.length / choice.ems.length, choice.block.width / choice.ems.width)
 }
 
-function compareBlockChoices(a: BlockPlacementChoice, b: BlockPlacementChoice, loadingMode: LoadingMode) {
-  if (loadingMode === 'quantity') {
-    return b.block.count - a.block.count
-      || b.block.volume - a.block.volume
-      || emsAxisFill(b) - emsAxisFill(a)
-      || emsMinAxisFill(b) - emsMinAxisFill(a)
-      || b.block.footprintArea - a.block.footprintArea
-      || a.waste - b.waste
-      || a.point.z - b.point.z
-      || a.point.x - b.point.x
-      || a.point.y - b.point.y
+function choiceMetrics(choice: BlockPlacementChoice) {
+  return {
+    cargoId: choice.state.item.id,
+    count: choice.block.count,
+    volume: choice.block.volume,
+    footprintArea: choice.block.footprintArea,
+    waste: choice.waste,
+    axisFill: emsAxisFill(choice),
+    minAxisFill: emsMinAxisFill(choice),
+    point: choice.point,
+    quality: choice.remainingQuality,
   }
-  return b.block.volume - a.block.volume
-    || b.block.count - a.block.count
-    || emsAxisFill(b) - emsAxisFill(a)
-    || emsMinAxisFill(b) - emsMinAxisFill(a)
-    || a.waste - b.waste
-    || a.point.z - b.point.z
-    || a.point.x - b.point.x
-    || a.point.y - b.point.y
+}
+
+function compareBlockChoices(a: BlockPlacementChoice, b: BlockPlacementChoice, loadingMode: LoadingMode) {
+  return compareBlockPlacement(choiceMetrics(a), choiceMetrics(b), loadingMode)
+}
+
+function leadingCargoUnitHeight(states: CargoPackingState[]) {
+  let minHeight = Number.POSITIVE_INFINITY
+  for (const state of states) {
+    if (state.remaining <= 0) continue
+    minHeight = Math.min(minHeight, state.item.length, state.item.width, state.item.height)
+  }
+  return minHeight
 }
 
 function blockPlacementKey(choice: Pick<BlockPlacementChoice, 'state' | 'block' | 'point'>) {
@@ -1180,11 +1187,13 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   ): BlockPlacementChoice | undefined => {
     const spaces = emsList.slice().sort((a, b) => a.x - b.x || a.z - b.z || a.y - b.y)
     for (const ems of spaces) {
-      let best: BlockPlacementChoice | undefined
+      const choices: BlockPlacementChoice[] = []
       const emsVolume = ems.length * ems.width * ems.height
+      const useFrontier = loadingMode === 'quantity' && ems.height < leadingCargoUnitHeight(cargoStates) * 2 - EPSILON
+      const blocksFor = useFrontier ? bestBlocksForSpace : maxBlocksForSpace
       for (const state of cargoStates) {
         if (state.remaining <= 0) continue
-        for (const block of bestBlocksForSpace(state.item, state.remaining, ems)) {
+        for (const block of blocksFor(state.item, state.remaining, ems)) {
           if (usedWeight + block.weight > effective.maxWeight + EPSILON) continue
           const choice: BlockPlacementChoice = {
             state,
@@ -1194,8 +1203,22 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
             waste: emsVolume - block.length * block.width * block.height,
           }
           if (rejected.has(blockPlacementKey(choice)) || !accepts(choice)) continue
-          if (!best || compareBlockChoices(choice, best, loadingMode) < 0) best = choice
+          choices.push(choice)
         }
+      }
+      if (choices.length === 0) continue
+
+      const scored = useFrontier
+        ? assignRemainingQuality(
+          choices,
+          emsList,
+          cargoStates.map((state) => ({ item: state.item, remaining: state.remaining })),
+          loadingMode,
+        )
+        : choices
+      let best: BlockPlacementChoice | undefined
+      for (const choice of scored) {
+        if (!best || compareBlockChoices(choice, best, loadingMode) < 0) best = choice
       }
       if (best) return best
     }

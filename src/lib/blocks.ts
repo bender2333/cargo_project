@@ -30,6 +30,21 @@ export type BlockCandidate = {
 
 const MAX_BLOCKS_PER_ORIENTATION = 4
 
+export function maxBlocksForSpace(
+  item: CargoItem,
+  remaining: number,
+  space: Pick<ContainerSpec, 'length' | 'width' | 'height'>,
+): BlockCandidate[] {
+  if (remaining <= 0) return []
+
+  const blocks: BlockCandidate[] = []
+  for (const box of orientations(item)) {
+    const found = maxBlockForOrientation(item, remaining, space, box)
+    if (found) blocks.push(found)
+  }
+  return blocks
+}
+
 export function bestBlocksForSpace(
   item: CargoItem,
   remaining: number,
@@ -44,20 +59,7 @@ export function bestBlocksForSpace(
     const maxNz = maxStackCount(item, Math.floor(space.height / box.height), remaining)
     if (maxNx <= 0 || maxNy <= 0 || maxNz <= 0) continue
 
-    let best: { nx: number; ny: number; nz: number; count: number; footprint: number } | undefined
-    for (let nz = maxNz; nz >= 1; nz -= 1) {
-      for (let ny = maxNy; ny >= 1; ny -= 1) {
-        const nx = Math.min(maxNx, Math.floor(remaining / (ny * nz)))
-        if (nx < 1) continue
-        const count = nx * ny * nz
-        const footprint = box.length * nx * box.width * ny
-        if (!best || count > best.count || (count === best.count && footprint > best.footprint)) {
-          best = { nx, ny, nz, count, footprint }
-        }
-        if (best.count === remaining) break
-      }
-      if (best?.count === remaining) break
-    }
+    const best = maxBlockDims(item, remaining, space, box)
     if (!best) continue
 
     const seen = new Set<string>()
@@ -83,6 +85,44 @@ export function bestBlocksForSpace(
     }
   }
   return blocks
+}
+
+function maxBlockForOrientation(
+  item: CargoItem,
+  remaining: number,
+  space: Pick<ContainerSpec, 'length' | 'width' | 'height'>,
+  box: OrientedBox,
+): BlockCandidate | undefined {
+  const dims = maxBlockDims(item, remaining, space, box)
+  return dims ? makeBlockCandidate(item, box, dims.nx, dims.ny, dims.nz) : undefined
+}
+
+function maxBlockDims(
+  item: CargoItem,
+  remaining: number,
+  space: Pick<ContainerSpec, 'length' | 'width' | 'height'>,
+  box: OrientedBox,
+) {
+  const maxNx = Math.min(Math.floor(space.length / box.length), remaining)
+  const maxNy = Math.min(Math.floor(space.width / box.width), remaining)
+  const maxNz = maxStackCount(item, Math.floor(space.height / box.height), remaining)
+  if (maxNx <= 0 || maxNy <= 0 || maxNz <= 0) return undefined
+
+  let best: { nx: number; ny: number; nz: number; count: number; footprint: number } | undefined
+  for (let nz = maxNz; nz >= 1; nz -= 1) {
+    for (let ny = maxNy; ny >= 1; ny -= 1) {
+      const nx = Math.min(maxNx, Math.floor(remaining / (ny * nz)))
+      if (nx < 1) continue
+      const count = nx * ny * nz
+      const footprint = box.length * nx * box.width * ny
+      if (!best || count > best.count || (count === best.count && footprint > best.footprint)) {
+        best = { nx, ny, nz, count, footprint }
+      }
+      if (best.count === remaining) break
+    }
+    if (best?.count === remaining) break
+  }
+  return best
 }
 
 function makeBlockCandidate(

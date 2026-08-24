@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CargoItem, ContainerSpec } from '../types'
-import { bestBlocksForSpace, generateBlockCandidates } from './blocks'
+import { bestBlocksForSpace, generateBlockCandidates, maxBlocksForSpace } from './blocks'
 
 function container(overrides: Partial<ContainerSpec> = {}): ContainerSpec {
   return {
@@ -118,5 +118,14 @@ describe('bestBlocksForSpace', () => {
     expect(blocks.length).toBeLessThan(catalog.length)
     const keys = blocks.map((block) => `${block.orientationKey}:${block.nx}x${block.ny}x${block.nz}`)
     expect(new Set(keys).size).toBe(keys.length)
+
+    const primaries = maxBlocksForSpace(item, 56, space)
+    expect(primaries.every((block) => blocks.some((candidate) => (
+      candidate.orientationKey === block.orientationKey
+      && candidate.nx === block.nx
+      && candidate.ny === block.ny
+      && candidate.nz === block.nz
+    )))).toBe(true)
+    expect(primaries.length).toBeLessThan(blocks.length)
   })
 })
