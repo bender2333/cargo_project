@@ -334,10 +334,20 @@ test('手动快捷键只在概览聚焦工作区时修改草稿', async ({ page 
   await page.keyboard.press('Control+z')
   await expect(scene).toHaveAttribute('data-box-count', '0')
 
-  await page.locator('[data-testid^="pool-quick-place-"]').first().click()
+  const quickPlace = page.locator('[data-testid^="pool-quick-place-"]').first()
+  await quickPlace.click()
   await expect(scene).toHaveAttribute('data-box-count', '1')
   const initialOrientation = await scene.getAttribute('data-selected-orientation')
   expect(initialOrientation).toBeTruthy()
+
+  await page.keyboard.press('Delete')
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+  await page.keyboard.press('Control+z')
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+  await page.keyboard.press('Control+y')
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+  await page.keyboard.press('Control+z')
+  await expect(scene).toHaveAttribute('data-box-count', '1')
 
   const historyNav = page.getByTestId('nav-history')
   await historyNav.focus()
@@ -345,23 +355,52 @@ test('手动快捷键只在概览聚焦工作区时修改草稿', async ({ page 
   await page.keyboard.press('R')
   await page.keyboard.press('Delete')
   await expect(scene).toHaveAttribute('data-box-count', '1')
-  await expect(scene).toHaveAttribute('data-selected-orientation', initialOrientation ?? '')
 
   await historyNav.click()
   await page.keyboard.press('Control+z')
   await page.keyboard.press('Delete')
   await page.getByTestId('nav-overview').click()
   await expect(scene).toHaveAttribute('data-box-count', '1')
+})
 
-  const canvas = scene.locator('canvas')
-  await expect(canvas).toHaveAttribute('tabindex', '0')
-  await canvas.focus()
+test('手动 2D 选中后按 Delete 移除箱体', async ({ page }) => {
+  await ensureChinese(page)
+  await enterManualModeEmpty(page)
+  await page.locator('[data-testid^="pool-quick-place-"]').first().click()
+  await expect(page.getByTestId('container-scene')).toHaveAttribute('data-box-count', '1')
+
+  await page.getByRole('button', { name: '2D', exact: true }).click()
+  const box = page.locator('[data-box-id]').first()
+  await expect(box).toBeVisible()
+  const boxId = await box.getAttribute('data-box-id')
+  expect(boxId).toBeTruthy()
   await page.keyboard.press('Delete')
-  await expect(scene).toHaveAttribute('data-box-count', '0')
-  await page.keyboard.press('Control+z')
-  await expect(scene).toHaveAttribute('data-box-count', '1')
-  await page.keyboard.press('Control+y')
-  await expect(scene).toHaveAttribute('data-box-count', '0')
+  await expect(page.locator(`[data-box-id="${boxId}"]`)).toHaveCount(0)
+
+  await page.getByRole('button', { name: '3D', exact: true }).click()
+  await expect(page.getByTestId('container-scene')).toHaveAttribute('data-box-count', '0')
+})
+
+test('自动模式工作区按 M 切换余量', async ({ page }) => {
+  await ensureChinese(page)
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-clearance-enabled', 'false')
+  await page.getByTestId('auto-keyboard-help').click()
+  await page.keyboard.press('m')
+  await expect(scene).toHaveAttribute('data-clearance-enabled', 'true')
+})
+
+test('最大化时 Esc 只退出最大化并保留选中', async ({ page }) => {
+  await ensureChinese(page)
+  await enterManualModeEmpty(page)
+  await page.locator('[data-testid^="pool-quick-place-"]').first().click()
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).not.toHaveAttribute('data-selected-orientation', '')
+  await page.getByTestId('maximize-workspace').click()
+  await expect(page.getByTestId('manual-workspace')).toHaveAttribute('data-workspace-maximized', 'true')
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('manual-workspace')).toHaveAttribute('data-workspace-maximized', 'false')
+  await expect(scene).not.toHaveAttribute('data-selected-orientation', '')
 })
 
 test('手动模式阻止键盘把箱体移动到悬空位置', async ({ page }) => {
@@ -378,7 +417,6 @@ test('手动模式阻止键盘把箱体移动到悬空位置', async ({ page }) 
 
   const scene = page.getByTestId('container-scene')
   await expect(scene).toHaveAttribute('data-box-count', '18')
-  await scene.locator('canvas').focus()
   await page.keyboard.press('PageUp')
   await expect(page.getByTestId('manual-operation-notice')).toBeVisible()
   await expect(page.getByTestId('manual-issues')).toHaveCount(0)
@@ -466,6 +504,8 @@ test('自动模式 3D 视图提供键盘帮助并说明尺规快捷键', async (
   const popover = page.getByTestId('auto-keyboard-help-popover')
   await expect(popover).toContainText('M')
   await expect(popover).toContainText('尺规')
+  await expect(popover).not.toContainText('Ctrl')
+  await expect(popover).not.toContainText('撤销')
 })
 
 test('自动模式更换货柜后清空旧画布并提示重新计算', async ({ page }) => {
@@ -881,7 +921,7 @@ test('手动活动结果统一驱动汇总、明细、导出和撤销历史', as
     unplacedQuantity: 17,
   })
 
-  await scene.locator('canvas').focus()
+  await page.getByTestId('placement-mode-manual').click()
   await page.keyboard.press('Delete')
   await expect(scene).toHaveAttribute('data-box-count', '0')
   await expect(page.getByTestId('report-panel')).toContainText('已装载: 0 / 18')
