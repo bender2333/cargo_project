@@ -1,6 +1,12 @@
 # Changelog
 
 
+## 2026-08-24 3D selection hotkey fix plan
+
+- Diagnosis: after selecting a box in the manual 3D scene, `ContainerScene` did not establish workspace focus; the shared hotkey guard then discarded `M`/`Delete` when the active element remained outside `workspaceRef`.
+- Plan: `plans/2026-08-24-3d-selection-hotkeys.md` defines the focused-scene fix, real 3D E2E coverage, preserved editable-field/navigation guards, verification gates, and commit boundaries. No product code changed in this planning step.
+
+
 ## 2026-08-24 compact space-first block packing
 
 - Root cause: block engine picked the largest-count block then the lowest-waste EMS (smallest hole). Different SKU footprints left a length-wise side corridor. Trimmed full-container catalogs had no long 1-row blocks for a 300mm strip.
