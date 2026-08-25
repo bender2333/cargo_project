@@ -2,12 +2,25 @@ import type { CargoItem, ContainerSpec, LoadingMode, PackingDiagnostic, PackingR
 import { effectiveContainer, getContainerVolume } from '../data/containers'
 import { finalizePlacementGeometry } from './finalizePackingResult'
 import { stackCapacity, violatesStackChain, type StackChainNode } from './stackCapacity'
-import { bestBlocksForSpace, maxBlocksForSpace, type BlockCandidate } from './blocks'
-import { initEMS, splitEMS, type EmptyMaximalSpace } from './emsSpace'
-import { assignRemainingQuality, compareBlockPlacement, type RemainingEmsQuality } from './packingLookahead'
+import { initEMS, splitEMS } from './emsSpace'
+import { generateBlockCandidates, selectBlockCandidate, type PackingBlockChoice } from './packingCandidates'
+import {
+  MINIMUM_SUPPORT_RATIO,
+  isSupportRatioAccepted,
+  canPlaceBox as canPlace,
+  canStageBlock as canStageBlockOnState,
+  fitsInsideContainer,
+  supportDetails,
+  type BoxSize,
+  type PackingPoint,
+} from './packingFeasibility'
+import type { PackingCargoState, PackingSearchState } from './packingSearchState'
 import { GAP_FILL_SOURCE } from './placementSource'
 import { buildLabelStats } from './labels'
 import { SpatialGrid, type SpatialAabb } from './spatialGrid'
+
+export { MINIMUM_SUPPORT_RATIO, isSupportRatioAccepted, supportDetails }
+export type { BoxSize, PackingPoint }
 
 export const UNPLACED_REASON_CODES = {
   EXCEEDS_DIMENSIONS: 'exceeds-dimensions',
@@ -23,18 +36,6 @@ const UNPLACED_REASON_MESSAGES: Record<UnplacedReasonCode, string> = {
   [UNPLACED_REASON_CODES.NO_SPACE]: 'No remaining loading space',
 }
 
-type BoxSize = {
-  length: number
-  width: number
-  height: number
-}
-
-type StackLimitCarrier = {
-  stackable: boolean
-  maxStackLayers?: number
-  groundOnly?: boolean
-}
-
 export type CalculatePackingOptions = {
   loadingMode?: LoadingMode
   defaultMaxStackLayers?: number
@@ -44,40 +45,13 @@ export type CalculatePackingOptions = {
 
 type OrientationKey = PlacedBox['orientationKey']
 type LabelRotationDeg = PlacedBox['labelRotationDeg']
-type CargoPackingState = {
-  item: CargoItem
-  itemIndex: number
-  label: string
-  remaining: number
-  nextIndex: number
-}
-
-type BlockPlacementChoice = {
-  state: CargoPackingState
-  block: BlockCandidate
-  ems: EmptyMaximalSpace
-  point: PackingPoint
-  waste: number
-  remainingQuality?: RemainingEmsQuality
-}
 
 export type BoxOrientation = BoxSize & {
   orientationKey: OrientationKey
   labelRotationDeg: LabelRotationDeg
 }
 
-export type PackingPoint = {
-  x: number
-  y: number
-  z: number
-}
-
 const EPSILON = 0.001
-export const MINIMUM_SUPPORT_RATIO = 0.5
-
-export function isSupportRatioAccepted(supportRatio: number, minimumSupportRatio = MINIMUM_SUPPORT_RATIO) {
-  return !(supportRatio < minimumSupportRatio)
-}
 const MAX_BLOCK_REJECTIONS_PER_STEP = 40
 
 function labelForIndex(index: number) {
@@ -149,246 +123,6 @@ export function orientations(item: CargoItem): BoxOrientation[] {
   )
   orientationCache.set(key, unique)
   return unique
-}
-
-function fitsInsideContainer(point: PackingPoint, box: BoxSize, container: ContainerSpec) {
-  return (
-    point.x + box.length <= container.length + EPSILON &&
-    point.y + box.width <= container.width + EPSILON &&
-    point.z + box.height <= container.height + EPSILON
-  )
-}
-
-function overlaps(a: PlacementBox, point: PackingPoint, box: BoxSize) {
-  return !(
-    point.x + box.length <= a.x + EPSILON ||
-    a.x + a.length <= point.x + EPSILON ||
-    point.y + box.width <= a.y + EPSILON ||
-    a.y + a.width <= point.y + EPSILON ||
-    point.z + box.height <= a.z + EPSILON ||
-    a.z + a.height <= point.z + EPSILON
-  )
-}
-
-function supportOverlap(candidate: PlacementBox, point: PackingPoint, box: BoxSize) {
-  if (Math.abs(candidate.z + candidate.height - point.z) > EPSILON) {
-    return 0
-  }
-
-  const overlapX = Math.max(
-    0,
-    Math.min(point.x + box.length, candidate.x + candidate.length) - Math.max(point.x, candidate.x),
-  )
-  const overlapY = Math.max(
-    0,
-    Math.min(point.y + box.width, candidate.y + candidate.width) - Math.max(point.y, candidate.y),
-  )
-  return overlapX * overlapY
-}
-
-
-export function supportDetails(point: PackingPoint, box: BoxSize, placed: PlacementBox[]) {
-  if (point.z <= EPSILON) {
-    return {
-      supportedArea: box.length * box.width,
-      supportRatio: 1,
-      supportedBy: [] as PlacementBox[],
-      supportType: 'floor' as const,
-      physicalLayer: 1,
-    }
-  }
-
-  const baseArea = box.length * box.width
-  const supportedBy = placed.filter((candidate) => supportOverlap(candidate, point, box) > 0)
-  const supportedArea = supportedBy.reduce((area, candidate) => area + supportOverlap(candidate, point, box), 0)
-  const supportRatio = baseArea ? supportedArea / baseArea : 0
-
-  return {
-    supportedArea,
-    supportRatio,
-    supportedBy,
-    supportType: supportRatio >= 1 - EPSILON ? ('fully-supported' as const) : ('partially-supported' as const),
-    physicalLayer: Math.max(...supportedBy.map((candidate) => candidate.physicalLayer), 0) + 1,
-  }
-}
-
-function respectsMaxStackLayers(
-  support: ReturnType<typeof supportDetails>,
-  placedById: Map<string, StackChainNode>,
-  item: StackLimitCarrier,
-) {
-  if (item.groundOnly && support.physicalLayer > 1) return false
-
-  const stack: StackChainNode[] = [...support.supportedBy]
-  const visited = new Set<string>()
-  while (stack.length > 0) {
-    const current = stack.pop()
-    if (!current || visited.has(current.id)) continue
-    visited.add(current.id)
-
-    if (current.groundOnly && current.physicalLayer > 1) return false
-    if (support.physicalLayer - current.physicalLayer + 1 > stackCapacity(current)) return false
-
-    stack.push(
-      ...current.supportedBy
-        .map((supportId) => placedById.get(supportId))
-        .filter((supportBox): supportBox is StackChainNode => Boolean(supportBox)),
-    )
-  }
-
-  return true
-}
-
-/**
- * Reject placements that would make the new box an illegal supporter of boxes
- * already sitting above the candidate slot. Downward-only checks miss this case:
- * a capacity-one box inserted under an existing stack only becomes illegal after
- * the final support graph is reconciled.
- *
- * Only the local geometric column above the candidate is inspected — rebuilding the
- * full support graph on every canPlace call is O(n²) and too expensive for dense loads.
- */
-function respectsStackCapacityWithUpwardRiders(
-  point: PackingPoint,
-  box: BoxSize,
-  item: StackLimitCarrier,
-  support: ReturnType<typeof supportDetails>,
-  placed: PlacementBox[],
-  placedById: Map<string, StackChainNode>,
-  placedNearby?: (aabb: SpatialAabb) => PlacementBox[],
-  containerHeight = Number.MAX_SAFE_INTEGER,
-) {
-  const candidateTop = point.z + box.height
-  // Direct riders sit on the candidate top face; the canPlace `placed` arg is already the
-  // local nearby subset (or full placed when no index). Filter that set only.
-  const directRiders = placed.filter((candidate) => {
-    if (Math.abs(candidate.z - candidateTop) > EPSILON) return false
-    const overlapX = Math.max(
-      0,
-      Math.min(point.x + box.length, candidate.x + candidate.length) - Math.max(point.x, candidate.x),
-    )
-    const overlapY = Math.max(
-      0,
-      Math.min(point.y + box.width, candidate.y + candidate.width) - Math.max(point.y, candidate.y),
-    )
-    return overlapX * overlapY > 0
-  })
-  if (directRiders.length === 0) return true
-
-  // Dependents may sit on a rider outside the candidate column footprint; expand to the
-  // union of direct-rider AABBs upward before inverting support edges.
-  let depMinX = point.x
-  let depMinY = point.y
-  let depMaxX = point.x + box.length
-  let depMaxY = point.y + box.width
-  for (const rider of directRiders) {
-    depMinX = Math.min(depMinX, rider.x)
-    depMinY = Math.min(depMinY, rider.y)
-    depMaxX = Math.max(depMaxX, rider.x + rider.length)
-    depMaxY = Math.max(depMaxY, rider.y + rider.width)
-  }
-  const dependentNeighborhood = placedNearby
-    ? placedNearby({
-        minX: depMinX - EPSILON,
-        minY: depMinY - EPSILON,
-        minZ: candidateTop - EPSILON,
-        maxX: depMaxX + EPSILON,
-        maxY: depMaxY + EPSILON,
-        maxZ: containerHeight + EPSILON,
-      })
-    : placed
-  const dependents = new Map<string, PlacementBox[]>()
-  for (const existing of dependentNeighborhood) {
-    for (const supportId of existing.supportedBy) {
-      const list = dependents.get(supportId)
-      if (list) list.push(existing)
-      else dependents.set(supportId, [existing])
-    }
-  }
-
-  const maxDepthAbove = (start: PlacementBox, seen = new Set<string>()): number => {
-    if (seen.has(start.id)) return 0
-    seen.add(start.id)
-    const children = dependents.get(start.id) ?? []
-    if (children.length === 0) return 1
-    let best = 1
-    for (const child of children) {
-      best = Math.max(best, 1 + maxDepthAbove(child, new Set(seen)))
-    }
-    return best
-  }
-
-  const riderDepth = Math.max(...directRiders.map((rider) => maxDepthAbove(rider)))
-  // Stack layers counting the candidate itself through the tallest rider chain.
-  if (riderDepth + 1 > stackCapacity(item)) return false
-
-  // Existing supporters below the candidate must still tolerate the taller chain.
-  const stack: StackChainNode[] = [...support.supportedBy]
-  const visited = new Set<string>()
-  while (stack.length > 0) {
-    const current = stack.pop()
-    if (!current || visited.has(current.id)) continue
-    visited.add(current.id)
-    const topLayer = support.physicalLayer + riderDepth
-    if (topLayer - current.physicalLayer + 1 > stackCapacity(current)) return false
-    stack.push(
-      ...current.supportedBy
-        .map((supportId) => placedById.get(supportId))
-        .filter((supportBox): supportBox is StackChainNode => Boolean(supportBox)),
-    )
-  }
-
-  return true
-}
-
-function preservesReservedTopPassengerStackSlot(
-  support: ReturnType<typeof supportDetails>,
-  placedById: Map<string, StackChainNode>,
-) {
-  const stack: StackChainNode[] = [...support.supportedBy]
-  const visited = new Set<string>()
-  while (stack.length > 0) {
-    const current = stack.pop()
-    if (!current || visited.has(current.id)) continue
-    visited.add(current.id)
-
-    const capacity = stackCapacity(current)
-    if (Number.isFinite(capacity) && support.physicalLayer - current.physicalLayer + 1 >= capacity) {
-      return false
-    }
-
-    stack.push(
-      ...current.supportedBy
-        .map((supportId) => placedById.get(supportId))
-        .filter((supportBox): supportBox is StackChainNode => Boolean(supportBox)),
-    )
-  }
-
-  return true
-}
-
-function canPlace(
-  point: PackingPoint,
-  box: BoxSize,
-  container: ContainerSpec,
-  placed: PlacementBox[],
-  placedById: Map<string, StackChainNode>,
-  item: StackLimitCarrier,
-  reservedTopPassengerHeight = 0,
-  reserveTopPassengerStackSlot = false,
-  minSupportRatio = MINIMUM_SUPPORT_RATIO,
-  placedNearby?: (aabb: SpatialAabb) => PlacementBox[],
-) {
-  if (!fitsInsideContainer(point, box, container)) return false
-  if (reservedTopPassengerHeight > 0 && stackCapacity(item) > 1 && point.z + box.height + reservedTopPassengerHeight > container.height + EPSILON) return false
-  // `placed` is expected to already be a nearby subset when called from hot paths.
-  if (!placed.every((candidate) => !overlaps(candidate, point, box))) return false
-
-  const support = supportDetails(point, box, placed)
-  if (!isSupportRatioAccepted(support.supportRatio, minSupportRatio)) return false
-  if (reserveTopPassengerStackSlot && !preservesReservedTopPassengerStackSlot(support, placedById)) return false
-  if (!respectsMaxStackLayers(support, placedById, item)) return false
-  return respectsStackCapacityWithUpwardRiders(point, box, item, support, placed, placedById, placedNearby, container.height)
 }
 
 function pointKey(point: PackingPoint) {
@@ -836,44 +570,7 @@ function cargoVolume(item: CargoItem) {
   return item.length * item.width * item.height
 }
 
-function emsAxisFill(choice: BlockPlacementChoice) {
-  const fillLength = choice.block.length / choice.ems.length
-  const fillWidth = choice.block.width / choice.ems.width
-  return Math.max(fillLength, fillWidth)
-}
-
-function emsMinAxisFill(choice: BlockPlacementChoice) {
-  return Math.min(choice.block.length / choice.ems.length, choice.block.width / choice.ems.width)
-}
-
-function choiceMetrics(choice: BlockPlacementChoice) {
-  return {
-    cargoId: choice.state.item.id,
-    count: choice.block.count,
-    volume: choice.block.volume,
-    footprintArea: choice.block.footprintArea,
-    waste: choice.waste,
-    axisFill: emsAxisFill(choice),
-    minAxisFill: emsMinAxisFill(choice),
-    point: choice.point,
-    quality: choice.remainingQuality,
-  }
-}
-
-function compareBlockChoices(a: BlockPlacementChoice, b: BlockPlacementChoice, loadingMode: LoadingMode) {
-  return compareBlockPlacement(choiceMetrics(a), choiceMetrics(b), loadingMode)
-}
-
-function leadingCargoUnitHeight(states: CargoPackingState[]) {
-  let minHeight = Number.POSITIVE_INFINITY
-  for (const state of states) {
-    if (state.remaining <= 0) continue
-    minHeight = Math.min(minHeight, state.item.length, state.item.width, state.item.height)
-  }
-  return minHeight
-}
-
-function blockPlacementKey(choice: Pick<BlockPlacementChoice, 'state' | 'block' | 'point'>) {
+function blockPlacementKey(choice: Pick<PackingBlockChoice, 'state' | 'block' | 'point'>) {
   const { state, block, point } = choice
   return [
     state.item.id,
@@ -992,7 +689,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     }
   }
 
-  const cargoStates: CargoPackingState[] = cargoItems.map((item, itemIndex) => {
+  const cargoStates: PackingCargoState[] = cargoItems.map((item, itemIndex) => {
     const effectiveItem = {
       ...item,
       maxStackLayers: effectiveMaxStackLayers(item, defaultMaxStackLayers),
@@ -1096,7 +793,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     usedWeight += entry.item.weight
   }
 
-  const blockUnitBox = (block: BlockCandidate): BoxOrientation => ({
+  const blockUnitBox = (block: PackingBlockChoice['block']): BoxOrientation => ({
     length: block.box.length,
     width: block.box.width,
     height: block.box.height,
@@ -1104,7 +801,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     labelRotationDeg: labelRotationForOrientation(block.orientationKey),
   })
 
-  const blockUnitPlacements = (choice: BlockPlacementChoice) => {
+  const blockUnitPlacements = (choice: PackingBlockChoice) => {
     const box = blockUnitBox(choice.block)
     const units: Array<{ entry: { item: CargoItem; itemIndex: number; label: string; index: number }; placement: { box: BoxOrientation; point: PackingPoint } }> = []
     let offset = 0
@@ -1134,37 +831,21 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     return units
   }
 
-  const canStageBlock = (choice: BlockPlacementChoice) => {
-    if (usedWeight + choice.block.weight > effective.maxWeight + EPSILON) return false
-    // Shared outer neighborhood for the whole block AABB; units only add same-block peers.
-    // Block-local units are mutually non-overlapping and share the same outer placed set.
-    const blockNearbyBase = placedNearby({
-      minX: choice.point.x - EPSILON,
-      minY: choice.point.y - EPSILON,
-      minZ: choice.point.z - EPSILON,
-      maxX: choice.point.x + choice.block.length + EPSILON,
-      maxY: choice.point.y + choice.block.width + EPSILON,
-      maxZ: choice.point.z + choice.block.height + EPSILON,
-    })
-    // One Map + growing support array instead of O(units) Map rebuilds.
-    const stagedById = new Map<string, StackChainNode>(placedByIdLive)
-    const supportSet = blockNearbyBase.slice()
-    let workStep = placed.length + 1
-    for (const unit of blockUnitPlacements(choice)) {
-      if (!canPlace(unit.placement.point, unit.placement.box, effective, supportSet, stagedById, unit.entry.item, 0, false, minSupportRatio, placedNearby)) {
-        return false
-      }
-      const stagedBox = buildPlacedBox(unit.entry, unit.placement, supportSet, workStep)
-      supportSet.push(stagedBox)
-      stagedById.set(stagedBox.id, stagedBox)
-      workStep += 1
-    }
-    return true
-  }
-
   let emsList = initEMS(effective)
 
-  const commitBlock = (choice: BlockPlacementChoice) => {
+  const currentSearchState = (): PackingSearchState => ({
+    container: effective,
+    cargoStates,
+    emsList,
+    placed,
+    placedById: placedByIdLive,
+    usedWeight,
+    minSupportRatio,
+  })
+
+  const canStageBlock = (choice: PackingBlockChoice) => canStageBlockOnState(currentSearchState(), choice)
+
+  const commitBlock = (choice: PackingBlockChoice) => {
     const placementSource = choice.block.count === 1 ? GAP_FILL_SOURCE : undefined
     for (const unit of blockUnitPlacements(choice)) {
       placeEntry(unit.entry, unit.placement, placementSource)
@@ -1183,49 +864,40 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
 
   const selectBlockPlacement = (
     rejected: Set<string>,
-    accepts: (choice: BlockPlacementChoice) => boolean,
-  ): BlockPlacementChoice | undefined => {
-    const spaces = emsList.slice().sort((a, b) => a.x - b.x || a.z - b.z || a.y - b.y)
+    accepts: (choice: PackingBlockChoice) => boolean,
+  ): PackingBlockChoice | undefined => {
+    const searchState = currentSearchState()
+    const mode = loadingMode === 'volume' ? 'volume' : 'quantity'
+    const candidates = generateBlockCandidates(searchState, mode)
+      .filter((choice) => !rejected.has(blockPlacementKey(choice)) && accepts(choice))
+    // Naive global compareBlockPlacement across all EMS drops Vietnam 20GP
+    // 464→434 (floor corridors). Keep first-EMS commit until Task 2 beam;
+    // generateBlockCandidates still enumerates every EMS.
+    const seen = new Set<string>()
+    const spaces = []
+    for (const choice of candidates) {
+      const key = `${choice.ems.x}:${choice.ems.y}:${choice.ems.z}:${choice.ems.length}x${choice.ems.width}x${choice.ems.height}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      spaces.push(choice.ems)
+    }
+    spaces.sort((a, b) => a.x - b.x || a.z - b.z || a.y - b.y)
     for (const ems of spaces) {
-      const choices: BlockPlacementChoice[] = []
-      const emsVolume = ems.length * ems.width * ems.height
-      const useFrontier = loadingMode === 'quantity' && ems.height < leadingCargoUnitHeight(cargoStates) * 2 - EPSILON
-      const blocksFor = useFrontier ? bestBlocksForSpace : maxBlocksForSpace
-      for (const state of cargoStates) {
-        if (state.remaining <= 0) continue
-        for (const block of blocksFor(state.item, state.remaining, ems)) {
-          if (usedWeight + block.weight > effective.maxWeight + EPSILON) continue
-          const choice: BlockPlacementChoice = {
-            state,
-            block,
-            ems,
-            point: { x: ems.x, y: ems.y, z: ems.z },
-            waste: emsVolume - block.length * block.width * block.height,
-          }
-          if (rejected.has(blockPlacementKey(choice)) || !accepts(choice)) continue
-          choices.push(choice)
-        }
-      }
-      if (choices.length === 0) continue
-
-      const scored = useFrontier
-        ? assignRemainingQuality(
-          choices,
-          emsList,
-          cargoStates.map((state) => ({ item: state.item, remaining: state.remaining })),
-          loadingMode,
-        )
-        : choices
-      let best: BlockPlacementChoice | undefined
-      for (const choice of scored) {
-        if (!best || compareBlockChoices(choice, best, loadingMode) < 0) best = choice
-      }
-      if (best) return best
+      const emsChoices = candidates.filter((choice) => (
+        choice.ems.x === ems.x
+        && choice.ems.y === ems.y
+        && choice.ems.z === ems.z
+        && choice.ems.length === ems.length
+        && choice.ems.width === ems.width
+        && choice.ems.height === ems.height
+      ))
+      const picked = selectBlockCandidate(emsChoices, mode, searchState)
+      if (picked) return picked
     }
     return undefined
   }
 
-  const placeBlocks = (accepts: (choice: BlockPlacementChoice) => boolean) => {
+  const placeBlocks = (accepts: (choice: PackingBlockChoice) => boolean) => {
     const rejected = new Set<string>()
     let rejectionsSinceCommit = 0
     while (cargoStates.some((state) => state.remaining > 0)) {

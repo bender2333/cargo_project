@@ -13,7 +13,9 @@ export type RemainingCargo = {
 }
 
 export type RemainingEmsQuality = {
+  /** Optimistic geometric size-fit bound from bestBlocksForSpace. Not a proven canPlace count. */
   nextCountBound: number
+  /** Optimistic geometric size-fit bound. Not a proven placeable volume. */
   nextVolumeBound: number
   deadVolume: number
   narrowVolume: number
@@ -53,6 +55,11 @@ function maxBlockInSpace(item: CargoItem, remaining: number, space: EmptyMaximal
   return best
 }
 
+/**
+ * Leftover EMS score from size-fit only (`bestBlocksForSpace`).
+ * `nextCountBound` / `nextVolumeBound` are optimistic geometric bounds — they are not
+ * proven canPlace / canStageBlock counts and must not be treated as committed capacity.
+ */
 export function scoreRemainingEmsQuality(
   emsList: EmptyMaximalSpace[],
   remaining: RemainingCargo[],

@@ -1,6 +1,41 @@
 # Changelog
 
 
+## 2026-08-25 compete block candidates across all EMS
+
+- Extracted shared `canPlaceBox` / `canStageBlock` into `src/lib/packingFeasibility.ts`. `packing.ts` weight/input/residual and block staging call the same function; no second legality copy.
+- Added `generateBlockCandidates` + `selectBlockCandidate` (`src/lib/packingCandidates.ts`) and clone-on-write `PackingSearchState`. Generation iterates every EMS, dedupes `(sku, orientation, nx, ny, nz, point)`, truncates across EMS.
+- Lookahead `nextCountBound` / `nextVolumeBound` documented as optimistic size-fit bounds, not proven `canPlace` counts.
+- Production commit: naive global `compareBlockPlacement` across EMS dropped Vietnam 20GP primary objectives (quantity 464→434, volume 468→428). Reverted `selectBlockPlacement` to first-EMS commit (same selection boundary as Task 0). Did not change goldens.
+
+Shipped `calculatePacking` vs Task 0 (after revert; same primary numbers):
+
+| fixture | mode | old placed | new placed | old usedVolume | new usedVolume | old interCargoMaxMm | new | notes |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| 0824 20GP | quantity | 504 | 504 | 30243574000 | 30243574000 | 150 | 150 | snapshot unchanged |
+| 0824 20GP | volume | 424 | 424 | 30725850000 | 30725850000 | 0 | 0 | snapshot unchanged |
+| Vietnam 20GP | quantity | 464 | 464 | 28074481500 | 28074481500 | 1100 | 1100 | invariants restored |
+| Vietnam 20GP | volume | 468 | 468 | 27603279500 | 27603279500 | 1200 | 1200 | invariants restored |
+| Vietnam 40HQ | quantity | 864 | 864 | 63038263000 | 63038263000 | 8050 | 8050 | contract hash restored |
+| Vietnam 40HQ | volume | 864 | 864 | 63038263000 | 63038263000 | 10000 | 10000 | contract hash restored |
+| 0802 40HQ | quantity | 877 | 877 | 61046585250 | 61046585250 | 6800 | 6800 | complete pack |
+
+Reverted global-greedy diagnostic (`2026-08-25T06:45:42.417Z`):
+
+| fixture | mode | old placed | global placed | old usedVolume | global usedVolume | old interCargoMaxMm | global | notes |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| 0824 20GP | quantity | 504 | 504 | 30243574000 | 30243574000 | 150 | 150 | no 506 |
+| 0824 20GP | volume | 424 | 424 | 30725850000 | 30725850000 | 0 | 0 | |
+| Vietnam 20GP | quantity | 464 | 434 | 28074481500 | 25177780000 | 1100 | 4000 | primary drop; reverted |
+| Vietnam 20GP | volume | 468 | 428 | 27603279500 | 25274704000 | 1200 | 4000 | primary drop; reverted |
+| Vietnam 40HQ | quantity | 864 | 864 | 63038263000 | 63038263000 | 8050 | 8300 | layout hash changed |
+| Vietnam 40HQ | volume | 864 | 864 | 63038263000 | 63038263000 | 10000 | 7250 | full pack |
+| 0802 40HQ | quantity | 877 | 877 | 61046585250 | 61046585250 | 6800 | 9650 | notch 120→144 |
+
+- Verification: TDD RED then GREEN for feasibility and two-EMS picker. After revert: `packingFeasibility` 7, `packingCandidates` 5, `packingSearchState` 1, `packingLookahead` 5, `packing.crossEms` 1, `packing.test` 57, `packing.0824.baseline` 2, `packing.compactness` 7, `packingInvariants` 15, `packing.blockEngine` 6 — 106 passed. Touched-file eslint 0. `npx tsc -b` exit 0.
+- Not deployed. No golden/hash edits.
+
+
 ## 2026-08-25 freeze quantity/volume objective and 0824 baselines
 
 - Added `comparePackingQuality` in `src/lib/packingObjective.ts`. Lexicographic: quantity is placedCount first; volume is usedVolume then placedCount; compactness (notch, inter-cargo, dead EMS, external residual) is secondary. Negative return means the first argument is better.

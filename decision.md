@@ -1,6 +1,24 @@
 # Decision Log
 
 
+## 2026-08-25 跨 EMS 全局贪心回退（已决策）
+
+- 背景：Task 1 要求 `selectBlockPlacement` 删掉「第一个有可行块的 EMS 直接 return」，改为全 EMS 生成后用现有 `compareBlockPlacement` 全局选。共享 `canPlaceBox` / `canStageBlock` 已抽出。
+- 选项：
+  - A. 生产路径用 `selectBlockCandidate` 跨全部 EMS 比 count/volume（任务原文）
+  - B. 生成仍遍历全部 EMS，提交仍按 x 排序取第一个非空 EMS（恢复 Task 0 选择边界）
+- 决策：B。A 在单路径 greedy 下会跳去后面更高 count 的深 EMS，在柜长方向留下地走廊。
+- 实测（A，`node scripts/packing-mode-baseline.mjs`，2026-08-25T06:45:42.417Z）：
+  - 0824 quantity **504** / volume **424**（主目标未降，槽 150/0 未变）
+  - Vietnam 20GP quantity **464→434**，usedVolume 28074481500→25177780000
+  - Vietnam 20GP volume **468→428**，usedVolume 27603279500→25274704000
+  - Vietnam 40HQ 仍 864/864，但 quantity 合同 hash / 层序变化，interCargo 8050→8300
+  - 0802 仍 877，interCargo 6800→9650，internal_notch 120→144
+  - compactness 走廊用例 2200mm（门槛 <200mm）
+- 影响：生产 `calculatePacking` 的块选择边界与 Task 0 相同，主目标金线不改。`generateBlockCandidates` / `selectBlockCandidate` 保留并有注入双 EMS 单测；`packing.ts` 只把同一 EMS 的候选交给 `selectBlockCandidate`。不得把 434/428 写成新下限。
+- 后续：Task 2 beam 才在搜索宽度上用全局 `selectBlockCandidate`；若要 greedy 跨 EMS，必须先有不牺牲 20GP 件数的层内约束，而不是把 count-max 直接接到提交。
+
+
 ## 2026-08-25 数量/体积搜索：0824 合同与当前基线（已决策）
 
 - 背景：0824 件数合同此前是 `placedCount >= 500`（`packing.compactness.test.ts`），无法检测 506→504。volume 没有 0824 命名基线。终局比较若散落在 lookahead / packing / 后续 LNS 会再次分叉。
