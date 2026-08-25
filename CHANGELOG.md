@@ -1,6 +1,13 @@
 # Changelog
 
 
+## 2026-08-25 quantity and volume algorithm design
+
+- Design: defined separate lexicographic contracts for `quantity` (final placed count first) and `volume` (final used volume first); compactness is a secondary objective in both modes.
+- Architecture: proposed a stable `calculatePacking` facade over shared feasibility, cross-EMS candidate generation, objective comparison, bounded beam search, optional LNS, and offline CP-SAT/MIP oracle modules.
+- Plan: `plans/2026-08-25-quantity-volume-algorithm-design.md`. No production packing code changed.
+
+
 ## 2026-08-25 3D container-loading algorithm survey
 
 - Research: analyzed the 0824 load shape (24 SKUs / 2544 units, repeated footprints, rotation and stacking enabled, weight non-binding) against EMS, block/superitem tree search, beam search, LNS, layer-pattern methods, CP-SAT/MIP, and black-box metaheuristics.
