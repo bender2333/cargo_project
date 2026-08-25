@@ -5,7 +5,7 @@
 
 - Research: analyzed the 0824 load shape (24 SKUs / 2544 units, repeated footprints, rotation and stacking enabled, weight non-binding) against EMS, block/superitem tree search, beam search, LNS, layer-pattern methods, CP-SAT/MIP, and black-box metaheuristics.
 - Conclusion: the current issue is a local-search/objective problem, not proof that compactness must reduce quantity. Recommended lexicographic quantity-first scoring, cross-EMS beam search, bounded LNS re-placement, and offline exact micro-instances as an oracle.
-- Findings: `research/2026-08-25-3d-container-loading-algorithm-survey.md`. No packing implementation changed.
+- Findings: `plans/2026-08-25-packing-algorithm-research.md`. No packing implementation changed.
 
 
 ## 2026-08-24 upper-gap one-step leftover scoring
