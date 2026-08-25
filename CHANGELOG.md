@@ -1,6 +1,30 @@
 # Changelog
 
 
+## 2026-08-25 bounded quantity beam search
+
+- Added `src/lib/packingSearch.ts`: `optimizePacking` with default budget width 8 / depth 2 / 32 states / 8s. Incumbent is greedy+residual. Leaves are completed the same way and compared with `comparePackingQuality(..., 'quantity')`. `optimisticCountBound` is leftover size-fit remaining and must not underestimate.
+- Quantity block-engine only. Volume block path stays greedy. `weight` / `input` unchanged. Search stats stay off `PackingResult`.
+- Production ships a beam complete only when it places **strictly more** pieces without worsening greedy notch, inter-cargo slot, or floor corridor. Unconstrained count-max completes (0824 524 with a 400mm slot; mixed 20GP 636 with a 700mm floor groove) are evaluated and discarded.
+- Greedy full packs (Vietnam 40HQ 864, 0802 877) skip expansion. 20GP searcher `maxMs` is 1500 so existing 5s tests still hold.
+- 0824 quantity remains **504** (slot 150mm, notch 0). 506 with slot `< 200` was not recovered. Snapshot tests stay at 504; no red `>= 506` test.
+
+TDD: packingSearch.test.ts RED (missing module) then GREEN (8). Verification: packingSearch 8, 0824 baseline 2, compactness 7, invariants 15, blockEngine 6, crossEms 3, candidates 5 — **46 passed**. packing.test 57. Touched-file eslint 0. `npx tsc -b` exit 0.
+
+`node scripts/packing-mode-baseline.mjs` 2026-08-25T07:50:36.257Z (`search: null`):
+
+| fixture | mode | old placed | new placed | old usedVolume | new usedVolume | old interCargoMaxMm | new | old elapsedMs | new | notes |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 0824 20GP | quantity | 504 | 504 | 30243574000 | 30243574000 | 150 | 150 | 117 | 1315 | beam ran; 524/400mm rejected |
+| 0824 20GP | volume | 424 | 424 | 30725850000 | 30725850000 | 0 | 0 | 43 | 41 | greedy unchanged |
+| Vietnam 20GP | quantity | 464 | 464 | 28074481500 | 28074481500 | 1100 | 1100 | 252 | 1788 | |
+| Vietnam 20GP | volume | 473 | 473 | 29937044000 | 29937044000 | 1000 | 1000 | — | 304 | greedy unchanged |
+| Vietnam 40HQ | quantity | 864 | 864 | 63038263000 | 63038263000 | 8050 | 8050 | 4835 | 4643 | full pack, skip beam |
+| Vietnam 40HQ | volume | 864 | 864 | 63038263000 | 63038263000 | 4550 | 4550 | — | 2781 | greedy unchanged |
+| 0802 40HQ | quantity | 877 | 877 | 61046585250 | 61046585250 | 6800 | 6800 | 5275 | 4420 | full pack, skip beam |
+
+Not deployed.
+
 ## 2026-08-25 compete equal-count leftover across EMS
 
 - Production `selectBlockPlacement` now passes the **full** candidate list into `selectBlockCandidate` (no first-EMS early return).

@@ -1,6 +1,22 @@
 # Decision Log
 
 
+## 2026-08-25 quantity beam 未收回 506，504/紧凑性 Pareto（已决策）
+
+- 背景：Task 2 要求 quantity 走有预算 beam，终局用 `comparePackingQuality` 比完整布局。搜索目标 0824 **506** 且槽 `< 200mm`、`internal_notch = 0`。Naive 全局 count-max 曾把越南 20GP 打到 434。
+- 选项：
+  - A. 按词典序件数优先，直接提交更高件数的完整布局（0824 实测 **524**，槽 400mm；走廊用例 **636**，地板沟 700mm）
+  - B. 只提交比 greedy 件数严格更高、且 notch / 3D 槽 / 地板走廊都不更差的完整布局；否则保留 greedy
+- 决策：B。已决策。A 会让 0824 compactness（槽 `< 200`）和 length-wise corridor（`< 200mm`）变红。`optimizePacking` 内部仍按 `comparePackingQuality` 比较（玩具 4→5 用例需要）；`packing.ts` 在候选完整布局上再加 B。不得把 524 写成新 golden，也不得加会红的 `>= 506` 测试。
+- 实测：
+  - 0824 quantity 仍 **504** / usedVolume 30243574000 / 槽 150 / notch 0；beam 见过 524（400mm 槽）后丢掉
+  - Vietnam 20GP quantity **464**、volume **473**；40HQ **864/864**；0802 **877**
+  - 装满的 greedy（40HQ / 0802）不再展开 beam，避免同件数层序抖动导致合同哈希不稳
+  - 20GP `maxMs` 1500，以免 `packing.test.ts` 默认 5s 和 20GP `< 5000ms` 超时
+- 影响：件数合同不变。506 + 槽 `< 200` 仍未找到。后续 LNS / 更深 beam 若找到该布局，再把 0824 snapshot 从 504 提到 506。
+- 后续：Task 3 volume beam。不要把 count-max 完整布局在紧凑性变差时直接接进生产。
+
+
 ## 2026-08-25 跨 EMS 全局贪心回退（已决策）
 
 - 背景：Task 1 要求 `selectBlockPlacement` 删掉「第一个有可行块的 EMS 直接 return」，改为全 EMS 生成后用现有 `compareBlockPlacement` 全局选。共享 `canPlaceBox` / `canStageBlock` 已抽出。

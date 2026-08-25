@@ -14,7 +14,9 @@ import {
   type BoxSize,
   type PackingPoint,
 } from './packingFeasibility'
-import type { PackingCargoState, PackingSearchState } from './packingSearchState'
+import { comparePackingQuality, packingQualityOf } from './packingObjective'
+import { DEFAULT_QUANTITY_SEARCH_BUDGET, optimizePacking } from './packingSearch'
+import { clonePackingSearchState, type PackingCargoState, type PackingSearchState } from './packingSearchState'
 import { GAP_FILL_SOURCE } from './placementSource'
 import { buildLabelStats } from './labels'
 import { SpatialGrid, type SpatialAabb } from './spatialGrid'
@@ -570,6 +572,43 @@ function cargoVolume(item: CargoItem) {
   return item.length * item.width * item.height
 }
 
+function floorCorridorMaxMm(placed: PlacementBox[], container: ContainerSpec) {
+  const voxel = 50
+  const nx = Math.ceil(container.length / voxel)
+  const ny = Math.ceil(container.width / voxel)
+  const occ = Array.from({ length: nx }, () => new Uint8Array(ny))
+  for (const box of placed) {
+    const x0 = Math.max(0, Math.floor(box.x / voxel))
+    const x1 = Math.min(nx, Math.ceil((box.x + box.length) / voxel))
+    const y0 = Math.max(0, Math.floor(box.y / voxel))
+    const y1 = Math.min(ny, Math.ceil((box.y + box.width) / voxel))
+    for (let x = x0; x < x1; x += 1) {
+      for (let y = y0; y < y1; y += 1) occ[x][y] = 1
+    }
+  }
+  let longest = 0
+  for (let y = 0; y < ny; y += 1) {
+    let first = -1
+    let last = -1
+    for (let x = 0; x < nx; x += 1) {
+      if (!occ[x][y]) continue
+      if (first < 0) first = x
+      last = x
+    }
+    if (first < 0) continue
+    let run = 0
+    for (let x = first; x <= last; x += 1) {
+      if (occ[x][y]) {
+        run = 0
+        continue
+      }
+      run += 1
+      if (run > longest) longest = run
+    }
+  }
+  return longest * voxel
+}
+
 function blockPlacementKey(choice: Pick<PackingBlockChoice, 'state' | 'block' | 'point'>) {
   const { state, block, point } = choice
   return [
@@ -891,21 +930,58 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     }
   }
 
-  const useBlockEngine = shouldUseBlockEngine(cargoStates.map((state) => state.item), loadingMode, effective)
+  const snapshotSearchState = () => clonePackingSearchState(currentSearchState())
 
-  if (useBlockEngine) {
-    placeBlocks((choice) => choice.state.item.groundOnly === true && choice.point.z <= EPSILON)
-    placeBlocks((choice) => !choice.state.item.groundOnly)
+  const applySearchState = (state: PackingSearchState) => {
+    placed.length = 0
+    placed.push(...state.placed)
+    placedByIdLive.clear()
+    for (const box of placed) placedByIdLive.set(box.id, box)
+    for (const [id, node] of state.placedById) {
+      if (!placedByIdLive.has(id)) placedByIdLive.set(id, node)
+    }
+    cargoStates.length = 0
+    cargoStates.push(...state.cargoStates)
+    emsList = state.emsList
+    usedWeight = state.usedWeight
+    committedOrientations.clear()
+    const ordered = placed.slice().sort((a, b) => a.workStep - b.workStep)
+    for (const box of ordered) {
+      const item = cargoStates.find((entry) => entry.item.id === box.cargoId)?.item
+      if (item && box.height === item.height && !committedOrientations.has(box.cargoId)) {
+        committedOrientations.set(box.cargoId, box.orientationKey)
+      }
+    }
+    let points: PackingPoint[] = [{ x: 0, y: 0, z: 0 }]
+    for (const box of ordered) {
+      const origin = { x: box.x, y: box.y, z: box.z }
+      points = normalizePoints(
+        [
+          ...points.filter((point) => pointKey(point) !== pointKey(origin)),
+          { x: box.x + box.length, y: box.y, z: box.z },
+          { x: box.x, y: box.y + box.width, z: box.z },
+          { x: box.x, y: box.y, z: box.z + box.height },
+        ],
+        effective,
+      )
+    }
+    extremePoints = points
+  }
 
+  const bindChoice = (choice: PackingBlockChoice): PackingBlockChoice => {
+    const cargo = cargoStates.find((entry) => (
+      entry.item.id === choice.cargoId && entry.itemIndex === choice.state.itemIndex
+    )) ?? cargoStates.find((entry) => entry.item.id === choice.cargoId)
+    return cargo ? { ...choice, state: cargo } : choice
+  }
+
+  const fillResidualBlocks = () => {
     // Include residual groundOnly too — canPlace already forces z==0, and EMS/block
     // exhaustion can leave free floor that only extreme-point singles can fill.
     const residualStates = cargoStates.filter((state) => state.remaining > 0)
     const fallbackStates = loadingMode === 'quantity'
       ? residualStates.sort((a, b) => b.remaining - a.remaining || cargoVolume(b.item) - cargoVolume(a.item))
       : residualStates
-    // Precompute top-surface candidates once per residual SKU, then only recompute after a place
-    // that actually changes the placed set (every successful placeEntry). This still matches
-    // full topSurfacePoints(placed, item) because the function is pure over the placed array.
     const emsOriginPoints = () => emsList.map((space) => ({ x: space.x, y: space.y, z: space.z }))
     for (const state of fallbackStates) {
       const usesTops = canUseTopSurfacePoints(state.item)
@@ -952,6 +1028,61 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         state.remaining -= 1
         state.nextIndex += 1
       }
+    }
+  }
+
+  const runGreedyBlockEngine = () => {
+    placeBlocks((choice) => choice.state.item.groundOnly === true && choice.point.z <= EPSILON)
+    placeBlocks((choice) => !choice.state.item.groundOnly)
+    fillResidualBlocks()
+  }
+
+  const useBlockEngine = shouldUseBlockEngine(cargoStates.map((state) => state.item), loadingMode, effective)
+
+  if (useBlockEngine) {
+    if (loadingMode === 'quantity') {
+      const completes: PackingSearchState[] = []
+      optimizePacking(snapshotSearchState(), {
+        ...DEFAULT_QUANTITY_SEARCH_BUDGET,
+        maxMs: effective.length < 8000 ? 1500 : DEFAULT_QUANTITY_SEARCH_BUDGET.maxMs,
+      }, {
+        commit: (state, choice) => {
+          applySearchState(clonePackingSearchState(state))
+          commitBlock(bindChoice(choice))
+          return snapshotSearchState()
+        },
+        complete: (state) => {
+          applySearchState(clonePackingSearchState(state))
+          runGreedyBlockEngine()
+          const done = snapshotSearchState()
+          completes.push(done)
+          return done
+        },
+        quality: packingQualityOf,
+      })
+      const greedyComplete = completes[0]
+      if (!greedyComplete) {
+        runGreedyBlockEngine()
+      } else {
+        const greedyQuality = packingQualityOf(greedyComplete)
+        const greedyCorridor = floorCorridorMaxMm(greedyComplete.placed, effective)
+        let chosen = greedyComplete
+        let chosenQuality = greedyQuality
+        for (const candidate of completes) {
+          const quality = packingQualityOf(candidate)
+          if (quality.placedCount <= greedyQuality.placedCount) continue
+          if (quality.internalNotchVolume > greedyQuality.internalNotchVolume) continue
+          if (quality.interCargoMaxMm > greedyQuality.interCargoMaxMm) continue
+          if (floorCorridorMaxMm(candidate.placed, effective) > greedyCorridor) continue
+          if (comparePackingQuality(quality, chosenQuality, 'quantity') < 0) {
+            chosen = candidate
+            chosenQuality = quality
+          }
+        }
+        applySearchState(chosen)
+      }
+    } else {
+      runGreedyBlockEngine()
     }
 
     for (const state of cargoStates) {
