@@ -1,6 +1,70 @@
 # Decision Log
 
 
+## 2026-08-25 r73 全量闸门与部署跳过（已决策）
+
+- 背景：Task 4 要求全量验证、诚实 r73 release note、部署闸门。0824 quantity 仍是 **504**（槽 `< 200`，notch 0），未恢复 506。计划：未恢复 506 则不得把 504 写成新上限，部署前需产品确认 Pareto。
+- 选项：
+  - A. 产品未确认 506 仍执行 `npm run deploy`（仅架构）
+  - B. 不部署，把跳过原因写入本文件
+- 决策：B。已决策。本轮 **未执行 `npm run deploy`**。
+- 实测：见 `CHANGELOG.md`「2026-08-25 r73 quantity/volume search (Task 4 gates)」。主目标金线未降：0824 qty 504 / vol 424，越南 20GP 464 / **473**，40HQ 864/864，0802 877。
+- 影响：生产仍是 r72。r73 只进 in-app release note 与文档；算法代码已在此前 Task 0–3 commits。
+- 后续：产品确认是否接受 504 作为可部署状态，或要求继续搜 506 后再部署。
+
+
+## 2026-08-25 0824 quantity 504 vs 506 Pareto 待产品确认（已决策）
+
+- 背景：quantity beam 见过 **524** 件完整布局，但货物间槽 **400mm**，硬帽整单拒绝后回到 greedy **504** / 槽 150 / notch 0。合法的紧凑 **506 + 槽 `< 200`** 本轮未找到。
+- 选项：
+  - A. 把 504 写成新上限并当作可发状态
+  - B. 504 只是当前引擎快照，待产品确认 Pareto：接受 504/槽 `< 200`，或要求继续搜 506
+- 决策：B。已决策。不得把 504 写成新上限，不得在 release note 声称 506。
+- 影响：r73 文案写明 0824 仍是 504 件、槽小于 200mm。snapshot 测试继续冻 504，不加会红的 `>= 506`。
+- 后续：产品拍板。若要 506，走 Phase 4 LNS / 更深 beam，找到后再冻 snapshot。
+
+
+## 2026-08-25 Phase 4 LNS 后续入口（已决策）
+
+- 背景：设计已写明 LNS 不得阻塞首屏。本轮 Phase 0–3 beam 已落地，0824 未收回 506。
+- 决策：本轮 **不实现** LNS，只留后续入口。
+- 入口：从 beam **完整解**拆除最大槽相邻块，用同一 `generateBlockCandidates` / `canStageBlock` 重填；只接受 `comparePackingQuality` 改善；固定 seed。默认自动装箱先返回 beam，LNS 不挡首屏。
+- 影响：生产路径仍是 greedy incumbent + 有预算 beam。
+- 后续：单独计划文件，不并进 r73 部署条件。
+
+
+## 2026-08-25 Phase 5 离线 oracle 后续入口（已决策）
+
+- 背景：精确求解器不得进前端 bundle。
+- 决策：本轮 **不实现** oracle，只留后续入口。
+- 入口：2–5 个几何类、少量库存、固定候选点的 CP-SAT/MIP；用来量 beam 差距。依赖 **不进前端 bundle**。
+- 影响：浏览器主路径仍是启发式。
+- 后续：离线研究任务，不作为 r73 发布条件。
+
+
+## 2026-08-25 packing.test 顶填 5s 超时不改用例（已决策）
+
+- 背景：Task 4 必跑 `packing.test.ts`。`loads rotatable top-fill boxes before moving to the next outer depth slice`（20GP、22 SKU、默认 quantity + block beam，`maxMs` 1500）在默认 `testTimeout` 5000ms 下 RED。
+- 证据：套件内 8520ms / `test:unit` 9089ms 报超时；单独复跑 7057ms 仍超时；`--testTimeout=20000` **GREEN 5433ms**，断言成立。
+- 选项：
+  - A. 抬该用例超时或降 20GP `maxMs` 凑绿
+  - B. 失败记本文件，不削弱断言、不改用例
+- 决策：B。已决策。超时不是断言失败。
+- 影响：`npm run test:unit` 本机 RED 1 条 packing + 1 条既有 contracts updater。
+- 后续：若产品要部署，另开任务处理 20GP beam 墙钟或测试超时政策。不要为这条改业务金线。
+
+
+## 2026-08-25 Task 4 既有 lint / rollback / contracts 门禁 RED（已记录）
+
+- 背景：计划写明全量 `npm run lint` 可能因 `.worktrees` `tsconfigRootDir` RED；Windows `test:rollback` 离线 bash fixture 可能失败。不改 eslint、不改 rollback 测试。
+- 证据：
+  - `npm run lint` exit 1，**466 errors**，全部 `Parsing error: No tsconfigRootDir was set, and multiple candidate TSConfigRootDirs are present`（仓库根 vs `.worktrees/p6-linear-packing-authority`）。触及 packing 文件的单独 eslint **0**。
+  - `npm run test:rollback` **16 failed / 13 passed**；失败断言 `RUN_STATUS` / `RUN_STATE` 为 `undefined`（离线 fixture 未跑起来）。
+  - `scripts/updatePackingContracts.test.mjs` 在 `test:unit` 下 `spawnSync` **ETIMEDOUT** 58730ms。此前并行 `npm test` 已记录同一症状。
+- 决策：只记录，不改配置/测试凑绿。
+- 后续：仓库维护处理 worktree ignore / Windows bash fixture；contracts updater 单独加长 subprocess 超时另开任务。
+
+
 ## 2026-08-25 volume beam 复用搜索器，不上 quantity 槽帽（已决策）
 
 - 背景：Task 3 要求 volume 块路径走同一 `optimizePacking`，只换 `objective` 和体积上界。quantity 的 leftover 近窗、浅层 EMS leftover、`passesQuantityHardCaps` 不能抄到 volume。0824 volume 现合同 interCargo 0、usedVolume 30725850000；越南 20GP volume 473 / 29937044000。

@@ -1,6 +1,35 @@
 # Changelog
 
 
+## 2026-08-25 r73 quantity/volume search (Task 4 gates)
+
+- In-app release note `2026-08-25-r73-quantity-volume-search`. Honest copy: quantity ranks complete layouts by placed count; volume ranks by occupied volume; Vietnam 20GP volume 468→473; 0824 quantity still **504** / slot `< 200mm` / notch 0. **No 506 claim.**
+- Production goldens unchanged this task (no packing code). Same contract as Task 3 baseline `2026-08-25T09:00:51.459Z`:
+
+| fixture | mode | placed | usedVolume | interCargoMaxMm | notes |
+|---|---|---:|---:|---:|---|
+| 0824 20GP | quantity | 504 | 30243574000 | 150 | beam saw 524/400mm; hard cap kept greedy |
+| 0824 20GP | volume | 424 | 30725850000 | 0 | beam ran; greedy still best usedVolume |
+| Vietnam 20GP | quantity | 464 | 28074481500 | 1100 | |
+| Vietnam 20GP | volume | 473 | 29937044000 | 1000 | 468→473 still holds |
+| Vietnam 40HQ | quantity | 864 | 63038263000 | 8050 | full pack, skip beam |
+| Vietnam 40HQ | volume | 864 | 63038263000 | 4550 | full pack, skip beam |
+| 0802 40HQ | quantity | 877 | 61046585250 | 6800 | full pack, skip beam |
+
+Gate results (this machine, 2026-08-25):
+
+- Touched-file eslint (`packing.ts` + search modules): **exit 0**, 0 problems.
+- Required vitest: packingSearch 16, 0824 2, compactness 7, invariants 15, blockEngine 6, lookahead 5, feasibility 7, candidates 5, crossEms 3 — **pass**. `packing.test.ts` **56/57**: `loads rotatable top-fill boxes before moving to the next outer depth slice` **timed out at 5000ms** (isolated retry 7057ms RED; `--testTimeout=20000` GREEN **5433ms**, assertions hold). Did not raise timeout or change the test.
+- `npx tsc -b`: **exit 0**.
+- `npm run build`: **exit 0** (vite 2.98s). Workbench chunk `Workbench-B5nySFPz.js`.
+- `npm run test:packing-performance`: **9 passed** / 2 files, 25.92s (0802 877 in 6389ms).
+- `npm run test:unit`: **2 failed / 976 passed** (109 files). Failures: same packing.test 5s timeout; `scripts/updatePackingContracts.test.mjs` `ETIMEDOUT` at 58730ms. Did not change tests.
+- `npm run lint`: **exit 1**, **466 errors**, all `tsconfigRootDir` / `.worktrees/p6-linear-packing-authority`. Pre-existing. Did not change eslint config.
+- `npm run test:rollback`: **16 failed / 13 passed**. Windows offline bash fixture (`RUN_STATUS` / `RUN_STATE` undefined). Pre-existing. Did not change tests.
+- E2E focused `e2e/container-calc.spec.ts` (not full `npm run test:e2e`): 6 passed — utilization, 2D labels, 0802 **Loaded: 877 / 877**, 2D plan views, 3D canvas, 3D camera + layer filter. Full suite not run.
+
+**Deploy skipped.** Product has not confirmed 0824 504 vs 506 Pareto. Did not run `npm run deploy`.
+
 ## 2026-08-25 search volume by final usedVolume
 
 - Same `optimizePacking` as quantity. Added required `objective`. Volume ranks `usedVolume` then `placedCount` then compactness. Quantity tests pass `'quantity'`.

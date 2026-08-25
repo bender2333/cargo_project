@@ -14,6 +14,29 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-08-25-r73-quantity-volume-search',
+    date: '2026-08-25',
+    title: {
+      en: 'Quantity packing now compares complete layouts by piece count; volume packing compares occupied volume',
+      zh: '数量优先按最终件数比较完整方案，体积优先按最终占用体积比较',
+    },
+    items: {
+      en: [
+        'Quantity mode compares finished layouts by how many pieces they actually load, instead of scoring only the block in front of the searcher.',
+        'Volume mode compares finished layouts by occupied volume. Mixed 20GP Vietnam volume packing went from 468 to 473 pieces.',
+        'Long gaps between cartons are still squeezed, but the engine will not reopen a 400 mm slot just to load extra pieces. The 0824 load remains 504 pieces with slots under 200 mm.',
+        'Door-end and side-wall leftover remains legal.',
+      ],
+      zh: [
+        '数量优先按最终装入件数比较完整方案，不再只看眼前一块是否塞得满。',
+        '体积优先按最终占用体积比较。越南 20GP 体积模式件数从 468 提到 473。',
+        '货物间长槽仍会压，但不会为了多装而重新打开 400 mm 槽（0824 仍是 504 件、槽小于 200 mm）。',
+        '门端和侧壁的合法余量仍然允许。',
+      ],
+    },
+  },
+
+  {
     version: '2026-08-24-r72-upper-gap-packing',
     date: '2026-08-24',
     title: {
