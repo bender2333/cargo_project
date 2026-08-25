@@ -1,6 +1,13 @@
 # Changelog
 
 
+## 2026-08-25 3D container-loading algorithm survey
+
+- Research: analyzed the 0824 load shape (24 SKUs / 2544 units, repeated footprints, rotation and stacking enabled, weight non-binding) against EMS, block/superitem tree search, beam search, LNS, layer-pattern methods, CP-SAT/MIP, and black-box metaheuristics.
+- Conclusion: the current issue is a local-search/objective problem, not proof that compactness must reduce quantity. Recommended lexicographic quantity-first scoring, cross-EMS beam search, bounded LNS re-placement, and offline exact micro-instances as an oracle.
+- Findings: `research/2026-08-25-3d-container-loading-algorithm-survey.md`. No packing implementation changed.
+
+
 ## 2026-08-24 upper-gap one-step leftover scoring
 
 - Root cause: `bestBlocksForSpace` returned only the max-count block per orientation; `compareBlockChoices` ranked max axis-fill first. Equal-count `TB-C13` `WLH 18×3` (5490×1590) beat `LWH 9×6` (4770×1830), then `TB-C10` filled a 410 mm strip and left a 400 mm inter-cargo slot at `x=5300 y=1600 z=2050`.
