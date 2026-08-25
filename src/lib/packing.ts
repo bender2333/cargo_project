@@ -1054,23 +1054,25 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   const useBlockEngine = shouldUseBlockEngine(cargoStates.map((state) => state.item), loadingMode, effective)
 
   if (useBlockEngine) {
+    const searchHooks = {
+      commit: (state: PackingSearchState, choice: PackingBlockChoice) => {
+        applySearchState(clonePackingSearchState(state))
+        commitBlock(bindChoice(choice))
+        return snapshotSearchState()
+      },
+      complete: (state: PackingSearchState) => {
+        applySearchState(clonePackingSearchState(state))
+        runGreedyBlockEngine()
+        return snapshotSearchState()
+      },
+      quality: packingQualityOf,
+    }
+    const searchBudget = {
+      ...DEFAULT_QUANTITY_SEARCH_BUDGET,
+      maxMs: 1500,
+    }
     if (loadingMode === 'quantity') {
-      const { completes } = optimizePacking(snapshotSearchState(), {
-        ...DEFAULT_QUANTITY_SEARCH_BUDGET,
-        maxMs: 1500,
-      }, {
-        commit: (state, choice) => {
-          applySearchState(clonePackingSearchState(state))
-          commitBlock(bindChoice(choice))
-          return snapshotSearchState()
-        },
-        complete: (state) => {
-          applySearchState(clonePackingSearchState(state))
-          runGreedyBlockEngine()
-          return snapshotSearchState()
-        },
-        quality: packingQualityOf,
-      })
+      const { completes } = optimizePacking(snapshotSearchState(), searchBudget, searchHooks, 'quantity')
       if (completes.length === 0) {
         runGreedyBlockEngine()
       } else {
@@ -1080,8 +1082,19 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
           (greedy, candidate) => passesQuantityHardCaps(greedy, candidate, effective),
         ))
       }
-    } else {
-      runGreedyBlockEngine()
+    } else if (loadingMode === 'volume') {
+      const { state, completes } = optimizePacking(snapshotSearchState(), searchBudget, searchHooks, 'volume')
+      const greedy = completes[0]
+      if (!greedy) {
+        runGreedyBlockEngine()
+      } else {
+        const greedyQuality = packingQualityOf(greedy)
+        const beamQuality = packingQualityOf(state)
+        const greedyRemaining = greedy.cargoStates.reduce((sum, cargo) => sum + Math.max(0, cargo.remaining), 0)
+        const breaksGoldens = beamQuality.usedVolume < greedyQuality.usedVolume
+          || (greedyRemaining <= 0 && beamQuality.placedCount < greedyQuality.placedCount)
+        applySearchState(breaksGoldens ? greedy : state)
+      }
     }
 
     for (const state of cargoStates) {

@@ -10,6 +10,7 @@ import type { PackingQuality } from './packingObjective'
 import {
   DEFAULT_QUANTITY_SEARCH_BUDGET,
   optimisticCountBound,
+  optimisticVolumeBound,
   optimizePacking,
   pickBestCappedComplete,
   type PackingSearchHooks,
@@ -216,7 +217,7 @@ describe('quantity beam search', () => {
     const greedy = hooks.complete(clonePackingSearchState(initial))
     expect(greedy.placed.length, 'greedy complete is the 4-piece incumbent').toBe(4)
 
-    const result = optimizePacking(initial, DEFAULT_QUANTITY_SEARCH_BUDGET, hooks)
+    const result = optimizePacking(initial, DEFAULT_QUANTITY_SEARCH_BUDGET, hooks, 'quantity')
     expect(
       result.state.placed.length,
       'quantity must keep the 5-piece complete even though that first block is smaller and less compact',
@@ -246,7 +247,7 @@ describe('quantity beam search', () => {
       quality: (state) => qualityOf(state, notches.get(state) ?? 0),
     }
 
-    const result = optimizePacking(initial, DEFAULT_QUANTITY_SEARCH_BUDGET, hooks)
+    const result = optimizePacking(initial, DEFAULT_QUANTITY_SEARCH_BUDGET, hooks, 'quantity')
     expect(result.state.placed.length).toBe(5)
     expect(
       hooks.quality(result.state).internalNotchVolume,
@@ -277,7 +278,7 @@ describe('quantity beam search', () => {
       quality: (state) => qualityOf(state, notches.get(state) ?? 0),
     }
 
-    const result = optimizePacking(initial, DEFAULT_QUANTITY_SEARCH_BUDGET, hooks)
+    const result = optimizePacking(initial, DEFAULT_QUANTITY_SEARCH_BUDGET, hooks, 'quantity')
     expect(result.state.placed.length).toBe(5)
     expect(hooks.quality(result.state).internalNotchVolume).toBeGreaterThan(0)
   })
@@ -294,13 +295,13 @@ describe('quantity beam search', () => {
       quality: (state) => qualityOf(state, 0),
     }
 
-    const zeroStates = optimizePacking(initial, { beamWidth: 8, depth: 2, maxStates: 0, maxMs: 8000 }, hooks)
+    const zeroStates = optimizePacking(initial, { beamWidth: 8, depth: 2, maxStates: 0, maxMs: 8000 }, hooks, 'quantity')
     expect(zeroStates.state.placed.length).toBeGreaterThan(0)
     expect(zeroStates.state.placed.length).toBe(4)
     expect(zeroStates.search.budgetExceeded).toBe(true)
     expect(zeroStates.search.strategy).toBe('greedy')
 
-    const zeroMs = optimizePacking(initial, { beamWidth: 8, depth: 2, maxStates: 32, maxMs: 0 }, hooks)
+    const zeroMs = optimizePacking(initial, { beamWidth: 8, depth: 2, maxStates: 32, maxMs: 0 }, hooks, 'quantity')
     expect(zeroMs.state.placed.length).toBeGreaterThan(0)
     expect(zeroMs.search.budgetExceeded).toBe(true)
   })
@@ -441,7 +442,7 @@ describe('quantity beam search', () => {
     const greedy = hooks.complete(clonePackingSearchState(initial))
     expect(greedy.placed.length).toBe(4)
 
-    const result = optimizePacking(initial, { beamWidth: 2, depth: 2, maxStates: 3, maxMs: 8000 }, hooks)
+    const result = optimizePacking(initial, { beamWidth: 2, depth: 2, maxStates: 3, maxMs: 8000 }, hooks, 'quantity')
     expect(
       result.state.placed.length,
       'ranking first-block candidates before committing must leave maxStates for a depth-2 5-piece complete',
@@ -468,5 +469,232 @@ describe('quantity beam search', () => {
     expect(original.placed).toHaveLength(1)
     expect(original.placed[0].x).toBe(0)
     expect(original.emsList[0].x).toBe(0)
+  })
+})
+
+function bulkyAndFillState(): PackingSearchState {
+  const bulky: CargoItem = {
+    id: 'bulky',
+    name: 'bulky',
+    label: 'B',
+    length: 1000,
+    width: 1000,
+    height: 1000,
+    weight: 8,
+    quantity: 3,
+    color: '#b45309',
+    canRotate: false,
+    stackable: false,
+  }
+  const fill: CargoItem = { ...cube(), id: 'fill', name: 'fill', label: 'F' }
+  return {
+    container: {
+      id: 'toy-5x1',
+      label: 'toy',
+      description: 'volume: greedy 4 vs higher-volume 3',
+      length: 4000,
+      width: 1000,
+      height: 1000,
+      maxWeight: 50_000,
+      doorGap: 0,
+      topGap: 0,
+      sideGap: 0,
+    },
+    cargoStates: [
+      { item: bulky, itemIndex: 0, label: 'B', remaining: 3, nextIndex: 1 },
+      { item: fill, itemIndex: 1, label: 'F', remaining: 8, nextIndex: 1 },
+    ],
+    emsList: [{ x: 0, y: 0, z: 0, length: 4000, width: 1000, height: 1000 }],
+    placed: [],
+    placedById: new Map(),
+    usedWeight: 0,
+    minSupportRatio: MINIMUM_SUPPORT_RATIO,
+  }
+}
+
+function usedVolumeOf(state: PackingSearchState) {
+  return state.placed.reduce((sum, box) => sum + box.length * box.width * box.height, 0)
+}
+
+function setPlacedLength(state: PackingSearchState, length: number) {
+  for (const box of state.placed) box.length = length
+}
+
+describe('volume beam search', () => {
+  it('does not copy quantity leftover windows or slot caps onto volume ranking', () => {
+    const source = readFileSync(resolve('src/lib/packingSearch.ts'), 'utf8')
+    expect(source).not.toMatch(/QUANTITY_COUNT_NEAR_WINDOW/)
+    expect(source).not.toMatch(/passesQuantityHardCaps/)
+  })
+
+  it('picks a higher usedVolume complete even when that layout has fewer pieces than greedy', () => {
+    const initial = bulkyAndFillState()
+    const generated = generateBlockCandidates(initial, 'volume')
+    expect(generated.some((choice) => choice.block.count === 4), 'greedy-sized first block must exist').toBe(true)
+    expect(generated.some((choice) => choice.block.count === 3), 'alternative first block must exist').toBe(true)
+
+    const hooks: PackingSearchHooks = {
+      commit: commitChoice,
+      complete: (state) => {
+        const next = clonePackingSearchState(state)
+        if (next.placed.length === 0) {
+          addBoxes(next, 4)
+          return next
+        }
+        if (next.placed.length === 3) {
+          setPlacedLength(next, 1500)
+          return next
+        }
+        return next
+      },
+      quality: (state) => qualityOf(state, 0),
+    }
+
+    const greedy = hooks.complete(clonePackingSearchState(initial))
+    expect(greedy.placed.length, 'greedy complete is the 4-piece incumbent').toBe(4)
+    expect(usedVolumeOf(greedy)).toBe(4_000_000_000)
+
+    const quantityPick = optimizePacking(initial, DEFAULT_QUANTITY_SEARCH_BUDGET, hooks, 'quantity')
+    expect(
+      quantityPick.state.placed.length,
+      'quantity still prefers more pieces on the same hooks',
+    ).toBe(4)
+
+    const result = optimizePacking(initial, DEFAULT_QUANTITY_SEARCH_BUDGET, hooks, 'volume')
+    expect(usedVolumeOf(result.state), 'volume must keep the higher usedVolume even with fewer pieces').toBe(4_500_000_000)
+    expect(result.state.placed.length).toBe(3)
+    expect(result.search.strategy).toBe('beam')
+    expect(usedVolumeOf(result.state)).toBeGreaterThan(usedVolumeOf(greedy))
+  })
+
+  it('breaks an equal usedVolume with the higher piece count', () => {
+    const initial = bulkyAndFillState()
+    const hooks: PackingSearchHooks = {
+      commit: commitChoice,
+      complete: (state) => {
+        const next = clonePackingSearchState(state)
+        if (next.placed.length === 0) {
+          addBoxes(next, 4)
+          return next
+        }
+        if (next.placed.length === 3) {
+          while (next.placed.length < 5) addBoxes(next, 1)
+          setPlacedLength(next, 800)
+          return next
+        }
+        return next
+      },
+      quality: (state) => qualityOf(state, 0),
+    }
+
+    const result = optimizePacking(initial, DEFAULT_QUANTITY_SEARCH_BUDGET, hooks, 'volume')
+    expect(usedVolumeOf(result.state)).toBe(4_000_000_000)
+    expect(result.state.placed.length, 'same usedVolume must prefer more pieces').toBe(5)
+  })
+
+  it('does not let a higher piece count with lower usedVolume win in volume mode', () => {
+    const initial = bulkyAndFillState()
+    const hooks: PackingSearchHooks = {
+      commit: commitChoice,
+      complete: (state) => {
+        const next = clonePackingSearchState(state)
+        if (next.placed.length === 0) {
+          addBoxes(next, 4)
+          return next
+        }
+        if (next.placed.length === 3) {
+          while (next.placed.length < 5) addBoxes(next, 1)
+          setPlacedLength(next, 500)
+          return next
+        }
+        return next
+      },
+      quality: (state) => qualityOf(state, 0),
+    }
+
+    const greedy = hooks.complete(clonePackingSearchState(initial))
+    const result = optimizePacking(initial, DEFAULT_QUANTITY_SEARCH_BUDGET, hooks, 'volume')
+    expect(usedVolumeOf(result.state), 'volume must not trade usedVolume away for extra pieces').toBe(4_000_000_000)
+    expect(result.state.placed.length).toBe(4)
+    expect(usedVolumeOf(result.state)).toBe(usedVolumeOf(greedy))
+    expect(result.state.placed.length).toBeLessThan(5)
+  })
+
+  it('returns the greedy complete and budgetExceeded when the beam cannot expand', () => {
+    const initial = bulkyAndFillState()
+    const hooks: PackingSearchHooks = {
+      commit: commitChoice,
+      complete: (state) => {
+        const next = clonePackingSearchState(state)
+        if (next.placed.length === 0) addBoxes(next, 4)
+        return next
+      },
+      quality: (state) => qualityOf(state, 0),
+    }
+
+    const zeroStates = optimizePacking(initial, { beamWidth: 8, depth: 2, maxStates: 0, maxMs: 8000 }, hooks, 'volume')
+    expect(zeroStates.state.placed.length).toBe(4)
+    expect(zeroStates.search.budgetExceeded).toBe(true)
+    expect(zeroStates.search.strategy).toBe('greedy')
+
+    const zeroMs = optimizePacking(initial, { beamWidth: 8, depth: 2, maxStates: 32, maxMs: 0 }, hooks, 'volume')
+    expect(zeroMs.state.placed.length).toBeGreaterThan(0)
+    expect(zeroMs.search.budgetExceeded).toBe(true)
+  })
+
+  it('optimistic volume bound uses leftover EMS volume so remaining cargo volume without geometry fails when leftover is tighter', () => {
+    const item: CargoItem = {
+      id: 'fit',
+      name: 'fit',
+      label: 'F',
+      length: 500,
+      width: 500,
+      height: 500,
+      weight: 1,
+      quantity: 8,
+      color: '#0f172a',
+      canRotate: false,
+      stackable: true,
+    }
+    const leftover = { x: 0, y: 0, z: 0, length: 1500, width: 500, height: 500 }
+    const geometric = bestBlocksForSpace(item, 8, leftover)
+    const sizeFit = Math.max(0, ...geometric.map((block) => block.count))
+    const unitVolume = item.length * item.width * item.height
+    const sizeFitVolume = sizeFit * unitVolume
+    const remainingCargoVolume = 8 * unitVolume
+    expect(sizeFit, 'constructed leftover must size-fit some but not all remaining cubes').toBeGreaterThan(0)
+    expect(sizeFit).toBeLessThan(8)
+    expect(sizeFitVolume).toBeLessThan(remainingCargoVolume)
+
+    const state: PackingSearchState = {
+      container: {
+        id: 'bound',
+        label: 'bound',
+        description: 'bound',
+        length: 1500,
+        width: 500,
+        height: 500,
+        maxWeight: 10_000,
+        doorGap: 0,
+        topGap: 0,
+        sideGap: 0,
+      },
+      cargoStates: [{ item, itemIndex: 0, label: 'F', remaining: 8, nextIndex: 1 }],
+      emsList: [leftover],
+      placed: [],
+      placedById: new Map(),
+      usedWeight: 0,
+      minSupportRatio: MINIMUM_SUPPORT_RATIO,
+    }
+
+    const bound = optimisticVolumeBound(state)
+    expect(bound).toBeGreaterThanOrEqual(usedVolumeOf(state) + sizeFitVolume)
+    expect(
+      bound,
+      'bound must follow leftover EMS usable volume, not remaining cargo volume alone',
+    ).toBeLessThan(usedVolumeOf(state) + remainingCargoVolume)
+
+    const demandOnly = usedVolumeOf(state) + remainingCargoVolume
+    expect(demandOnly, 'usedVolume+remaining cargo volume ignores tighter leftover geometry').toBeGreaterThan(bound)
   })
 })

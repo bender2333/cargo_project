@@ -2,7 +2,7 @@ import { bestBlocksForSpace } from './blocks'
 import { splitEMS } from './emsSpace'
 import { generateBlockCandidates, type PackingBlockChoice } from './packingCandidates'
 import { canStageBlock } from './packingFeasibility'
-import { comparePackingQuality, type PackingQuality } from './packingObjective'
+import { comparePackingQuality, type PackingObjective, type PackingQuality } from './packingObjective'
 import { clonePackingSearchState, type PackingSearchState } from './packingSearchState'
 
 export type PackingSearchBudget = {
@@ -43,6 +43,33 @@ export type PackingSearchHooks = {
 
 function usedVolumeOf(state: PackingSearchState) {
   return state.placed.reduce((sum, box) => sum + box.length * box.width * box.height, 0)
+}
+
+function itemVolume(item: { length: number; width: number; height: number }) {
+  return item.length * item.width * item.height
+}
+
+function remainingCargoVolume(cargoStates: PackingSearchState['cargoStates']) {
+  let volume = 0
+  for (const cargo of cargoStates) {
+    volume += Math.max(0, cargo.remaining) * itemVolume(cargo.item)
+  }
+  return volume
+}
+
+function optimisticEmsUsableVolume(
+  emsList: PackingSearchState['emsList'],
+  cargoStates: PackingSearchState['cargoStates'],
+) {
+  const remainingVolume = remainingCargoVolume(cargoStates)
+  if (remainingVolume <= 0) return 0
+  let emsVolume = 0
+  for (const ems of emsList) emsVolume += itemVolume(ems)
+  return Math.min(remainingVolume, emsVolume)
+}
+
+export function optimisticVolumeBound(state: PackingSearchState): number {
+  return usedVolumeOf(state) + optimisticEmsUsableVolume(state.emsList, state.cargoStates)
 }
 
 function maxBlockCount(item: PackingSearchState['cargoStates'][number]['item'], remaining: number, space: PackingSearchState['emsList'][number]) {
@@ -91,7 +118,7 @@ export function optimisticCountBound(state: PackingSearchState): number {
   return state.placed.length + optimisticEmsCapacity(state.emsList, state.cargoStates)
 }
 
-function scoreChoice(state: PackingSearchState, choice: PackingBlockChoice) {
+function scoreChoice(state: PackingSearchState, choice: PackingBlockChoice, objective: PackingObjective) {
   const cargoStates = state.cargoStates.map((cargo) => {
     if (cargo.item.id !== choice.cargoId || cargo.itemIndex !== choice.state.itemIndex) return cargo
     return { ...cargo, remaining: cargo.remaining - choice.block.count }
@@ -105,11 +132,14 @@ function scoreChoice(state: PackingSearchState, choice: PackingBlockChoice) {
     height: choice.block.height,
   })
   const placed = state.placed.length + choice.block.count
+  const volume = usedVolumeOf(state) + choice.block.volume
   return {
     choice,
-    bound: placed + optimisticEmsCapacity(emsList, cargoStates),
+    bound: objective === 'volume'
+      ? volume + optimisticEmsUsableVolume(emsList, cargoStates)
+      : placed + optimisticEmsCapacity(emsList, cargoStates),
     placed,
-    volume: usedVolumeOf(state) + choice.block.volume,
+    volume,
   }
 }
 
@@ -140,6 +170,7 @@ export function optimizePacking(
   initial: PackingSearchState,
   budget: PackingSearchBudget,
   hooks: PackingSearchHooks,
+  objective: PackingObjective,
 ): { state: PackingSearchState; search: PackingSearchStats; completes: PackingSearchState[] } {
   const startedAt = Date.now()
   let beamWidth = Math.max(1, budget.beamWidth)
@@ -160,7 +191,7 @@ export function optimizePacking(
   const recordComplete = (state: PackingSearchState) => {
     completes.push(state)
     const quality = hooks.quality(state)
-    if (comparePackingQuality(quality, incumbentQuality, 'quantity') < 0) {
+    if (comparePackingQuality(quality, incumbentQuality, objective) < 0) {
       incumbent = state
       incumbentQuality = quality
       strategy = 'beam'
@@ -205,7 +236,7 @@ export function optimizePacking(
       return []
     }
 
-    const generated = generateBlockCandidates(state, 'quantity')
+    const generated = generateBlockCandidates(state, objective)
     const ranked: Array<ReturnType<typeof scoreChoice>> = []
     for (const choice of generated) {
       candidatesEvaluated += 1
@@ -213,9 +244,11 @@ export function optimizePacking(
         budgetExceeded = true
         break
       }
-      ranked.push(scoreChoice(state, choice))
+      ranked.push(scoreChoice(state, choice, objective))
     }
-    ranked.sort((a, b) => b.bound - a.bound || b.placed - a.placed || b.volume - a.volume)
+    ranked.sort(objective === 'volume'
+      ? (a, b) => b.bound - a.bound || b.volume - a.volume || b.placed - a.placed
+      : (a, b) => b.bound - a.bound || b.placed - a.placed || b.volume - a.volume)
 
     const kept: PackingSearchState[] = []
     for (const entry of ranked) {

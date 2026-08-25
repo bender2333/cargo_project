@@ -1,6 +1,21 @@
 # Decision Log
 
 
+## 2026-08-25 volume beam 复用搜索器，不上 quantity 槽帽（已决策）
+
+- 背景：Task 3 要求 volume 块路径走同一 `optimizePacking`，只换 `objective` 和体积上界。quantity 的 leftover 近窗、浅层 EMS leftover、`passesQuantityHardCaps` 不能抄到 volume。0824 volume 现合同 interCargo 0、usedVolume 30725850000；越南 20GP volume 473 / 29937044000。
+- 选项：
+  - A. volume 也套 quantity 槽帽 / leftover 近窗
+  - B. 终局只用 `comparePackingQuality(..., 'volume')`；上界 = usedVolume + min(剩余货物体积, EMS 体积和)；完整布局若 usedVolume 低于 greedy、或满装件数低于 greedy（40HQ 864）则留 greedy
+- 决策：B。已决策。小票 `shouldUseBlockEngine === false` 仍走 `placementScore` 单箱循环。
+- 实测（`node scripts/packing-mode-baseline.mjs` 2026-08-25T09:00:51.459Z）：
+  - 0824 volume **424** / usedVolume **30725850000** / 槽 0 / notch 0（beam 跑了，~41ms→1814ms，仍是 greedy）
+  - 越南 20GP volume **473** / **29937044000**（~304ms→1841ms）
+  - quantity 0824 **504**、越南 464、40HQ 864/864、0802 877，未回归
+- 影响：主目标未降。0824 volume snapshot 不上调。后续更深 beam / LNS 若 usedVolume 上升，再把 snapshot 往上改。
+- 后续：Task 4 全量验证、release note、部署。不要把 0824 volume 424 写成上限。
+
+
 ## 2026-08-25 在帽子内比较所有完整布局，不是赢家-or-greedy（已决策）
 
 - 背景：搜索器按无帽件数选出 524（400mm 槽），硬帽整单拒绝后回到 greedy 504。合法的 506/槽 180 即使被 complete 过也不会上船。

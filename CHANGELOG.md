@@ -1,6 +1,31 @@
 # Changelog
 
 
+## 2026-08-25 search volume by final usedVolume
+
+- Same `optimizePacking` as quantity. Added required `objective`. Volume ranks `usedVolume` then `placedCount` then compactness. Quantity tests pass `'quantity'`.
+- `optimisticVolumeBound` = usedVolume + min(remaining cargo volume, sum of EMS volumes). Overlapping EMS may overcount (safe). Must not underestimate remaining cargo. No `QUANTITY_COUNT_NEAR_WINDOW`, no leftover shallow-EMS scoring, no `passesQuantityHardCaps` on volume.
+- Volume block-engine (`shouldUseBlockEngine && loadingMode === 'volume'`) uses the same commit/complete/quality hooks. If a complete would drop usedVolume vs greedy, or drop placedCount on a full pack (40HQ 864), keep greedy. Small tickets still use the `placementScore` loop.
+- Production goldens unchanged. 0824 volume snapshot stays 424 / **30725850000** (did not rise). Vietnam 20GP volume still **473** / **29937044000**. Quantity 0824 **504**, Vietnam qty **464**, 40HQ **864/864**, 0802 **877**.
+
+TDD: packingSearch.test.ts RED (volume picked quantity-style 4e9 / 2.5e9; `optimisticVolumeBound` missing) then GREEN (16).
+
+Verification: packingSearch 16, 0824 2, compactness 7, invariants 15, blockEngine 6, crossEms 3 — **49 passed**. packing.test 57. eslint 0. `npx tsc -b` exit 0.
+
+`node scripts/packing-mode-baseline.mjs` 2026-08-25T09:00:51.459Z (`search: null`):
+
+| fixture | mode | old placed | new placed | old usedVolume | new usedVolume | old interCargoMaxMm | new | old elapsedMs | new | notes |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 0824 20GP | quantity | 504 | 504 | 30243574000 | 30243574000 | 150 | 150 | 1315 | 2382 | Task 2 numbers held |
+| 0824 20GP | volume | 424 | 424 | 30725850000 | 30725850000 | 0 | 0 | 41 | 1814 | beam ran; greedy still best usedVolume |
+| Vietnam 20GP | quantity | 464 | 464 | 28074481500 | 28074481500 | 1100 | 1100 | 1788 | 1937 | |
+| Vietnam 20GP | volume | 473 | 473 | 29937044000 | 29937044000 | 1000 | 1000 | 304 | 1841 | beam ran; 473 held |
+| Vietnam 40HQ | quantity | 864 | 864 | 63038263000 | 63038263000 | 8050 | 8050 | 4643 | 4622 | full pack, skip beam |
+| Vietnam 40HQ | volume | 864 | 864 | 63038263000 | 63038263000 | 4550 | 4550 | 2781 | 2430 | full pack, skip beam |
+| 0802 40HQ | quantity | 877 | 877 | 61046585250 | 61046585250 | 6800 | 6800 | 4420 | 3345 | full pack, skip beam |
+
+Not deployed.
+
 ## 2026-08-25 pick best capped beam complete
 
 - `optimizePacking` returns every complete (greedy first). Production filters by hard caps, then `pickBestCappedComplete` uses `comparePackingQuality` among the legal set. An illegal 524/400mm no longer hides a legal 506/180mm.
