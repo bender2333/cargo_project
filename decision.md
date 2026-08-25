@@ -1,6 +1,18 @@
 # Decision Log
 
 
+## 2026-08-25 在帽子内比较所有完整布局，不是赢家-or-greedy（已决策）
+
+- 背景：搜索器按无帽件数选出 524（400mm 槽），硬帽整单拒绝后回到 greedy 504。合法的 506/槽 180 即使被 complete 过也不会上船。
+- 选项：
+  - A. 继续对无帽赢家做 accept-or-reject
+  - B. 收集所有 complete，硬帽过滤（greedy 必留），再 `comparePackingQuality` 选
+- 决策：B。已决策。`optimizePacking` 返回 `completes[]`；`pickBestCappedComplete` 只在通过帽子的集合里比。
+- 实测：玩具 4/6/5 选 5。0824 全柜仍 **504**。未找到 506+槽 `< 200`。
+- 影响：件数优先在合法帽子内生效。
+- 后续：若全柜 0824 ≥506 且槽 `< 200`、notch 0，冻结 snapshot。
+
+
 ## 2026-08-25 beam 硬帽是测试门槛，不是 greedy 槽不得变差（已决策）
 
 - 背景：第一版 overlay 要求件数严格更多且 notch/槽/走廊都不比 greedy 差。这样会拒绝 **506 + 槽 180mm**（合法 `< 200`），只因为 greedy 槽是 150。

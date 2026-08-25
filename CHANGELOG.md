@@ -1,6 +1,14 @@
 # Changelog
 
 
+## 2026-08-25 pick best capped beam complete
+
+- `optimizePacking` returns every complete (greedy first). Production filters by hard caps, then `pickBestCappedComplete` uses `comparePackingQuality` among the legal set. An illegal 524/400mm no longer hides a legal 506/180mm.
+- Toy: greedy 4 (slot 0) vs illegal 6 (slot 400) vs legal 5 (slot 180) ships 5.
+- 0824 quantity still **504**, slot 150, notch 0. 506 not recovered.
+
+Verification: packingSearch 10, 0824 2, compactness 7, invariants 15, blockEngine 6 — **40 passed**. eslint 0. `npx tsc -b` exit 0. Not deployed.
+
 ## 2026-08-25 rank beam states and keep slot caps
 
 - Rank first-block candidates by `optimisticCountBound` **before** `commit` / `statesExpanded`, then expand in that order so depth 2 still runs under `maxStates: 32`.

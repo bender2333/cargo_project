@@ -15,7 +15,7 @@ import {
   type PackingPoint,
 } from './packingFeasibility'
 import { packingQualityOf } from './packingObjective'
-import { DEFAULT_QUANTITY_SEARCH_BUDGET, optimizePacking } from './packingSearch'
+import { DEFAULT_QUANTITY_SEARCH_BUDGET, optimizePacking, pickBestCappedComplete } from './packingSearch'
 import { clonePackingSearchState, type PackingCargoState, type PackingSearchState } from './packingSearchState'
 import { GAP_FILL_SOURCE } from './placementSource'
 import { buildLabelStats } from './labels'
@@ -1055,8 +1055,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
 
   if (useBlockEngine) {
     if (loadingMode === 'quantity') {
-      let greedyComplete: PackingSearchState | undefined
-      const { state: best } = optimizePacking(snapshotSearchState(), {
+      const { completes } = optimizePacking(snapshotSearchState(), {
         ...DEFAULT_QUANTITY_SEARCH_BUDGET,
         maxMs: 1500,
       }, {
@@ -1068,16 +1067,18 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
         complete: (state) => {
           applySearchState(clonePackingSearchState(state))
           runGreedyBlockEngine()
-          const done = snapshotSearchState()
-          if (!greedyComplete) greedyComplete = done
-          return done
+          return snapshotSearchState()
         },
         quality: packingQualityOf,
       })
-      if (!greedyComplete) {
+      if (completes.length === 0) {
         runGreedyBlockEngine()
       } else {
-        applySearchState(passesQuantityHardCaps(greedyComplete, best, effective) ? best : greedyComplete)
+        applySearchState(pickBestCappedComplete(
+          completes,
+          { quality: packingQualityOf },
+          (greedy, candidate) => passesQuantityHardCaps(greedy, candidate, effective),
+        ))
       }
     } else {
       runGreedyBlockEngine()

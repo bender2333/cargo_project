@@ -113,17 +113,41 @@ function scoreChoice(state: PackingSearchState, choice: PackingBlockChoice) {
   }
 }
 
+export function pickBestCappedComplete(
+  completes: PackingSearchState[],
+  hooks: Pick<PackingSearchHooks, 'quality'>,
+  allowed: (greedy: PackingSearchState, candidate: PackingSearchState) => boolean,
+): PackingSearchState {
+  const greedy = completes[0]
+  if (!greedy) {
+    throw new Error('pickBestCappedComplete requires the greedy complete as completes[0]')
+  }
+
+  let best = greedy
+  let bestQuality = hooks.quality(greedy)
+  for (const candidate of completes) {
+    if (candidate !== greedy && !allowed(greedy, candidate)) continue
+    const quality = hooks.quality(candidate)
+    if (comparePackingQuality(quality, bestQuality, 'quantity') < 0) {
+      best = candidate
+      bestQuality = quality
+    }
+  }
+  return best
+}
+
 export function optimizePacking(
   initial: PackingSearchState,
   budget: PackingSearchBudget,
   hooks: PackingSearchHooks,
-): { state: PackingSearchState; search: PackingSearchStats } {
+): { state: PackingSearchState; search: PackingSearchStats; completes: PackingSearchState[] } {
   const startedAt = Date.now()
   let beamWidth = Math.max(1, budget.beamWidth)
   let statesExpanded = 0
   let candidatesEvaluated = 0
   let budgetExceeded = false
   let strategy: PackingSearchStats['strategy'] = 'greedy'
+  const completes: PackingSearchState[] = []
 
   const outOfTime = () => budget.maxMs <= 0 || Date.now() - startedAt >= budget.maxMs
   const outOfStates = () => statesExpanded >= budget.maxStates
@@ -131,8 +155,10 @@ export function optimizePacking(
   const incumbentState = hooks.complete(clonePackingSearchState(initial))
   let incumbent = incumbentState
   let incumbentQuality = hooks.quality(incumbent)
+  completes.push(incumbent)
 
-  const consider = (state: PackingSearchState) => {
+  const recordComplete = (state: PackingSearchState) => {
+    completes.push(state)
     const quality = hooks.quality(state)
     if (comparePackingQuality(quality, incumbentQuality, 'quantity') < 0) {
       incumbent = state
@@ -150,6 +176,7 @@ export function optimizePacking(
         candidatesEvaluated,
         budgetExceeded: true,
       },
+      completes,
     }
   }
 
@@ -163,6 +190,7 @@ export function optimizePacking(
         candidatesEvaluated,
         budgetExceeded: false,
       },
+      completes,
     }
   }
 
@@ -209,7 +237,7 @@ export function optimizePacking(
         budgetExceeded = true
         return
       }
-      consider(hooks.complete(clonePackingSearchState(leaf)))
+      recordComplete(hooks.complete(clonePackingSearchState(leaf)))
     }
   }
 
@@ -237,5 +265,6 @@ export function optimizePacking(
       candidatesEvaluated,
       budgetExceeded,
     },
+    completes,
   }
 }

@@ -11,6 +11,7 @@ import {
   DEFAULT_QUANTITY_SEARCH_BUDGET,
   optimisticCountBound,
   optimizePacking,
+  pickBestCappedComplete,
   type PackingSearchHooks,
 } from './packingSearch'
 import { clonePackingSearchState, type PackingSearchState } from './packingSearchState'
@@ -149,6 +150,40 @@ describe('quantity beam search', () => {
   it('does not import packing.ts, so the searcher can be hooked from packing without a cycle', () => {
     const source = readFileSync(resolve('src/lib/packingSearch.ts'), 'utf8')
     expect(source).not.toMatch(/from ['"]\.\/packing['"]/)
+  })
+
+  it('picks a legal 5-piece complete over greedy 4 and over an illegal 6 with a huge slot', () => {
+    const greedy = toyState()
+    addBoxes(greedy, 4)
+    const illegal = toyState()
+    addBoxes(illegal, 6)
+    const legal = toyState()
+    addBoxes(legal, 5)
+    const slotMm = new WeakMap<object, number>([
+      [greedy, 0],
+      [illegal, 400],
+      [legal, 180],
+    ])
+    const quality = (state: PackingSearchState): PackingQuality => ({
+      ...qualityOf(state, 0),
+      interCargoMaxMm: slotMm.get(state) ?? 0,
+    })
+    const allowed = (incumbent: PackingSearchState, candidate: PackingSearchState) => {
+      const greedySlot = quality(incumbent).interCargoMaxMm
+      const candidateSlot = quality(candidate).interCargoMaxMm
+      if (greedySlot < 200 && candidateSlot >= 200) return false
+      return true
+    }
+
+    const uncapped = [illegal, legal, greedy].sort((a, b) => (
+      quality(b).placedCount - quality(a).placedCount
+    ))[0]
+    expect(uncapped.placed.length, 'uncapped quantity winner is the illegal 6').toBe(6)
+
+    const picked = pickBestCappedComplete([greedy, illegal, legal], { quality }, allowed)
+    expect(picked.placed.length, 'must ship 5 under the slot cap, not greedy 4 and not illegal 6').toBe(5)
+    expect(quality(picked).interCargoMaxMm).toBeLessThan(200)
+    expect(picked).toBe(legal)
   })
 
   it('picks the first block that finishes at 5 pieces because quantity is final count, not greedy 4', () => {
