@@ -1,6 +1,38 @@
 # Decision Log
 
 
+## 2026-08-25 数量/体积搜索：0824 合同与当前基线（已决策）
+
+- 背景：0824 件数合同此前是 `placedCount >= 500`（`packing.compactness.test.ts`），无法检测 506→504。volume 没有 0824 命名基线。终局比较若散落在 lookahead / packing / 后续 LNS 会再次分叉。
+- 选项：
+  - A. 把当前 504 写成新的数量上限并继续搜紧凑性
+  - B. 冻结 504 为重构前下限，搜索以 506 为目标；主目标回退必须失败；若搜完仍 504，停下来等产品确认 Pareto
+- 决策：B。已决策：搜索以 506 为目标，504 为当前下限，回退需产品确认。
+  - 搜索以 **506** 为目标，同时保持槽 `< 200mm`、`internal_notch = 0`
+  - **504** 为当前 `calculatePacking` quantity 实测下限（refactor snapshot）
+  - 回退低于 504 本轮失败，不得用 `>= 500` 掩盖
+  - 若搜索后仍 504，不得把 504 写成新的数量上限；需产品确认 Pareto 后才能改 golden 或部署
+- 影响：Phase 0 只加 `comparePackingQuality` 与只读基线，不改 `packing.ts` 选择逻辑，不改 `PackingResult`。
+- 后续：Phase 1 起跨 EMS 候选 / beam 必须对照下表主目标；quantity 改动不得默认降低 volume `usedVolume`。
+
+实测（`node scripts/packing-mode-baseline.mjs`，2026-08-25T06:16:58.920Z，voxel 50mm，`search: null`）：
+
+| Fixture | Mode | placed | usedVolume mm³ | util % | internal_notch voxels | interCargoMaxMm | external_residual voxels | elapsedMs |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 0824 20GP | quantity | **504** | 30243574000 | 93.634 | 0 | 150 | 20785 | 117 |
+| 0824 20GP | volume | 424 | **30725850000** | 95.128 | 0 | 0 | 15544 | 43 |
+| Vietnam 20GP | quantity | 464 | 28074481500 | 86.919 | 156 | 1100 | 32569 | 252 |
+| Vietnam 20GP | volume | 468 | 27603279500 | 85.460 | 60 | 1200 | 35960 | 170 |
+| Vietnam 40HQ | quantity | 864 | 63038263000 | 80.868 | 439 | 8050 | 98060 | 4835 |
+| Vietnam 40HQ | volume | 864 | 63038263000 | 80.868 | 693 | 10000 | 105195 | 3964 |
+| 0802 40HQ | quantity | 877 | 61046585250 | 80.274 | 120 | 6800 | 95275 | 5275 |
+| compactness seed 1/7/13 | quantity | 347 / 417 / 326 | — | — | 0 / 0 / 0 | 3100 / 1200 / 900 | — | 284 / 50 / 31 |
+
+0824 quantity SKU placed：TB-C13 56/56，TP-B10 100/100，TC-A02 160/160，TD-J03 8/120，TD-F01 180/184。volume：TN-D01 120/144，TP-B10 100/100，TC-A02 24/160，TD-F01 180/184。
+
+对照合同（本轮只记录、未改 golden）：越南 20GP 464/468、40HQ 864/864、0802 877 均命中。0824 quantity 实测就是 504，与 08-24 leftover 评分后的记录一致，没有编造。越南 20GP/40HQ 与 0802 的 `internal_notch` / 大槽是既有形态，不是本轮验收门槛。volume 0824 的 `usedVolume` 30725850000 作为后续 quantity 改动的对照下限。
+
+
 ## 2026-08-24 上层外开口槽：一步剩余评分只用于浅层 quantity（已决策）
 
 - 背景：0824 上层 `z=2025` 的 400 mm 槽来自 quantity 下同件数 `TB-C13` 的 `WLH 18×3`（5490×1590）优于 `LWH 9×6`（4770×1830）。`nextCountBound` 会把 410 mm 窄条判成更好（还能塞 10 件 C10），因此不能把「下一步件数上界」放在剩余质量的第一位。

@@ -1,6 +1,37 @@
 # Changelog
 
 
+## 2026-08-25 freeze quantity/volume objective and 0824 baselines
+
+- Added `comparePackingQuality` in `src/lib/packingObjective.ts`. Lexicographic: quantity is placedCount first; volume is usedVolume then placedCount; compactness (notch, inter-cargo, dead EMS, external residual) is secondary. Negative return means the first argument is better.
+- Did not change `packing.ts` placement. Search diagnostics stay out of `PackingResult` (`search: null` in the baseline script).
+- Read-only baseline: `node scripts/packing-mode-baseline.mjs` (Vite SSR). Output also written to gitignored `test-results/current/packing-mode-baseline.json`. Voxel 50mm. Generated at 2026-08-25T06:16:58.920Z.
+
+Measured `calculatePacking` (this run; elapsed is wall-clock):
+
+| Fixture | Mode | placed | usedVolume mm³ | util % | internal_notch voxels/vol | interCargoMaxMm | external_residual voxels/vol | elapsedMs |
+|---|---|---:|---:|---:|---|---:|---|---:|
+| 0824 20GP | quantity | 504 | 30243574000 | 93.634 | 0 / 0 | 150 | 20785 / 2598125000 | 117 |
+| 0824 20GP | volume | 424 | 30725850000 | 95.128 | 0 / 0 | 0 | 15544 / 1943000000 | 43 |
+| Vietnam 20GP | quantity | 464 | 28074481500 | 86.919 | 156 / 19500000 | 1100 | 32569 / 4071125000 | 252 |
+| Vietnam 20GP | volume | 468 | 27603279500 | 85.460 | 60 / 7500000 | 1200 | 35960 / 4495000000 | 170 |
+| Vietnam 40HQ | quantity | 864 | 63038263000 | 80.868 | 439 / 54875000 | 8050 | 98060 / 12257500000 | 4835 |
+| Vietnam 40HQ | volume | 864 | 63038263000 | 80.868 | 693 / 86625000 | 10000 | 105195 / 13149375000 | 3964 |
+| 0802 40HQ | quantity | 877 | 61046585250 | 80.274 | 120 / 15000000 | 6800 | 95275 / 11909375000 | 5275 |
+| compactness seed 1 | quantity | 347 | 18798773000 | 58.201 | 0 / 0 | 3100 | 112340 / 14042500000 | 284 |
+| compactness seed 7 | quantity | 417 | 22429316500 | 69.441 | 0 / 0 | 1200 | 83664 / 10458000000 | 50 |
+| compactness seed 13 | quantity | 326 | 19901014000 | 61.614 | 0 / 0 | 900 | 103997 / 12999625000 | 31 |
+
+0824 SKU placed (label: placed/requested):
+
+- quantity: TB-C13-EV_v1.1 56/56, TP-B10-EV_v1.0 100/100, TC-A02-EV_v1.0 160/160, TD-J03-EV_v1.0 8/120, TD-F01-EV_v1.0 180/184; other SKUs 0.
+- volume: TN-D01-EV_v1.1 120/144, TP-B10-EV_v1.0 100/100, TC-A02-EV_v1.0 24/160, TD-F01-EV_v1.0 180/184; other SKUs 0.
+
+Frozen named snapshot in `src/lib/packing.0824.baseline.test.ts`: quantity placed 504 / usedVolume 30243574000, volume placed 424 / usedVolume 30725850000, quantity and volume `internal_notch=0` and `interCargoMaxMm < 200`. This is the pre-search floor, not the 506 target.
+
+Vietnam 464/468/864/864 and 0802 877 match existing invariant contracts. Compactness seeds 1/7/13 have `internal_notch=0`. `packing.compactness.test.ts` still uses `placedCount >= 500`.
+
+
 ## 2026-08-25 quantity and volume algorithm design
 
 - Design: defined separate lexicographic contracts for `quantity` (final placed count first) and `volume` (final used volume first); compactness is a secondary objective in both modes.
