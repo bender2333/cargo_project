@@ -403,13 +403,19 @@ describe('automatic packing compactness', () => {
     expectSupportContract(result.placed)
     expectQuantityConservation(items, result)
     expect(gaps.internalNotchVoxels).toBe(0)
+    expect(
+      gaps.interCargoMaxMm,
+      `C13 must not leave a 400mm side channel; interCargo=${gaps.interCargoMaxMm}mm placed=${result.placedCount}`,
+    ).toBeLessThan(200)
+    expect(result.placedCount, 'compact C13 must not place fewer pieces than the greedy 54+10 layout').toBeGreaterThanOrEqual(64)
     const c13 = result.placed.filter((box) => box.cargoId === 'c13')
     const c13SpanY = Math.max(...c13.map((box) => box.y + box.width)) - Math.min(...c13.map((box) => box.y))
-    expect(
-      c13SpanY,
-      `C13 y-span ${c13SpanY}mm should use the 9x6 1830mm footprint instead of 18x3 1590mm; placed=${result.placedCount} interCargo=${gaps.interCargoMaxMm}`,
-    ).toBeGreaterThan(1700)
-    expect(result.placedCount, 'compact C13 must not place fewer pieces than the greedy 54+10 layout').toBeGreaterThanOrEqual(64)
+    if (result.placedCount <= 64) {
+      expect(
+        c13SpanY,
+        `equal-count C13 y-span ${c13SpanY}mm should use the 9x6 1830mm footprint instead of 18x3 1590mm; placed=${result.placedCount} interCargo=${gaps.interCargoMaxMm}`,
+      ).toBeGreaterThan(1700)
+    }
   })
 
   it('keeps origin-packed L leftover legal and does not scatter cargo to fill the door wall', () => {

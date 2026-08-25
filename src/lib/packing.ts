@@ -14,7 +14,7 @@ import {
   type BoxSize,
   type PackingPoint,
 } from './packingFeasibility'
-import { comparePackingQuality, packingQualityOf } from './packingObjective'
+import { packingQualityOf } from './packingObjective'
 import { DEFAULT_QUANTITY_SEARCH_BUDGET, optimizePacking } from './packingSearch'
 import { clonePackingSearchState, type PackingCargoState, type PackingSearchState } from './packingSearchState'
 import { GAP_FILL_SOURCE } from './placementSource'
@@ -609,6 +609,20 @@ function floorCorridorMaxMm(placed: PlacementBox[], container: ContainerSpec) {
   return longest * voxel
 }
 
+function passesQuantityHardCaps(
+  greedy: PackingSearchState,
+  candidate: PackingSearchState,
+  container: ContainerSpec,
+) {
+  const greedyQuality = packingQualityOf(greedy)
+  const candidateQuality = packingQualityOf(candidate)
+  if (greedyQuality.internalNotchVolume === 0 && candidateQuality.internalNotchVolume > 0) return false
+  if (greedyQuality.interCargoMaxMm < 200 && candidateQuality.interCargoMaxMm >= 200) return false
+  const greedyCorridor = floorCorridorMaxMm(greedy.placed, container)
+  if (greedyCorridor < 200 && floorCorridorMaxMm(candidate.placed, container) >= 200) return false
+  return true
+}
+
 function blockPlacementKey(choice: Pick<PackingBlockChoice, 'state' | 'block' | 'point'>) {
   const { state, block, point } = choice
   return [
@@ -1041,10 +1055,10 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
 
   if (useBlockEngine) {
     if (loadingMode === 'quantity') {
-      const completes: PackingSearchState[] = []
-      optimizePacking(snapshotSearchState(), {
+      let greedyComplete: PackingSearchState | undefined
+      const { state: best } = optimizePacking(snapshotSearchState(), {
         ...DEFAULT_QUANTITY_SEARCH_BUDGET,
-        maxMs: effective.length < 8000 ? 1500 : DEFAULT_QUANTITY_SEARCH_BUDGET.maxMs,
+        maxMs: 1500,
       }, {
         commit: (state, choice) => {
           applySearchState(clonePackingSearchState(state))
@@ -1055,31 +1069,15 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
           applySearchState(clonePackingSearchState(state))
           runGreedyBlockEngine()
           const done = snapshotSearchState()
-          completes.push(done)
+          if (!greedyComplete) greedyComplete = done
           return done
         },
         quality: packingQualityOf,
       })
-      const greedyComplete = completes[0]
       if (!greedyComplete) {
         runGreedyBlockEngine()
       } else {
-        const greedyQuality = packingQualityOf(greedyComplete)
-        const greedyCorridor = floorCorridorMaxMm(greedyComplete.placed, effective)
-        let chosen = greedyComplete
-        let chosenQuality = greedyQuality
-        for (const candidate of completes) {
-          const quality = packingQualityOf(candidate)
-          if (quality.placedCount <= greedyQuality.placedCount) continue
-          if (quality.internalNotchVolume > greedyQuality.internalNotchVolume) continue
-          if (quality.interCargoMaxMm > greedyQuality.interCargoMaxMm) continue
-          if (floorCorridorMaxMm(candidate.placed, effective) > greedyCorridor) continue
-          if (comparePackingQuality(quality, chosenQuality, 'quantity') < 0) {
-            chosen = candidate
-            chosenQuality = quality
-          }
-        }
-        applySearchState(chosen)
+        applySearchState(passesQuantityHardCaps(greedyComplete, best, effective) ? best : greedyComplete)
       }
     } else {
       runGreedyBlockEngine()

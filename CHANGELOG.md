@@ -1,6 +1,15 @@
 # Changelog
 
 
+## 2026-08-25 rank beam states and keep slot caps
+
+- Rank first-block candidates by `optimisticCountBound` **before** `commit` / `statesExpanded`, then expand in that order so depth 2 still runs under `maxStates: 32`.
+- Bound is `placedCount + min(remainingQty, overlapping-EMS geometric capacity)` so leftover geometry ranks; `placed + remainingQty` with no geometry is not enough.
+- Production uses the searcher `comparePackingQuality` winner. Hard caps only: if greedy notch is 0 keep 0; if greedy inter-cargo `< 200` keep `< 200` (180mm is legal, 400mm is not); if greedy floor corridor `< 200` keep `< 200`. Do not require beam slot ≤ greedy 150mm.
+- Isolated C13 360mm space: 64→**67** via 18×3 with the side channel filled (`interCargo` 0). Equal-count still requires 9×6 y-span; higher count may change footprint. 0824 full load still **504**, slot 150, notch 0. 506 not recovered.
+
+Verification: packingSearch 9 (RED then GREEN for bound + depth-2), 0824 baseline 2, compactness 7, invariants 15, blockEngine 6 — **39 passed**. packing.test 57. eslint 0. `npx tsc -b` exit 0. Not deployed.
+
 ## 2026-08-25 bounded quantity beam search
 
 - Added `src/lib/packingSearch.ts`: `optimizePacking` with default budget width 8 / depth 2 / 32 states / 8s. Incumbent is greedy+residual. Leaves are completed the same way and compared with `comparePackingQuality(..., 'quantity')`. `optimisticCountBound` is leftover size-fit remaining and must not underestimate.

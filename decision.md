@@ -1,6 +1,18 @@
 # Decision Log
 
 
+## 2026-08-25 beam 硬帽是测试门槛，不是 greedy 槽不得变差（已决策）
+
+- 背景：第一版 overlay 要求件数严格更多且 notch/槽/走廊都不比 greedy 差。这样会拒绝 **506 + 槽 180mm**（合法 `< 200`），只因为 greedy 槽是 150。
+- 选项：
+  - A. 继续「不得差于 greedy 槽」
+  - B. 硬帽对齐现有测试：greedy notch=0 则保持 0；greedy 槽 `< 200` 则保持 `< 200`；greedy 地板走廊 `< 200` 则保持 `< 200`。通过帽子的布局用 `optimizePacking` 的 `comparePackingQuality` 赢家
+- 决策：B。已决策。`calculatePacking` 使用搜索器返回值；帽子失败才回 greedy。不再用第二套 `completes[]` 选主。
+- 实测：0824 全柜仍 **504** / 槽 150 / notch 0。C13 360mm 隔离用例 64→67（18×3 把侧槽填掉，interCargo 0）。未找到 506+槽 `< 200`。
+- 影响：件数优先在帽子内生效。不得把 504 写成上限。
+- 后续：Task 3 volume beam。若全柜 0824 出现 ≥506 且槽 `< 200`、notch 0，再冻结 snapshot。
+
+
 ## 2026-08-25 quantity beam 未收回 506，504/紧凑性 Pareto（已决策）
 
 - 背景：Task 2 要求 quantity 走有预算 beam，终局用 `comparePackingQuality` 比完整布局。搜索目标 0824 **506** 且槽 `< 200mm`、`internal_notch = 0`。Naive 全局 count-max 曾把越南 20GP 打到 434。

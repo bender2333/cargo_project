@@ -1,4 +1,5 @@
 import { bestBlocksForSpace } from './blocks'
+import { splitEMS } from './emsSpace'
 import { generateBlockCandidates, type PackingBlockChoice } from './packingCandidates'
 import { canStageBlock } from './packingFeasibility'
 import { comparePackingQuality, type PackingQuality } from './packingObjective'
@@ -52,31 +53,64 @@ function maxBlockCount(item: PackingSearchState['cargoStates'][number]['item'], 
   return best
 }
 
-export function optimisticCountBound(state: PackingSearchState): number {
-  const placedCount = state.placed.length
+function remainingDemand(cargoStates: PackingSearchState['cargoStates']) {
   let remainingQty = 0
-  let skuGeometric = 0
-  for (const cargo of state.cargoStates) {
-    if (cargo.remaining <= 0) continue
-    remainingQty += cargo.remaining
-    let fitted = 0
-    for (const ems of state.emsList) {
-      fitted += maxBlockCount(cargo.item, cargo.remaining, ems)
-    }
-    skuGeometric += Math.min(cargo.remaining, fitted)
-  }
+  for (const cargo of cargoStates) remainingQty += Math.max(0, cargo.remaining)
+  return remainingQty
+}
+
+function optimisticEmsCapacity(
+  emsList: PackingSearchState['emsList'],
+  cargoStates: PackingSearchState['cargoStates'],
+) {
+  const remainingQty = remainingDemand(cargoStates)
+  if (remainingQty <= 0) return 0
 
   let emsGeometric = 0
-  for (const ems of state.emsList) {
+  for (const ems of emsList) {
     let best = 0
-    for (const cargo of state.cargoStates) {
+    for (const cargo of cargoStates) {
       if (cargo.remaining <= 0) continue
       best = Math.max(best, maxBlockCount(cargo.item, cargo.remaining, ems))
     }
     emsGeometric += best
   }
 
-  return placedCount + Math.max(remainingQty, skuGeometric, emsGeometric)
+  let skuGeometric = 0
+  for (const cargo of cargoStates) {
+    if (cargo.remaining <= 0) continue
+    let fitted = 0
+    for (const ems of emsList) fitted += maxBlockCount(cargo.item, cargo.remaining, ems)
+    skuGeometric += Math.min(cargo.remaining, fitted)
+  }
+
+  return Math.min(remainingQty, Math.max(emsGeometric, skuGeometric))
+}
+
+export function optimisticCountBound(state: PackingSearchState): number {
+  return state.placed.length + optimisticEmsCapacity(state.emsList, state.cargoStates)
+}
+
+function scoreChoice(state: PackingSearchState, choice: PackingBlockChoice) {
+  const cargoStates = state.cargoStates.map((cargo) => {
+    if (cargo.item.id !== choice.cargoId || cargo.itemIndex !== choice.state.itemIndex) return cargo
+    return { ...cargo, remaining: cargo.remaining - choice.block.count }
+  })
+  const emsList = splitEMS(state.emsList, {
+    x: choice.point.x,
+    y: choice.point.y,
+    z: choice.point.z,
+    length: choice.block.length,
+    width: choice.block.width,
+    height: choice.block.height,
+  })
+  const placed = state.placed.length + choice.block.count
+  return {
+    choice,
+    bound: placed + optimisticEmsCapacity(emsList, cargoStates),
+    placed,
+    volume: usedVolumeOf(state) + choice.block.volume,
+  }
 }
 
 export function optimizePacking(
@@ -144,26 +178,29 @@ export function optimizePacking(
     }
 
     const generated = generateBlockCandidates(state, 'quantity')
-    const ranked: Array<{ state: PackingSearchState; bound: number; placed: number; volume: number }> = []
+    const ranked: Array<ReturnType<typeof scoreChoice>> = []
     for (const choice of generated) {
       candidatesEvaluated += 1
+      if (outOfTime()) {
+        budgetExceeded = true
+        break
+      }
+      ranked.push(scoreChoice(state, choice))
+    }
+    ranked.sort((a, b) => b.bound - a.bound || b.placed - a.placed || b.volume - a.volume)
+
+    const kept: PackingSearchState[] = []
+    for (const entry of ranked) {
+      if (kept.length >= beamWidth) break
       if (outOfTime() || outOfStates()) {
         budgetExceeded = true
         break
       }
-      if (!canStageBlock(state, choice)) continue
-      const next = hooks.commit(clonePackingSearchState(state), choice)
+      if (!canStageBlock(state, entry.choice)) continue
+      kept.push(hooks.commit(clonePackingSearchState(state), entry.choice))
       statesExpanded += 1
-      ranked.push({
-        state: next,
-        bound: optimisticCountBound(next),
-        placed: next.placed.length,
-        volume: usedVolumeOf(next),
-      })
     }
-
-    ranked.sort((a, b) => b.bound - a.bound || b.placed - a.placed || b.volume - a.volume)
-    return ranked.slice(0, beamWidth).map((entry) => entry.state)
+    return kept
   }
 
   const completeLeaves = (leaves: PackingSearchState[]) => {

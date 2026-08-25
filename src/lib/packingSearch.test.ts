@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { CargoItem, PlacementBox } from '../types'
 import { bestBlocksForSpace } from './blocks'
+import { splitEMS } from './emsSpace'
 import { generateBlockCandidates, type PackingBlockChoice } from './packingCandidates'
 import { MINIMUM_SUPPORT_RATIO } from './packingFeasibility'
 import type { PackingQuality } from './packingObjective'
@@ -269,7 +270,7 @@ describe('quantity beam search', () => {
     expect(zeroMs.search.budgetExceeded).toBe(true)
   })
 
-  it('optimistic count bound is at least leftover size-fit remaining and must not underestimate', () => {
+  it('optimistic count bound uses leftover geometry so placed+remainingQty without geometry fails when leftover is tighter', () => {
     const item: CargoItem = {
       id: 'fit',
       name: 'fit',
@@ -283,18 +284,19 @@ describe('quantity beam search', () => {
       canRotate: false,
       stackable: true,
     }
-    const leftover = { x: 0, y: 0, z: 0, length: 2000, width: 1000, height: 500 }
+    const leftover = { x: 0, y: 0, z: 0, length: 1500, width: 500, height: 500 }
     const geometric = bestBlocksForSpace(item, 8, leftover)
     const sizeFit = Math.max(0, ...geometric.map((block) => block.count))
-    expect(sizeFit, 'constructed leftover must size-fit several cubes').toBeGreaterThanOrEqual(8)
+    expect(sizeFit, 'constructed leftover must size-fit some but not all remaining cubes').toBeGreaterThan(0)
+    expect(sizeFit).toBeLessThan(8)
 
     const state: PackingSearchState = {
       container: {
         id: 'bound',
         label: 'bound',
         description: 'bound',
-        length: 2000,
-        width: 1000,
+        length: 1500,
+        width: 500,
         height: 500,
         maxWeight: 10_000,
         doorGap: 0,
@@ -310,12 +312,107 @@ describe('quantity beam search', () => {
     }
 
     const bound = optimisticCountBound(state)
+    const remainingQty = 8
     expect(bound).toBeGreaterThanOrEqual(state.placed.length + sizeFit)
-    expect(bound).toBeGreaterThanOrEqual(state.placed.length + 8)
+    expect(
+      bound,
+      'bound must follow leftover EMS capacity, not remaining demand alone',
+    ).toBeLessThan(state.placed.length + remainingQty)
 
-    const underestimated = state.placed.length + 0
-    expect(underestimated, 'a proven-zero leftover bound would hide placeable remaining').toBeLessThan(sizeFit)
-    expect(bound).toBeGreaterThan(underestimated)
+    const demandOnly = state.placed.length + remainingQty
+    expect(demandOnly, 'placed+remainingQty ignores tighter leftover geometry').toBeGreaterThan(bound)
+  })
+
+  it('still finds a better depth-2 complete when first-block candidates exceed maxStates', () => {
+    const item = cube()
+    const emsList = Array.from({ length: 10 }, (_, index) => ({
+      x: index * 1000,
+      y: 0,
+      z: 0,
+      length: 1000,
+      width: 1000,
+      height: 1000,
+    }))
+    const initial: PackingSearchState = {
+      container: {
+        id: 'many-ems',
+        label: 'many-ems',
+        description: 'more first-block candidates than maxStates',
+        length: 10000,
+        width: 1000,
+        height: 1000,
+        maxWeight: 50_000,
+        doorGap: 0,
+        topGap: 0,
+        sideGap: 0,
+      },
+      cargoStates: [{ item, itemIndex: 0, label: 'C', remaining: 8, nextIndex: 1 }],
+      emsList,
+      placed: [],
+      placedById: new Map(),
+      usedWeight: 0,
+      minSupportRatio: MINIMUM_SUPPORT_RATIO,
+    }
+
+    const generated = generateBlockCandidates(initial, 'quantity')
+    expect(generated.length).toBeGreaterThan(3)
+
+    const commitAcrossEms = (state: PackingSearchState, choice: PackingBlockChoice) => {
+      const next = clonePackingSearchState(state)
+      const cargo = next.cargoStates.find((entry) => entry.item.id === choice.cargoId)
+      if (!cargo || cargo.remaining < choice.block.count) return next
+      cargo.remaining -= choice.block.count
+      cargo.nextIndex += choice.block.count
+      const start = next.placed.length
+      for (let i = 0; i < choice.block.count; i += 1) {
+        const index = start + i + 1
+        const box = dummyBox({
+          id: `${choice.cargoId}-${index}`,
+          index,
+          x: choice.point.x + i * choice.block.box.length,
+          y: choice.point.y,
+          z: choice.point.z,
+        })
+        next.placed.push(box)
+        next.placedById.set(box.id, box)
+      }
+      next.usedWeight += choice.block.weight
+      next.emsList = splitEMS(next.emsList, {
+        x: choice.point.x,
+        y: choice.point.y,
+        z: choice.point.z,
+        length: choice.block.length,
+        width: choice.block.width,
+        height: choice.block.height,
+      })
+      return next
+    }
+
+    const hooks: PackingSearchHooks = {
+      commit: commitAcrossEms,
+      complete: (state) => {
+        const next = clonePackingSearchState(state)
+        if (next.placed.length === 0) {
+          addBoxes(next, 4)
+          return next
+        }
+        const target = next.placed.length >= 2 ? 5 : 4
+        while (next.placed.length < target) addBoxes(next, 1)
+        return next
+      },
+      quality: (state) => qualityOf(state, 0),
+    }
+
+    const greedy = hooks.complete(clonePackingSearchState(initial))
+    expect(greedy.placed.length).toBe(4)
+
+    const result = optimizePacking(initial, { beamWidth: 2, depth: 2, maxStates: 3, maxMs: 8000 }, hooks)
+    expect(
+      result.state.placed.length,
+      'ranking first-block candidates before committing must leave maxStates for a depth-2 5-piece complete',
+    ).toBe(5)
+    expect(result.search.strategy).toBe('beam')
+    expect(result.search.statesExpanded).toBeLessThanOrEqual(3)
   })
 
   it('mutating clone A placed/emsList does not change clone B', () => {
