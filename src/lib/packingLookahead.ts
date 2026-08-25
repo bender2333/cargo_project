@@ -176,26 +176,7 @@ export function assignRemainingQuality<T extends ScoredBlockChoice>(
       : maxVolume - choice.block.volume <= maxVolume * 0.0001
   ))
 
-  const ranked = near.slice().sort((a, b) => compareBlockPlacement({
-    count: a.block.count,
-    volume: a.block.volume,
-    footprintArea: a.block.volume,
-    waste: 0,
-    axisFill: 0,
-    minAxisFill: 0,
-    point: a.point,
-  }, {
-    count: b.block.count,
-    volume: b.block.volume,
-    footprintArea: b.block.volume,
-    waste: 0,
-    axisFill: 0,
-    minAxisFill: 0,
-    point: b.point,
-  }, loadingMode))
-
-  const frontier = ranked.slice(0, MAX_LOOKAHEAD_CANDIDATES)
-  return frontier.map((choice) => {
+  return near.map((choice) => {
     const remaining = cargoStates.map((cargo) => (
       cargo.item === choice.state.item || cargo.item.id === choice.state.item.id
         ? { item: cargo.item, remaining: cargo.remaining - choice.block.count }

@@ -70,54 +70,50 @@ function candidateKey(choice: { cargoId: string; block: { orientationKey: string
 }
 
 describe('cross-EMS block candidates', () => {
-  it('picks the later EMS when it holds a higher quantity block', () => {
+  it('keeps the origin EMS when a later space only offers a larger current count', () => {
     const item = cargo({ quantity: 10 })
-    const early = { x: 0, y: 0, z: 0, length: 1000, width: 1000, height: 1000 }
+    const origin = { x: 0, y: 0, z: 0, length: 1000, width: 1000, height: 1000 }
     const later = { x: 3000, y: 0, z: 0, length: 2000, width: 2000, height: 1000 }
-    const state = stateFor(item, [early, later])
+    const state = stateFor(item, [origin, later])
 
     const candidates = generateBlockCandidates(state, 'quantity')
-    expect(candidates.some((choice) => choice.point.x === early.x)).toBe(true)
-    expect(candidates.some((choice) => choice.point.x === later.x)).toBe(true)
+    expect(candidates.some((choice) => choice.point.x === origin.x)).toBe(true)
+    expect(candidates.some((choice) => choice.point.x === later.x && choice.block.count > 1)).toBe(true)
 
     const picked = selectBlockCandidate(candidates, 'quantity', state)
     expect(picked).toBeDefined()
-    expect(picked!.point.x).toBe(later.x)
-    expect(picked!.ems.x).toBe(later.x)
-    expect(picked!.block.count).toBeGreaterThan(1)
+    expect(picked!.point.x).toBe(origin.x)
+    expect(picked!.ems.x).toBe(origin.x)
   })
 
-  it('picks the later EMS when it holds a higher volume block', () => {
+  it('keeps the origin EMS when a later space only offers a larger current volume', () => {
     const item = cargo({ quantity: 10 })
-    const early = { x: 0, y: 0, z: 0, length: 1000, width: 1000, height: 1000 }
+    const origin = { x: 0, y: 0, z: 0, length: 1000, width: 1000, height: 1000 }
     const later = { x: 4000, y: 0, z: 0, length: 2000, width: 2000, height: 1000 }
-    const state = stateFor(item, [early, later])
+    const state = stateFor(item, [origin, later])
 
     const picked = selectBlockCandidate(generateBlockCandidates(state, 'volume'), 'volume', state)
     expect(picked).toBeDefined()
-    expect(picked!.point.x).toBe(later.x)
-    expect(picked!.ems.x).toBe(later.x)
-    expect(picked!.block.volume).toBeGreaterThan(1_000_000_000)
+    expect(picked!.point.x).toBe(origin.x)
+    expect(picked!.ems.x).toBe(origin.x)
   })
 
-  it('lets a later EMS win when the first space has a larger current footprint but a worse count', () => {
-    const item = cargo({ quantity: 10 })
-    // First EMS is a long 3-unit floor strip (larger current XY block, count 3).
-    // Later EMS is a 4-high column (better quantity/volume). Old first-EMS return would commit the strip.
-    const early = { x: 0, y: 0, z: 0, length: 3000, width: 1000, height: 1000 }
-    const later = { x: 5000, y: 0, z: 0, length: 1000, width: 1000, height: 4000 }
-    const state = stateFor(item, [early, later])
+  it('picks a later EMS when equal-count leftover is a less-narrow channel', () => {
+    const item = cargo({ quantity: 8 })
+    const origin = { x: 0, y: 0, z: 0, length: 2000, width: 2000, height: 1000 }
+    const later = { x: 3000, y: 0, z: 0, length: 4000, width: 1000, height: 1000 }
+    const state = stateFor(item, [origin, later])
 
     const quantityPick = selectBlockCandidate(generateBlockCandidates(state, 'quantity'), 'quantity', state)
     expect(quantityPick).toBeDefined()
+    expect(quantityPick!.block.count).toBe(4)
     expect(quantityPick!.ems.x).toBe(later.x)
     expect(quantityPick!.point.x).toBe(later.x)
-    expect(quantityPick!.block.count).toBe(4)
 
     const volumePick = selectBlockCandidate(generateBlockCandidates(state, 'volume'), 'volume', state)
     expect(volumePick).toBeDefined()
-    expect(volumePick!.ems.x).toBe(later.x)
     expect(volumePick!.block.count).toBe(4)
+    expect(volumePick!.ems.x).toBe(later.x)
   })
 
   it('dedupes the same sku/orientation/nx/ny/nz/point once', () => {

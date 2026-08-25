@@ -19,6 +19,18 @@
 - 后续：Task 2 beam 才在搜索宽度上用全局 `selectBlockCandidate`；若要 greedy 跨 EMS，必须先有不牺牲 20GP 件数的层内约束，而不是把 count-max 直接接到提交。
 
 
+## 2026-08-25 跨 EMS greedy = 近件数 leftover，不是 count-max（已决策）
+
+- 背景：评审要求生产路径把**全部**候选交给 `selectBlockCandidate`，并删掉 first-EMS 提交。此前 naive 全局 `compareBlockPlacement` 按更大 count/volume 跳到远处 EMS，Vietnam 20GP 464→434。
+- 选项：
+  - A. 继续 first-EMS 提交（与「过时局部贪心直接删」冲突）
+  - B. 全局 count-max（已否决）
+  - C. 全局比较，但装箱前线（更小 x,z,y）优先；仅当件数/体积近窗口且 leftover 更好时，后 EMS 才可赢
+- 决策：C。已决策。`packing.ts` `selectBlockPlacement` 只过滤 rejected/accepts 后调用 `selectBlockCandidate(candidates, mode, state)`。数量 leftover 只在浅层 frontier 上跨 EMS 赋分；体积在近体积窗口且多 EMS 时赋 leftover。Task 2 beam 用终局 `comparePackingQuality`，不把 greedy 前线规则当成搜索目标。
+- 实测：0824 quantity 仍 504（槽 <200、internal_notch 0）；Vietnam 20GP quantity 464 不变；volume **468→473**、usedVolume 27603279500→29937044000；40HQ 864/864（volume 合同 hash 因层序变化刷新）；0802 877。
+- 影响：`packingInvariants` volume 下限改为 473（件数上升，不是回退）。`vietnam-20gp-volume` / `vietnam-40hq-volume` 合同 hash 已刷新。不得把 434 当新下限。
+
+
 ## 2026-08-25 数量/体积搜索：0824 合同与当前基线（已决策）
 
 - 背景：0824 件数合同此前是 `placedCount >= 500`（`packing.compactness.test.ts`），无法检测 506→504。volume 没有 0824 命名基线。终局比较若散落在 lookahead / packing / 后续 LNS 会再次分叉。

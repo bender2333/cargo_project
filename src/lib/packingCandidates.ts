@@ -1,6 +1,12 @@
 import { bestBlocksForSpace, maxBlocksForSpace, type BlockCandidate } from './blocks'
 import type { EmptyMaximalSpace } from './emsSpace'
-import { assignRemainingQuality, compareBlockPlacement, type RemainingEmsQuality } from './packingLookahead'
+import {
+  QUANTITY_COUNT_NEAR_WINDOW,
+  assignRemainingQuality,
+  compareBlockPlacement,
+  compareRemainingEmsQuality,
+  type RemainingEmsQuality,
+} from './packingLookahead'
 import type { PackingCargoState, PackingSearchState } from './packingSearchState'
 
 const EPSILON = 0.001
@@ -108,6 +114,78 @@ export function generateBlockCandidates(
   return choices
 }
 
+function emsKey(ems: EmptyMaximalSpace) {
+  return `${ems.x}:${ems.y}:${ems.z}:${ems.length}x${ems.width}x${ems.height}`
+}
+
+function isNearEqualPrimary(a: PackingBlockChoice, b: PackingBlockChoice, loadingMode: 'quantity' | 'volume') {
+  if (loadingMode === 'quantity') {
+    return Math.abs(a.block.count - b.block.count) <= QUANTITY_COUNT_NEAR_WINDOW
+  }
+  const maxVolume = Math.max(a.block.volume, b.block.volume)
+  return Math.abs(a.block.volume - b.block.volume) <= maxVolume * 0.0001
+}
+
+function packingFrontDelta(a: PackingBlockChoice, b: PackingBlockChoice) {
+  return a.point.x - b.point.x || a.point.z - b.point.z || a.point.y - b.point.y
+}
+
+/** Packing-front greedy: later EMS cannot win on a larger current block alone. */
+function compareSelectBlockCandidate(
+  a: PackingBlockChoice,
+  b: PackingBlockChoice,
+  loadingMode: 'quantity' | 'volume',
+) {
+  const front = packingFrontDelta(a, b)
+  if (front !== 0) {
+    if (!isNearEqualPrimary(a, b, loadingMode)) return front
+    const quality = a.remainingQuality && b.remainingQuality
+      ? compareRemainingEmsQuality(a.remainingQuality, b.remainingQuality)
+      : 0
+    if (quality !== 0 && a.cargoId === b.cargoId) return quality
+    return front
+  }
+  return compareBlockPlacement(choiceMetrics(a), choiceMetrics(b), loadingMode)
+}
+
+function withRemainingQuality(
+  candidates: PackingBlockChoice[],
+  loadingMode: 'quantity' | 'volume',
+  state: PackingSearchState,
+): PackingBlockChoice[] {
+  if (candidates.length === 0) return candidates
+
+  const maxCount = Math.max(...candidates.map((choice) => choice.block.count))
+  const maxVolume = Math.max(...candidates.map((choice) => choice.block.volume))
+  const near = candidates.filter((choice) => (
+    loadingMode === 'quantity'
+      ? maxCount - choice.block.count <= QUANTITY_COUNT_NEAR_WINDOW
+      : maxVolume - choice.block.volume <= maxVolume * 0.0001
+  ))
+  const frontier = candidates.filter((choice) => shouldUseFrontier(loadingMode, choice.ems, state.cargoStates))
+  const nearFrontier = near.filter((choice) => shouldUseFrontier(loadingMode, choice.ems, state.cargoStates))
+  const nearFrontierEms = new Set(nearFrontier.map((choice) => emsKey(choice.ems)))
+  const nearEms = new Set(near.map((choice) => emsKey(choice.ems)))
+  const toScore = loadingMode === 'volume'
+    ? (nearEms.size > 1 ? near : [])
+    : nearFrontierEms.size > 1
+      ? nearFrontier
+      : frontier
+  if (toScore.length === 0) return candidates
+
+  const scored = assignRemainingQuality(
+    toScore,
+    state.emsList,
+    state.cargoStates.map((entry) => ({ item: entry.item, remaining: entry.remaining })),
+    loadingMode,
+  )
+  const qualityByKey = new Map(scored.map((choice) => [candidateKey(choice), choice.remainingQuality]))
+  return candidates.map((choice) => {
+    const remainingQuality = qualityByKey.get(candidateKey(choice))
+    return remainingQuality ? { ...choice, remainingQuality } : choice
+  })
+}
+
 export function selectBlockCandidate(
   candidates: PackingBlockChoice[],
   loadingMode: 'quantity' | 'volume',
@@ -115,26 +193,10 @@ export function selectBlockCandidate(
 ): PackingBlockChoice | undefined {
   if (candidates.length === 0) return undefined
 
-  const leftover: PackingBlockChoice[] = []
-  const others: PackingBlockChoice[] = []
-  for (const choice of candidates) {
-    if (shouldUseFrontier(loadingMode, choice.ems, state.cargoStates)) leftover.push(choice)
-    else others.push(choice)
-  }
-
-  const scoredLeftover = leftover.length > 0
-    ? assignRemainingQuality(
-      leftover,
-      state.emsList,
-      state.cargoStates.map((entry) => ({ item: entry.item, remaining: entry.remaining })),
-      loadingMode,
-    )
-    : []
-
-  const pool: PackingBlockChoice[] = [...scoredLeftover, ...others]
+  const pool = withRemainingQuality(candidates, loadingMode, state)
   let best: PackingBlockChoice | undefined
   for (const choice of pool) {
-    if (!best || compareBlockPlacement(choiceMetrics(choice), choiceMetrics(best), loadingMode) < 0) {
+    if (!best || compareSelectBlockCandidate(choice, best, loadingMode) < 0) {
       best = choice
     }
   }

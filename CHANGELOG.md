@@ -1,6 +1,17 @@
 # Changelog
 
 
+## 2026-08-25 compete equal-count leftover across EMS
+
+- Production `selectBlockPlacement` now passes the **full** candidate list into `selectBlockCandidate` (no first-EMS early return).
+- Greedy ranking keeps the packing front (lower x,z,y). A later EMS cannot win only because `block.count` / `block.volume` is larger. It may win when the primary metric is near-equal and leftover quality is better, with leftover scored across those near-equal candidates from every EMS.
+- Tests: origin EMS kept against a far higher-count space; equal-count later EMS wins when leftover is a less-narrow channel; `calculatePacking` two-SKU load starts at x=0.
+- Vietnam 20GP volume 468→473 (usedVolume 27603279500→29937044000). Quantity 464 unchanged. 0824 quantity 504 unchanged. 40HQ 864/864. 0802 877.
+- Refreshed packing contracts `vietnam-20gp-volume` and `vietnam-40hq-volume`. Updated invariants volume placed 473.
+
+Verification: `npx vitest run` packingFeasibility, packingCandidates, packingSearchState, packingLookahead, packing.crossEms, packing.0824.baseline, packing.compactness, packingInvariants, packing.blockEngine — **51 passed**. Touched-file eslint 0. `npx tsc -b` exit 0. Not deployed.
+
+
 ## 2026-08-25 compete block candidates across all EMS
 
 - Extracted shared `canPlaceBox` / `canStageBlock` into `src/lib/packingFeasibility.ts`. `packing.ts` weight/input/residual and block staging call the same function; no second legality copy.

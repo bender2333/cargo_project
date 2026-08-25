@@ -870,31 +870,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     const mode = loadingMode === 'volume' ? 'volume' : 'quantity'
     const candidates = generateBlockCandidates(searchState, mode)
       .filter((choice) => !rejected.has(blockPlacementKey(choice)) && accepts(choice))
-    // Naive global compareBlockPlacement across all EMS drops Vietnam 20GP
-    // 464→434 (floor corridors). Keep first-EMS commit until Task 2 beam;
-    // generateBlockCandidates still enumerates every EMS.
-    const seen = new Set<string>()
-    const spaces = []
-    for (const choice of candidates) {
-      const key = `${choice.ems.x}:${choice.ems.y}:${choice.ems.z}:${choice.ems.length}x${choice.ems.width}x${choice.ems.height}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      spaces.push(choice.ems)
-    }
-    spaces.sort((a, b) => a.x - b.x || a.z - b.z || a.y - b.y)
-    for (const ems of spaces) {
-      const emsChoices = candidates.filter((choice) => (
-        choice.ems.x === ems.x
-        && choice.ems.y === ems.y
-        && choice.ems.z === ems.z
-        && choice.ems.length === ems.length
-        && choice.ems.width === ems.width
-        && choice.ems.height === ems.height
-      ))
-      const picked = selectBlockCandidate(emsChoices, mode, searchState)
-      if (picked) return picked
-    }
-    return undefined
+    return selectBlockCandidate(candidates, mode, searchState)
   }
 
   const placeBlocks = (accepts: (choice: PackingBlockChoice) => boolean) => {
