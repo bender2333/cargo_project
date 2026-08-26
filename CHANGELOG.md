@@ -1,6 +1,12 @@
 # Changelog
 
 
+## 2026-08-26 packing search stats elapsedMs diagnostic seam
+
+- `PackingSearchStats` now includes `elapsedMs` with `statesExpanded`, `candidatesEvaluated`, `budgetExceeded`, and `claim: 'best-found-within-budget'`. Stats stay off `PackingResult`.
+- `lastPackingSearchStats()` is documented as a single-thread test/benchmark diagnostic. It is not a concurrency-safe production API.
+- packingSearch 23, packing.quantityFirst 8. Did not change goldens.
+
 ## 2026-08-26 budget-controlled packing search
 
 - `optimizePacking` is no longer hard-capped at depth 2. Expansion is jointly limited by `beamWidth`, `maxStates`, `maxMs`, and optional `maxDepth`. Default budget is width 8 / 32 states / 8s with no maxDepth.

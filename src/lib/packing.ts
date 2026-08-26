@@ -574,6 +574,11 @@ function cargoVolume(item: CargoItem) {
 
 let lastSearchStats: PackingSearchStats | null = null
 
+/**
+ * Last `calculatePacking` search stats on this JavaScript thread.
+ * Test / benchmark diagnostic seam only. Not concurrency-safe.
+ * Not part of `PackingResult` and must not be treated as a production API.
+ */
 export function lastPackingSearchStats(): PackingSearchStats | null {
   return lastSearchStats
 }
@@ -588,6 +593,7 @@ function greedySearchStats(): PackingSearchStats {
     statesExpanded: 0,
     candidatesEvaluated: 0,
     budgetExceeded: false,
+    elapsedMs: 0,
     claim: 'best-found-within-budget',
   }
 }

@@ -296,6 +296,8 @@ describe('quantity beam search', () => {
     const zeroMs = optimizePacking(initial, { beamWidth: 8, maxStates: 32, maxMs: 0 }, hooks, 'quantity')
     expect(zeroMs.state.placed.length).toBeGreaterThan(0)
     expect(zeroMs.search.budgetExceeded).toBe(true)
+    expect(zeroMs.search.elapsedMs).toBeGreaterThanOrEqual(0)
+    expect(zeroStates.search.elapsedMs).toBeGreaterThanOrEqual(0)
   })
 
   it('optimistic count bound uses leftover geometry so placed+remainingQty without geometry fails when leftover is tighter', () => {

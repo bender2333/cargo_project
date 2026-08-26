@@ -98,6 +98,12 @@ describe('quantity-first production path', () => {
     expect(returnBeforeLoopEnd).not.toMatch(/return choices/)
   })
 
+  it('documents lastPackingSearchStats as a single-thread diagnostic seam', () => {
+    const packingSource = readFileSync(resolve('src/lib/packing.ts'), 'utf8')
+    expect(packingSource).toMatch(/Not concurrency-safe/)
+    expect(packingSource).toMatch(/Test \/ benchmark diagnostic seam only/)
+  })
+
   it('publishes search stats after calculatePacking instead of dropping them', () => {
     const items: CargoItem[] = [
       cargo({ id: 'A', length: 400, width: 300, height: 400, quantity: 50, canRotate: true, stackable: true, weight: 8 }),
@@ -106,13 +112,17 @@ describe('quantity-first production path', () => {
     const box = gp20()
     expect(shouldUseBlockEngine(items, 'quantity', box)).toBe(true)
 
-    calculatePacking(box, items, { loadingMode: 'quantity' })
+    const result = calculatePacking(box, items, { loadingMode: 'quantity' })
     const stats = lastPackingSearchStats()
     expect(stats, 'calculatePacking must keep search telemetry').not.toBeNull()
     expect(stats?.claim).toBe('best-found-within-budget')
     expect(stats?.statesExpanded).toBeGreaterThanOrEqual(0)
     expect(stats?.candidatesEvaluated).toBeGreaterThanOrEqual(0)
     expect(typeof stats?.budgetExceeded).toBe('boolean')
+    expect(stats?.elapsedMs).toBeGreaterThanOrEqual(0)
+    expect(result).not.toHaveProperty('search')
+    expect(result).not.toHaveProperty('statesExpanded')
+    expect(result).not.toHaveProperty('budgetExceeded')
   })
 
   it('does not put LNS or the exact solver on the default calculatePacking path', () => {

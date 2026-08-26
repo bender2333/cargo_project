@@ -24,6 +24,7 @@ export type PackingSearchStats = {
   statesExpanded: number
   candidatesEvaluated: number
   budgetExceeded: boolean
+  elapsedMs: number
   /** Search never claims a global optimum; this is the best complete found in budget. */
   claim: 'best-found-within-budget'
 }
@@ -153,12 +154,14 @@ function searchStats(
   statesExpanded: number,
   candidatesEvaluated: number,
   budgetExceeded: boolean,
+  elapsedMs: number,
 ): PackingSearchStats {
   return {
     strategy,
     statesExpanded,
     candidatesEvaluated,
     budgetExceeded,
+    elapsedMs,
     claim: 'best-found-within-budget',
   }
 }
@@ -223,7 +226,7 @@ export function optimizePacking(
   if (budget.maxStates <= 0 || outOfTime()) {
     return {
       state: incumbent,
-      search: searchStats('greedy', statesExpanded, candidatesEvaluated, true),
+      search: searchStats('greedy', statesExpanded, candidatesEvaluated, true, Date.now() - startedAt),
       completes,
     }
   }
@@ -232,7 +235,7 @@ export function optimizePacking(
   if (remainingAfterIncumbent <= 0) {
     return {
       state: incumbent,
-      search: searchStats('greedy', statesExpanded, candidatesEvaluated, false),
+      search: searchStats('greedy', statesExpanded, candidatesEvaluated, false, Date.now() - startedAt),
       completes,
     }
   }
@@ -322,7 +325,7 @@ export function optimizePacking(
 
   return {
     state: incumbent,
-    search: searchStats(strategy, statesExpanded, candidatesEvaluated, budgetExceeded),
+    search: searchStats(strategy, statesExpanded, candidatesEvaluated, budgetExceeded, Date.now() - startedAt),
     completes,
   }
 }
