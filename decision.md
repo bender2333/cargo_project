@@ -1,6 +1,15 @@
 # Decision Log
 
 
+## 2026-08-26 0824 本轮仍是 504，未形成 504/506/524 Pareto（已记录）
+
+- 背景：共享搜索内核、quantity 词典序、volume 去掉 golden 保护之后，重新跑 0824。
+- 实测 quantity：**504** / usedVolume 30243574000 / notch 0 / unsupportedSpanRisk 256683375 / interCargo 150mm / 2011ms / statesExpanded 8 / candidatesEvaluated 135 / budgetExceeded true / strategy greedy。volume：**424** / 30725850000 / notch 0 / risk 0 / slot 0 / 1816ms / 8 states / budgetExceeded / strategy greedy。搜索运行但未改善。
+- 决策：不更新 golden。不把 504 写成上限。不部署。本轮没有同时交出 504、506、524 三个完整布局。
+- 既有 RED：`packing.test.ts` 顶填用例默认 5s 超时，与此前 decision 相同，未改用例、未抬 timeout。
+- 后续：要在预算内搜到 524/506，需要更大 `maxMs`/`maxStates` 或把局部重排真正接进同步路径（当前明确未做）。
+
+
 ## 2026-08-26 局部槽重排本轮不进生产路径（已决策）
 
 - 背景：`packingSlotRelocation.relocateLargestBoundarySlot` 已是可调用入口，但缺少本轮要求的完整前置：三维空区连通到门端/侧壁、相邻 block 与支撑链收集、删支撑箱时同步上方依赖、重建 supportedBy/physicalLayer/EMS、恢复 nextIndex、deadline 只返回完整布局。`seed` 写在预算类型里但未参与搜索。

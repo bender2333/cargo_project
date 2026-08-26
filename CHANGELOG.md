@@ -1,6 +1,33 @@
 # Changelog
 
 
+## 2026-08-26 quantity/volume search kernel gates
+
+Shared kernel: layout quality (support union + independent cavity/slot/risk), feasible-first beam admission, budget-controlled search (no hardcoded depth 2), `elapsedMs` diagnostic stats. Quantity and volume use the same complete-layout compare. Slot relocation stays off `calculatePacking`. Claim is `best-found-within-budget` only.
+
+0824 this budget did **not** produce 506 or 524. Quantity stays **504** / slot 150 / notch 0 / risk 256683375 (`strategy=greedy`, 8 states, 135 candidates, `budgetExceeded=true`, 2011ms). Volume stays **424** / usedVolume **30725850000** / slot 0 / risk 0 (`strategy=greedy`, 8 states, `budgetExceeded=true`, 1816ms) — search ran but did not improve. No 504/506/524 Pareto table. Goldens not updated. Not deployed.
+
+| fixture | mode | placed | usedVolume | notch | risk | interCargo | search | notes |
+|---|---|---:|---:|---:|---:|---:|---|---|
+| 0824 20GP | quantity | 504 | 30243574000 | 0 | 256683375 | 150 | greedy, 8 states, budgetExceeded | floor held; 524/506 not found |
+| 0824 20GP | volume | 424 | 30725850000 | 0 | 0 | 0 | greedy, 8 states, budgetExceeded | usedVolume held; search ran, no improve |
+| Vietnam 20GP | quantity | 464 | 28074481500 | 19500000 | 338355250 | 1100 | greedy, budgetExceeded | |
+| Vietnam 20GP | volume | 473 | 29937044000 | 0 | 638390000 | 1000 | greedy, budgetExceeded | 473 held |
+| Vietnam 40HQ | quantity | 864 | 63038263000 | 54875000 | 2828408625 | 8050 | greedy skip (full) | 864/864 |
+| Vietnam 40HQ | volume | 864 | 63038263000 | 0 | 1438020625 | 4550 | greedy skip (full) | 864/864 |
+| 0802 40HQ | quantity | 877 | 61046585250 | 15000000 | 3355064125 | 6800 | greedy skip (full) | 877/877 |
+| 0802 40HQ | volume | 877 | 61046585250 | 42750000 | 3148049625 | 7000 | greedy skip (full) | 877/877 |
+
+Gates:
+
+- packingLayoutQuality 7, packingObjective 11, packingSearch 24, packing.quantityFirst 10, packingSlotRelocation 3, 0824 baseline 2, compactness 7, candidates 5, feasibility 7, crossEms 3, invariants 15: pass.
+- packing.blockEngine: 0802 **877**, Vietnam 20GP both modes, 40HQ **864**.
+- Touched-file eslint: exit 0. `npx tsc -b`: exit 0. `npm run build`: exit 0. Workbench `Workbench-Ckb-xQVq.js`.
+- `packing.test.ts`: same pre-existing RED — `loads rotatable top-fill boxes before moving to the next outer depth slice` timed out at 5000ms. Did not raise timeout or change the test.
+- `issues/0824/` left untracked.
+
+Deploy skipped: 0824 still 504; 506/524 not found in budget; product Pareto not formed.
+
 ## 2026-08-26 slot relocation stays off the production path
 
 - `calculatePacking` still does not import `packingSlotRelocation` or `packingOracle`. This round does not claim slot bubbling / LNS is done.
