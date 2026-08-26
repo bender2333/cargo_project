@@ -29,7 +29,15 @@ Gates:
 - `npm run build`: exit 0. Workbench `Workbench-BQtYYEtG.js`.
 - `npm run test:packing-performance`: 9 passed (0802 877 in 6427ms).
 - `packing.test.ts`: 56/57 at 5s (top-fill timeout, unchanged); `--testTimeout=20000` 57/57 GREEN.
+- `npm run test:unit`: **2 failed / 991 passed** (112 files). Failures: same packing.test 5s timeout; `scripts/updatePackingContracts.test.mjs` `ETIMEDOUT` at 58324ms. Did not change tests.
+- `npm run test:e2e`: **149 passed / 0 failed** in 9.2m, including 0802 **877/877**.
 - Production goldens not updated.
+
+Deploy:
+
+- Independent SQLite `.backup` `/root/cargo-database-20260826-104544.db` (`root:root` mode 600, 1773568 B, `PRAGMA quick_check=ok`, SHA-256 `06ae85f7eef03bf05eae42d1c8f3743e07280c013b4ce51a9cdbde3de544d90c`).
+- `npm run deploy` 7/7. Site backup `/root/cargo_project-backup-20260826-024550`. Health: homepage **200**, unauthenticated `/api/import-templates` **401**. `cargo-server.service` active. Live `index-CzI-6nnR.js`, Workbench `Workbench-DphjEwOp.js`, scene `ContainerScene-BC1LM3Ds.js`.
+- Remote Playwright via SSH tunnel **not run**: `E2E_USERNAME` / `E2E_PASSWORD` / admin pair unset in this session. Local 149/149 is the e2e evidence.
 
 ## 2026-08-26 quantity-first slot relocation and stability plan
 
