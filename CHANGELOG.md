@@ -1,6 +1,11 @@
 # Changelog
 
 
+## 2026-08-26 slot relocation stays off the production path
+
+- `calculatePacking` still does not import `packingSlotRelocation` or `packingOracle`. This round does not claim slot bubbling / LNS is done.
+- Follow-up must implement 3D empty-space connectivity to the door or side wall, support-chain collection, dependent-box removal, EMS/support rebuild, unique box ids, and complete-only deadline returns. `seed` currently does not affect search and must be wired or deleted then.
+
 ## 2026-08-26 volume uses the same complete-layout compare as greedy
 
 - Quantity and volume block-engine paths both `applySearchState` the `optimizePacking` incumbent. Deleted the volume `breaksGoldens` overlay that could reject a higher usedVolume / lower count complete, or keep greedy on a full pack when beam had a better volume.

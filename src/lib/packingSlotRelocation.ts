@@ -9,6 +9,7 @@ import { clonePackingSearchState, type PackingSearchState } from './packingSearc
 const EPSILON = 0.001
 
 export type SlotRelocationBudget = {
+  /** Unused until a follow-up wires seed into a deterministic search or deletes it. */
   seed: number
   maxRounds: number
   maxMs: number

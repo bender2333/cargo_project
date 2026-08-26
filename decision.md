@@ -1,6 +1,13 @@
 # Decision Log
 
 
+## 2026-08-26 局部槽重排本轮不进生产路径（已决策）
+
+- 背景：`packingSlotRelocation.relocateLargestBoundarySlot` 已是可调用入口，但缺少本轮要求的完整前置：三维空区连通到门端/侧壁、相邻 block 与支撑链收集、删支撑箱时同步上方依赖、重建 supportedBy/physicalLayer/EMS、恢复 nextIndex、deadline 只返回完整布局。`seed` 写在预算类型里但未参与搜索。
+- 决策：本轮 **不声称已完成槽冒泡**。`calculatePacking` 继续不 import relocation / oracle。LNS 与 CP-SAT 不进默认生产路径。
+- 后续独立任务必须先补齐上述前置；`seed` 要么真正进入确定性搜索，要么删除该参数。不得把当前 seam 写成已优化槽。
+
+
 ## 2026-08-26 unsupportedSpanRisk 用支撑矩形并集，不是运输稳定性证明（已决策）
 
 - 背景：上一轮 `unsupportedSpanRisk` 对 `supportType === 'partially-supported'` 的箱体直接加底面积，不看真实支撑矩形，也无法区分 50% 与 90% 支撑。`packingObjective` 与 `packingSlotRelocation` 各扫一遍体素。
