@@ -300,6 +300,27 @@ describe('quantity beam search', () => {
     expect(zeroStates.search.elapsedMs).toBeGreaterThanOrEqual(0)
   })
 
+  it('does not mark a full greedy pack as budgetExceeded', () => {
+    const initial = toyState(4)
+    const hooks: PackingSearchHooks = {
+      commit: commitChoice,
+      complete: (state) => {
+        const next = clonePackingSearchState(state)
+        if (next.placed.length === 0) addBoxes(next, 4)
+        for (const cargo of next.cargoStates) cargo.remaining = 0
+        return next
+      },
+      quality: (state) => qualityOf(state, 0),
+    }
+
+    const result = optimizePacking(initial, { beamWidth: 8, maxStates: 32, maxMs: 0 }, hooks, 'quantity')
+    expect(result.state.placed.length).toBe(4)
+    expect(result.state.cargoStates.every((cargo) => cargo.remaining <= 0)).toBe(true)
+    expect(result.search.strategy).toBe('greedy')
+    expect(result.search.budgetExceeded, 'a finished full pack did not exhaust search budget').toBe(false)
+    expect(result.search.statesExpanded).toBe(0)
+  })
+
   it('optimistic count bound uses leftover geometry so placed+remainingQty without geometry fails when leftover is tighter', () => {
     const item: CargoItem = {
       id: 'fit',

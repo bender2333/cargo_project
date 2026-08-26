@@ -223,19 +223,19 @@ export function optimizePacking(
     }
   }
 
-  if (budget.maxStates <= 0 || outOfTime()) {
-    return {
-      state: incumbent,
-      search: searchStats('greedy', statesExpanded, candidatesEvaluated, true, Date.now() - startedAt),
-      completes,
-    }
-  }
-
   const remainingAfterIncumbent = incumbent.cargoStates.reduce((sum, cargo) => sum + Math.max(0, cargo.remaining), 0)
   if (remainingAfterIncumbent <= 0) {
     return {
       state: incumbent,
       search: searchStats('greedy', statesExpanded, candidatesEvaluated, false, Date.now() - startedAt),
+      completes,
+    }
+  }
+
+  if (budget.maxStates <= 0 || outOfTime()) {
+    return {
+      state: incumbent,
+      search: searchStats('greedy', statesExpanded, candidatesEvaluated, true, Date.now() - startedAt),
       completes,
     }
   }
