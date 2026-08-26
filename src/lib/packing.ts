@@ -1047,24 +1047,10 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       ...DEFAULT_QUANTITY_SEARCH_BUDGET,
       maxMs: 1500,
     }
-    if (loadingMode === 'quantity') {
-      const { state, search } = optimizePacking(snapshotSearchState(), searchBudget, searchHooks, 'quantity')
+    if (loadingMode === 'quantity' || loadingMode === 'volume') {
+      const { state, search } = optimizePacking(snapshotSearchState(), searchBudget, searchHooks, loadingMode)
       publishSearchStats(search)
       applySearchState(state)
-    } else if (loadingMode === 'volume') {
-      const { state, search, completes } = optimizePacking(snapshotSearchState(), searchBudget, searchHooks, 'volume')
-      publishSearchStats(search)
-      const greedy = completes[0]
-      if (!greedy) {
-        runGreedyBlockEngine()
-      } else {
-        const greedyQuality = packingQualityOf(greedy)
-        const beamQuality = packingQualityOf(state)
-        const greedyRemaining = greedy.cargoStates.reduce((sum, cargo) => sum + Math.max(0, cargo.remaining), 0)
-        const breaksGoldens = beamQuality.usedVolume < greedyQuality.usedVolume
-          || (greedyRemaining <= 0 && beamQuality.placedCount < greedyQuality.placedCount)
-        applySearchState(breaksGoldens ? greedy : state)
-      }
     }
 
     for (const state of cargoStates) {

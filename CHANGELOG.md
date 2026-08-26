@@ -1,6 +1,12 @@
 # Changelog
 
 
+## 2026-08-26 volume uses the same complete-layout compare as greedy
+
+- Quantity and volume block-engine paths both `applySearchState` the `optimizePacking` incumbent. Deleted the volume `breaksGoldens` overlay that could reject a higher usedVolume / lower count complete, or keep greedy on a full pack when beam had a better volume.
+- Volume lexicographic order remains usedVolume ↓, placedCount ↓, then the shared compactness keys. deadEmsVolume is leftover ranking only, not real capacity.
+- If beam does not beat greedy, `strategy` stays `greedy` — search ran but did not improve. Fixture numbers are recorded after the baseline run; goldens not updated here.
+
 ## 2026-08-26 quantity complete-layout comparison (0824 report, no 504 ceiling)
 
 - Quantity lexicographic order is unchanged: placedCount ↓, internalNotchVolume ↑, unsupportedSpanRisk ↑, interCargoMaxMm ↑, residual ↑, then placementTieBreak. Slot width / floor corridor are not hard rejects.

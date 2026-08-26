@@ -134,6 +134,14 @@ describe('quantity-first production path', () => {
     expect(result).not.toHaveProperty('budgetExceeded')
   })
 
+  it('uses the same comparePackingQuality winner for volume as for quantity, without a golden-protection overlay', () => {
+    const packingSource = readFileSync(resolve('src/lib/packing.ts'), 'utf8')
+    expect(packingSource).not.toMatch(/breaksGoldens/)
+    expect(packingSource).not.toMatch(/greedyRemaining/)
+    expect(packingSource).toMatch(/loadingMode === 'quantity' \|\| loadingMode === 'volume'/)
+    expect(packingSource).toMatch(/optimizePacking\(snapshotSearchState\(\), searchBudget, searchHooks, loadingMode\)/)
+  })
+
   it('does not put LNS or the exact solver on the default calculatePacking path', () => {
     const packingSource = readFileSync(resolve('src/lib/packing.ts'), 'utf8')
     expect(packingSource).not.toMatch(/packingSlotRelocation/)
