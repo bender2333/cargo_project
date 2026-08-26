@@ -1,6 +1,14 @@
 # Changelog
 
 
+## 2026-08-26 quantity-first slot relocation and stability plan
+
+- User direction: remove the quantity-mode slot hard cap. A boundary-connected gap is not automatically a stability failure; only real geometry, support, stacking, payload, and unloading constraints are hard failures.
+- Plan: `plans/2026-08-26-packing-slot-relocation-and-stability.md` separates enclosed voids, boundary-connected residuals, inter-cargo visual slots, and unsupported-span risk; quantity maximizes a feasible final count before compactness tie-breaks.
+- Next Grok task: remove `passesQuantityHardCaps`/slot filtering, preserve shared feasibility, expose search telemetry, and use bounded local re-placement to move gaps outward without silently accepting unstable layouts.
+- No production code changed in this planning step.
+
+
 ## 2026-08-25 r73 quantity/volume search (Task 4 gates)
 
 - In-app release note `2026-08-25-r73-quantity-volume-search`. Honest copy: quantity ranks complete layouts by placed count; volume ranks by occupied volume; Vietnam 20GP volume 468→473; 0824 quantity still **504** / slot `< 200mm` / notch 0. **No 506 claim.**
