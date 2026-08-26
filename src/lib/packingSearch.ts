@@ -41,6 +41,11 @@ export type PackingSearchHooks = {
    */
   complete: (state: PackingSearchState) => PackingSearchState
   quality: (state: PackingSearchState) => PackingQuality
+  /**
+   * Optional test seam. Production omits this and uses canStageBlock / canPlaceBox
+   * for every unit of the block. Hard constraints never skip this gate.
+   */
+  canStage?: (state: PackingSearchState, choice: PackingBlockChoice) => boolean
 }
 
 function usedVolumeOf(state: PackingSearchState) {
@@ -214,6 +219,8 @@ export function optimizePacking(
     beamWidth = 4
   }
 
+  const isFeasible = hooks.canStage ?? canStageBlock
+
   const expand = (state: PackingSearchState): PackingSearchState[] => {
     if (outOfTime() || outOfStates()) {
       budgetExceeded = true
@@ -221,27 +228,27 @@ export function optimizePacking(
     }
 
     const generated = generateBlockCandidates(state, objective)
-    const ranked: Array<ReturnType<typeof scoreChoice>> = []
+    const feasible: Array<ReturnType<typeof scoreChoice>> = []
     for (const choice of generated) {
       candidatesEvaluated += 1
       if (outOfTime()) {
         budgetExceeded = true
         break
       }
-      ranked.push(scoreChoice(state, choice, objective))
+      if (!isFeasible(state, choice)) continue
+      feasible.push(scoreChoice(state, choice, objective))
     }
-    ranked.sort(objective === 'volume'
+    feasible.sort(objective === 'volume'
       ? (a, b) => b.bound - a.bound || b.volume - a.volume || b.placed - a.placed
       : (a, b) => b.bound - a.bound || b.placed - a.placed || b.volume - a.volume)
 
     const kept: PackingSearchState[] = []
-    for (const entry of ranked) {
+    for (const entry of feasible) {
       if (kept.length >= beamWidth) break
       if (outOfTime() || outOfStates()) {
         budgetExceeded = true
         break
       }
-      if (!canStageBlock(state, entry.choice)) continue
       kept.push(hooks.commit(clonePackingSearchState(state), entry.choice))
       statesExpanded += 1
     }

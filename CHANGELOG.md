@@ -1,6 +1,12 @@
 # Changelog
 
 
+## 2026-08-26 feasible-first beam admission
+
+- Beam expansion is now `generateBlockCandidates` → `canStageBlock`/`canPlaceBox` per unit → bound only on feasible choices → sort → clone → commit → complete. Illegal high-bound blocks cannot occupy beam slots.
+- `PackingSearchHooks.canStage` is an optional test seam; production still uses `canStageBlock`. Clone-on-write before commit is unchanged.
+- packingSearch 19. Touched-file tests green. Did not change goldens.
+
 ## 2026-08-26 shared layout quality (support union + independent cavity/slot/risk)
 
 - Extracted `src/lib/packingLayoutQuality.ts`. `packingObjective` and `packingSlotRelocation` no longer duplicate the 50mm voxel occupancy scan.

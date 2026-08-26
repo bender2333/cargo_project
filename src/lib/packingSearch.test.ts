@@ -5,7 +5,7 @@ import type { CargoItem, PlacementBox } from '../types'
 import { bestBlocksForSpace } from './blocks'
 import { splitEMS } from './emsSpace'
 import { generateBlockCandidates, type PackingBlockChoice } from './packingCandidates'
-import { MINIMUM_SUPPORT_RATIO } from './packingFeasibility'
+import { canStageBlock, MINIMUM_SUPPORT_RATIO } from './packingFeasibility'
 import { comparePackingQuality, type PackingQuality } from './packingObjective'
 import {
   DEFAULT_QUANTITY_SEARCH_BUDGET,
@@ -442,6 +442,89 @@ describe('quantity beam search', () => {
     ).toBe(5)
     expect(result.search.strategy).toBe('beam')
     expect(result.search.statesExpanded).toBeLessThanOrEqual(3)
+  })
+
+  it('does not let an illegal high-bound first block occupy a width-1 beam', () => {
+    const initial = toyState()
+    const stagedCounts: number[] = []
+    const committedCounts: number[] = []
+    const hooks: PackingSearchHooks = {
+      canStage: (_state, choice) => {
+        stagedCounts.push(choice.block.count)
+        return choice.block.count < 4
+      },
+      commit: (state, choice) => {
+        committedCounts.push(choice.block.count)
+        expect(choice.block.count, 'illegal high-bound blocks must not be committed').toBeLessThan(4)
+        return commitChoice(state, choice)
+      },
+      complete: (state) => {
+        const next = clonePackingSearchState(state)
+        if (next.placed.length === 0) {
+          addBoxes(next, 4)
+          return next
+        }
+        if (next.placed.length === 3) addBoxes(next, 2)
+        return next
+      },
+      quality: (state) => qualityOf(state, 0),
+    }
+
+    const result = optimizePacking(initial, { beamWidth: 1, depth: 2, maxStates: 8, maxMs: 8000 }, hooks, 'quantity')
+    expect(stagedCounts.some((count) => count >= 4), 'the illegal high-bound 4-pack must still be generated').toBe(true)
+    expect(committedCounts.length).toBeGreaterThan(0)
+    expect(committedCounts.every((count) => count < 4)).toBe(true)
+    expect(result.state.placed.length, 'the legal 3-pack must still complete to 5 inside a width-1 beam').toBe(5)
+  })
+
+  it('runs canStage on every generated block before any commit, including each unit of a multi-box block', () => {
+    const initial = toyState()
+    const stagedUnits: number[] = []
+    const hooks: PackingSearchHooks = {
+      canStage: (state, choice) => {
+        stagedUnits.push(choice.block.count)
+        expect(choice.block.nx * choice.block.ny * choice.block.nz).toBe(choice.block.count)
+        return canStageBlock(state, choice)
+      },
+      commit: commitChoice,
+      complete: (state) => {
+        const next = clonePackingSearchState(state)
+        if (next.placed.length === 0) addBoxes(next, 4)
+        else while (next.placed.length < 5) addBoxes(next, 1)
+        return next
+      },
+      quality: (state) => qualityOf(state, 0),
+    }
+
+    optimizePacking(initial, { beamWidth: 2, depth: 1, maxStates: 8, maxMs: 8000 }, hooks, 'quantity')
+    expect(stagedUnits.length, 'every generated block must be staged before ranking').toBeGreaterThan(0)
+    expect(stagedUnits.some((count) => count > 1), 'a multi-box block must stage every unit via canStage/canPlaceBox').toBe(true)
+  })
+
+  it('clones before commit so expanding one beam child cannot mutate a sibling', () => {
+    const initial = toyState()
+    const snapshots: number[] = []
+    const hooks: PackingSearchHooks = {
+      commit: (state, choice) => {
+        snapshots.push(state.placed.length)
+        const next = commitChoice(state, choice)
+        state.placed.push(dummyBox({ id: `pollute-${state.placed.length}`, index: 99, x: 0 }))
+        state.emsList.push({ x: 9, y: 9, z: 9, length: 1, width: 1, height: 1 })
+        return next
+      },
+      complete: (state) => {
+        const next = clonePackingSearchState(state)
+        if (next.placed.length === 0) addBoxes(next, 4)
+        else while (next.placed.length < 5) addBoxes(next, 1)
+        return next
+      },
+      quality: (state) => qualityOf(state, 0),
+    }
+
+    const result = optimizePacking(initial, { beamWidth: 3, depth: 1, maxStates: 8, maxMs: 8000 }, hooks, 'quantity')
+    expect(snapshots.every((count) => count === 0), 'each commit must see the unpolluted parent, not a sibling mutation').toBe(true)
+    expect(result.state.placed.some((box) => box.id.startsWith('pollute-'))).toBe(false)
+    expect(initial.placed).toHaveLength(0)
   })
 
   it('mutating clone A placed/emsList does not change clone B', () => {
