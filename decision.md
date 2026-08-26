@@ -1,6 +1,30 @@
 # Decision Log
 
 
+## 2026-08-26 解除 quantity 槽硬限制（已决策）
+
+- 背景：上一轮 `passesQuantityHardCaps` 把货物间槽 / 地面走廊 / 内部空腔当成搜索淘汰条件。0824 合法候选 A（524 件 / 400mm 外开口槽）被拒绝，候选 B（504 件 / 150mm 槽）获胜。用户已明确授权：去除 quantity 模式的槽限制。
+- 选项：
+  - A. 继续用槽宽硬帽过滤完整布局（504 优先于合法的更高件数）
+  - B. 槽不再是硬约束。quantity 终局只比较真实可行布局：`placedCount` 最大；同件数再比 `internalNotchVolume`、`unsupportedSpanRisk`、`interCargoMaxMm`、外部残余。`interCargoMaxMm` 不是稳定性证明。
+- 决策：B。已决策。用户确认。
+- 硬约束仅限：越界、重叠、重量、支撑比例、`groundOnly`、`maxStackLayers`，以及 `packingFeasibility.canPlaceBox` / `canStageBlock`。
+- `packingLookahead` 尺寸估算只作乐观排序上界，不是合法性证明。
+- `weight` / `input` 不改。`PackingResult` schema 不改。LNS 与 CP-SAT 本轮只留可调用入口，不进默认同步生产路径。
+- 搜索只能声称预算内 best-found，不得声称全局最优。`statesExpanded` / `candidatesEvaluated` / `budgetExceeded` 必须暴露，不能在 `calculatePacking` 里丢弃。
+- 词典序冲突：「506 若找到必须胜过 524 和 504」与「最终 placedCount 最大」不能同时成立——合法 524 > 合法 506。本轮跟用户主目标：件数优先，因此 **524 > 506 > 504**。506 仍胜过 504；524 只要真实可行就胜过 506，400mm 外开口槽不能推翻件数。
+- 影响：0824 若搜到合法 524/400 将胜过 504/150 与 506。不把 504 写成上限。跨 EMS 候选仍覆盖全部 EMS。
+- 后续：若产品仍想要紧凑 506 而不是更高件数的 524，那是新的产品拍板，不是本轮算法目标。
+
+
+## 2026-08-26 0824 本轮实测仍是 504，不是 504/506/524 产出 Pareto（已记录）
+
+- 背景：去掉槽硬帽后，词典序会让合法 524 胜过 504。本轮 `maxMs=1500` 的 `optimizePacking` 在 0824 quantity 上 `strategy=greedy`、`statesExpanded=4`、`budgetExceeded=true`，完整布局仍是 **504 / 槽 150 / notch 0 / 2102ms**。体积 424 / usedVolume 30725850000 未降。
+- 决策：不把历史 debug 里的 524 写成当前引擎产出；不更新 golden；不把 504 写成上限。本轮产品 Pareto（同时交出 504、506、524 三个完整布局）**没有形成**——只有 504 被预算内 best-found 选中。
+- 影响：r74 文案写明 0824 仍是 504、搜索只保证预算内最好。越南 20GP 464/473、40HQ 864、0802 877 未降。
+- 后续：要在预算内真正搜到 524/506，需要更深 beam 或把 LNS 接入默认同步路径（当前只留入口）。
+
+
 ## 2026-08-25 r73 全量闸门与部署跳过（已决策）
 
 - 背景：Task 4 要求全量验证、诚实 r73 release note、部署闸门。0824 quantity 仍是 **504**（槽 `< 200`，notch 0），未恢复 506。计划：未恢复 506 则不得把 504 写成新上限，部署前需产品确认 Pareto。
