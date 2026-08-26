@@ -2,7 +2,9 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { effectiveContainer } from '../data/containers'
 import type { CargoItem, ContainerSpec, PlacedBox } from '../types'
-import { calculatePacking } from './packing'
+import { calculatePacking, lastPackingSearchStats } from './packing'
+import { packingQualityOf } from './packingObjective'
+import { MINIMUM_SUPPORT_RATIO } from './packingFeasibility'
 import { expectQuantityConservation } from './packingContract.testSupport'
 
 /**
@@ -187,6 +189,33 @@ function load0824() {
   }
 }
 
+function comparisonOf(container: ContainerSpec, result: { placed: PlacedBox[]; placedCount: number; usedVolume: number; usedWeight: number }) {
+  const effective = effectiveContainer(container)
+  const quality = packingQualityOf({
+    container: effective,
+    cargoStates: [],
+    emsList: [],
+    placed: result.placed,
+    placedById: new Map(result.placed.map((box) => [box.id, box])),
+    usedWeight: result.usedWeight,
+    minSupportRatio: MINIMUM_SUPPORT_RATIO,
+  })
+  const search = lastPackingSearchStats()
+  return {
+    placedCount: result.placedCount,
+    usedVolume: result.usedVolume,
+    internalNotchVolume: quality.internalNotchVolume,
+    unsupportedSpanRisk: quality.unsupportedSpanRisk,
+    interCargoMaxMm: quality.interCargoMaxMm,
+    elapsedMs: search?.elapsedMs ?? null,
+    statesExpanded: search?.statesExpanded ?? null,
+    candidatesEvaluated: search?.candidatesEvaluated ?? null,
+    budgetExceeded: search?.budgetExceeded ?? null,
+    strategy: search?.strategy ?? null,
+    claim: search?.claim ?? null,
+  }
+}
+
 describe('0824 packing baseline snapshot', () => {
   it('keeps quantity at or above the 504 floor without treating a 400mm external slot as failure', () => {
     const fixture = load0824()
@@ -195,13 +224,16 @@ describe('0824 packing baseline snapshot', () => {
 
     const result = calculatePacking(fixture.container, fixture.items, { loadingMode: 'quantity' })
     const gaps = analyzePackingGaps(result.placed, fixture.container)
+    const comparison = comparisonOf(fixture.container, result)
 
     expectQuantityConservation(fixture.items, result)
     expect(
       result.placedCount,
-      `0824 quantity placed=${result.placedCount} slot=${gaps.interCargoMaxMm}mm notch=${gaps.internalNotchVoxels}`,
+      `0824 quantity comparison ${JSON.stringify(comparison)}`,
     ).toBeGreaterThanOrEqual(QUANTITY_FLOOR_PLACED)
     expect(gaps.interCargoMaxMm, 'a boundary-connected 400mm slot must not fail this comparison').toBeGreaterThanOrEqual(0)
+    expect(comparison.claim).toBe('best-found-within-budget')
+    expect([504, 506, 524].includes(result.placedCount) || result.placedCount >= QUANTITY_FLOOR_PLACED).toBe(true)
   }, 20_000)
 
   it('records a named volume snapshot for the same 0824 fixture', () => {

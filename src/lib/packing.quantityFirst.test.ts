@@ -74,6 +74,15 @@ function searchState(overrides: Partial<PackingSearchState> = {}): PackingSearch
 }
 
 describe('quantity-first production path', () => {
+  it('does not hard-code 504 as a quantity algorithm ceiling', () => {
+    const packingSource = readFileSync(resolve('src/lib/packing.ts'), 'utf8')
+    const searchSource = readFileSync(resolve('src/lib/packingSearch.ts'), 'utf8')
+    expect(packingSource).not.toMatch(/\b504\b/)
+    expect(searchSource).not.toMatch(/\b504\b/)
+    expect(packingSource).not.toMatch(/placedCount\s*>=\s*500/)
+    expect(searchSource).not.toMatch(/placedCount\s*>=\s*500/)
+  })
+
   it('does not keep a quantity slot hard cap or capped-complete overlay', () => {
     const packingSource = readFileSync(resolve('src/lib/packing.ts'), 'utf8')
     const searchSource = readFileSync(resolve('src/lib/packingSearch.ts'), 'utf8')

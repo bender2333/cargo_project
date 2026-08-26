@@ -224,7 +224,7 @@ function analyzePackingGaps(placed, container, voxel = VOXEL) {
   }
 }
 
-function summarizeRun(name, fixture, loadingMode, container, items, result, elapsedMs, effective, search) {
+function summarizeRun(name, fixture, loadingMode, container, items, result, elapsedMs, effective, search, quality) {
   const gaps = analyzePackingGaps(result.placed, effective)
   return {
     name,
@@ -242,7 +242,13 @@ function summarizeRun(name, fixture, loadingMode, container, items, result, elap
     usedVolume: result.usedVolume,
     containerVolume: result.containerVolume,
     volumeUtilization: result.volumeUtilization,
+    internalNotchVolume: quality?.internalNotchVolume ?? gaps.internalNotchVolume,
+    unsupportedSpanRisk: quality?.unsupportedSpanRisk ?? null,
+    interCargoMaxMm: quality?.interCargoMaxMm ?? gaps.interCargoMaxMm,
     elapsedMs,
+    statesExpanded: search?.statesExpanded ?? null,
+    candidatesEvaluated: search?.candidatesEvaluated ?? null,
+    budgetExceeded: search?.budgetExceeded ?? null,
     skuPlaced: skuPlaced(items, result),
     gaps,
     search: search ?? null,
@@ -251,9 +257,11 @@ function summarizeRun(name, fixture, loadingMode, container, items, result, elap
 
 const vite = await createServer(packingBenchmarkViteConfig(root))
 try {
-  const [{ calculatePacking, lastPackingSearchStats }, { containers, effectiveContainer }] = await Promise.all([
+  const [{ calculatePacking, lastPackingSearchStats }, { containers, effectiveContainer }, { packingQualityOf }, { MINIMUM_SUPPORT_RATIO }] = await Promise.all([
     vite.ssrLoadModule('/src/lib/packing.ts'),
     vite.ssrLoadModule('/src/data/containers.ts'),
+    vite.ssrLoadModule('/src/lib/packingObjective.ts'),
+    vite.ssrLoadModule('/src/lib/packingFeasibility.ts'),
   ])
 
   const gp20 = containers.find((item) => item.id === '20gp')
@@ -318,6 +326,13 @@ try {
       items: cloneItems(fixture0802.items),
       loadingMode: fixture0802.loadingMode || 'quantity',
     },
+    {
+      name: '0802-volume',
+      fixture: 'test-data/json/0802/input.json',
+      container: fixture0802.container,
+      items: cloneItems(fixture0802.items),
+      loadingMode: 'volume',
+    },
     ...[1, 7, 13].map((seed) => ({
       name: `compactness-seed-${seed}`,
       fixture: `packing.compactness.test.ts:seed-${seed}`,
@@ -332,6 +347,16 @@ try {
     const startedAt = Date.now()
     const result = calculatePacking(job.container, job.items, { loadingMode: job.loadingMode })
     const elapsedMs = Date.now() - startedAt
+    const effective = effectiveContainer(job.container)
+    const quality = packingQualityOf({
+      container: effective,
+      cargoStates: [],
+      emsList: [],
+      placed: result.placed,
+      placedById: new Map(result.placed.map((box) => [box.id, box])),
+      usedWeight: result.usedWeight,
+      minSupportRatio: MINIMUM_SUPPORT_RATIO,
+    })
     runs.push(summarizeRun(
       job.name,
       job.fixture,
@@ -340,8 +365,9 @@ try {
       job.items,
       result,
       elapsedMs,
-      effectiveContainer(job.container),
+      effective,
       lastPackingSearchStats(),
+      quality,
     ))
   }
 

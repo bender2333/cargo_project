@@ -1,6 +1,12 @@
 # Changelog
 
 
+## 2026-08-26 quantity complete-layout comparison (0824 report, no 504 ceiling)
+
+- Quantity lexicographic order is unchanged: placedCount ↓, internalNotchVolume ↑, unsupportedSpanRisk ↑, interCargoMaxMm ↑, residual ↑, then placementTieBreak. Slot width / floor corridor are not hard rejects.
+- 504 is a comparison floor, not an algorithm ceiling. packing.ts / packingSearch.ts do not hard-code 504 or `placedCount >= 500`.
+- 0824 quantity tests and `scripts/packing-mode-baseline.mjs` now report placedCount, usedVolume, internalNotchVolume, unsupportedSpanRisk, interCargoMaxMm, elapsedMs, statesExpanded, candidatesEvaluated, budgetExceeded. Pareto 504/506/524 is reported if those counts appear; goldens are not updated in this step.
+
 ## 2026-08-26 packing search stats elapsedMs diagnostic seam
 
 - `PackingSearchStats` now includes `elapsedMs` with `statesExpanded`, `candidatesEvaluated`, `budgetExceeded`, and `claim: 'best-found-within-budget'`. Stats stay off `PackingResult`.
