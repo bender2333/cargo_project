@@ -140,13 +140,12 @@ function commitChoice(state: PackingSearchState, choice: PackingBlockChoice): Pa
 }
 
 describe('quantity beam search', () => {
-  it('keeps the published quantity budget at width 8, depth 2, 32 states, 8s', () => {
-    expect(DEFAULT_QUANTITY_SEARCH_BUDGET).toEqual({
-      beamWidth: 8,
-      depth: 2,
-      maxStates: 32,
-      maxMs: 8000,
-    })
+  it('keeps the published quantity budget at width 8, 32 states, 8s, without a hardcoded depth of 2', () => {
+    expect(DEFAULT_QUANTITY_SEARCH_BUDGET.beamWidth).toBe(8)
+    expect(DEFAULT_QUANTITY_SEARCH_BUDGET.maxStates).toBe(32)
+    expect(DEFAULT_QUANTITY_SEARCH_BUDGET.maxMs).toBe(8000)
+    expect(DEFAULT_QUANTITY_SEARCH_BUDGET.maxDepth).toBeUndefined()
+    expect(DEFAULT_QUANTITY_SEARCH_BUDGET).not.toHaveProperty('depth')
   })
 
   it('does not import packing.ts, so the searcher can be hooked from packing without a cycle', () => {
@@ -287,14 +286,14 @@ describe('quantity beam search', () => {
       quality: (state) => qualityOf(state, 0),
     }
 
-    const zeroStates = optimizePacking(initial, { beamWidth: 8, depth: 2, maxStates: 0, maxMs: 8000 }, hooks, 'quantity')
+    const zeroStates = optimizePacking(initial, { beamWidth: 8, maxStates: 0, maxMs: 8000 }, hooks, 'quantity')
     expect(zeroStates.state.placed.length).toBeGreaterThan(0)
     expect(zeroStates.state.placed.length).toBe(4)
     expect(zeroStates.search.budgetExceeded).toBe(true)
     expect(zeroStates.search.strategy).toBe('greedy')
     expect(zeroStates.search.claim).toBe('best-found-within-budget')
 
-    const zeroMs = optimizePacking(initial, { beamWidth: 8, depth: 2, maxStates: 32, maxMs: 0 }, hooks, 'quantity')
+    const zeroMs = optimizePacking(initial, { beamWidth: 8, maxStates: 32, maxMs: 0 }, hooks, 'quantity')
     expect(zeroMs.state.placed.length).toBeGreaterThan(0)
     expect(zeroMs.search.budgetExceeded).toBe(true)
   })
@@ -435,7 +434,7 @@ describe('quantity beam search', () => {
     const greedy = hooks.complete(clonePackingSearchState(initial))
     expect(greedy.placed.length).toBe(4)
 
-    const result = optimizePacking(initial, { beamWidth: 2, depth: 2, maxStates: 3, maxMs: 8000 }, hooks, 'quantity')
+    const result = optimizePacking(initial, { beamWidth: 2, maxDepth: 2, maxStates: 3, maxMs: 8000 }, hooks, 'quantity')
     expect(
       result.state.placed.length,
       'ranking first-block candidates before committing must leave maxStates for a depth-2 5-piece complete',
@@ -470,7 +469,7 @@ describe('quantity beam search', () => {
       quality: (state) => qualityOf(state, 0),
     }
 
-    const result = optimizePacking(initial, { beamWidth: 1, depth: 2, maxStates: 8, maxMs: 8000 }, hooks, 'quantity')
+    const result = optimizePacking(initial, { beamWidth: 1, maxDepth: 2, maxStates: 8, maxMs: 8000 }, hooks, 'quantity')
     expect(stagedCounts.some((count) => count >= 4), 'the illegal high-bound 4-pack must still be generated').toBe(true)
     expect(committedCounts.length).toBeGreaterThan(0)
     expect(committedCounts.every((count) => count < 4)).toBe(true)
@@ -496,7 +495,7 @@ describe('quantity beam search', () => {
       quality: (state) => qualityOf(state, 0),
     }
 
-    optimizePacking(initial, { beamWidth: 2, depth: 1, maxStates: 8, maxMs: 8000 }, hooks, 'quantity')
+    optimizePacking(initial, { beamWidth: 2, maxDepth: 1, maxStates: 8, maxMs: 8000 }, hooks, 'quantity')
     expect(stagedUnits.length, 'every generated block must be staged before ranking').toBeGreaterThan(0)
     expect(stagedUnits.some((count) => count > 1), 'a multi-box block must stage every unit via canStage/canPlaceBox').toBe(true)
   })
@@ -521,7 +520,7 @@ describe('quantity beam search', () => {
       quality: (state) => qualityOf(state, 0),
     }
 
-    const result = optimizePacking(initial, { beamWidth: 3, depth: 1, maxStates: 8, maxMs: 8000 }, hooks, 'quantity')
+    const result = optimizePacking(initial, { beamWidth: 3, maxDepth: 1, maxStates: 8, maxMs: 8000 }, hooks, 'quantity')
     expect(snapshots.every((count) => count === 0), 'each commit must see the unpolluted parent, not a sibling mutation').toBe(true)
     expect(result.state.placed.some((box) => box.id.startsWith('pollute-'))).toBe(false)
     expect(initial.placed).toHaveLength(0)
@@ -545,6 +544,143 @@ describe('quantity beam search', () => {
     expect(original.placed).toHaveLength(1)
     expect(original.placed[0].x).toBe(0)
     expect(original.emsList[0].x).toBe(0)
+  })
+
+  it('explores a third block when maxDepth is 3', () => {
+    const initial = toyState()
+    initial.emsList = [{ x: 0, y: 0, z: 0, length: 1000, width: 1000, height: 1000 }]
+    const plantNextSlot = (state: PackingSearchState, choice: PackingBlockChoice) => {
+      const next = commitChoice(state, choice)
+      next.emsList = [{ x: next.placed.length * 1000, y: 0, z: 0, length: 1000, width: 1000, height: 1000 }]
+      return next
+    }
+    const hooks: PackingSearchHooks = {
+      commit: plantNextSlot,
+      complete: (state) => {
+        const next = clonePackingSearchState(state)
+        if (next.placed.length === 0) {
+          addBoxes(next, 4)
+          return next
+        }
+        if (next.placed.length >= 3) {
+          while (next.placed.length < 6) addBoxes(next, 1)
+          return next
+        }
+        while (next.placed.length < 4) addBoxes(next, 1)
+        return next
+      },
+      quality: (state) => qualityOf(state, 0),
+    }
+
+    const depth2 = optimizePacking(initial, { beamWidth: 1, maxDepth: 2, maxStates: 16, maxMs: 8000 }, hooks, 'quantity')
+    expect(depth2.state.placed.length, 'a depth-2 cap must not reach the third-block complete').toBe(4)
+
+    const depth3 = optimizePacking(initial, { beamWidth: 1, maxDepth: 3, maxStates: 16, maxMs: 8000 }, hooks, 'quantity')
+    expect(depth3.state.placed.length, 'maxDepth 3 must expand a third block and keep that complete').toBe(6)
+    expect(depth3.search.strategy).toBe('beam')
+  })
+
+  it('returns the greedy complete, never a partial local state, when maxStates or maxMs is 0', () => {
+    const initial = toyState()
+    const hooks: PackingSearchHooks = {
+      commit: commitChoice,
+      complete: (state) => {
+        const next = clonePackingSearchState(state)
+        if (next.placed.length === 0) addBoxes(next, 4)
+        return next
+      },
+      quality: (state) => qualityOf(state, 0),
+    }
+
+    const zeroStates = optimizePacking(initial, { beamWidth: 8, maxStates: 0, maxMs: 8000 }, hooks, 'quantity')
+    expect(zeroStates.state.placed.length).toBe(4)
+    expect(zeroStates.search.budgetExceeded).toBe(true)
+    expect(zeroStates.search.strategy).toBe('greedy')
+    expect(zeroStates.search.claim).toBe('best-found-within-budget')
+
+    const zeroMs = optimizePacking(initial, { beamWidth: 8, maxStates: 32, maxMs: 0 }, hooks, 'quantity')
+    expect(zeroMs.state.placed.length).toBe(4)
+    expect(zeroMs.search.budgetExceeded).toBe(true)
+  })
+
+  it('does not return an uncompleted local state when the state budget runs out after one expansion', () => {
+    const initial = toyState()
+    const hooks: PackingSearchHooks = {
+      commit: commitChoice,
+      complete: (state) => {
+        const next = clonePackingSearchState(state)
+        if (next.placed.length === 0) addBoxes(next, 4)
+        else while (next.placed.length < 5) addBoxes(next, 1)
+        return next
+      },
+      quality: (state) => qualityOf(state, 0),
+    }
+
+    const result = optimizePacking(initial, { beamWidth: 8, maxStates: 1, maxMs: 8000 }, hooks, 'quantity')
+    expect(result.search.budgetExceeded).toBe(true)
+    expect(result.state.placed.length, 'incumbent must be a complete fill, not the single committed block').toBeGreaterThanOrEqual(4)
+    expect(result.state.placed.length).not.toBe(1)
+  })
+
+  it('does not prune a branch whose remaining demand can still beat the incumbent', () => {
+    const initial = toyState()
+    initial.emsList = [{ x: 0, y: 0, z: 0, length: 1000, width: 1000, height: 1000 }]
+    const plantOneSlot = (state: PackingSearchState, choice: PackingBlockChoice) => {
+      const next = commitChoice(state, choice)
+      next.emsList = [{ x: next.placed.length * 1000, y: 0, z: 0, length: 1000, width: 1000, height: 1000 }]
+      return next
+    }
+    const afterOne = plantOneSlot(clonePackingSearchState(initial), {
+      cargoId: 'cube',
+      state: initial.cargoStates[0],
+      ems: initial.emsList[0],
+      point: { x: 0, y: 0, z: 0 },
+      waste: 0,
+      block: {
+        cargoId: 'cube',
+        name: 'cube',
+        label: 'C',
+        color: '#64748b',
+        orientationKey: 'LWH',
+        box: { orientationKey: 'LWH', length: 1000, width: 1000, height: 1000 },
+        nx: 1,
+        ny: 1,
+        nz: 1,
+        count: 1,
+        length: 1000,
+        width: 1000,
+        height: 1000,
+        volume: 1_000_000_000,
+        footprintArea: 1_000_000,
+        weight: 8,
+      },
+    })
+    expect(optimisticCountBound(afterOne), 'leftover geometry only size-fits one more cube').toBe(2)
+    expect(afterOne.placed.length + afterOne.cargoStates[0].remaining).toBeGreaterThan(4)
+
+    const hooks: PackingSearchHooks = {
+      commit: plantOneSlot,
+      complete: (state) => {
+        const next = clonePackingSearchState(state)
+        if (next.placed.length === 0) {
+          addBoxes(next, 4)
+          return next
+        }
+        if (next.placed.length >= 2) {
+          while (next.placed.length < 6) addBoxes(next, 1)
+          return next
+        }
+        while (next.placed.length < 4) addBoxes(next, 1)
+        return next
+      },
+      quality: (state) => qualityOf(state, 0),
+    }
+
+    const result = optimizePacking(initial, { beamWidth: 1, maxDepth: 2, maxStates: 8, maxMs: 8000 }, hooks, 'quantity')
+    expect(
+      result.state.placed.length,
+      'a safe remaining-demand bound must keep the branch that residual-fills to 6',
+    ).toBe(6)
   })
 })
 
@@ -708,12 +844,12 @@ describe('volume beam search', () => {
       quality: (state) => qualityOf(state, 0),
     }
 
-    const zeroStates = optimizePacking(initial, { beamWidth: 8, depth: 2, maxStates: 0, maxMs: 8000 }, hooks, 'volume')
+    const zeroStates = optimizePacking(initial, { beamWidth: 8, maxStates: 0, maxMs: 8000 }, hooks, 'volume')
     expect(zeroStates.state.placed.length).toBe(4)
     expect(zeroStates.search.budgetExceeded).toBe(true)
     expect(zeroStates.search.strategy).toBe('greedy')
 
-    const zeroMs = optimizePacking(initial, { beamWidth: 8, depth: 2, maxStates: 32, maxMs: 0 }, hooks, 'volume')
+    const zeroMs = optimizePacking(initial, { beamWidth: 8, maxStates: 32, maxMs: 0 }, hooks, 'volume')
     expect(zeroMs.state.placed.length).toBeGreaterThan(0)
     expect(zeroMs.search.budgetExceeded).toBe(true)
   })

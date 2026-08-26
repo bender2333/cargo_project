@@ -7,14 +7,14 @@ import { clonePackingSearchState, type PackingSearchState } from './packingSearc
 
 export type PackingSearchBudget = {
   beamWidth: number
-  depth: number
   maxStates: number
   maxMs: number
+  /** Optional expansion cap. Omit to search until maxStates or maxMs. */
+  maxDepth?: number
 }
 
 export const DEFAULT_QUANTITY_SEARCH_BUDGET: PackingSearchBudget = {
   beamWidth: 8,
-  depth: 2,
   maxStates: 32,
   maxMs: 8000,
 }
@@ -123,6 +123,29 @@ function optimisticEmsCapacity(
 
 export function optimisticCountBound(state: PackingSearchState): number {
   return state.placed.length + optimisticEmsCapacity(state.emsList, state.cargoStates)
+}
+
+/** Safe count bound: may overestimate, must not underestimate. Used only to prune. */
+export function safeCountBound(state: PackingSearchState): number {
+  return state.placed.length + remainingDemand(state.cargoStates)
+}
+
+/** Safe volume bound: remaining cargo volume, not dead EMS as real capacity. */
+export function safeVolumeBound(state: PackingSearchState): number {
+  return usedVolumeOf(state) + remainingCargoVolume(state.cargoStates)
+}
+
+function cannotBeatIncumbent(
+  state: PackingSearchState,
+  incumbent: PackingQuality,
+  objective: PackingObjective,
+) {
+  if (objective === 'volume') return safeVolumeBound(state) < incumbent.usedVolume
+  return safeCountBound(state) < incumbent.placedCount
+}
+
+function rankingBound(state: PackingSearchState, objective: PackingObjective) {
+  return objective === 'volume' ? optimisticVolumeBound(state) : optimisticCountBound(state)
 }
 
 function searchStats(
@@ -255,30 +278,46 @@ export function optimizePacking(
     return kept
   }
 
-  const completeLeaves = (leaves: PackingSearchState[]) => {
-    for (const leaf of leaves) {
-      if (outOfTime()) {
-        budgetExceeded = true
-        return
-      }
-      recordComplete(hooks.complete(clonePackingSearchState(leaf)))
+  const completeLeaf = (leaf: PackingSearchState) => {
+    if (outOfTime()) {
+      budgetExceeded = true
+      return
     }
+    recordComplete(hooks.complete(clonePackingSearchState(leaf)))
   }
 
-  const depth = Math.max(0, budget.depth)
-  const first = depth >= 1 ? expand(initial) : []
-  completeLeaves(first)
+  type BeamNode = { state: PackingSearchState; depth: number }
+  let beam: BeamNode[] = [{ state: initial, depth: 0 }]
+  const maxDepth = budget.maxDepth
 
-  if (depth >= 2 && !outOfTime() && !outOfStates()) {
-    const second: PackingSearchState[] = []
-    for (const state of first) {
+  while (beam.length > 0) {
+    if (outOfTime() || outOfStates()) {
+      budgetExceeded = true
+      break
+    }
+
+    const nextBeam: BeamNode[] = []
+    for (const node of beam) {
       if (outOfTime() || outOfStates()) {
         budgetExceeded = true
         break
       }
-      second.push(...expand(state))
+      if (maxDepth !== undefined && node.depth >= maxDepth) continue
+      if (cannotBeatIncumbent(node.state, incumbentQuality, objective)) continue
+
+      const children = expand(node.state)
+      for (const child of children) {
+        completeLeaf(child)
+        nextBeam.push({ state: child, depth: node.depth + 1 })
+      }
     }
-    completeLeaves(second)
+
+    nextBeam.sort((a, b) => {
+      const boundDelta = rankingBound(b.state, objective) - rankingBound(a.state, objective)
+      if (boundDelta !== 0) return boundDelta
+      return b.state.placed.length - a.state.placed.length
+    })
+    beam = nextBeam.slice(0, beamWidth)
   }
 
   return {

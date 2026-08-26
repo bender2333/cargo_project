@@ -1,6 +1,13 @@
 # Changelog
 
 
+## 2026-08-26 budget-controlled packing search
+
+- `optimizePacking` is no longer hard-capped at depth 2. Expansion is jointly limited by `beamWidth`, `maxStates`, `maxMs`, and optional `maxDepth`. Default budget is width 8 / 32 states / 8s with no maxDepth.
+- Quantity prunes only when `placedCount + remainingDemand` cannot beat the incumbent count. Volume prunes only when `usedVolume + remainingCargoVolume` cannot beat incumbent volume. Ranking still uses leftover-geometry optimistic bounds (may overestimate, must not underestimate for pruning).
+- Every expanded child is completed with the same residual fill before objective compare. Budget exhaustion returns the last complete incumbent, never a partial local state. Claim remains `best-found-within-budget`.
+- packingSearch 23. Did not change goldens.
+
 ## 2026-08-26 feasible-first beam admission
 
 - Beam expansion is now `generateBlockCandidates` → `canStageBlock`/`canPlaceBox` per unit → bound only on feasible choices → sort → clone → commit → complete. Illegal high-bound blocks cannot occupy beam slots.
