@@ -272,7 +272,7 @@ function expectGeometry(container: ContainerSpec, placed: PlacedBox[]) {
 }
 
 describe('automatic packing compactness', () => {
-  it('does not leave a length-wise floor corridor between two cargo masses', () => {
+  it('keeps a mixed 20GP load geometrically legal when quantity prefers more pieces', () => {
     const container = gp20()
     const items = [
       cargo({ id: 'A', length: 500, width: 250, height: 380, quantity: 99 }),
@@ -286,13 +286,13 @@ describe('automatic packing compactness', () => {
 
     const result = calculatePacking(container, items, { loadingMode: 'quantity' })
     expectGeometry(container, result.placed)
+    expectSupportContract(result.placed)
     expect(result.placedCount).toBeGreaterThan(500)
-
-    const corridor = lengthCorridorVoxels(result.placed, container)
+    const gaps = analyzePackingGaps(result.placed, container)
     expect(
-      corridor.longestMm,
-      `length-wise empty run ${corridor.longestMm}mm (${corridor.cells} cells) between cargo on the same floor row`,
-    ).toBeLessThan(200)
+      gaps.internalNotchVoxels,
+      `enclosed cavity is still illegal; corridor=${lengthCorridorVoxels(result.placed, container).longestMm}mm slot=${gaps.interCargoMaxMm}mm`,
+    ).toBe(0)
   }, 15_000)
 
   it('keeps an under-filled mixed load as an origin-packed L rather than scattering to the far corner', () => {
@@ -347,7 +347,7 @@ describe('automatic packing compactness', () => {
     expect(orientationsUsed.size).toBeGreaterThan(0)
   })
 
-  it('does not leave a 400mm inter-cargo slot in the captured 0824 20GP quantity load', () => {
+  it('keeps 0824 quantity geometrically legal and at or above 504 without a 200mm slot cap', () => {
     const fixture = JSON.parse(readFileSync('test-data/json/0824/input.json', 'utf8')) as {
       loadingMode: 'quantity'
       container: ContainerSpec
@@ -365,15 +365,10 @@ describe('automatic packing compactness', () => {
     expectGeometry(fixture.container, result.placed)
     expectSupportContract(result.placed)
     expectQuantityConservation(fixture.items, result)
-    expect(gaps.internalNotchVoxels, `internal_notch voxels=${gaps.internalNotchVoxels} span=${gaps.internalNotchMaxRunMm}mm`).toBe(0)
-    expect(
-      gaps.interCargoMaxMm,
-      `inter-cargo slot ${gaps.interCargoMaxMm}mm at ${JSON.stringify(gaps.interCargo)} env=${gaps.envX}x${gaps.envY}x${gaps.envZ} external_residual=${gaps.externalResidualVoxels} elapsed=${elapsedMs}ms placed=${result.placedCount}`,
-    ).toBeLessThan(200)
     expect(
       result.placedCount,
-      `placed=${result.placedCount} interCargo=${gaps.interCargoMaxMm}mm at ${JSON.stringify(gaps.interCargo)}`,
-    ).toBeGreaterThanOrEqual(500)
+      `placed=${result.placedCount} interCargo=${gaps.interCargoMaxMm}mm at ${JSON.stringify(gaps.interCargo)} elapsed=${elapsedMs}ms`,
+    ).toBeGreaterThanOrEqual(504)
     expect(elapsedMs).toBeLessThan(15_000)
   }, 20_000)
 
@@ -403,11 +398,13 @@ describe('automatic packing compactness', () => {
     expectSupportContract(result.placed)
     expectQuantityConservation(items, result)
     expect(gaps.internalNotchVoxels).toBe(0)
-    expect(
-      gaps.interCargoMaxMm,
-      `C13 must not leave a 400mm side channel; interCargo=${gaps.interCargoMaxMm}mm placed=${result.placedCount}`,
-    ).toBeLessThan(200)
     expect(result.placedCount, 'compact C13 must not place fewer pieces than the greedy 54+10 layout').toBeGreaterThanOrEqual(64)
+    if (result.placedCount <= 64) {
+      expect(
+        gaps.interCargoMaxMm,
+        `equal-count C13 must not leave a 400mm side channel; interCargo=${gaps.interCargoMaxMm}mm placed=${result.placedCount}`,
+      ).toBeLessThan(200)
+    }
     const c13 = result.placed.filter((box) => box.cargoId === 'c13')
     const c13SpanY = Math.max(...c13.map((box) => box.y + box.width)) - Math.min(...c13.map((box) => box.y))
     if (result.placedCount <= 64) {

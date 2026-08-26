@@ -15,7 +15,7 @@ import {
   type PackingPoint,
 } from './packingFeasibility'
 import { packingQualityOf } from './packingObjective'
-import { DEFAULT_QUANTITY_SEARCH_BUDGET, optimizePacking, pickBestCappedComplete } from './packingSearch'
+import { DEFAULT_QUANTITY_SEARCH_BUDGET, optimizePacking, type PackingSearchStats } from './packingSearch'
 import { clonePackingSearchState, type PackingCargoState, type PackingSearchState } from './packingSearchState'
 import { GAP_FILL_SOURCE } from './placementSource'
 import { buildLabelStats } from './labels'
@@ -572,55 +572,24 @@ function cargoVolume(item: CargoItem) {
   return item.length * item.width * item.height
 }
 
-function floorCorridorMaxMm(placed: PlacementBox[], container: ContainerSpec) {
-  const voxel = 50
-  const nx = Math.ceil(container.length / voxel)
-  const ny = Math.ceil(container.width / voxel)
-  const occ = Array.from({ length: nx }, () => new Uint8Array(ny))
-  for (const box of placed) {
-    const x0 = Math.max(0, Math.floor(box.x / voxel))
-    const x1 = Math.min(nx, Math.ceil((box.x + box.length) / voxel))
-    const y0 = Math.max(0, Math.floor(box.y / voxel))
-    const y1 = Math.min(ny, Math.ceil((box.y + box.width) / voxel))
-    for (let x = x0; x < x1; x += 1) {
-      for (let y = y0; y < y1; y += 1) occ[x][y] = 1
-    }
-  }
-  let longest = 0
-  for (let y = 0; y < ny; y += 1) {
-    let first = -1
-    let last = -1
-    for (let x = 0; x < nx; x += 1) {
-      if (!occ[x][y]) continue
-      if (first < 0) first = x
-      last = x
-    }
-    if (first < 0) continue
-    let run = 0
-    for (let x = first; x <= last; x += 1) {
-      if (occ[x][y]) {
-        run = 0
-        continue
-      }
-      run += 1
-      if (run > longest) longest = run
-    }
-  }
-  return longest * voxel
+let lastSearchStats: PackingSearchStats | null = null
+
+export function lastPackingSearchStats(): PackingSearchStats | null {
+  return lastSearchStats
 }
 
-function passesQuantityHardCaps(
-  greedy: PackingSearchState,
-  candidate: PackingSearchState,
-  container: ContainerSpec,
-) {
-  const greedyQuality = packingQualityOf(greedy)
-  const candidateQuality = packingQualityOf(candidate)
-  if (greedyQuality.internalNotchVolume === 0 && candidateQuality.internalNotchVolume > 0) return false
-  if (greedyQuality.interCargoMaxMm < 200 && candidateQuality.interCargoMaxMm >= 200) return false
-  const greedyCorridor = floorCorridorMaxMm(greedy.placed, container)
-  if (greedyCorridor < 200 && floorCorridorMaxMm(candidate.placed, container) >= 200) return false
-  return true
+function publishSearchStats(stats: PackingSearchStats) {
+  lastSearchStats = stats
+}
+
+function greedySearchStats(): PackingSearchStats {
+  return {
+    strategy: 'greedy',
+    statesExpanded: 0,
+    candidatesEvaluated: 0,
+    budgetExceeded: false,
+    claim: 'best-found-within-budget',
+  }
 }
 
 function blockPlacementKey(choice: Pick<PackingBlockChoice, 'state' | 'block' | 'point'>) {
@@ -665,6 +634,7 @@ export function shouldUseBlockEngine(cargoItems: CargoItem[], loadingMode: Loadi
 }
 
 export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem[], options: CalculatePackingOptions = {}): PackingResult {
+  lastSearchStats = greedySearchStats()
   const effective = effectiveContainer(container)
   const placed: PlacementBox[] = []
   const placedByIdLive = new Map<string, StackChainNode>()
@@ -1072,18 +1042,12 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
       maxMs: 1500,
     }
     if (loadingMode === 'quantity') {
-      const { completes } = optimizePacking(snapshotSearchState(), searchBudget, searchHooks, 'quantity')
-      if (completes.length === 0) {
-        runGreedyBlockEngine()
-      } else {
-        applySearchState(pickBestCappedComplete(
-          completes,
-          { quality: packingQualityOf },
-          (greedy, candidate) => passesQuantityHardCaps(greedy, candidate, effective),
-        ))
-      }
+      const { state, search } = optimizePacking(snapshotSearchState(), searchBudget, searchHooks, 'quantity')
+      publishSearchStats(search)
+      applySearchState(state)
     } else if (loadingMode === 'volume') {
-      const { state, completes } = optimizePacking(snapshotSearchState(), searchBudget, searchHooks, 'volume')
+      const { state, search, completes } = optimizePacking(snapshotSearchState(), searchBudget, searchHooks, 'volume')
+      publishSearchStats(search)
       const greedy = completes[0]
       if (!greedy) {
         runGreedyBlockEngine()

@@ -24,6 +24,8 @@ export type PackingSearchStats = {
   statesExpanded: number
   candidatesEvaluated: number
   budgetExceeded: boolean
+  /** Search never claims a global optimum; this is the best complete found in budget. */
+  claim: 'best-found-within-budget'
 }
 
 /**
@@ -118,6 +120,21 @@ export function optimisticCountBound(state: PackingSearchState): number {
   return state.placed.length + optimisticEmsCapacity(state.emsList, state.cargoStates)
 }
 
+function searchStats(
+  strategy: PackingSearchStats['strategy'],
+  statesExpanded: number,
+  candidatesEvaluated: number,
+  budgetExceeded: boolean,
+): PackingSearchStats {
+  return {
+    strategy,
+    statesExpanded,
+    candidatesEvaluated,
+    budgetExceeded,
+    claim: 'best-found-within-budget',
+  }
+}
+
 function scoreChoice(state: PackingSearchState, choice: PackingBlockChoice, objective: PackingObjective) {
   const cargoStates = state.cargoStates.map((cargo) => {
     if (cargo.item.id !== choice.cargoId || cargo.itemIndex !== choice.state.itemIndex) return cargo
@@ -141,29 +158,6 @@ function scoreChoice(state: PackingSearchState, choice: PackingBlockChoice, obje
     placed,
     volume,
   }
-}
-
-export function pickBestCappedComplete(
-  completes: PackingSearchState[],
-  hooks: Pick<PackingSearchHooks, 'quality'>,
-  allowed: (greedy: PackingSearchState, candidate: PackingSearchState) => boolean,
-): PackingSearchState {
-  const greedy = completes[0]
-  if (!greedy) {
-    throw new Error('pickBestCappedComplete requires the greedy complete as completes[0]')
-  }
-
-  let best = greedy
-  let bestQuality = hooks.quality(greedy)
-  for (const candidate of completes) {
-    if (candidate !== greedy && !allowed(greedy, candidate)) continue
-    const quality = hooks.quality(candidate)
-    if (comparePackingQuality(quality, bestQuality, 'quantity') < 0) {
-      best = candidate
-      bestQuality = quality
-    }
-  }
-  return best
 }
 
 export function optimizePacking(
@@ -201,12 +195,7 @@ export function optimizePacking(
   if (budget.maxStates <= 0 || outOfTime()) {
     return {
       state: incumbent,
-      search: {
-        strategy: 'greedy',
-        statesExpanded,
-        candidatesEvaluated,
-        budgetExceeded: true,
-      },
+      search: searchStats('greedy', statesExpanded, candidatesEvaluated, true),
       completes,
     }
   }
@@ -215,12 +204,7 @@ export function optimizePacking(
   if (remainingAfterIncumbent <= 0) {
     return {
       state: incumbent,
-      search: {
-        strategy: 'greedy',
-        statesExpanded,
-        candidatesEvaluated,
-        budgetExceeded: false,
-      },
+      search: searchStats('greedy', statesExpanded, candidatesEvaluated, false),
       completes,
     }
   }
@@ -292,12 +276,7 @@ export function optimizePacking(
 
   return {
     state: incumbent,
-    search: {
-      strategy,
-      statesExpanded,
-      candidatesEvaluated,
-      budgetExceeded,
-    },
+    search: searchStats(strategy, statesExpanded, candidatesEvaluated, budgetExceeded),
     completes,
   }
 }

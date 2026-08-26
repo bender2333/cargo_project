@@ -8,6 +8,7 @@ export type PackingQuality = {
   placedCount: number
   usedVolume: number
   internalNotchVolume: number
+  unsupportedSpanRisk: number
   interCargoMaxMm: number
   deadEmsVolume: number
   externalResidualVolume: number
@@ -20,6 +21,7 @@ function layoutCompactness(placed: PlacementBox[], container: ContainerSpec) {
   if (placed.length === 0) {
     return {
       internalNotchVolume: 0,
+      unsupportedSpanRisk: 0,
       interCargoMaxMm: 0,
       externalResidualVolume: container.length * container.width * container.height,
     }
@@ -119,9 +121,21 @@ function layoutCompactness(placed: PlacementBox[], container: ContainerSpec) {
 
   return {
     internalNotchVolume: internalNotchVoxels * QUALITY_VOXEL_VOLUME,
+    unsupportedSpanRisk: unsupportedSpanRiskOf(placed),
     interCargoMaxMm,
     externalResidualVolume: externalResidualVoxels * QUALITY_VOXEL_VOLUME,
   }
+}
+
+function unsupportedSpanRiskOf(placed: PlacementBox[]) {
+  let risk = 0
+  for (const box of placed) {
+    if (box.z <= 0.001) continue
+    if (box.supportType === 'partially-supported') {
+      risk += box.length * box.width
+    }
+  }
+  return risk
 }
 
 export function packingQualityOf(state: PackingSearchState): PackingQuality {
@@ -131,6 +145,7 @@ export function packingQualityOf(state: PackingSearchState): PackingQuality {
     placedCount: state.placed.length,
     usedVolume: state.placed.reduce((sum, box) => sum + box.length * box.width * box.height, 0),
     internalNotchVolume: compactness.internalNotchVolume,
+    unsupportedSpanRisk: compactness.unsupportedSpanRisk,
     interCargoMaxMm: compactness.interCargoMaxMm,
     deadEmsVolume: leftover.deadVolume,
     externalResidualVolume: compactness.externalResidualVolume,
@@ -139,6 +154,7 @@ export function packingQualityOf(state: PackingSearchState): PackingQuality {
 
 function compareCompactness(a: PackingQuality, b: PackingQuality) {
   return a.internalNotchVolume - b.internalNotchVolume
+    || a.unsupportedSpanRisk - b.unsupportedSpanRisk
     || a.interCargoMaxMm - b.interCargoMaxMm
     || a.deadEmsVolume - b.deadEmsVolume
     || a.externalResidualVolume - b.externalResidualVolume

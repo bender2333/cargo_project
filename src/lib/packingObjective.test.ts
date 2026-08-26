@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { comparePackingQuality, type PackingQuality } from './packingObjective'
+import type { ContainerSpec, PlacementBox } from '../types'
+import { comparePackingQuality, packingQualityOf, type PackingQuality } from './packingObjective'
+import { MINIMUM_SUPPORT_RATIO } from './packingFeasibility'
+import type { PackingSearchState } from './packingSearchState'
 
 function quality(overrides: Partial<PackingQuality> = {}): PackingQuality {
   return {
     placedCount: 500,
     usedVolume: 10_000_000,
     internalNotchVolume: 0,
+    unsupportedSpanRisk: 0,
     interCargoMaxMm: 0,
     deadEmsVolume: 0,
     externalResidualVolume: 0,
@@ -18,6 +22,58 @@ function sign(value: number) {
 }
 
 describe('comparePackingQuality', () => {
+  it('quantity prefers a feasible 524/400mm external slot over a compact 504/150mm layout', () => {
+    const compact504 = quality({
+      placedCount: 504,
+      usedVolume: 12_000_000,
+      internalNotchVolume: 0,
+      unsupportedSpanRisk: 0,
+      interCargoMaxMm: 150,
+      deadEmsVolume: 0,
+      externalResidualVolume: 1_000_000,
+    })
+    const legal524 = quality({
+      placedCount: 524,
+      usedVolume: 12_400_000,
+      internalNotchVolume: 0,
+      unsupportedSpanRisk: 0,
+      interCargoMaxMm: 400,
+      deadEmsVolume: 8_000_000,
+      externalResidualVolume: 4_000_000,
+    })
+
+    expect(comparePackingQuality(legal524, compact504, 'quantity')).toBeLessThan(0)
+    expect(comparePackingQuality(compact504, legal524, 'quantity')).toBeGreaterThan(0)
+  })
+
+  it('quantity ranks a legal 524 above 506 and 504 because placedCount is the primary key', () => {
+    const compact504 = quality({
+      placedCount: 504,
+      internalNotchVolume: 0,
+      unsupportedSpanRisk: 0,
+      interCargoMaxMm: 150,
+    })
+    const legal524 = quality({
+      placedCount: 524,
+      internalNotchVolume: 0,
+      unsupportedSpanRisk: 0,
+      interCargoMaxMm: 400,
+    })
+    const compact506 = quality({
+      placedCount: 506,
+      usedVolume: 11_000_000,
+      internalNotchVolume: 0,
+      unsupportedSpanRisk: 0,
+      interCargoMaxMm: 180,
+      deadEmsVolume: 8_000_000,
+      externalResidualVolume: 2_000_000,
+    })
+
+    expect(comparePackingQuality(compact506, compact504, 'quantity')).toBeLessThan(0)
+    expect(comparePackingQuality(compact506, legal524, 'quantity')).toBeGreaterThan(0)
+    expect(comparePackingQuality(legal524, compact504, 'quantity')).toBeLessThan(0)
+  })
+
   it('quantity prefers 506 pieces over a tighter 504 with no interior notch', () => {
     const fewerCompact = quality({
       placedCount: 504,
@@ -58,7 +114,25 @@ describe('comparePackingQuality', () => {
     expect(comparePackingQuality(hasNotch, noNotch, 'quantity')).toBeGreaterThan(0)
   })
 
-  it('quantity prefers the smaller inter-cargo slot once count and notch match', () => {
+  it('quantity prefers the lower unsupported-span risk once count and interior notch match', () => {
+    const stable = quality({
+      placedCount: 504,
+      internalNotchVolume: 0,
+      unsupportedSpanRisk: 10,
+      interCargoMaxMm: 400,
+    })
+    const risky = quality({
+      placedCount: 504,
+      internalNotchVolume: 0,
+      unsupportedSpanRisk: 80,
+      interCargoMaxMm: 0,
+    })
+
+    expect(comparePackingQuality(stable, risky, 'quantity')).toBeLessThan(0)
+    expect(comparePackingQuality(risky, stable, 'quantity')).toBeGreaterThan(0)
+  })
+
+  it('quantity prefers the smaller inter-cargo slot once count, notch, and support risk match', () => {
     const tight = quality({
       placedCount: 504,
       internalNotchVolume: 0,
@@ -195,5 +269,67 @@ describe('comparePackingQuality', () => {
     const sameExceptVolume = quality({ ...a, usedVolume: a.usedVolume + 1 })
     expect(comparePackingQuality(a, sameExceptVolume, 'quantity')).toBe(0)
     expect(comparePackingQuality(a, sameExceptVolume, 'volume')).not.toBe(0)
+  })
+})
+
+describe('packingQualityOf support risk', () => {
+  it('scores unsupported span from the real supportType on placed boxes, not from empty voxels', () => {
+    const container: ContainerSpec = {
+      id: 'risk',
+      label: 'risk',
+      description: 'risk',
+      length: 2000,
+      width: 1000,
+      height: 1000,
+      maxWeight: 10_000,
+      doorGap: 0,
+      topGap: 0,
+      sideGap: 0,
+    }
+    const floor: PlacementBox = {
+      id: 'floor-1',
+      cargoId: 'a',
+      name: 'a',
+      label: 'A',
+      index: 1,
+      x: 0,
+      y: 0,
+      z: 0,
+      length: 1000,
+      width: 1000,
+      height: 500,
+      orientationKey: 'LWH',
+      labelRotationDeg: 0 as const,
+      weight: 1,
+      color: '#64748b',
+      canRotate: false,
+      stackable: true,
+      physicalLayer: 1,
+      workStep: 1,
+      supportType: 'floor',
+      supportedBy: [],
+    }
+    const rider: PlacementBox = {
+      ...floor,
+      id: 'rider-1',
+      index: 2,
+      z: 500,
+      workStep: 2,
+      physicalLayer: 2,
+      supportType: 'partially-supported',
+      supportedBy: ['floor-1'],
+    }
+    const state: PackingSearchState = {
+      container,
+      cargoStates: [],
+      emsList: [],
+      placed: [floor, rider],
+      placedById: new Map([[floor.id, floor], [rider.id, rider]]),
+      usedWeight: 2,
+      minSupportRatio: MINIMUM_SUPPORT_RATIO,
+    }
+
+    expect(packingQualityOf(state).unsupportedSpanRisk).toBe(1000 * 1000)
+    expect(packingQualityOf({ ...state, placed: [floor], placedById: new Map([[floor.id, floor]]) }).unsupportedSpanRisk).toBe(0)
   })
 })

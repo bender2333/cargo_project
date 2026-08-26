@@ -224,7 +224,7 @@ function analyzePackingGaps(placed, container, voxel = VOXEL) {
   }
 }
 
-function summarizeRun(name, fixture, loadingMode, container, items, result, elapsedMs, effective) {
+function summarizeRun(name, fixture, loadingMode, container, items, result, elapsedMs, effective, search) {
   const gaps = analyzePackingGaps(result.placed, effective)
   return {
     name,
@@ -245,13 +245,13 @@ function summarizeRun(name, fixture, loadingMode, container, items, result, elap
     elapsedMs,
     skuPlaced: skuPlaced(items, result),
     gaps,
-    search: null,
+    search: search ?? null,
   }
 }
 
 const vite = await createServer(packingBenchmarkViteConfig(root))
 try {
-  const [{ calculatePacking }, { containers, effectiveContainer }] = await Promise.all([
+  const [{ calculatePacking, lastPackingSearchStats }, { containers, effectiveContainer }] = await Promise.all([
     vite.ssrLoadModule('/src/lib/packing.ts'),
     vite.ssrLoadModule('/src/data/containers.ts'),
   ])
@@ -341,6 +341,7 @@ try {
       result,
       elapsedMs,
       effectiveContainer(job.container),
+      lastPackingSearchStats(),
     ))
   }
 
