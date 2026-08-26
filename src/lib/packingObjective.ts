@@ -24,7 +24,7 @@ function placementTieBreakOf(state: PackingSearchState) {
 }
 
 export function packingQualityOf(state: PackingSearchState): PackingQuality {
-  const compactness = layoutCompactness(state.placed, state.container, state.placedById)
+  const compactness = layoutCompactness(state.placed, state.container)
   const leftover = scoreRemainingEmsQuality(state.emsList, state.cargoStates)
   return {
     placedCount: state.placed.length,
