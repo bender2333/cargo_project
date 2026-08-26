@@ -105,6 +105,7 @@ function qualityOf(state: PackingSearchState, notch: number): PackingQuality {
     interCargoMaxMm: 0,
     deadEmsVolume: 0,
     externalResidualVolume: 0,
+    placementTieBreak: '',
   }
 }
 

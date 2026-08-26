@@ -1,6 +1,14 @@
 # Changelog
 
 
+## 2026-08-26 shared layout quality (support union + independent cavity/slot/risk)
+
+- Extracted `src/lib/packingLayoutQuality.ts`. `packingObjective` and `packingSlotRelocation` no longer duplicate the 50mm voxel occupancy scan.
+- Independent complete-layout metrics: `internalNotchVolume` (empty components that never touch a container face), `externalResidualVolume` (components that touch a face), `interCargoMaxMm` (both-sides empty run), `unsupportedSpanRisk`.
+- `unsupportedSpanRisk` uses the real `supportedBy` rectangles: union area (overlapping supports are not summed twice), `unsupportedArea = base - union`, `maxUnsupportedSpan` = longest uncovered axis-aligned run on the footprint, risk = `unsupportedArea * maxUnsupportedSpan`. Geometric proxy only — not a transport-stability proof. Floor and fully covered riders score 0. 50% vs 90% support score differently.
+- `PackingQuality.placementTieBreak` is a deterministic work-step/orientation/coordinate key used only after the numeric lexicographic keys.
+- Tests: packingLayoutQuality 7, packingObjective 11, packingSearch 16, packingSlotRelocation 3. Touched-file eslint 0. Did not change goldens.
+
 ## 2026-08-26 quantity-first: remove slot hard caps
 
 - User authorized dropping quantity `passesQuantityHardCaps`. `interCargoMaxMm` is a same-count layout quality key, not a stability hard fail. Real hard fails stay in `canPlaceBox` / `canStageBlock`.

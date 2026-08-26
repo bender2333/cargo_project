@@ -13,6 +13,7 @@ function quality(overrides: Partial<PackingQuality> = {}): PackingQuality {
     interCargoMaxMm: 0,
     deadEmsVolume: 0,
     externalResidualVolume: 0,
+    placementTieBreak: '',
     ...overrides,
   }
 }
@@ -273,7 +274,7 @@ describe('comparePackingQuality', () => {
 })
 
 describe('packingQualityOf support risk', () => {
-  it('scores unsupported span from the real supportType on placed boxes, not from empty voxels', () => {
+  it('scores unsupported span from support rectangles, not from supportType or empty voxels', () => {
     const container: ContainerSpec = {
       id: 'risk',
       label: 'risk',
@@ -329,7 +330,7 @@ describe('packingQualityOf support risk', () => {
       minSupportRatio: MINIMUM_SUPPORT_RATIO,
     }
 
-    expect(packingQualityOf(state).unsupportedSpanRisk).toBe(1000 * 1000)
+    expect(packingQualityOf(state).unsupportedSpanRisk).toBe(0)
     expect(packingQualityOf({ ...state, placed: [floor], placedById: new Map([[floor.id, floor]]) }).unsupportedSpanRisk).toBe(0)
   })
 })

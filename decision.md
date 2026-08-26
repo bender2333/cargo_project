@@ -1,6 +1,18 @@
 # Decision Log
 
 
+## 2026-08-26 unsupportedSpanRisk 用支撑矩形并集，不是运输稳定性证明（已决策）
+
+- 背景：上一轮 `unsupportedSpanRisk` 对 `supportType === 'partially-supported'` 的箱体直接加底面积，不看真实支撑矩形，也无法区分 50% 与 90% 支撑。`packingObjective` 与 `packingSlotRelocation` 各扫一遍体素。
+- 选项：
+  - A. 继续用 supportType 旗标当风险
+  - B. 共享布局质量模块：内腔 / 外残余 / 货物间槽 / 支撑风险分开算；支撑面积用矩形并集，风险 = `unsupportedArea * maxUnsupportedSpan`
+- 决策：B。已决策。本轮任务要求。
+- 这是几何风险代理，不得写成运输稳定性证明。硬约束仍在 `canPlaceBox` / `canStageBlock` 的支撑比门槛。
+- 影响：与地面全重叠但仍被标成 partial 的 rider 风险变为 0。槽、内腔、支撑风险保持三个独立指标。
+- 后续：Phase 4 槽重排仍不进生产路径；本轮只把体素扫描抽到共享模块。
+
+
 ## 2026-08-26 解除 quantity 槽硬限制（已决策）
 
 - 背景：上一轮 `passesQuantityHardCaps` 把货物间槽 / 地面走廊 / 内部空腔当成搜索淘汰条件。0824 合法候选 A（524 件 / 400mm 外开口槽）被拒绝，候选 B（504 件 / 150mm 槽）获胜。用户已明确授权：去除 quantity 模式的槽限制。

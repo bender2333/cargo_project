@@ -1,11 +1,11 @@
 import { initEMS, splitEMS } from './emsSpace'
 import { generateBlockCandidates, selectBlockCandidate } from './packingCandidates'
 import { canStageBlock } from './packingFeasibility'
+import { largestInterCargoGap } from './packingLayoutQuality'
 import { comparePackingQuality, packingQualityOf, type PackingObjective } from './packingObjective'
 import type { PackingSearchHooks } from './packingSearch'
 import { clonePackingSearchState, type PackingSearchState } from './packingSearchState'
 
-const VOXEL = 50
 const EPSILON = 0.001
 
 export type SlotRelocationBudget = {
@@ -36,81 +36,8 @@ function rebuildEms(state: PackingSearchState) {
   return emsList
 }
 
-function largestInterCargoGap(state: PackingSearchState) {
-  const { container, placed } = state
-  if (placed.length === 0) return undefined
-
-  const nx = Math.ceil(container.length / VOXEL)
-  const ny = Math.ceil(container.width / VOXEL)
-  const nz = Math.ceil(container.height / VOXEL)
-  const occupied = new Uint8Array(nx * ny * nz)
-  const index = (x: number, y: number, z: number) => (x * ny + y) * nz + z
-
-  for (const box of placed) {
-    const x0 = Math.max(0, Math.floor(box.x / VOXEL))
-    const x1 = Math.min(nx, Math.ceil((box.x + box.length) / VOXEL))
-    const y0 = Math.max(0, Math.floor(box.y / VOXEL))
-    const y1 = Math.min(ny, Math.ceil((box.y + box.width) / VOXEL))
-    const z0 = Math.max(0, Math.floor(box.z / VOXEL))
-    const z1 = Math.min(nz, Math.ceil((box.z + box.height) / VOXEL))
-    for (let x = x0; x < x1; x += 1) {
-      for (let y = y0; y < y1; y += 1) {
-        for (let z = z0; z < z1; z += 1) occupied[index(x, y, z)] = 1
-      }
-    }
-  }
-
-  let best: { mm: number; axis: 'x' | 'y'; x0: number; x1: number; y0: number; y1: number; z: number } | undefined
-  const note = (mm: number, axis: 'x' | 'y', x0: number, x1: number, y0: number, y1: number, z: number) => {
-    if (best && mm <= best.mm) return
-    best = { mm, axis, x0, x1, y0, y1, z }
-  }
-
-  for (let z = 0; z < Math.max(0, nz - 1); z += 1) {
-    for (let x = 0; x < nx; x += 1) {
-      let y = 0
-      while (y < ny) {
-        if (occupied[index(x, y, z)]) {
-          y += 1
-          continue
-        }
-        const start = y
-        while (y < ny && !occupied[index(x, y, z)]) y += 1
-        if (start > 0 && y < ny && occupied[index(x, start - 1, z)] && occupied[index(x, y, z)]) {
-          note((y - start) * VOXEL, 'y', x, x + 1, start, y, z)
-        }
-      }
-    }
-    for (let y = 0; y < ny; y += 1) {
-      let x = 0
-      while (x < nx) {
-        if (occupied[index(x, y, z)]) {
-          x += 1
-          continue
-        }
-        const start = x
-        while (x < nx && !occupied[index(x, y, z)]) x += 1
-        if (start > 0 && x < nx && occupied[index(start - 1, y, z)] && occupied[index(x, y, z)]) {
-          note((x - start) * VOXEL, 'x', start, x, y, y + 1, z)
-        }
-      }
-    }
-  }
-  if (!best) return undefined
-
-  const minX = best.x0 * VOXEL
-  const maxX = best.x1 * VOXEL
-  const minY = best.y0 * VOXEL
-  const maxY = best.y1 * VOXEL
-  const minZ = best.z * VOXEL
-  const maxZ = (best.z + 1) * VOXEL
-  const touchesBoundary = minX <= EPSILON
-    || minY <= EPSILON
-    || minZ <= EPSILON
-    || maxX >= container.length - EPSILON
-    || maxY >= container.width - EPSILON
-    || maxZ >= container.height - EPSILON
-  return { ...best, minX, maxX, minY, maxY, minZ, maxZ, touchesBoundary }
+function gapOf(state: PackingSearchState) {
+  return largestInterCargoGap(state.placed, state.container)
 }
 
 function restoreRemoved(state: PackingSearchState, removedIds: Set<string>) {
@@ -190,7 +117,7 @@ export function relocateLargestBoundarySlot(
       break
     }
     rounds += 1
-    const gap = largestInterCargoGap(current)
+    const gap = gapOf(current)
     if (!gap || !gap.touchesBoundary) break
 
     const doorSide = current.placed.filter((box) => {
