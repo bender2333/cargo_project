@@ -1,6 +1,36 @@
 # Changelog
 
 
+## 2026-08-26 quantity-first: remove slot hard caps
+
+- User authorized dropping quantity `passesQuantityHardCaps`. `interCargoMaxMm` is a same-count layout quality key, not a stability hard fail. Real hard fails stay in `canPlaceBox` / `canStageBlock`.
+- Quantity lexicographic complete-layout order: `placedCount` ↓, `internalNotchVolume` ↑, `unsupportedSpanRisk` ↑, `interCargoMaxMm` ↑, residual ↑. Volume still `usedVolume` then `placedCount`. A legal 524/400mm layout beats 504/150mm; a legal 524 also beats 506 because count is primary.
+- Production quantity path uses `optimizePacking` incumbent directly. Deleted `passesQuantityHardCaps` and `pickBestCappedComplete`.
+- `lastPackingSearchStats()` exposes `statesExpanded`, `candidatesEvaluated`, `budgetExceeded`, `claim: 'best-found-within-budget'`. Not written into `PackingResult`.
+- `packingSlotRelocation.relocateLargestBoundarySlot` and `packingOracle.solvePackingOracle` exist as callables. `calculatePacking` does not import them.
+- 0824 quantity this budget is still **504** / slot 150 / notch 0 (`strategy=greedy`, `statesExpanded=4`, `budgetExceeded=true`, 2102ms). Historical 524 was not reproduced inside `maxMs=1500`. Did not raise 0824 to 524/506. Did not change production goldens.
+
+| fixture | mode | placed | usedVolume | interCargoMaxMm | search | notes |
+|---|---|---:|---:|---:|---|---|
+| 0824 20GP | quantity | 504 | 30243574000 | 150 | greedy, 4 states, budgetExceeded | floor held; 524/506 not found |
+| 0824 20GP | volume | 424 | 30725850000 | 0 | greedy, 8 states, budgetExceeded | usedVolume held |
+| Vietnam 20GP | quantity | 464 | 28074481500 | 1100 | greedy, budgetExceeded | |
+| Vietnam 20GP | volume | 473 | 29937044000 | 1000 | greedy, budgetExceeded | 473 held |
+| Vietnam 40HQ | quantity | 864 | 63038263000 | 8050 | greedy skip (full) | |
+| Vietnam 40HQ | volume | 864 | 63038263000 | 4550 | greedy skip (full) | |
+| 0802 40HQ | quantity | 877 | 61046585250 | 6800 | greedy skip (full) | 877/877 |
+
+Gates:
+
+- Focused packing/search/feasibility/objective/relocation/oracle tests: pass.
+- 0824, compactness, cross-EMS, lookahead, invariants, blockEngine: pass.
+- Touched-file eslint: exit 0.
+- `npx tsc -b`: exit 0.
+- `npm run build`: exit 0. Workbench `Workbench-BQtYYEtG.js`.
+- `npm run test:packing-performance`: 9 passed (0802 877 in 6427ms).
+- `packing.test.ts`: 56/57 at 5s (top-fill timeout, unchanged); `--testTimeout=20000` 57/57 GREEN.
+- Production goldens not updated.
+
 ## 2026-08-26 quantity-first slot relocation and stability plan
 
 - User direction: remove the quantity-mode slot hard cap. A boundary-connected gap is not automatically a stability failure; only real geometry, support, stacking, payload, and unloading constraints are hard failures.

@@ -14,6 +14,29 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-08-26-r74-quantity-first-slot',
+    date: '2026-08-26',
+    title: {
+      en: 'Quantity packing now keeps extra pieces even when a slot opens to the door or side wall',
+      zh: '数量优先现在会保留件数更多的方案，即使货物间出现通向门或侧壁的槽',
+    },
+    items: {
+      en: [
+        'Quantity mode ranks finished layouts by how many pieces they load. A boundary-connected gap is no longer a reason to throw away a higher count.',
+        'When two layouts load the same number of pieces, packing still prefers no enclosed cavity, then lower unsupported span, then a smaller gap between cartons.',
+        'The 0824 mixed 20GP load is still 504 pieces in the current search budget. The search reports the best layout it found in time, not a proven global optimum.',
+        'Volume mode is unchanged: occupied volume first. Vietnam 20GP volume packing stays at 473 pieces.',
+      ],
+      zh: [
+        '数量优先按最终装入件数比较完整方案。通向柜门或侧壁的槽不再用来否决更高件数。',
+        '件数相同时，仍优先没有封闭内腔，再看支撑风险，再看货物间槽。',
+        '0824 混装 20GP 在当前搜索预算内仍是 504 件。搜索只保证预算内找到的最好方案，不是全局最优。',
+        '体积优先仍然先比占用体积。越南 20GP 体积模式仍是 473 件。',
+      ],
+    },
+  },
+
+  {
     version: '2026-08-25-r73-quantity-volume-search',
     date: '2026-08-25',
     title: {
