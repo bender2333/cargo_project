@@ -14,6 +14,25 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-08-27-r75-vietnam-manual-hotkeys',
+    date: '2026-08-27',
+    title: {
+      en: 'Vietnam template packing closes the upper-layer slot and keeps 3D editing shortcuts active',
+      zh: '越南模板装箱收紧上层贯穿槽，3D 手动编辑快捷键恢复可用',
+    },
+    items: {
+      en: [
+        'Quantity packing in 20-foot containers now builds the loading front vertically first, avoiding a long upper-layer channel in the Vietnam template load.',
+        'After selecting a carton in the 3D view, Delete, Backspace, and M remain active even if the canvas briefly loses DOM focus.',
+      ],
+      zh: [
+        '20 英尺级货柜的数量优先装箱现在按垂直前沿优先构建，避免越南模板装载时形成贯穿上层的长槽。',
+        '3D 点选箱体后，即使画布短暂丢失 DOM 焦点，Delete、Backspace 和 M 仍然有效。',
+      ],
+    },
+  },
+
+  {
     version: '2026-08-26-r74-quantity-first-slot',
     date: '2026-08-26',
     title: {

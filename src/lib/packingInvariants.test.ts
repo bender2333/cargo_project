@@ -338,7 +338,7 @@ describe('PackingResult geometry is unchanged by the layering fix', () => {
   // 2026-07-28 layering baseline (463/462/839/823).
   const expectedPlacement: Record<string, { placed: number; total: number }> = {
     'russia-volume': { placed: 31, total: 31 },
-    'vietnam-20gp-quantity': { placed: 464, total: 864 },
+    'vietnam-20gp-quantity': { placed: 482, total: 864 },
     'vietnam-20gp-volume': { placed: 473, total: 864 },
     'vietnam-40hq-quantity': { placed: 864, total: 864 },
     'vietnam-40hq-volume': { placed: 864, total: 864 },

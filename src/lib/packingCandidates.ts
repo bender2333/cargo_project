@@ -10,6 +10,7 @@ import {
 import type { PackingCargoState, PackingSearchState } from './packingSearchState'
 
 const EPSILON = 0.001
+const SHORT_CONTAINER_LENGTH_MM = 6000
 
 export type PackingBlockChoice = {
   cargoId: string
@@ -126,8 +127,9 @@ function isNearEqualPrimary(a: PackingBlockChoice, b: PackingBlockChoice, loadin
   return Math.abs(a.block.volume - b.block.volume) <= maxVolume * 0.0001
 }
 
-function packingFrontDelta(a: PackingBlockChoice, b: PackingBlockChoice) {
-  return a.point.z - b.point.z || a.point.y - b.point.y || a.point.x - b.point.x
+function packingFrontDelta(a: PackingBlockChoice, b: PackingBlockChoice, preferVerticalFront: boolean) {
+  if (preferVerticalFront) return a.point.z - b.point.z || a.point.y - b.point.y || a.point.x - b.point.x
+  return a.point.x - b.point.x || a.point.z - b.point.z || a.point.y - b.point.y
 }
 
 /** Packing-front greedy: later EMS cannot win on a larger current block alone. */
@@ -135,8 +137,9 @@ function compareSelectBlockCandidate(
   a: PackingBlockChoice,
   b: PackingBlockChoice,
   loadingMode: 'quantity' | 'volume',
+  preferVerticalFront: boolean,
 ) {
-  const front = packingFrontDelta(a, b)
+  const front = packingFrontDelta(a, b, preferVerticalFront)
   if (front !== 0) {
     if (!isNearEqualPrimary(a, b, loadingMode)) return front
     const quality = a.remainingQuality && b.remainingQuality
@@ -194,9 +197,13 @@ export function selectBlockCandidate(
   if (candidates.length === 0) return undefined
 
   const pool = withRemainingQuality(candidates, loadingMode, state)
+  // In a 20-foot-class container, quantity loading benefits from finishing the
+  // current vertical front before opening the next longitudinal slot.
+  const preferVerticalFront = loadingMode === 'quantity'
+    && state.container.length <= SHORT_CONTAINER_LENGTH_MM
   let best: PackingBlockChoice | undefined
   for (const choice of pool) {
-    if (!best || compareSelectBlockCandidate(choice, best, loadingMode) < 0) {
+    if (!best || compareSelectBlockCandidate(choice, best, loadingMode, preferVerticalFront) < 0) {
       best = choice
     }
   }
