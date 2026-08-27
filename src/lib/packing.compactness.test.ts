@@ -4,6 +4,7 @@ import { containers, effectiveContainer } from '../data/containers'
 import type { CargoItem, ContainerSpec, PlacedBox } from '../types'
 import { calculatePacking, shouldUseBlockEngine } from './packing'
 import { expectQuantityConservation } from './packingContract.testSupport'
+import { largestInterCargoGap, layoutCompactness } from './packingLayoutQuality'
 import { violatesStackChain } from './stackCapacity'
 
 const VOXEL = 50
@@ -370,6 +371,21 @@ describe('automatic packing compactness', () => {
       `placed=${result.placedCount} interCargo=${gaps.interCargoMaxMm}mm at ${JSON.stringify(gaps.interCargo)} elapsed=${elapsedMs}ms`,
     ).toBeGreaterThanOrEqual(504)
     expect(elapsedMs).toBeLessThan(15_000)
+  }, 20_000)
+
+  it('keeps the Vietnam template load compact at the upper packing front', () => {
+    const fixture = JSON.parse(readFileSync('test-data/json/vietnam-11/input.json', 'utf8')) as {
+      loadingMode: 'quantity'
+      container: ContainerSpec
+      items: CargoItem[]
+    }
+    const result = calculatePacking(fixture.container, fixture.items, { loadingMode: fixture.loadingMode })
+    const gap = largestInterCargoGap(result.placed, fixture.container)
+
+    expectQuantityConservation(fixture.items, result)
+    expect(result.placedCount, 'the template load must not regress to the 464-piece scattered layout').toBeGreaterThanOrEqual(480)
+    expect(gap?.mm ?? 0, `Vietnam upper-front slot is ${gap?.mm ?? 0}mm`).toBeLessThan(1000)
+    expect(layoutCompactness(result.placed, fixture.container).internalNotchVolume).toBe(0)
   }, 20_000)
 
   it('does not pick a max-count C13 block that leaves a 400mm side channel next to C10 in a 360mm-tall space', () => {

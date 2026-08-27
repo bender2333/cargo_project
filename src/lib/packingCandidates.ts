@@ -127,7 +127,7 @@ function isNearEqualPrimary(a: PackingBlockChoice, b: PackingBlockChoice, loadin
 }
 
 function packingFrontDelta(a: PackingBlockChoice, b: PackingBlockChoice) {
-  return a.point.x - b.point.x || a.point.z - b.point.z || a.point.y - b.point.y
+  return a.point.z - b.point.z || a.point.y - b.point.y || a.point.x - b.point.x
 }
 
 /** Packing-front greedy: later EMS cannot win on a larger current block alone. */
