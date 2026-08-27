@@ -37,6 +37,24 @@ describe('resolveWorkspaceHotkey', () => {
     expect(resolveWorkspaceHotkey(input({ ...outside, nav: 'history', workspaceContains: true, key: 'Delete' }))).toBeNull()
   })
 
+  it('keeps the last 3D workspace interaction active when the canvas loses focus', () => {
+    expect(resolveWorkspaceHotkey(input({
+      workspaceContains: false,
+      workspaceInteracted: true,
+      key: 'Delete',
+    }))).toEqual({ type: 'delete', boxId: 'box-1' })
+    expect(resolveWorkspaceHotkey(input({
+      workspaceContains: false,
+      workspaceInteracted: true,
+      key: 'm',
+    }))).toEqual({ type: 'toggleClearance' })
+    expect(resolveWorkspaceHotkey(input({
+      workspaceContains: false,
+      workspaceInteracted: false,
+      key: 'Delete',
+    }))).toBeNull()
+  })
+
   it('still deletes in manual mode without a 2D/3D view flag, so 2D does not need the scene mounted', () => {
     expect(resolveWorkspaceHotkey(input({ key: 'Delete' }))).toEqual({ type: 'delete', boxId: 'box-1' })
   })

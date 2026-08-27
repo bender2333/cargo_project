@@ -16,6 +16,7 @@ export type WorkspaceHotkeyInput = {
   nav: string
   placementMode: 'auto' | 'manual'
   workspaceContains: boolean
+  workspaceInteracted?: boolean
   maximized: boolean
   selectedBoxId: string | null
   fromEditableField: boolean
@@ -29,7 +30,7 @@ function nudgeStep(input: WorkspaceHotkeyInput) {
 
 export function resolveWorkspaceHotkey(input: WorkspaceHotkeyInput): WorkspaceHotkeyCommand | null {
   if (input.fromEditableField) return null
-  if (input.nav !== 'overview' || !input.workspaceContains) return null
+  if (input.nav !== 'overview' || (!input.workspaceContains && !input.workspaceInteracted)) return null
 
   if (input.key === 'Escape') {
     if (input.maximized) return { type: 'exitMaximize' }

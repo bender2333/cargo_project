@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 import { resolveWorkspaceHotkey } from '../lib/workspaceHotkeys'
 import type { ManualRotationDirection } from '../lib/manualPlacement'
 
@@ -40,6 +40,28 @@ export function useWorkspaceHotkeys({
   onToggleClearance,
   onExitMaximize,
 }: UseWorkspaceHotkeysArgs) {
+  // Pointer/focus events can leave a WebGL canvas with `body` as the active
+  // element after a mode switch or a browser default action. Keep the last
+  // workspace interaction so a subsequent command still targets this editor,
+  // while any interaction outside the workspace revokes that scope.
+  const workspaceInteractedRef = useRef(false)
+
+  useEffect(() => {
+    const isInsideWorkspace = (target: EventTarget | null) => {
+      const workspace = workspaceRef.current
+      return Boolean(workspace && target instanceof Node && workspace.contains(target))
+    }
+    const trackWorkspaceInteraction = (event: Event) => {
+      workspaceInteractedRef.current = isInsideWorkspace(event.target)
+    }
+    window.addEventListener('pointerdown', trackWorkspaceInteraction, true)
+    window.addEventListener('focusin', trackWorkspaceInteraction, true)
+    return () => {
+      window.removeEventListener('pointerdown', trackWorkspaceInteraction, true)
+      window.removeEventListener('focusin', trackWorkspaceInteraction, true)
+    }
+  }, [workspaceRef])
+
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
@@ -53,7 +75,10 @@ export function useWorkspaceHotkeys({
         ctrl: event.ctrlKey,
         nav: enabled ? 'overview' : 'other',
         placementMode,
-        workspaceContains: Boolean(target && workspaceRef.current?.contains(target)),
+        workspaceContains: Boolean(
+          target && workspaceRef.current?.contains(target),
+        ),
+        workspaceInteracted: workspaceInteractedRef.current,
         maximized,
         selectedBoxId: selectedBox?.id ?? null,
         fromEditableField,
