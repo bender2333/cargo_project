@@ -3171,3 +3171,9 @@
 - 背景：3D 点选箱体后，canvas 可能因重渲染或浏览器焦点变化把 `keydown` 的 `event.target` 置为 `body`，导致工作区范围判断丢弃 Delete、Backspace 和 M。
 - 决策：在工作区内记录最近一次 pointer/focus 交互；工作区外的交互清除该作用域。window 仍只保留一个快捷键监听，输入框、导航页和历史/撤销保护不变。
 - 影响：真实 3D 点选后失焦仍可删除箱体和切换余量标注；新增 resolver 回归测试及完整手动 3D E2E 覆盖。
+
+## 2026-08-28 导入后报告导航仍启用工作区快捷键
+
+- 背景：导入确认后 Workbench 会导航到 `report`，但报告页仍渲染同一个 `VisualizationWorkspace`。`hotkeysEnabled` 之前只在 `activeNav === 'overview'` 时为真，导致越南模板装箱后切换手动模式时 M/Delete 被静默忽略。
+- 决策：由 Workbench 的渲染分支决定快捷键生命周期；只要 `VisualizationWorkspace` 已挂载就启用，离开工作台进入历史、模板管理或用户管理时组件卸载并自动移除监听。
+- 影响：导入后停留在报告导航时，3D 选箱快捷键与 overview 一致；历史/管理页面不获得工作区快捷键。远程回归已观察到越南模板路径的装箱、选中、M、Delete 均执行成功。

@@ -1277,7 +1277,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
             locale={locale}
             calculateAndShowPlacement={calculateAndShowPlacement}
             onChromeChange={setVisualizationChrome}
-            hotkeysEnabled={activeNav === 'overview'}
+            hotkeysEnabled
             manual={{
               manualNotice,
               setManualNotice,

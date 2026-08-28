@@ -6,6 +6,8 @@
 - 3D 手动模式记录工作区内最近 pointer/focus 交互。选箱后即使 canvas 丢失 DOM 焦点，`Delete`、`Backspace` 和 `M` 仍作用于当前箱体；工作区外交互会清除作用域。
 - 验证：越南/短柜装箱回归与相关候选测试 **17/17**；快捷键单测 **9/9**；`manual-3d.spec.ts` **56/56**；`npm run build` 通过。完整 `npm run test:e2e` 本轮未取得聚合结果，未将其计为通过。
 - 变更提交：`ab5e2ff`、`fcf20e5`，以及本次短柜范围收敛与契约/发布记录提交。
+- 追加修复：导入确认后会进入报告导航，但仍渲染工作区；快捷键不再错误地限定 overview，越南模板路径的 3D M/Delete 在 report 导航下也可用。
+- 远程回归：越南模板导入 `1/1`；3D 真实选箱后的 M/Delete/Backspace `2/2`；完整导入→装箱→手动→选中→M→Delete 已观察到 `packed/selected/measured/deleted` 全部成功。大数据删除后的 Playwright teardown 长时间不汇总，未宣称该长跑通过。
 
 
 ## 2026-08-26 quantity/volume search kernel gates
