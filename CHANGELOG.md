@@ -13,6 +13,7 @@
 - 生产复核：`cargo-server.service` active；首页 HTTP 200；未认证模板 API HTTP 401；DB quick_check=ok、foreign_key_check 无输出。部署后的 `Workbench-B5_xT0XB.js` SHA-256 与本地构建一致。
 - 远程 E2E：通过 SSH 回环入口、1920×1080 视口、零重试、未启用凭据 trace，真实越南模板完整手动链路与 M/Delete、Backspace 两条 3D 用例 **3/3 通过，1.6m**，长流程正常收尾。仅使用 testuser（执行前历史为0），本轮创建的模板由用例清理；未使用生产管理员凭据。截图 `test-results/e2e-remote-r76.local/import-templates-P-Vietnam-5933c-eys-scoped-to-the-workspace-chromium/vietnam-20gp-quantity.png` 已目视检查。
 - 代码提交：`9374002`（lint 范围）、`f174dc8`（快捷键生命周期）、`1a0aae9`（数量槽隙修复）、`b1a15fa`（重型测试调度）、`3f064d2`（E2E/发布说明）、`b776cd8`（修复预算/支撑验证）。既有 `.serena/project.yml` 与 `issues/0824/` 保留。
+- 本次在 Windows 环境复核：1021 单元、1 契约、lint、build 和定向真实越南模板/3D 快捷键 E2E 通过；rollback 子套件因环境缺少 `bash` 有 16 项 shell fixture 失败，详见 `decision.md`，未修改测试凑绿。
 
 ## 2026-09-11 生产无登录账号清理
 

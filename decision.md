@@ -1,5 +1,12 @@
 # Decision Log
 
+## 2026-09-11 当前环境回归边界
+
+- 背景：重新执行本分支的完整门禁，单元测试、契约测试、lint、build 和真实越南保存模板→20GP→数量优先→3D 快捷键流程均通过。
+- 观察：`npm test` 的 rollback 子套件有 16 项失败，根因是当前 Windows 执行环境没有 `bash`（测试通过 `execFileSync('bash', ...)` 运行离线 shell fixture），返回 `status=null`/字段缺失；不是本次装箱或快捷键代码断言失败。
+- 决策：不修改 rollback 测试以适配环境，不把本轮完整 `npm test` 记为通过；保留失败证据，待具备 bash 的 CI/WSL 环境复跑 rollback 门禁。
+- 影响：本分支当前可确认的结果是 1021 单元 + 1 契约通过、lint/build 通过、定向真实 E2E 1/1 通过；rollback 状态为环境阻塞。
+
 
 ## 2026-08-26 0824 本轮仍是 504，未形成 504/506/524 Pareto（已记录）
 
