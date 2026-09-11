@@ -8,6 +8,7 @@ import { clonePackingSearchState, type PackingSearchState } from './packingSearc
 
 const EPSILON = 0.001
 const MAX_COMPLETIONS = 4
+const MAX_REPAIR_MS = 1000
 
 /** Keep a support-closed lower load and return the entire affected upper layer to demand. */
 export function reopenGapLayer(complete: PackingSearchState): PackingSearchState | null {
@@ -40,14 +41,16 @@ export function reopenGapLayer(complete: PackingSearchState): PackingSearchState
 
 /** Repair a visible slot without trading away the quantity result already found. */
 export function repairQuantityPackingGap(complete: PackingSearchState, hooks: PackingSearchHooks) {
+  const deadline = Date.now() + MAX_REPAIR_MS
   let state = complete
   let candidatesEvaluated = 0
   let completions = 0
+  let budgetExceeded = false
   if (!complete.cargoStates.some((cargo) => cargo.remaining > 0)) {
-    return { state, candidatesEvaluated, completions }
+    return { state, candidatesEvaluated, completions, budgetExceeded }
   }
   const reopened = reopenGapLayer(complete)
-  if (!reopened) return { state, candidatesEvaluated, completions }
+  if (!reopened) return { state, candidatesEvaluated, completions, budgetExceeded }
 
   const before = hooks.quality(complete)
   let best = before
@@ -56,8 +59,18 @@ export function repairQuantityPackingGap(complete: PackingSearchState, hooks: Pa
   ))
   for (const choice of choices) {
     if (completions >= MAX_COMPLETIONS) break
+    if (Date.now() >= deadline) {
+      budgetExceeded = true
+      break
+    }
     candidatesEvaluated += 1
     if (!canStageBlock(reopened, choice)) continue
+    if (Date.now() >= deadline) {
+      budgetExceeded = true
+      break
+    }
+    // Like the main search, finish an admitted candidate before checking the deadline.
+    // Never return a partly rebuilt load when one completion exceeds the budget.
     const candidate = hooks.complete(hooks.commit(clonePackingSearchState(reopened), choice))
     completions += 1
     const quality = hooks.quality(candidate)
@@ -69,5 +82,6 @@ export function repairQuantityPackingGap(complete: PackingSearchState, hooks: Pa
       best = quality
     }
   }
-  return { state, candidatesEvaluated, completions }
+  budgetExceeded ||= Date.now() >= deadline
+  return { state, candidatesEvaluated, completions, budgetExceeded }
 }

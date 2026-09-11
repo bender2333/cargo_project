@@ -41,6 +41,30 @@ function layout(xs = [0, 400]): PackingSearchState {
 }
 
 describe('quantity upper-gap repair', () => {
+  it('finishes the admitted candidate and stops admitting more after its time budget', () => {
+    vi.useFakeTimers()
+    try {
+      const complete = layout()
+      const compact = layout([0, 100])
+      const hooks: PackingSearchHooks = {
+        commit: (state) => state,
+        complete: vi.fn(() => {
+          vi.advanceTimersByTime(1001)
+          return compact
+        }),
+        quality: packingQualityOf,
+      }
+      const repaired = repairQuantityPackingGap(complete, hooks)
+      expect(repaired.state).toBe(compact)
+      expect(repaired.completions).toBe(1)
+      expect(hooks.complete).toHaveBeenCalledTimes(1)
+      expect(repaired.budgetExceeded).toBe(true)
+      expect(complete.placed[2].x).toBe(400)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('reopens only the upper load and rebuilds demand, weight, free spaces, and the support index', () => {
     const complete = layout()
     const before = clonePackingSearchState(complete)

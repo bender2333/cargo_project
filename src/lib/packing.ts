@@ -1058,6 +1058,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
           strategy: repaired.state === state ? search.strategy : 'gap-repair',
           statesExpanded: search.statesExpanded + repaired.completions,
           candidatesEvaluated: search.candidatesEvaluated + repaired.candidatesEvaluated,
+          budgetExceeded: search.budgetExceeded || repaired.budgetExceeded,
           elapsedMs: search.elapsedMs + Date.now() - repairStartedAt,
         })
         applySearchState(repaired.state)

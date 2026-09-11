@@ -7,6 +7,8 @@
 - 保护契约确认仅越南 20GP 数量模式发生正向变化，其余夹具件数和契约哈希不变；未使用 `--allow-regression`。
 - 验证：`npm run lint` 通过（仅已有 Workbench Hook warning）；`npm test` 通过（1020 单元、1 契约、29 回滚、10 性能）；`npm run build` 通过（保留既有大 chunk warning）；串行 `npm run test:e2e -- --output=test-results/e2e-final.local` **150/150 通过**。
 - 新增说明：`docs/2026-09-11-vietnam-packing-hotkeys.md`；发布说明：`src/data/releaseNotes.ts` 的 `2026-09-11-r76-upper-gap-workspace`。
+- 追加审查：自动装箱仍重排完整上层；局部邻箱回退未改善真实槽隙，已撤回。修复阶段增加 1000 ms 候选启动预算与超时诊断，已开始的候选完整完成后才返回，未增加任何测试超时。新增预算测试和真实夹具 ID 唯一性／支撑引用／接触面积检查。
+- 追加验证：`lint && npm test && build` 再次全部通过；1021 单元、1 契约、29 回滚、10 性能。原越南5000 ms性能门槛、483件契约与500 mm槽指标保持通过。准备对最终版本再次冻结并跑完整 E2E，随后部署。
 
 ## 2026-09-11 生产无登录账号清理
 

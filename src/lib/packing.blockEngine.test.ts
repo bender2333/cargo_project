@@ -5,6 +5,7 @@ import type { ContainerSpec, CargoItem, LoadingMode, PlacedBox } from '../types'
 import { calculatePacking, shouldUseBlockEngine } from './packing'
 import { expectPackingResultContract } from './packingContract.testSupport'
 import { expectQuantityConservation } from './packingContract.testSupport'
+import { MINIMUM_SUPPORT_RATIO, supportDetails } from './packingFeasibility'
 import { isGapFillBox } from './placementSource'
 import { largestInterCargoGap } from './packingLayoutQuality'
 import { violatesStackChain } from './stackCapacity'
@@ -341,7 +342,20 @@ describe('block-building packing engine', () => {
     expectQuantityConservation(fixture.items, result)
     expectNoOverlapOrBounds(fixture.container, result.placed)
     const graph = new Map(result.placed.map((box) => [box.id, box]))
+    expect(graph.size).toBe(result.placed.length)
     for (const box of result.placed) expect(violatesStackChain(box, graph)).toBeNull()
+    for (const box of result.placed) {
+      const support = supportDetails(
+        { x: box.x, y: box.y, z: box.z },
+        { length: box.length, width: box.width, height: box.height },
+        result.placed.filter((candidate) => candidate.id !== box.id),
+      )
+      expect(box.supportedBy.every((id) => graph.has(id)), `${box.id} has missing support`).toBe(true)
+      expect(box.supportedBy.slice().sort(), `${box.id} support references`).toEqual(
+        support.supportedBy.map((candidate) => candidate.id).sort(),
+      )
+      expect(support.supportRatio, `${box.id} support ratio`).toBeGreaterThanOrEqual(MINIMUM_SUPPORT_RATIO)
+    }
     expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
     expect(result.placedCount).toBeGreaterThanOrEqual(482)
     expect(gap?.mm ?? 0, `Vietnam quantity channel is ${gap?.mm ?? 0}mm`).toBeLessThanOrEqual(500)

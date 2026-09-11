@@ -632,8 +632,10 @@ test('P: Vietnam saved template keeps 20GP quantity manual 3D hotkeys scoped to 
   const automaticCount = Number(await scene.getAttribute('data-box-count'))
   expect(automaticCount).toBeGreaterThanOrEqual(482)
   await page.getByRole('button', { name: 'Top', exact: true }).click()
+  const screenshotPath = testInfo.outputPath('vietnam-20gp-quantity.png')
+  await scene.screenshot({ path: screenshotPath })
   await testInfo.attach('Vietnam 20GP quantity packing', {
-    body: await scene.screenshot(), contentType: 'image/png',
+    path: screenshotPath, contentType: 'image/png',
   })
   await page.getByRole('button', { name: 'Iso', exact: true }).click()
 
