@@ -8,6 +8,7 @@
 - 生产部署完成：使用本轮已验证构建执行`npm run deploy`。独立数据库备份`/root/cargo-database-20260911-121635-before-e2e-entry.db`（0600、quick_check=ok），应用回滚备份`/root/cargo_project-backup-20260911-121646`。
 - 远程回归：新固定命令`npm run test:e2e:remote` **3/3通过，1.6m，零重试、无跳过**；只配置testuser，未提供管理员凭据。临时模板已清理：测试前后该账号历史均0条、导入模板均203条，模板全部记录SHA-256保持`0e0d8e7f6b3fd6ce0fd0d4395a4a1935e6f1a518ad4b3b6c99e65426f468a173`。
 - 上线复核：service active、首页200、未认证API401、DB quick_check=ok且foreign_key_check无异常；Workbench与ContainerScene的SHA-256均与本地一致。远程截图已目视检查，产物在`test-results/remote`，无trace文件。
+- 远程默认产物目录与现有current/benchmark目录一样纳入Git忽略，保留本地截图和结果，不将运行产物混入提交。
 - 实现提交`48af14e`；本轮没有修改装箱算法、UI或既有业务断言/超时，保留工作区既有`.serena/project.yml`和`issues/0824/`改动。
 
 ## 2026-09-11 越南数量装箱槽隙与模板手动微调重构
