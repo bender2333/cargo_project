@@ -15,6 +15,7 @@ import {
   type PackingPoint,
 } from './packingFeasibility'
 import { packingQualityOf } from './packingObjective'
+import { repairQuantityPackingGap } from './packingGapRepair'
 import { DEFAULT_QUANTITY_SEARCH_BUDGET, optimizePacking, type PackingSearchStats } from './packingSearch'
 import { clonePackingSearchState, type PackingCargoState, type PackingSearchState } from './packingSearchState'
 import { GAP_FILL_SOURCE } from './placementSource'
@@ -1049,8 +1050,21 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
     }
     if (loadingMode === 'quantity' || loadingMode === 'volume') {
       const { state, search } = optimizePacking(snapshotSearchState(), searchBudget, searchHooks, loadingMode)
-      publishSearchStats(search)
-      applySearchState(state)
+      if (loadingMode === 'quantity') {
+        const repairStartedAt = Date.now()
+        const repaired = repairQuantityPackingGap(state, searchHooks)
+        publishSearchStats({
+          ...search,
+          strategy: repaired.state === state ? search.strategy : 'gap-repair',
+          statesExpanded: search.statesExpanded + repaired.completions,
+          candidatesEvaluated: search.candidatesEvaluated + repaired.candidatesEvaluated,
+          elapsedMs: search.elapsedMs + Date.now() - repairStartedAt,
+        })
+        applySearchState(repaired.state)
+      } else {
+        publishSearchStats(search)
+        applySearchState(state)
+      }
     }
 
     for (const state of cargoStates) {

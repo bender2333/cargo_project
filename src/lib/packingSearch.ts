@@ -20,7 +20,7 @@ export const DEFAULT_QUANTITY_SEARCH_BUDGET: PackingSearchBudget = {
 }
 
 export type PackingSearchStats = {
-  strategy: 'greedy' | 'beam'
+  strategy: 'greedy' | 'beam' | 'gap-repair'
   statesExpanded: number
   candidatesEvaluated: number
   budgetExceeded: boolean

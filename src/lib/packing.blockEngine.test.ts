@@ -6,6 +6,7 @@ import { calculatePacking, shouldUseBlockEngine } from './packing'
 import { expectPackingResultContract } from './packingContract.testSupport'
 import { expectQuantityConservation } from './packingContract.testSupport'
 import { isGapFillBox } from './placementSource'
+import { largestInterCargoGap } from './packingLayoutQuality'
 import { violatesStackChain } from './stackCapacity'
 
 const VOXEL_MM = 50
@@ -330,6 +331,20 @@ describe('block-building packing engine', () => {
       quantity.result.placedCount !== volume.result.placedCount
       || placedDistributionKey(quantity.result.placed) !== placedDistributionKey(volume.result.placed),
     ).toBe(true)
+  })
+
+  it('repairs the Vietnam 20GP quantity upper channel without losing loaded cartons', () => {
+    const fixture = vietnamFixture()
+    const result = calculatePacking(fixture.container, fixture.items, { loadingMode: 'quantity' })
+    const gap = largestInterCargoGap(result.placed, fixture.container)
+
+    expectQuantityConservation(fixture.items, result)
+    expectNoOverlapOrBounds(fixture.container, result.placed)
+    const graph = new Map(result.placed.map((box) => [box.id, box]))
+    for (const box of result.placed) expect(violatesStackChain(box, graph)).toBeNull()
+    expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
+    expect(result.placedCount).toBeGreaterThanOrEqual(482)
+    expect(gap?.mm ?? 0, `Vietnam quantity channel is ${gap?.mm ?? 0}mm`).toBeLessThanOrEqual(500)
   })
 
   it('keeps Vietnam 40HQ utilization above the frozen baseline', () => {

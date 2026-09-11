@@ -3199,3 +3199,30 @@
 - 失败记录：先前按中间回复增加的 volume 定向回归 `visible 1m internal channel` 失败（1000 < 1000 为假，约 1.87s），表明另一个模式同样存在槽隙。改为 x→y→z 前沿使体积降至 29,480,012,000 mm³，已拒绝并恢复；跨 SKU EMS quality 未改善。不得扩大排序特例造成目标退步。
 - 额外实验：支撑连通组整体平移仅移动 4 组，quantity 最大槽仍 800 mm；逐箱保持支撑成员/面积不减的平移不能移动任何箱子。说明剩余槽受堆叠和既有排布约束，不能仅作坐标压缩。
 - 决策：继续在完整候选方案搜索/比较处优化，不降低件数或体积首要目标，不放宽碰撞/支撑，不把无改善的坐标整理上生产。
+
+## 2026-09-11 数量装箱增加独立的上层槽隙修复
+
+- 根因：数量模式原始 greedy 与从空柜开始的 beam 都较早固定底层，后续可用小型号耗尽，上层形成被两侧箱体夹住的通道。仅切换全局前沿或平移保持支撑的箱体不能修复。
+- 方案：保留主搜索输出作为不可丢失的完整结果；定位最大上层槽所在的侧邻箱体底面，保留其下已支撑闭合的布局，重新建立剩余货物/重量/EMS/支撑索引。按数量与体积排序，经现有真实可行性检查后最多完成四个候选。
+- 接受规则：本模块职责是修槽，仅接受件数不低于进入模块时的结果、最大槽严格缩小、封闭空腔不增加的完整方案；合格方案之间仍按现有数量优先 comparator 比较。碰撞、支撑比例、朝向、堆叠限高与载重继续用原 feasibility，最终层级/作业顺序仍用统一 finalizer。
+- 范围：仅数量优先且仍有未装货物；不改变体积优先和已全部装入的方案。删除本轮在用户中间回复下添加但尚未提交的 volume 1000mm 红色测试，改为最终确认的 quantity 回归，不改变原有体积模式断言。
+- 实验数据：完整候选 483 件、29.1322915 m³、最大槽 500 mm、封闭空腔 0，对比原 482 件、28.468091 m³、800 mm。支撑风险代理值增大（152456500 → 460252750），仍需验证所有真实支撑/堆叠约束；不声称运输稳定性改善。
+- 取舍：不通过延长全局搜索到 6 秒追求更多件数，实验的 491 件方案反而留下 1150mm 槽且超现有延迟门槛。槽修复是有界局部改良，不保证最优或零缝隙。
+- 定向 RED 已验证：`npx vitest run src/lib/packing.blockEngine.test.ts --pool=threads --maxWorkers=1 -t "repairs the Vietnam"` 在生产集成前失败，`Vietnam quantity channel is 800mm: expected 800 <= 500`，1.639s。其它 6 项因名称过滤未运行，此命令不是全套通过证据。
+- 生产集成后同一定向 quantity 回归 GREEN：1 passed（其它 6 项为名称过滤未运行），2.20s；`packingGapRepair.test.ts` 5/5 passed，覆盖下层与支撑闭合保留、货物/重量/EMS/索引重建、原结果不可变、低件数候选拒绝、紧凑候选接纳以及完整装载跳过。
+- 契约更新原则：本轮预期越南 20GP quantity 从 482 → 483。仅在受保护生成器确认其它四个契约哈希不变、件数无下降后更新该正向变化；同步数量守恒测试中的精确期望，不降低原几何、标签、作业顺序、支撑或性能断言。
+- 构建失败记录：首次 `npm run build` 在新测试夹具 `packingGapRepair.test.ts:21` 报 TS2322，CargoItem.label 可选而 PlacementBox.label 必填。修正测试构造器显式提供 label；不涉及断言/生产规则。完整 lint 退出 0，仍仅已有 Workbench Hook warning。
+- 受保护契约生成器结果：仅 Vietnam 20GP quantity 482 → 483、哈希变化；俄罗斯 31、Vietnam volume 473、两种40HQ 864 和其余四个哈希全部不变。未使用 allow-regression。
+
+## 2026-09-11 全量 npm test 的 Bash 环境阻塞
+
+- 背景：`npm test` 的业务单测 115 files / 1021 tests 全部通过；随后 rollback 隔离测试 16 failed / 13 passed，仅70ms，性能阶段未执行。
+- 根因检查：该套件通过 `execFileSync('bash', ...)` 执行 Linux 回滚脚本，当前 PowerShell PATH 无 Bash，异常被测试助手转为 status=null/fields=undefined。
+- 决策：不修改回滚代码、断言、超时或跳过测试；本次验证进程使用现有 Git for Windows Bash 路径补齐环境，再重跑完整 npm test。若无法找到可用 Bash 则保留环境阻塞。
+- 同时：生产构建现已通过，仍有既有 >500 kB chunk warning。完整 E2E 已启动。
+- 补齐 Bash 的第二次 npm test 与完整 E2E 并行，115 文件中114通过，1021项中1020通过；`scripts/updatePackingContracts.test.mjs` 子进程 ETIMEDOUT（30426ms）。第一次单独业务单测该项已通过，当前未改生成器代码。判定资源竞争需串行复核，保留30秒子进程限制，不通过加超时、改断言或跳过测试处理。完整 E2E 继续，待其结束后串行重跑 npm test。
+- 完整 E2E 运行中出现两处失败：`auth-isolation.spec.ts:1036` custom container dialog chunk failure 场景；`container-calc.spec.ts:936` 3D camera/layer 场景超时30.1s。保存 test-results/current 错误上下文，待汇总后独立复现；不修改断言/超时，不把负向请求日志与测试成功混为一谈。
+- 完整 E2E 追加失败：`container-calc.spec.ts:1667` 保存/恢复历史方案超时30.1s，累计三处待复核。关键完整越南保存模板→数量装箱→继续手动→真实3D快捷键用例在该全量运行中通过（42.0s）。
+- 首次完整 E2E 汇总：145 passed / 5 failed（11.2m），无跳过。另两处为延迟历史保存导航超时与发布说明版本断言。失败现场包含意外整页导航、语言回到中文；发布说明明确是测试启动时旧版本与运行期间新增 r76 不一致。该轮夹杂源文件/Markdown 更新及并行测试，作为受干扰运行保留，不能计为完整通过。错误上下文已复制到 `test-results/e2e-first.local`。后续冻结文件、串行执行原用例与全量回归。
+- 冻结文件、停止浏览器后的 npm test 再跑仍有单个 updater 子进程 ETIMEDOUT（此轮第2次生成，测试总56.4s），其余114文件/1020项通过。因此不能只归因于 E2E 外部并行；继续检查 unit 内部并行的重型契约生成。下一步先独立运行该集成套件，若通过则按现有 rollback/performance 模式将其串行纳入 npm test，不改测试超时/断言。
+- updater 集成测试独立运行通过：1 file / 1 test，32.51s（内部三次子进程均满足原30秒限制）。确认应按现有重型套件隔离模式调整测试调度：从 test:unit 并行集合移到 test:contracts 单独1 worker，npm test 仍串行执行全部单元、契约、回滚、性能套件。不减少覆盖、不增加超时。
