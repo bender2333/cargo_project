@@ -45,7 +45,6 @@ export function VisualizationWorkspace({
   locale,
   calculateAndShowPlacement,
   onChromeChange,
-  hotkeysEnabled,
   manual,
   playback,
   render,
@@ -161,7 +160,6 @@ export function VisualizationWorkspace({
   ])
 
   useWorkspaceHotkeys({
-    enabled: hotkeysEnabled,
     placementMode,
     workspaceRef,
     selectedBox: selectedHotkeyBox,
@@ -231,7 +229,7 @@ export function VisualizationWorkspace({
   return (
     <div
       ref={workspaceRef}
-      tabIndex={hotkeysEnabled ? 0 : undefined}
+      tabIndex={0}
     >
       <div className={`grid grid-cols-5 gap-3 max-xl:grid-cols-2 ${workspaceMaximized ? 'hidden' : ''}`} data-testid="archive-stat-grid">
         <div className="archive-stat"><div className="archive-stat-value">{activeResult.placedCount}</div><div className="archive-stat-key">{t.loaded}</div></div>

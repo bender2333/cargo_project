@@ -172,7 +172,6 @@ export type VisualizationWorkspaceProps = {
   locale: Locale
   calculateAndShowPlacement: () => void
   onChromeChange?: (chrome: VisualizationChrome) => void
-  hotkeysEnabled: boolean
   manual: ManualWorkspaceProps
   playback: PlaybackWorkspaceProps
   render: SceneRenderWorkspaceProps

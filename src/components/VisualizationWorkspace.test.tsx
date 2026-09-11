@@ -35,7 +35,6 @@ function props(overrides: Partial<VisualizationWorkspaceProps> = {}): Visualizat
     customContainerLoadFailed: false,
     locale: 'en',
     calculateAndShowPlacement: vi.fn(),
-    hotkeysEnabled: false,
     manual: {
       manualNotice: null,
       setManualNotice: vi.fn(),

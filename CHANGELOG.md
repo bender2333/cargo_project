@@ -2663,3 +2663,6 @@ Implements REVIEW.md「第三十三轮」points 1-4 (scope A+B per decision.md 2
 - 修改前基线：`node scripts/packing-mode-baseline.mjs` 已完成。Vietnam 20GP quantity：482 件 / 28.468091 m³ / 最大槽 800 mm / 封闭空腔 0；volume：473 件 / 29.937044 m³ / 最大槽 1000 mm / 封闭空腔 0。Vietnam 40HQ 两模式 864 件；0802 40HQ 两模式 877 件。搜索为预算内最好结果，非全局最优。
 - 基线文件：`test-results/packing-before-20260911.log`（日志忽略入库）。源码和端到端复现仍在进行，尚未宣称修复或发布完成。
 - 验证环境修正：ESLint 排除嵌套 `.worktrees/**` 并显式设置当前配置根；`npm run lint` 从 473 个路径错误恢复为退出 0，保留已有 `Workbench.tsx:308` Hook 依赖 warning（未改相邻业务）。配置改动与任务清单/失败记录独立提交。
+- 快捷键子任务：删除 `hotkeysEnabled` 公共参数及 resolver 假 `overview` 值，监听直接跟随可视工作区生命周期。新增 hook 的最新选中/唯一分发、输入框与外交互保护、卸载/重挂载作用域测试；相关单测 3 文件 / 15 项通过。
+- 新增完整真实 E2E：越南 Excel → 保存组合尺寸模板 → 取消 → 重新选模板导入 → 20GP 数量优先装箱 → 继续手动 → 真实 Canvas 选中 → M/Delete/撤销/Backspace，验证箱数与池余量守恒、输入框/导航隔离、离开再返回。定向 E2E 1 passed，测试服务正常收尾；此前大数据删除 teardown 挂起在本次未重现。新增测试清理其自己创建的模板。
+- 结论：当前分支未复现新的快捷键故障；消除了历史导航开关误禁用工作区的接口，并补齐此前缺失的整条业务回归。尚待完整 E2E 与发布验证。

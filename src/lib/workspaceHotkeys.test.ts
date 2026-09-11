@@ -7,7 +7,6 @@ function input(overrides: Partial<WorkspaceHotkeyInput> = {}): WorkspaceHotkeyIn
     shift: false,
     meta: false,
     ctrl: false,
-    nav: 'overview',
     placementMode: 'manual',
     workspaceContains: true,
     maximized: false,
@@ -29,12 +28,11 @@ describe('resolveWorkspaceHotkey', () => {
     expect(resolveWorkspaceHotkey(input({ key: 'ArrowUp' }))).toEqual({ type: 'nudge', dx: 0, dy: 10, dz: 0 })
   })
 
-  it('ignores packing keys when focus is outside the overview workspace', () => {
+  it('ignores packing keys without workspace interaction', () => {
     const outside = { workspaceContains: false as const }
     expect(resolveWorkspaceHotkey(input({ ...outside, key: 'Delete' }))).toBeNull()
     expect(resolveWorkspaceHotkey(input({ ...outside, key: 'r' }))).toBeNull()
     expect(resolveWorkspaceHotkey(input({ ...outside, key: 'z', ctrl: true }))).toBeNull()
-    expect(resolveWorkspaceHotkey(input({ ...outside, nav: 'history', workspaceContains: true, key: 'Delete' }))).toBeNull()
   })
 
   it('keeps the last 3D workspace interaction active when the canvas loses focus', () => {

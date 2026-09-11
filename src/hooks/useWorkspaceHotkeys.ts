@@ -10,7 +10,6 @@ type SelectedBox = {
 }
 
 type UseWorkspaceHotkeysArgs = {
-  enabled: boolean
   placementMode: 'auto' | 'manual'
   workspaceRef: RefObject<HTMLElement | null>
   selectedBox: SelectedBox | null
@@ -26,7 +25,6 @@ type UseWorkspaceHotkeysArgs = {
 }
 
 export function useWorkspaceHotkeys({
-  enabled,
   placementMode,
   workspaceRef,
   selectedBox,
@@ -73,7 +71,6 @@ export function useWorkspaceHotkeys({
         shift: event.shiftKey,
         meta: event.metaKey,
         ctrl: event.ctrlKey,
-        nav: enabled ? 'overview' : 'other',
         placementMode,
         workspaceContains: Boolean(
           target && workspaceRef.current?.contains(target),
@@ -121,7 +118,6 @@ export function useWorkspaceHotkeys({
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
   }, [
-    enabled,
     maximized,
     onClearSelection,
     onDelete,

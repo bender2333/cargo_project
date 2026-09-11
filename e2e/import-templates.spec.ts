@@ -133,6 +133,50 @@ async function deleteTemplatesByName(page: Page, names: string[]) {
   await goToWorkbench(page)
 }
 
+async function waitTwoAnimationFrames(page: Page) {
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  }))
+}
+
+async function aimSceneNearTop(page: Page) {
+  const scene = page.getByTestId('container-scene')
+  await scene.evaluate((element) => {
+    element.setAttribute('data-camera-command', 'near-top')
+    element.dispatchEvent(new Event('test-camera-command'))
+  })
+  await waitTwoAnimationFrames(page)
+}
+
+async function poolRemainingTotal(page: Page) {
+  return page.getByTestId('manual-pool-item').evaluateAll((elements) => (
+    elements.reduce((sum, element) => sum + Number(element.getAttribute('data-remaining') ?? 0), 0)
+  ))
+}
+
+/** Select an actual rendered box, rather than dispatching a synthetic 2D event. */
+async function selectBoxBy3dCanvasHit(page: Page) {
+  const scene = page.getByTestId('container-scene')
+  const canvas = scene.locator('canvas')
+  await expect(canvas).toBeVisible()
+  const bounds = await canvas.boundingBox()
+  if (!bounds) throw new Error('3D canvas has no bounding box')
+
+  for (let row = 0; row < 4; row += 1) {
+    for (let column = 0; column < 6; column += 1) {
+      await aimSceneNearTop(page)
+      await canvas.click({
+        position: {
+          x: bounds.width * (0.22 + (0.56 * column) / 5),
+          y: bounds.height * (0.28 + (0.52 * row) / 3),
+        },
+      })
+      if (await scene.getAttribute('data-selected-orientation')) return
+    }
+  }
+  throw new Error('3D canvas pointer hit did not select a box')
+}
+
 const templateMapping = {
   name: 'Goods',
   length: 'L',
@@ -548,4 +592,83 @@ test('O: Vietnam fixture maps 24 cargos through combined dimensions', async ({ p
   await expect(page.getByRole('button', { name: /世喜PPSU款新生儿奶瓶-防胀气系列160mL越南版（0-1）/ }).first()).toBeVisible()
   await expect(page.getByText(/TB-C10-EV_v1\.1/).first()).toBeVisible()
   await expect(page.getByText(/530 x 305 x 310 mm/).first()).toBeVisible()
+})
+
+test('P: Vietnam saved template keeps 20GP quantity manual 3D hotkeys scoped to the workspace', async ({ page }) => {
+  test.slow()
+  await openEnglish(page)
+  const templateName = uniqueName('vietnam-manual-3d')
+
+  await openImport(page, vietnamWorkbookPath())
+  await useWithoutTemplate(page)
+  await page.getByTestId('template-header-row').fill('2')
+  await page.getByTestId('template-start-row').fill('3')
+  await page.getByTestId('template-dimension-mode').selectOption('combined')
+  await page.getByTestId('template-combined-column').selectOption('外箱尺寸（mm）')
+  await mapColumns(page, {
+    label: '物料代码SKU',
+    name: '物料名称',
+    weight: '产品毛重(KG)/箱',
+    quantity: '箱数',
+  })
+  await expect(page.getByTestId('mapping-parse-summary')).toContainText('24 ok / 0 err')
+  await page.getByTestId('import-template-name').fill(templateName)
+  await page.getByTestId('save-import-template').click()
+  await expect(page.getByTestId('template-save-status')).toContainText(templateName)
+  await cancelImport(page)
+
+  await openImport(page, vietnamWorkbookPath())
+  await selectTemplateByName(page, templateName)
+  await expect(page.getByTestId('template-combined-column')).toHaveValue('外箱尺寸（mm）')
+  await expect(page.getByTestId('map-select-label')).toHaveValue('物料代码SKU')
+  await page.getByTestId('confirm-mapping').click()
+  await expect(page.getByTestId('import-log-panel').getByText('Import success: 24')).toBeVisible()
+
+  await page.getByLabel('Container type').selectOption('20gp')
+  await page.getByLabel('Loading rules').selectOption('quantity')
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-box-count', /^[1-9]\d*$/, { timeout: 60_000 })
+  const automaticCount = Number(await scene.getAttribute('data-box-count'))
+
+  await page.getByTestId('continue-manually').click()
+  await expect(page.getByTestId('manual-workspace')).toBeVisible()
+  await expect(scene).toHaveAttribute('data-box-count', String(automaticCount))
+  const poolBefore = await poolRemainingTotal(page)
+
+  await selectBoxBy3dCanvasHit(page)
+  await expect(scene).toBeFocused()
+  await page.keyboard.press('m')
+  await expect(scene).toHaveAttribute('data-clearance-enabled', 'true')
+  await page.keyboard.press('Delete')
+  await expect(scene).toHaveAttribute('data-box-count', String(automaticCount - 1))
+  expect(await poolRemainingTotal(page)).toBe(poolBefore + 1)
+
+  await page.keyboard.press('Control+z')
+  await expect(scene).toHaveAttribute('data-box-count', String(automaticCount))
+  expect(await poolRemainingTotal(page)).toBe(poolBefore)
+
+  await page.getByLabel('Shipment name').focus()
+  await page.keyboard.press('m')
+  await page.keyboard.press('Delete')
+  await expect(scene).toHaveAttribute('data-box-count', String(automaticCount))
+  await expect(scene).toHaveAttribute('data-clearance-enabled', 'true')
+
+  await selectBoxBy3dCanvasHit(page)
+  await page.keyboard.press('Backspace')
+  await expect(scene).toHaveAttribute('data-box-count', String(automaticCount - 1))
+  expect(await poolRemainingTotal(page)).toBe(poolBefore + 1)
+  await page.keyboard.press('Control+z')
+  await expect(scene).toHaveAttribute('data-box-count', String(automaticCount))
+  expect(await poolRemainingTotal(page)).toBe(poolBefore)
+
+  await page.getByTestId('nav-history').focus()
+  await page.keyboard.press('m')
+  await page.keyboard.press('Delete')
+  await expect(scene).toHaveAttribute('data-box-count', String(automaticCount))
+  await page.getByTestId('nav-history').click()
+  await expect(page.getByTestId('history-page')).toBeVisible()
+  await page.getByTestId('nav-overview').click()
+  await expect(page.getByTestId('visual-workspace')).toBeVisible()
+  await deleteTemplatesByName(page, [templateName])
 })
