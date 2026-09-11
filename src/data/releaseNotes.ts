@@ -14,6 +14,24 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-09-11-r76-upper-gap-workspace',
+    date: '2026-09-11',
+    title: {
+      en: 'Tighter quantity packing and reliable manual editing shortcuts',
+      zh: '数量装箱收紧上层缝隙，手动微调快捷键流程完善',
+    },
+    items: {
+      en: [
+        'Quantity packing can rearrange the upper load to reduce gaps while preserving the number of loaded cartons and checking support and stacking rules.',
+        'After importing a saved template and continuing manually, select a carton in 3D to use M, Delete, Backspace, and undo. Text fields retain their normal keyboard behavior.',
+      ],
+      zh: [
+        '数量优先装箱增加上层重排，在不减少已装件数的前提下收紧货物间缝隙，并继续检查支撑和堆叠规则。',
+        '使用保存的模板导入并继续手动微调后，3D 选箱可使用 M、Delete、Backspace 和撤销；输入框保持正常文字编辑行为。',
+      ],
+    },
+  },
+  {
     version: '2026-08-27-r75-vietnam-manual-hotkeys',
     date: '2026-08-27',
     title: {

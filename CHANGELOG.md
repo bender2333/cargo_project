@@ -1,4 +1,13 @@
 # Changelog
+## 2026-09-11 越南数量装箱槽隙与模板手动微调重构
+
+- 数量优先装箱在主搜索后增加有界的上层槽隙修复：保留下层支撑闭合布局，重建货物余量、重量、EMS 和支撑索引，再通过既有碰撞、边界、支撑、堆叠与载重检查选择完整候选。
+- 真实越南第十一批 Excel／保存模板／20GP／数量优先结果由 **482** 件提升至 **483** 件，已装体积由 **28.468091** m³ 提升至 **29.1322915** m³，50 mm 网格最大货物间槽由 **800 mm** 降至 **500 mm**，封闭空腔仍为 **0**。支撑风险代理值由 **152456500** 增至 **460252750**，该指标不等同于运输稳定性证明，结果仍不是全局最优或零缝隙承诺。
+- 快捷键监听随 `VisualizationWorkspace` 挂载与卸载，删除冗余导航开关；真实 Canvas 选箱后 `M`、`Delete`、`Backspace`、撤销均作用于当前箱体，输入框和工作区外导航保持隔离。
+- 保护契约确认仅越南 20GP 数量模式发生正向变化，其余夹具件数和契约哈希不变；未使用 `--allow-regression`。
+- 验证：`npm run lint` 通过（仅已有 Workbench Hook warning）；`npm test` 通过（1020 单元、1 契约、29 回滚、10 性能）；`npm run build` 通过（保留既有大 chunk warning）；串行 `npm run test:e2e -- --output=test-results/e2e-final.local` **150/150 通过**。
+- 新增说明：`docs/2026-09-11-vietnam-packing-hotkeys.md`；发布说明：`src/data/releaseNotes.ts` 的 `2026-09-11-r76-upper-gap-workspace`。
+
 ## 2026-09-11 生产无登录账号清理
 
 - 清理条件：`last_login_at IS NULL`，保留 `RUIXI`、`邓晓艳`、`dengxbin`、`admin`、`dengxbin123`。

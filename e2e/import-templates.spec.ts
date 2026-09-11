@@ -594,7 +594,7 @@ test('O: Vietnam fixture maps 24 cargos through combined dimensions', async ({ p
   await expect(page.getByText(/530 x 305 x 310 mm/).first()).toBeVisible()
 })
 
-test('P: Vietnam saved template keeps 20GP quantity manual 3D hotkeys scoped to the workspace', async ({ page }) => {
+test('P: Vietnam saved template keeps 20GP quantity manual 3D hotkeys scoped to the workspace', async ({ page }, testInfo) => {
   test.slow()
   await openEnglish(page)
   const templateName = uniqueName('vietnam-manual-3d')
@@ -630,11 +630,18 @@ test('P: Vietnam saved template keeps 20GP quantity manual 3D hotkeys scoped to 
   const scene = page.getByTestId('container-scene')
   await expect(scene).toHaveAttribute('data-box-count', /^[1-9]\d*$/, { timeout: 60_000 })
   const automaticCount = Number(await scene.getAttribute('data-box-count'))
+  expect(automaticCount).toBeGreaterThanOrEqual(482)
+  await page.getByRole('button', { name: 'Top', exact: true }).click()
+  await testInfo.attach('Vietnam 20GP quantity packing', {
+    body: await scene.screenshot(), contentType: 'image/png',
+  })
+  await page.getByRole('button', { name: 'Iso', exact: true }).click()
 
   await page.getByTestId('continue-manually').click()
   await expect(page.getByTestId('manual-workspace')).toBeVisible()
   await expect(scene).toHaveAttribute('data-box-count', String(automaticCount))
   const poolBefore = await poolRemainingTotal(page)
+  expect(automaticCount + poolBefore).toBe(864)
 
   await selectBoxBy3dCanvasHit(page)
   await expect(scene).toBeFocused()
