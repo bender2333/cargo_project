@@ -185,13 +185,14 @@ const templateMapping = {
   weight: 'Weight',
 }
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }, testInfo) => {
   await page.goto('/')
   if (await page.locator('#username').isVisible()) {
     await page.fill('#username', e2eCredentials.user.username)
     await page.fill('#password', e2eCredentials.user.password)
     await page.click('button[type="submit"]')
     await expect(page.getByTestId('report-panel')).toBeVisible()
+    if (testInfo.tags.includes('@deployment')) return
     await page.evaluate(async () => {
       const token = window.localStorage.getItem('cargo_token')
       if (!token) return
@@ -594,7 +595,7 @@ test('O: Vietnam fixture maps 24 cargos through combined dimensions', async ({ p
   await expect(page.getByText(/530 x 305 x 310 mm/).first()).toBeVisible()
 })
 
-test('P: Vietnam saved template keeps 20GP quantity manual 3D hotkeys scoped to the workspace', async ({ page }, testInfo) => {
+test('P: Vietnam saved template keeps 20GP quantity manual 3D hotkeys scoped to the workspace', { tag: '@deployment' }, async ({ page }, testInfo) => {
   test.slow()
   await openEnglish(page)
   const templateName = uniqueName('vietnam-manual-3d')

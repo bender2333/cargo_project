@@ -15,6 +15,7 @@
     "test:packing-performance": "vitest run src/lib/packing.blockEngine.test.ts src/lib/packing.stackfill.test.ts --pool=threads --maxWorkers=1",
     "test:contracts:update": "node scripts/update-packing-contracts.mjs",
     "test:e2e": "playwright test",
+    "test:e2e:remote": "playwright test --config=playwright.remote.config.ts",
     "benchmark": "node scripts/frontendBenchmark.mjs",
     "benchmark:update": "node scripts/frontendBenchmark.mjs --update",
     "start:server": "node server/index.mjs",

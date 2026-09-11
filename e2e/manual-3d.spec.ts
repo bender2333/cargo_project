@@ -5,13 +5,14 @@ import * as XLSX from 'xlsx'
 import { releaseNotes } from '../src/data/releaseNotes'
 import { e2eCredentials } from './credentials'
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }, testInfo) => {
   await page.goto('/')
   if (await page.locator('#username').isVisible()) {
     await page.fill('#username', e2eCredentials.user.username)
     await page.fill('#password', e2eCredentials.user.password)
     await page.click('button[type="submit"]')
     await expect(page.getByTestId('report-panel')).toBeVisible()
+    if (testInfo.tags.includes('@deployment')) return
     await page.evaluate(async () => {
       const token = window.localStorage.getItem('cargo_token')
       if (!token) return
@@ -431,7 +432,7 @@ test('手动 2D 选中后按 Delete 移除箱体', async ({ page }) => {
   await expect(page.getByTestId('container-scene')).toHaveAttribute('data-box-count', '0')
 })
 
-test('手动 3D 真实选箱后 M 与 Delete 立即生效', async ({ page }) => {
+test('手动 3D 真实选箱后 M 与 Delete 立即生效', { tag: '@deployment' }, async ({ page }) => {
   await ensureChinese(page)
   const scene = page.getByTestId('container-scene')
   await expect(scene).toHaveAttribute('data-box-count', /^[1-9]\d*$/)
@@ -466,7 +467,7 @@ test('手动 3D 真实选箱后 M 与 Delete 立即生效', async ({ page }) => 
   await expect(scene).toHaveAttribute('data-box-count', String(inheritedCount - 1))
 })
 
-test('手动 3D 选箱后点击余量测量再按 Backspace 仍删除', async ({ page }) => {
+test('手动 3D 选箱后点击余量测量再按 Backspace 仍删除', { tag: '@deployment' }, async ({ page }) => {
   await ensureChinese(page)
   const scene = page.getByTestId('container-scene')
   await expect(scene).toHaveAttribute('data-box-count', /^[1-9]\d*$/)

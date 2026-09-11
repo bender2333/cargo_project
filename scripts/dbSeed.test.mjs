@@ -120,30 +120,40 @@ describe('E2E credential configuration', () => {
     })
   })
 
-  it('rejects every missing external credential by environment variable name', async () => {
-    const missing = []
+  it.each(['user', 'admin'])('allows the %s role without credentials for the other role', async (role) => {
+    const isAdmin = role === 'admin'
+    const { e2eCredentials } = await importE2ECredentials({
+      PLAYWRIGHT_BASE_URL: 'https://production.example.test',
+      [isAdmin ? 'E2E_ADMIN_USERNAME' : 'E2E_USERNAME']: ' remote-role ',
+      [isAdmin ? 'E2E_ADMIN_PASSWORD' : 'E2E_PASSWORD']: ' role-password ',
+    })
+
+    expect(e2eCredentials[role]).toEqual({ username: 'remote-role', password: ' role-password ' })
+    expect(() => e2eCredentials[isAdmin ? 'user' : 'admin']).toThrow(
+      isAdmin ? 'E2E_USERNAME' : 'E2E_ADMIN_USERNAME',
+    )
+  })
+
+  it('rejects every missing external credential when its role is read', async () => {
     for (const name of e2eCredentialNames) {
       const environment = {
         PLAYWRIGHT_BASE_URL: 'https://production.example.test',
         ...externalCredentialEnvironment,
       }
       delete environment[name]
-      try {
-        await importE2ECredentials(environment)
-      } catch (error) {
-        expect(String(error)).toContain(name)
-        continue
-      }
-      missing.push(name)
+      const { e2eCredentials } = await importE2ECredentials(environment)
+      const role = name.startsWith('E2E_ADMIN_') ? 'admin' : 'user'
+      expect(() => e2eCredentials[role]).toThrow(name)
     }
-    expect(missing).toEqual([])
   })
 
   it('rejects public HTTP external runs before using credentials', async () => {
-    await expect(importE2ECredentials({
+    const { e2eCredentials } = await importE2ECredentials({
       PLAYWRIGHT_BASE_URL: 'http://101.33.232.150/',
       ...externalCredentialEnvironment,
-    })).rejects.toThrow(/HTTPS|loopback/)
+    })
+    expect(() => e2eCredentials.user).toThrow(/HTTPS|loopback/)
+    expect(() => e2eCredentials.admin).toThrow(/HTTPS|loopback/)
   })
 
   it('uses all configured credentials for HTTPS and loopback HTTP', async () => {

@@ -20,12 +20,16 @@ function readCredential(name: string, fallback: string, normalize = false) {
 }
 
 export const e2eCredentials = {
-  user: {
-    username: readCredential('E2E_USERNAME', 'testuser', true),
-    password: readCredential('E2E_PASSWORD', 'testuser123'),
+  get user() {
+    return {
+      username: readCredential('E2E_USERNAME', 'testuser', true),
+      password: readCredential('E2E_PASSWORD', 'testuser123'),
+    }
   },
-  admin: {
-    username: readCredential('E2E_ADMIN_USERNAME', 'admin', true),
-    password: readCredential('E2E_ADMIN_PASSWORD', 'admin123'),
+  get admin() {
+    return {
+      username: readCredential('E2E_ADMIN_USERNAME', 'admin', true),
+      password: readCredential('E2E_ADMIN_PASSWORD', 'admin123'),
+    }
   },
 } as const
