@@ -1,4 +1,11 @@
 # Changelog
+## 2026-09-11 生产注册测试用户清理
+
+- 通过生产管理员接口清理用户名以 `u_reg_` 开头的注册测试用户；执行时匹配 **61** 个，成功删除 **61** 个，失败 **0** 个，删除后剩余 **0** 个。
+- 删除前创建独立 SQLite 备份：`/root/cargo-database-20260911-093926-before-ureg-delete.db`；权限 `0600`，`PRAGMA quick_check=ok`。
+- 删除后验证：`cargo-server.service` active，数据库 `quick_check=ok`，`foreign_key_check` 无异常，总用户 **292**，`admin` 保留 **1** 个，管理员登录 HTTP **200**。
+- 预检查时宽前缀统计为 60 个，执行时增至 61 个；以删除执行时的 61 个匹配结果为准。
+
 
 ## 2026-08-27 越南模板贯穿槽与 3D 手动快捷键修复
 
