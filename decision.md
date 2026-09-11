@@ -3,9 +3,9 @@
 ## 2026-09-11 当前环境回归边界
 
 - 背景：重新执行本分支的完整门禁，单元测试、契约测试、lint、build 和真实越南保存模板→20GP→数量优先→3D 快捷键流程均通过。
-- 观察：`npm test` 的 rollback 子套件有 16 项失败，根因是当前 Windows 执行环境没有 `bash`（测试通过 `execFileSync('bash', ...)` 运行离线 shell fixture），返回 `status=null`/字段缺失；不是本次装箱或快捷键代码断言失败。
-- 决策：不修改 rollback 测试以适配环境，不把本轮完整 `npm test` 记为通过；保留失败证据，待具备 bash 的 CI/WSL 环境复跑 rollback 门禁。
-- 影响：本分支当前可确认的结果是 1021 单元 + 1 契约通过、lint/build 通过、定向真实 E2E 1/1 通过；rollback 状态为环境阻塞。
+- 观察：`npm test` 的 rollback 子套件有 16 项失败，根因是当前 Windows 进程 PATH 找不到 `bash`（测试通过 `execFileSync('bash', ...)` 运行离线 shell fixture），返回 `status=null`/字段缺失；不是本次装箱或快捷键代码断言失败。
+- 决策：保留首轮失败，不修改 rollback 代码、断言或超时。随后找到本机已有 Git Bash，将 `C:\Program Files\Git\bin` 和 `C:\Program Files\Git\usr\bin` 加入单次验证进程 PATH，重新运行失败套件。
+- 收口：`npm run test:rollback` 29/29 通过（100.76s）；单独补跑原先因前序失败而未执行的 `test:packing-performance` 10/10 通过。此次各阶段累计 1061 项通过，lint/build 与定向真实 E2E 1/1 通过，环境阻塞已解除；原始无 Bash PATH 的整条命令仍保留失败记录。
 
 
 ## 2026-08-26 0824 本轮仍是 504，未形成 504/506/524 Pareto（已记录）
