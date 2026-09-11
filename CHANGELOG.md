@@ -2652,3 +2652,14 @@ Implements REVIEW.md「第三十三轮」points 1-4 (scope A+B per decision.md 2
 - RED after `185be95`: concurrent `npm test` execution let rollback shell integration contend with **92** unit suites; the **full-success** fixture reached **26.022s** and the persistent-502 fixture **20.059s**, the shared child **20s** guard fired, fields became undefined, and the aggregate reported **2 failed / 92 passed**. Timeout/assertions were not weakened.
 - Package fix: `test:unit` excludes `scripts/rollback.test.mjs`; new `test:rollback` runs `vitest run scripts/rollback.test.mjs --pool=threads --maxWorkers=1`; `npm test` runs `test:unit && test:rollback && test:packing-performance` in that order.
 - GREEN: `npm test` passed unit **92 files / 805 tests**, rollback **1 file / 29 tests**, and packing performance **2 files / 7 tests**; command wall time was **170.97s**. Standalone `npm run test:rollback` passed **1 file / 29 tests** in **101.37s**. `npm run lint` exited **0**. No full E2E, deployment, production rollback, or commit was run for this orchestration fix.
+
+## 2026-09-11 越南 20GP 间隙与手动快捷键重构（进行中）
+
+- 用户反馈：模板导入 → 装箱 → 继续手动微调，3D 可以拖箱但 Delete/M 无效；截图存在明显货物间槽。用户最终确认截图是 20GP 数量优先。
+- 当前分支 `feat/quantity-volume-search` / `3fb606d` 已含旧修复，必须重新验证。保留既有 `.serena/project.yml`、`src/lib/packing.ts`（当前内容 diff 为空，行尾状态）及 `issues/0824/`。
+- 子任务 1：复现真实 Excel/保存模板 → 自动装箱 → 继续手动 → 真实 3D 选中 → M/Delete/Backspace/撤销；收敛快捷键作用域与组件生命周期，补完整流程测试并独立提交。
+- 子任务 2：测量并优化越南数量优先货物间槽；以完整方案件数为首要目标，几何/支撑/标签/数量守恒为硬约束，体积模式和长柜守住业务目标；独立提交算法及回归测试。
+- 子任务 3：运行 lint、npm test、build、完整 E2E；失败先记 decision.md。更新发布通知、部署及远程回归，记录实际通过与阻塞。
+- 修改前基线：`node scripts/packing-mode-baseline.mjs` 已完成。Vietnam 20GP quantity：482 件 / 28.468091 m³ / 最大槽 800 mm / 封闭空腔 0；volume：473 件 / 29.937044 m³ / 最大槽 1000 mm / 封闭空腔 0。Vietnam 40HQ 两模式 864 件；0802 40HQ 两模式 877 件。搜索为预算内最好结果，非全局最优。
+- 基线文件：`test-results/packing-before-20260911.log`（日志忽略入库）。源码和端到端复现仍在进行，尚未宣称修复或发布完成。
+- 验证环境修正：ESLint 排除嵌套 `.worktrees/**` 并显式设置当前配置根；`npm run lint` 从 473 个路径错误恢复为退出 0，保留已有 `Workbench.tsx:308` Hook 依赖 warning（未改相邻业务）。配置改动与任务清单/失败记录独立提交。

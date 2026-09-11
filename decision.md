@@ -3177,3 +3177,11 @@
 - 背景：导入确认后 Workbench 会导航到 `report`，但报告页仍渲染同一个 `VisualizationWorkspace`。`hotkeysEnabled` 之前只在 `activeNav === 'overview'` 时为真，导致越南模板装箱后切换手动模式时 M/Delete 被静默忽略。
 - 决策：由 Workbench 的渲染分支决定快捷键生命周期；只要 `VisualizationWorkspace` 已挂载就启用，离开工作台进入历史、模板管理或用户管理时组件卸载并自动移除监听。
 - 影响：导入后停留在报告导航时，3D 选箱快捷键与 overview 一致；历史/管理页面不获得工作区快捷键。远程回归已观察到越南模板路径的装箱、选中、M、Delete 均执行成功。
+
+## 2026-09-11 当前仓库 lint 被嵌套 worktree 污染
+
+- 背景：改动前运行 `npm run lint` 失败，473 errors。typescript-eslint 报 `No tsconfigRootDir was set`，候选根同时包含当前仓库和 `.worktrees/p6-linear-packing-authority`。完整日志 `test-results/lint-before-20260911.log`。
+- 选项：只运行目标文件 lint 并持续保留全仓阻塞；或隔离其他 checkout 并显式配置当前 tsconfig 根。
+- 决策：当前任务需要可执行的全量验证，最小修正 ESLint：忽略 `.worktrees/**` 并设置 `tsconfigRootDir` 到配置所在目录。不修改规则、断言或测试超时。
+- 影响：检查当前 checkout，避免另一 worktree 的源代码/配置被混入；独立验证并提交。
+- 后续：重新运行 `npm run lint`，若出现当前 checkout 的真实错误另行记录，不能据此削弱规则。
