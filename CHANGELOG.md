@@ -5,10 +5,14 @@
 - 真实越南第十一批 Excel／保存模板／20GP／数量优先结果由 **482** 件提升至 **483** 件，已装体积由 **28.468091** m³ 提升至 **29.1322915** m³，50 mm 网格最大货物间槽由 **800 mm** 降至 **500 mm**，封闭空腔仍为 **0**。支撑风险代理值由 **152456500** 增至 **460252750**，该指标不等同于运输稳定性证明，结果仍不是全局最优或零缝隙承诺。
 - 快捷键监听随 `VisualizationWorkspace` 挂载与卸载，删除冗余导航开关；真实 Canvas 选箱后 `M`、`Delete`、`Backspace`、撤销均作用于当前箱体，输入框和工作区外导航保持隔离。
 - 保护契约确认仅越南 20GP 数量模式发生正向变化，其余夹具件数和契约哈希不变；未使用 `--allow-regression`。
-- 验证：`npm run lint` 通过（仅已有 Workbench Hook warning）；`npm test` 通过（1020 单元、1 契约、29 回滚、10 性能）；`npm run build` 通过（保留既有大 chunk warning）；串行 `npm run test:e2e -- --output=test-results/e2e-final.local` **150/150 通过**。
+- 最终验证：`npm run lint` 通过（仅已有 Workbench Hook warning）；`npm test` 通过（1021 单元、1 契约、29 回滚、10 性能）；`npm run build` 通过（保留既有大 chunk warning）；最终代码串行 `npm run test:e2e -- --output=test-results/e2e-reviewed.local` **150/150 通过，10.1m，无跳过**。
 - 新增说明：`docs/2026-09-11-vietnam-packing-hotkeys.md`；发布说明：`src/data/releaseNotes.ts` 的 `2026-09-11-r76-upper-gap-workspace`。
 - 追加审查：自动装箱仍重排完整上层；局部邻箱回退未改善真实槽隙，已撤回。修复阶段增加 1000 ms 候选启动预算与超时诊断，已开始的候选完整完成后才返回，未增加任何测试超时。新增预算测试和真实夹具 ID 唯一性／支撑引用／接触面积检查。
-- 追加验证：`lint && npm test && build` 再次全部通过；1021 单元、1 契约、29 回滚、10 性能。原越南5000 ms性能门槛、483件契约与500 mm槽指标保持通过。准备对最终版本再次冻结并跑完整 E2E，随后部署。
+- 追加验证：`lint && npm test && build` 再次全部通过；1021 单元、1 契约、29 回滚、10 性能。原越南5000 ms性能门槛、483件契约与500 mm槽指标保持通过。预算与支撑检查提交 `b776cd8`，最终冻结后的完整 E2E 结果如上。
+- 生产部署 **完成**：`npm run deploy` 使用已验证构建；独立 SQLite 备份 `/root/cargo-database-20260911-112635-before-r76.db`（0600，quick_check=ok）；应用回滚备份 `/root/cargo_project-backup-20260911-112649`。
+- 生产复核：`cargo-server.service` active；首页 HTTP 200；未认证模板 API HTTP 401；DB quick_check=ok、foreign_key_check 无输出。部署后的 `Workbench-B5_xT0XB.js` SHA-256 与本地构建一致。
+- 远程 E2E：通过 SSH 回环入口、1920×1080 视口、零重试、未启用凭据 trace，真实越南模板完整手动链路与 M/Delete、Backspace 两条 3D 用例 **3/3 通过，1.6m**，长流程正常收尾。仅使用 testuser（执行前历史为0），本轮创建的模板由用例清理；未使用生产管理员凭据。截图 `test-results/e2e-remote-r76.local/import-templates-P-Vietnam-5933c-eys-scoped-to-the-workspace-chromium/vietnam-20gp-quantity.png` 已目视检查。
+- 代码提交：`9374002`（lint 范围）、`f174dc8`（快捷键生命周期）、`1a0aae9`（数量槽隙修复）、`b1a15fa`（重型测试调度）、`3f064d2`（E2E/发布说明）、`b776cd8`（修复预算/支撑验证）。既有 `.serena/project.yml` 与 `issues/0824/` 保留。
 
 ## 2026-09-11 生产无登录账号清理
 
@@ -2664,7 +2668,7 @@ Implements REVIEW.md「第三十三轮」points 1-4 (scope A+B per decision.md 2
 - Package fix: `test:unit` excludes `scripts/rollback.test.mjs`; new `test:rollback` runs `vitest run scripts/rollback.test.mjs --pool=threads --maxWorkers=1`; `npm test` runs `test:unit && test:rollback && test:packing-performance` in that order.
 - GREEN: `npm test` passed unit **92 files / 805 tests**, rollback **1 file / 29 tests**, and packing performance **2 files / 7 tests**; command wall time was **170.97s**. Standalone `npm run test:rollback` passed **1 file / 29 tests** in **101.37s**. `npm run lint` exited **0**. No full E2E, deployment, production rollback, or commit was run for this orchestration fix.
 
-## 2026-09-11 越南 20GP 间隙与手动快捷键重构（进行中）
+## 2026-09-11 越南 20GP 间隙与手动快捷键重构（启动记录，已完成）
 
 - 用户反馈：模板导入 → 装箱 → 继续手动微调，3D 可以拖箱但 Delete/M 无效；截图存在明显货物间槽。用户最终确认截图是 20GP 数量优先。
 - 当前分支 `feat/quantity-volume-search` / `3fb606d` 已含旧修复，必须重新验证。保留既有 `.serena/project.yml`、`src/lib/packing.ts`（当前内容 diff 为空，行尾状态）及 `issues/0824/`。
@@ -2676,4 +2680,4 @@ Implements REVIEW.md「第三十三轮」points 1-4 (scope A+B per decision.md 2
 - 验证环境修正：ESLint 排除嵌套 `.worktrees/**` 并显式设置当前配置根；`npm run lint` 从 473 个路径错误恢复为退出 0，保留已有 `Workbench.tsx:308` Hook 依赖 warning（未改相邻业务）。配置改动与任务清单/失败记录独立提交。
 - 快捷键子任务：删除 `hotkeysEnabled` 公共参数及 resolver 假 `overview` 值，监听直接跟随可视工作区生命周期。新增 hook 的最新选中/唯一分发、输入框与外交互保护、卸载/重挂载作用域测试；相关单测 3 文件 / 15 项通过。
 - 新增完整真实 E2E：越南 Excel → 保存组合尺寸模板 → 取消 → 重新选模板导入 → 20GP 数量优先装箱 → 继续手动 → 真实 Canvas 选中 → M/Delete/撤销/Backspace，验证箱数与池余量守恒、输入框/导航隔离、离开再返回。定向 E2E 1 passed，测试服务正常收尾；此前大数据删除 teardown 挂起在本次未重现。新增测试清理其自己创建的模板。
-- 结论：当前分支未复现新的快捷键故障；消除了历史导航开关误禁用工作区的接口，并补齐此前缺失的整条业务回归。尚待完整 E2E 与发布验证。
+- 结论：当前分支未复现新的快捷键故障；消除了历史导航开关误禁用工作区的接口，并补齐此前缺失的整条业务回归。最终完整 E2E、生产发布和远程验证均已通过，详见本文件顶部同日完成记录。
