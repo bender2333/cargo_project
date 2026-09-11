@@ -1,4 +1,12 @@
 # Changelog
+## 2026-09-11 生产无登录账号清理
+
+- 清理条件：`last_login_at IS NULL`，保留 `RUIXI`、`邓晓艳`、`dengxbin`、`admin`、`dengxbin123`。
+- 删除前创建独立 SQLite 备份：`/root/cargo-database-20260911-094345-before-no-login-delete.db`；权限 `0600`，`PRAGMA quick_check=ok`。
+- 停止服务后在 `foreign_keys=ON` 事务中删除 **286** 个账号；关联删除 `history_plans` **118** 行、`custom_containers` **118** 行、`custom_cargo` **42** 行。
+- 删除后剩余账号 **6** 个：5 个指定保留账号与已存在登录记录的 `testuser`；候选剩余 **0**，所有关联表孤儿行 **0**。
+- 服务重启后验证：`cargo-server.service` active，数据库 `quick_check=ok`、`foreign_key_check` 无异常，管理员登录 HTTP **200**。
+
 ## 2026-09-11 生产注册测试用户清理
 
 - 通过生产管理员接口清理用户名以 `u_reg_` 开头的注册测试用户；执行时匹配 **61** 个，成功删除 **61** 个，失败 **0** 个，删除后剩余 **0** 个。
