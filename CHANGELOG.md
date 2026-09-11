@@ -1,10 +1,14 @@
 # Changelog
 ## 2026-09-11 远程部署回归入口整理
 
-- 任务：为越南模板与3D快捷键三条回归增加稳定的部署测试标记和远程运行命令；远程配置固定单 worker、零重试和1920×1080视口，不记录凭据 trace。
-- 任务：按需读取普通用户/管理员凭据，让普通部署验证只依赖测试用户；这三条用例不再清空账号历史，保留原业务断言与临时模板清理。
-- 验证计划：凭据模块测试、lint/test/build、本地全量150项E2E；随后数据库备份、远程部署、三条生产回归和静态文件/服务/数据库复核。
+- 完成：为越南模板与3D快捷键三条回归增加`@deployment`标记和`npm run test:e2e:remote`命令；远程配置固定单worker、零重试和1920×1080视口，关闭trace。操作说明见`docs/remote-e2e.md`。
+- 完成：按需读取普通用户/管理员凭据，让普通部署验证只依赖测试用户；这三条用例不再清空账号历史，保留原业务断言与临时模板清理。
 - 已验证：lint通过（仅既有Hook warning），完整`npm test`通过（1023单元、1契约、29回滚、10性能，共1063项），build通过；远程配置缺少URL时拒绝启动，user-only凭据下准确收集3条，本地仍收集150条。两项旧校验时机断言的失败与修正记录在`decision.md`。
+- 本地全量：`npm run test:e2e -- --output=test-results/e2e-remote-entry.local` **150/150通过，9.0m，无跳过**；冻结代码后串行运行，越南保存模板完整链路53.7s通过。
+- 生产部署完成：使用本轮已验证构建执行`npm run deploy`。独立数据库备份`/root/cargo-database-20260911-121635-before-e2e-entry.db`（0600、quick_check=ok），应用回滚备份`/root/cargo_project-backup-20260911-121646`。
+- 远程回归：新固定命令`npm run test:e2e:remote` **3/3通过，1.6m，零重试、无跳过**；只配置testuser，未提供管理员凭据。临时模板已清理：测试前后该账号历史均0条、导入模板均203条，模板全部记录SHA-256保持`0e0d8e7f6b3fd6ce0fd0d4395a4a1935e6f1a518ad4b3b6c99e65426f468a173`。
+- 上线复核：service active、首页200、未认证API401、DB quick_check=ok且foreign_key_check无异常；Workbench与ContainerScene的SHA-256均与本地一致。远程截图已目视检查，产物在`test-results/remote`，无trace文件。
+- 实现提交`48af14e`；本轮没有修改装箱算法、UI或既有业务断言/超时，保留工作区既有`.serena/project.yml`和`issues/0824/`改动。
 
 ## 2026-09-11 越南数量装箱槽隙与模板手动微调重构
 
