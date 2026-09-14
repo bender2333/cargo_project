@@ -679,7 +679,7 @@ export function calculatePacking(container: ContainerSpec, cargoItems: CargoItem
   let usedWeight = 0
   let totalCargoCount = 0
 
-  const loadingMode = options.loadingMode ?? 'quantity'
+  const loadingMode = options.loadingMode ?? 'volume'
   const minSupportRatio = options.supportPolicy?.minSupportRatio ?? MINIMUM_SUPPORT_RATIO
   const defaultMaxStackLayers = normalizeDefaultMaxStackLayers(options.defaultMaxStackLayers)
   const expanded = cargoItems

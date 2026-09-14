@@ -411,7 +411,7 @@ test('exports shipment-prefixed workbook data from the named plan', async ({ pag
   expect(shipmentRows[0]).toMatchObject({
     shipmentName: 'Prefix Plan',
     container: "Container 20'",
-    loadingMode: 'quantity',
+    loadingMode: 'volume',
   })
 })
 

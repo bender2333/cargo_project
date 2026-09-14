@@ -121,7 +121,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
     cargoItems: initialCargo,
     containerSnapshots: [...containers, customContainerDefaults],
     selectedContainerId: containers[0].id,
-    loadingMode: 'quantity',
+    loadingMode: 'volume',
     defaultMaxStackLayers: placementSettings.defaultMaxStackLayers,
     supportPolicy: placementSettings.supportPolicy,
   })
@@ -1046,7 +1046,7 @@ function Workbench({ currentUser, onLogout }: WorkbenchProps) {
       shipmentName: plan.shipmentName,
       container: data.container,
       cargoItems: data.cargoItems,
-      loadingMode: plan.loadingMode || 'quantity',
+      loadingMode: plan.loadingMode || 'volume',
       defaultMaxStackLayers: data.defaultMaxStackLayers,
       result: decision.kind === 'snapshot' ? decision.data.packingResult : undefined,
     })

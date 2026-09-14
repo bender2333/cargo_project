@@ -388,6 +388,21 @@ describe('automatic packing compactness', () => {
     expect(layoutCompactness(result.placed, fixture.container).internalNotchVolume).toBe(0)
   }, 20_000)
 
+  it('keeps the Vietnam template volume load compact at the upper packing front', () => {
+    const fixture = JSON.parse(readFileSync('test-data/json/vietnam-11/input.json', 'utf8')) as {
+      container: ContainerSpec
+      items: CargoItem[]
+    }
+    const result = calculatePacking(fixture.container, fixture.items, { loadingMode: 'volume' })
+    const gap = largestInterCargoGap(result.placed, fixture.container)
+    const compactness = layoutCompactness(result.placed, fixture.container)
+
+    expectQuantityConservation(fixture.items, result)
+    expect(result.usedVolume, 'volume mode must retain the high-utilization layout').toBeGreaterThanOrEqual(30_800_000_000)
+    expect(gap?.mm ?? 0, `Vietnam volume upper-front slot is ${gap?.mm ?? 0}mm`).toBeLessThan(1000)
+    expect(compactness.internalNotchVolume).toBe(0)
+  }, 20_000)
+
   it('does not pick a max-count C13 block that leaves a 400mm side channel next to C10 in a 360mm-tall space', () => {
     const container: ContainerSpec = {
       id: 'upper-ems-360',

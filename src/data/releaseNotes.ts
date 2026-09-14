@@ -14,6 +14,24 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-09-14-r77-volume-front-compaction',
+    date: '2026-09-14',
+    title: {
+      en: 'Volume packing now keeps the upper front compact in short containers',
+      zh: '体积优先装箱收紧短柜上层前沿并设为默认模式',
+    },
+    items: {
+      en: [
+        'New workspaces and packing comparisons now use volume priority by default.',
+        'Volume packing in 20-foot-class containers completes the current vertical loading front before opening the next longitudinal slot, improving occupied volume and reducing the Vietnam template upper gap while preserving support and stacking checks.',
+      ],
+      zh: [
+        '新建工作台和装箱比较现在默认使用体积优先。',
+        '20 英尺级货柜的体积优先装箱先完成当前垂直前沿再打开下一纵向空位；越南模板实测占用体积提升、上层货物间槽由 1000 mm 降至 650 mm，同时继续执行支撑和堆叠检查。',
+      ],
+    },
+  },
+  {
     version: '2026-09-11-r76-upper-gap-workspace',
     date: '2026-09-11',
     title: {

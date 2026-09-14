@@ -339,7 +339,7 @@ describe('PackingResult geometry is unchanged by the layering fix', () => {
   const expectedPlacement: Record<string, { placed: number; total: number }> = {
     'russia-volume': { placed: 31, total: 31 },
     'vietnam-20gp-quantity': { placed: 483, total: 864 },
-    'vietnam-20gp-volume': { placed: 473, total: 864 },
+    'vietnam-20gp-volume': { placed: 464, total: 864 },
     'vietnam-40hq-quantity': { placed: 864, total: 864 },
     'vietnam-40hq-volume': { placed: 864, total: 864 },
   }

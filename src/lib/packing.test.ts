@@ -378,7 +378,7 @@ describe('calculatePacking', () => {
     expect(calculatePacking(container, items, { loadingMode: 'input' }).workSteps.map((step) => step.label)).toEqual(['S', 'L'])
   })
 
-  it('defaults to quantity-priority loading mode when none is specified', () => {
+  it('defaults to volume-priority loading mode when none is specified', () => {
     const container = testContainer({ length: 5000, width: 1000, height: 1000 })
     const items = [
       cargo({ id: 'small-many', label: 'Q', length: 400, width: 1000, height: 1000, weight: 5, quantity: 3, canRotate: false }),
@@ -386,9 +386,9 @@ describe('calculatePacking', () => {
     ]
 
     const defaultLabels = calculatePacking(container, items).workSteps.map((step) => step.label).slice(0, 2)
-    const quantityLabels = calculatePacking(container, items, { loadingMode: 'quantity' }).workSteps.map((step) => step.label).slice(0, 2)
-    expect(defaultLabels).toEqual(quantityLabels)
-    expect(defaultLabels).toEqual(['Q', 'Q'])
+    const volumeLabels = calculatePacking(container, items, { loadingMode: 'volume' }).workSteps.map((step) => step.label).slice(0, 2)
+    expect(defaultLabels).toEqual(volumeLabels)
+    expect(defaultLabels).toEqual(['W', 'Q'])
   })
 
   it('places higher stack-capacity cargo first in quantity mode so it can form the lower layers', () => {

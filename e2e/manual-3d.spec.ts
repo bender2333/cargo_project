@@ -210,12 +210,12 @@ async function placeSingleManualBoxForRotation(page: Page) {
   return { boxId, before }
 }
 
-test('默认装载规则为数量优先', async ({ page }) => {
+test('默认装载规则为体积优先', async ({ page }) => {
   await ensureChinese(page)
   const select = page.getByLabel('装载规则')
-  await expect(select).toHaveValue('quantity')
+  await expect(select).toHaveValue('volume')
   const selectedText = await select.locator('option:checked').textContent()
-  expect(selectedText?.trim()).toBe('数量优先')
+  expect(selectedText?.trim()).toBe('体积优先')
 })
 
 test('允许堆叠时显示最大堆叠层数输入，取消后隐藏', async ({ page }) => {

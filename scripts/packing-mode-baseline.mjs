@@ -324,7 +324,7 @@ try {
       fixture: 'test-data/json/0802/input.json',
       container: fixture0802.container,
       items: cloneItems(fixture0802.items),
-      loadingMode: fixture0802.loadingMode || 'quantity',
+      loadingMode: fixture0802.loadingMode || 'volume',
     },
     {
       name: '0802-volume',

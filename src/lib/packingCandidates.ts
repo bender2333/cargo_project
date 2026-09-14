@@ -197,9 +197,9 @@ export function selectBlockCandidate(
   if (candidates.length === 0) return undefined
 
   const pool = withRemainingQuality(candidates, loadingMode, state)
-  // In a 20-foot-class container, quantity loading benefits from finishing the
-  // current vertical front before opening the next longitudinal slot.
-  const preferVerticalFront = loadingMode === 'quantity'
+  // In a 20-foot-class container, both objective modes benefit from finishing
+  // the current vertical front before opening the next longitudinal slot.
+  const preferVerticalFront = (loadingMode === 'quantity' || loadingMode === 'volume')
     && state.container.length <= SHORT_CONTAINER_LENGTH_MM
   let best: PackingBlockChoice | undefined
   for (const choice of pool) {

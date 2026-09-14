@@ -308,7 +308,7 @@ export const ResultsPanel = forwardRef<ResultsPanelHandle, ResultsPanelProps>(fu
     if (activeResultTab !== 'compare' || !hasCalculated) return []
     if (compareSelection.length === 0) return []
     const chosen = compareCandidates.filter((c) => compareSelection.includes(c.id))
-    return compareContainers(chosen, displayCargoItems ?? [], loadingMode ?? 'quantity', defaultMaxStackLayers)
+    return compareContainers(chosen, displayCargoItems ?? [], loadingMode ?? 'volume', defaultMaxStackLayers)
   }, [activeResultTab, compareSelection, compareCandidates, defaultMaxStackLayers, displayCargoItems, hasCalculated, loadingMode])
 
   // --- Imperative handle for Workbench to trigger actions ---
