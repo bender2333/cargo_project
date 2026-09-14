@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { containers, effectiveContainer, formatCubicMeters, getContainerVolume } from '../data/containers'
 import type { CargoItem, ContainerSpec, PackingResult, PlacedBox } from '../types'
-import { UNPLACED_REASON_CODES, calculatePacking, orientations } from './packing'
+import { UNPLACED_REASON_CODES, calculatePacking, isSupportRatioAccepted, orientations, placementScore, supportDetails } from './packing'
+import { expectQuantityConservation } from './packingContract.testSupport'
 import { violatesStackChain } from './stackCapacity'
 
 const cargo = (overrides: Partial<CargoItem> = {}): CargoItem => ({
@@ -19,6 +20,37 @@ const cargo = (overrides: Partial<CargoItem> = {}): CargoItem => ({
   stackable: true,
   ...overrides,
 })
+
+const supportBox = (length: number): PlacedBox => ({
+  id: `support-${length}`,
+  cargoId: 'support',
+  name: 'Support box',
+  label: 'S',
+  index: 1,
+  x: 0,
+  y: 0,
+  z: 0,
+  length,
+  width: 1000,
+  height: 500,
+  orientationKey: 'LWH',
+  labelRotationDeg: 0,
+  weight: 1,
+  color: '#64748b',
+  canRotate: false,
+  stackable: true,
+  physicalLayer: 1,
+  depthLayer: 1,
+  workStep: 1,
+  supportType: 'floor',
+  supportedBy: [],
+})
+
+const supportGeometry = (supportedLength: number) => supportDetails(
+  { x: 0, y: 0, z: 500 },
+  { length: 1000, width: 1000, height: 500 },
+  [supportBox(supportedLength)],
+)
 
 const testContainer = (overrides: Partial<ContainerSpec> = {}): ContainerSpec => ({
   id: 'test-container',
@@ -79,6 +111,7 @@ function expectValidPacking(container: ContainerSpec, result: PackingResult) {
   expect(result.usedVolume).toBe(usedVolume)
   expect(result.usedWeight).toBe(usedWeight)
   expect(result.usedWeight).toBeLessThanOrEqual(container.maxWeight)
+  expect(result.placedCount + result.unplaced.reduce((sum, entry) => sum + entry.quantity, 0)).toBe(result.totalCargoCount)
 
   const placedIds = new Set(result.placed.map((box) => box.id))
   for (const box of result.placed) {
@@ -127,6 +160,7 @@ function expectValidLargePacking(container: ContainerSpec, result: PackingResult
   expect(result.usedVolume).toBe(usedVolume)
   expect(result.usedWeight).toBe(usedWeight)
   expect(result.usedWeight).toBeLessThanOrEqual(container.maxWeight)
+  expect(result.placedCount + result.unplaced.reduce((sum, entry) => sum + entry.quantity, 0)).toBe(result.totalCargoCount)
 }
 
 function maxSupportedDistance(box: PlacedBox, graph: Map<string, PlacedBox>) {
@@ -152,6 +186,55 @@ function maxSupportedDistance(box: PlacedBox, graph: Map<string, PlacedBox>) {
   }
   return maxDistance
 }
+
+describe('automatic support-ratio rule', () => {
+  it('accepts a partially-supported placement at approximately 60% support', () => {
+    const support = supportGeometry(600)
+
+    expect(support.supportRatio, '60% geometry must calculate a 0.6 support ratio').toBeCloseTo(0.6, 10)
+    expect(support.supportType, '60% geometry must remain partially-supported').toBe('partially-supported')
+    expect(isSupportRatioAccepted(support.supportRatio), '60% support must be accepted by the minimum-support predicate').toBe(true)
+  })
+
+  it('rejects a partially-supported placement at approximately 40% support', () => {
+    const support = supportGeometry(400)
+
+    expect(support.supportRatio, '40% geometry must calculate a 0.4 support ratio').toBeCloseTo(0.4, 10)
+    expect(support.supportType, '40% geometry must remain partially-supported').toBe('partially-supported')
+    expect(isSupportRatioAccepted(support.supportRatio), '40% support must be rejected by the minimum-support predicate').toBe(false)
+  })
+
+  it('accepts a partially-supported placement at the exact 50% support boundary', () => {
+    const support = supportGeometry(500)
+
+    expect(support.supportRatio, '50% geometry must calculate the exact 0.5 support ratio').toBe(0.5)
+    expect(support.supportType, '50% geometry must remain partially-supported').toBe('partially-supported')
+    // Boundary policy: the automatic rule rejects ratios below 0.5, so exactly 0.5 is accepted.
+    expect(isSupportRatioAccepted(support.supportRatio), 'exactly 50% support must be accepted by the boundary policy').toBe(true)
+  })
+})
+
+
+describe('shared supportPolicy between automatic and manual paths', () => {
+  it('keeps default 0.5 goldens unchanged when supportPolicy is omitted', () => {
+    // Spot-check one small packing path; full five-fixture contracts remain the authority.
+    const container = testContainer({ length: 2000, width: 1000, height: 1000 })
+    const items = [cargo({ id: 'a', quantity: 2, canRotate: false, length: 1000, width: 1000, height: 500 })]
+    const baseline = calculatePacking(container, items)
+    const explicit = calculatePacking(container, items, { supportPolicy: { minSupportRatio: 0.5 } })
+    expect(explicit.placedCount).toBe(baseline.placedCount)
+    expect(explicit.placed.map((box) => [box.x, box.y, box.z])).toEqual(
+      baseline.placed.map((box) => [box.x, box.y, box.z]),
+    )
+  })
+
+  it('rejects automatic placements below a raised minSupportRatio', () => {
+    const support = supportGeometry(600) // 0.6
+    expect(support.supportRatio).toBeCloseTo(0.6, 10)
+    expect(isSupportRatioAccepted(support.supportRatio, 0.5)).toBe(true)
+    expect(isSupportRatioAccepted(support.supportRatio, 0.8)).toBe(false)
+  })
+})
 
 describe('container specs', () => {
   it('matches EasyCargo captured container dimensions', () => {
@@ -295,7 +378,7 @@ describe('calculatePacking', () => {
     expect(calculatePacking(container, items, { loadingMode: 'input' }).workSteps.map((step) => step.label)).toEqual(['S', 'L'])
   })
 
-  it('defaults to quantity-priority loading mode when none is specified', () => {
+  it('defaults to volume-priority loading mode when none is specified', () => {
     const container = testContainer({ length: 5000, width: 1000, height: 1000 })
     const items = [
       cargo({ id: 'small-many', label: 'Q', length: 400, width: 1000, height: 1000, weight: 5, quantity: 3, canRotate: false }),
@@ -303,9 +386,9 @@ describe('calculatePacking', () => {
     ]
 
     const defaultLabels = calculatePacking(container, items).workSteps.map((step) => step.label).slice(0, 2)
-    const quantityLabels = calculatePacking(container, items, { loadingMode: 'quantity' }).workSteps.map((step) => step.label).slice(0, 2)
-    expect(defaultLabels).toEqual(quantityLabels)
-    expect(defaultLabels).toEqual(['Q', 'Q'])
+    const volumeLabels = calculatePacking(container, items, { loadingMode: 'volume' }).workSteps.map((step) => step.label).slice(0, 2)
+    expect(defaultLabels).toEqual(volumeLabels)
+    expect(defaultLabels).toEqual(['W', 'Q'])
   })
 
   it('places higher stack-capacity cargo first in quantity mode so it can form the lower layers', () => {
@@ -510,6 +593,19 @@ describe('calculatePacking', () => {
     })
   })
 
+  it('warns when a real packing result contains partially-supported cargo', () => {
+    const result = calculatePacking(testContainer({ length: 1000, width: 1000, height: 1000 }), [
+      cargo({ id: 'support', label: 'S', length: 600, width: 1000, height: 500, quantity: 1, canRotate: false }),
+      cargo({ id: 'top', label: 'T', length: 1000, width: 1000, height: 500, quantity: 1, canRotate: false }),
+    ], { loadingMode: 'input' })
+    const partiallySupported = result.placed.filter((box) => box.supportType === 'partially-supported')
+
+    expect(partiallySupported.length, 'fixture must produce at least one partially-supported placed box').toBeGreaterThan(0)
+    expect(result.diagnostics.find((item) => item.id === 'support-check'), 'partial support must produce the support-check warning').toMatchObject({
+      severity: 'warning',
+    })
+  })
+
   it('supports gravity-stable stacking on top of fully supported boxes', () => {
     const result = calculatePacking(containers[0], [
       cargo({ id: 'base-a', label: 'A', length: containers[0].length, width: containers[0].width, height: 500, quantity: 1, canRotate: false }),
@@ -582,17 +678,55 @@ describe('calculatePacking', () => {
     expect(result.placed.find((box) => box.cargoId === 'top-only')?.z).toBeGreaterThan(0)
   })
 
-  it('keeps 0629 ground-only cartons off pallet tops', () => {
-    const { container, cargoItems } = load0629Fixture()
-    const result = calculatePacking(container, cargoItems.map((item) => item.label === 'C' ? { ...item, groundOnly: true } : item), { loadingMode: 'quantity' })
-    const cBoxes = result.placed.filter((box) => box.label === 'C')
+  it('includes residual ground-only cargo in block-engine single-box fallback', () => {
+    // Block path (SKU>=2, total>=100). Ground-only must remain floor-only and must not be
+    // skipped by the post-block extreme-point fallback merely because it is groundOnly.
+    const container = testContainer({ length: 4000, width: 2000, height: 2000, maxWeight: 100_000 })
+    const items = [
+      cargo({ id: 'g', label: 'G', length: 500, width: 500, height: 400, weight: 1, quantity: 40, canRotate: false, groundOnly: true }),
+      cargo({ id: 't', label: 'T', length: 500, width: 500, height: 400, weight: 1, quantity: 80, canRotate: false }),
+    ]
+    const result = calculatePacking(container, items, { loadingMode: 'quantity' })
+    const groundPlaced = result.placed.filter((box) => box.cargoId === 'g')
+    const groundUnplaced = result.unplaced
+      .filter((entry) => entry.cargoId === 'g')
+      .reduce((sum, entry) => sum + entry.quantity, 0)
+    const floorCount = result.placed.filter((box) => box.z === 0).length
+    const floorCapacity = Math.floor(container.length / 500) * Math.floor(container.width / 500)
 
-    expectValidLargePacking(container, result)
-    expect(cBoxes.every((box) => box.z === 0)).toBe(true)
-    expect(result.unplaced).toContainEqual(expect.objectContaining({
-      label: 'C',
-      reasonCode: UNPLACED_REASON_CODES.NO_SPACE,
-    }))
+    expect(groundPlaced.length).toBeGreaterThan(0)
+    expect(groundPlaced.every((box) => box.z === 0)).toBe(true)
+    expect(groundPlaced.length + groundUnplaced).toBe(40)
+    // If any ground-only remains unplaced, the floor must already be saturated — not a skipped fallback.
+    if (groundUnplaced > 0) {
+      expect(floorCount).toBeGreaterThanOrEqual(floorCapacity)
+    }
+  })
+
+  it('keeps 0629 ground-only cartons on the floor in quantity and volume modes', () => {
+    const { container, cargoItems } = load0629Fixture()
+    const constrainedItems = cargoItems.map((item) => item.label === 'C' ? { ...item, groundOnly: true } : item)
+
+    for (const loadingMode of ['quantity', 'volume'] as const) {
+      const result = calculatePacking(container, constrainedItems, { loadingMode })
+      const cBoxes = result.placed.filter((box) => box.label === 'C')
+
+      expectValidLargePacking(container, result)
+      expectQuantityConservation(constrainedItems, result)
+      expect(result.placedCount).toBeGreaterThanOrEqual(loadingMode === 'quantity' ? 188 : 156)
+      expect(result.unplaced).toContainEqual(expect.objectContaining({
+        label: 'C',
+        reasonCode: UNPLACED_REASON_CODES.NO_SPACE,
+      }))
+      expect(cBoxes.length).toBeGreaterThan(0)
+      expect(cBoxes.every((box) => box.z === 0)).toBe(true)
+      expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
+
+      const graph = new Map(result.placed.map((box) => [box.id, box]))
+      for (const box of graph.values()) {
+        expect(violatesStackChain(box, graph)).toBeNull()
+      }
+    }
   })
 
   it('honors cargo max stack layers while preserving unlimited legacy behavior by default', () => {
@@ -735,6 +869,171 @@ describe('calculatePacking', () => {
     expect(capped.placed.some((box) => box.orientationKey === 'LHW' && box.z >= 1800)).toBe(false)
     expect(capped.unplaced[0]).toMatchObject({ cargoId: 'dense-top-fill', reasonCode: UNPLACED_REASON_CODES.NO_SPACE })
   }, 30_000)
+
+  it('treats non-binding maxStackLayers like unlimited in placement scoring', () => {
+    // Container can physically reach 13 layers of 200mm; msl=99 is not binding.
+    const container = testContainer({ length: 2000, width: 1000, height: 2600 })
+    const baseItem = cargo({
+      id: 'base',
+      label: 'B',
+      length: 1000,
+      width: 1000,
+      height: 200,
+      canRotate: false,
+    })
+    const unlimitedItem = cargo({
+      id: 'rider',
+      label: 'R',
+      length: 1000,
+      width: 1000,
+      height: 200,
+      canRotate: false,
+    })
+    const nonBindingItem = cargo({
+      ...unlimitedItem,
+      maxStackLayers: 99,
+    })
+    const box = orientations(unlimitedItem)[0]
+    const floorBox: PlacedBox = {
+      id: 'floor-1',
+      cargoId: baseItem.id,
+      name: baseItem.name,
+      label: baseItem.label ?? 'B',
+      index: 1,
+      x: 0,
+      y: 0,
+      z: 0,
+      length: 1000,
+      width: 1000,
+      height: 200,
+      orientationKey: 'LWH',
+      labelRotationDeg: 0,
+      weight: baseItem.weight,
+      color: baseItem.color,
+      canRotate: false,
+      stackable: true,
+      physicalLayer: 1,
+      depthLayer: 1,
+      workStep: 1,
+      supportType: 'floor',
+      supportedBy: [],
+    }
+    // Same x/y isolates the z-primary branch difference between finite and unlimited.
+    const floorPoint = { x: 0, y: 0, z: 0 }
+    const stackedPoint = { x: 0, y: 0, z: 200 }
+
+    const unlimitedFloor = placementScore(unlimitedItem, box, floorPoint, [floorBox], container)
+    const unlimitedStacked = placementScore(unlimitedItem, box, stackedPoint, [floorBox], container)
+    const nonBindingFloor = placementScore(nonBindingItem, box, floorPoint, [floorBox], container)
+    const nonBindingStacked = placementScore(nonBindingItem, box, stackedPoint, [floorBox], container)
+
+    // Unlimited prefers low-z primary order; non-binding msl must share that branch.
+    expect(unlimitedFloor).toBeLessThan(unlimitedStacked)
+    expect(nonBindingFloor).toBeLessThan(nonBindingStacked)
+    expect(nonBindingFloor).toBe(unlimitedFloor)
+    expect(nonBindingStacked).toBe(unlimitedStacked)
+
+    // Control: a truly binding limit still prefers the finite high-z branch.
+    const bindingItem = cargo({ ...unlimitedItem, maxStackLayers: 2 })
+    const bindingFloor = placementScore(bindingItem, box, floorPoint, [floorBox], container)
+    const bindingStacked = placementScore(bindingItem, box, stackedPoint, [floorBox], container)
+    expect(bindingStacked).toBeLessThan(bindingFloor)
+  })
+
+  it('keeps binding maxStackLayers on the finite scoring branch and enforces the limit', () => {
+    // Physical reach is ceil(2600/200)=13; msl=2 is binding and must stay finite.
+    const container = testContainer({ length: 1000, width: 1000, height: 2600 })
+    const item = cargo({
+      id: 'binding-stack',
+      label: 'S',
+      length: 1000,
+      width: 1000,
+      height: 200,
+      quantity: 13,
+      canRotate: false,
+      maxStackLayers: 2,
+    })
+    const box = orientations(item)[0]
+    const floorBox: PlacedBox = {
+      id: 'floor-1',
+      cargoId: item.id,
+      name: item.name,
+      label: item.label ?? 'S',
+      index: 1,
+      x: 0,
+      y: 0,
+      z: 0,
+      length: 1000,
+      width: 1000,
+      height: 200,
+      orientationKey: 'LWH',
+      labelRotationDeg: 0,
+      weight: item.weight,
+      color: item.color,
+      canRotate: false,
+      stackable: true,
+      maxStackLayers: 2,
+      physicalLayer: 1,
+      depthLayer: 1,
+      workStep: 1,
+      supportType: 'floor',
+      supportedBy: [],
+    }
+    const floorPoint = { x: 0, y: 0, z: 0 }
+    const stackedPoint = { x: 0, y: 0, z: 200 }
+
+    const floorScore = placementScore(item, box, floorPoint, [floorBox], container)
+    const stackedScore = placementScore(item, box, stackedPoint, [floorBox], container)
+    // Finite branch prefers higher z (and penalizes later floor fills).
+    expect(stackedScore).toBeLessThan(floorScore)
+
+    const result = calculatePacking(container, [item], { loadingMode: 'quantity' })
+    expectValidPacking(container, result)
+    expect(result.placedCount).toBe(2)
+    expect(result.placed.every((placedBox) => placedBox.maxStackLayers === 2)).toBe(true)
+    expect(Math.max(...result.placed.map((placedBox) => placedBox.physicalLayer))).toBeLessThanOrEqual(2)
+    expect(result.unplaced[0]).toMatchObject({
+      cargoId: 'binding-stack',
+      quantity: 11,
+      reasonCode: UNPLACED_REASON_CODES.NO_SPACE,
+    })
+  })
+
+  it('matches placedCount for non-binding maxStackLayers=99 and unlimited on the same input', () => {
+    const container = testContainer({ length: 4000, width: 2000, height: 2600 })
+    const makeItems = (maxStackLayers?: number) => [
+      cargo({
+        id: 'sku-a',
+        label: 'A',
+        length: 1000,
+        width: 1000,
+        height: 200,
+        quantity: 40,
+        canRotate: false,
+        ...(maxStackLayers === undefined ? {} : { maxStackLayers }),
+      }),
+      cargo({
+        id: 'sku-b',
+        label: 'B',
+        length: 800,
+        width: 600,
+        height: 200,
+        quantity: 30,
+        canRotate: false,
+        ...(maxStackLayers === undefined ? {} : { maxStackLayers }),
+      }),
+    ]
+
+    const withNinetyNine = calculatePacking(container, makeItems(99), { loadingMode: 'quantity' })
+    const unlimited = calculatePacking(container, makeItems(undefined), { loadingMode: 'quantity' })
+
+    expectValidPacking(container, withNinetyNine)
+    expectValidPacking(container, unlimited)
+    expect(withNinetyNine.placedCount).toBe(unlimited.placedCount)
+    expect(withNinetyNine.placed.every((box) => box.maxStackLayers === 99)).toBe(true)
+    expect(unlimited.placed.every((box) => box.maxStackLayers === undefined)).toBe(true)
+  })
+
 
   it('rejects boxes that exceed dimensions', () => {
     const result = calculatePacking(containers[0], [cargo({ length: 9000 })])

@@ -233,6 +233,79 @@ describe('packingSessionReducer', () => {
     expect(next.defaultMaxStackLayers).toBe(state.defaultMaxStackLayers)
   })
 
+  it('invalidates when the selected custom container snapshot is refreshed with new dimensions', () => {
+    const state = makeCalculatedState()
+    const selected = selectPackingContainer(state)
+    const revised = { ...selected, length: selected.length + 1000 }
+
+    const next = packingSessionReducer(state, {
+      type: 'containerChanged',
+      container: revised,
+    })
+
+    expect(next.automaticResult).toBeNull()
+    expect(next.inputRevision).toBe(state.inputRevision + 1)
+    expect(selectPackingContainer(next).length).toBe(revised.length)
+  })
+
+  it('does not invalidate when a non-selected custom container is refreshed', () => {
+    const state = makeCalculatedState()
+    const other: ContainerSpec = {
+      ...container40,
+      id: 'custom-other',
+      label: 'Other custom',
+      length: 13_000,
+    }
+
+    // First seed the other container into snapshots without clearing result via selected change.
+    const withOther = {
+      ...state,
+      containerSnapshots: {
+        ...state.containerSnapshots,
+        [other.id]: other,
+      },
+    }
+    const revisedOther = { ...other, length: 14_000 }
+    const next = packingSessionReducer(withOther, {
+      type: 'containerSnapshotsSynced',
+      containers: [revisedOther],
+    })
+
+    expect(next.automaticResult).toBe(withOther.automaticResult)
+    expect(next.inputRevision).toBe(withOther.inputRevision)
+    expect(next.containerSnapshots[other.id].length).toBe(14_000)
+    expect(selectPackingContainer(next)).toEqual(selectPackingContainer(withOther))
+  })
+
+  it('invalidates via resultInvalidated when selected custom container dimensions change during sync', () => {
+    const custom: ContainerSpec = {
+      ...container40,
+      id: 'custom-1',
+      label: 'Custom 1',
+      length: 12_000,
+    }
+    const state = createPackingSessionState({
+      projectName: 'Current project',
+      shipmentName: 'Current shipment',
+      cargoItems: [cargoA],
+      containerSnapshots: [container20, custom],
+      selectedContainerId: custom.id,
+      loadingMode: 'quantity',
+      automaticResult: calculatedResult,
+    })
+    const revised = { ...custom, length: 13_000 }
+
+    const next = packingSessionReducer(state, {
+      type: 'containerSnapshotsSynced',
+      containers: [revised],
+    })
+
+    expect(next.automaticResult).toBeNull()
+    expect(next.inputRevision).toBe(state.inputRevision + 1)
+    expect(selectPackingContainer(next).length).toBe(13_000)
+  })
+
+
   it('owns copies of caller-provided cargo and container snapshots', () => {
     const initialCargo = { ...cargoA }
     const initialContainer = { ...container20 }

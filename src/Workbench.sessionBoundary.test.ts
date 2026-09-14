@@ -24,6 +24,15 @@ describe('Workbench packing-session boundary', () => {
     expect(source).toContain('container.description !== selectedContainer.description')
   })
 
+  it('invalidates packing results when selected custom containers are refreshed', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+
+    expect(source).toContain("type: 'containerSnapshotsSynced'")
+    expect(source).toContain('containers: nextCustomContainers')
+    expect(source).toMatch(/onClose=\{\(\) => \{\s*setShowCustomContainerDialog\(false\)\s*fetchCustomContainers\(\)/)
+  })
+
+
   it('routes manual editing through one session and one active result', () => {
     const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
 
@@ -96,11 +105,31 @@ describe('Workbench packing-session boundary', () => {
     expect(source).toContain('onCreateTemplate={createImportTemplateRecord}')
     expect(source).toContain('onUpdateTemplate={updateImportTemplateRecord}')
 
-    // CargoImportDialog owns the reconciliation, mapping state, and template CRUD
+    // CargoImportDialog owns the mapping state and explicit template write actions
     expect(dialogSource).toContain('selectedImportTemplateId')
-    expect(dialogSource).toContain('applyImportTemplate')
-    expect(dialogSource).toContain('handleSaveImportTemplate')
+    expect(dialogSource).toContain('selectTemplate')
+    expect(dialogSource).toContain('selectNone')
+    expect(dialogSource).toContain('handleCreateTemplate')
+    expect(dialogSource).toContain('handleUpdateTemplate')
+    expect(dialogSource).toContain('handleSaveTemplateCopy')
+    expect(dialogSource).not.toContain('handleSaveImportTemplate')
     expect(dialogSource).toContain('importMappingValueFromTemplate')
+  })
+
+  it('keeps workbook reads pending and commits cargo only from the confirmation callback', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+    const importHelper = readFileSync(path.resolve(process.cwd(), 'src/workbenchImport.ts'), 'utf8')
+    const importBlock = source.slice(source.indexOf('const importExcel'), source.indexOf('const exportExcel'))
+
+    expect(importBlock).toContain('setImportRows(outcome.rows)')
+    expect(importBlock).toContain('setShowMappingModal(true)')
+    expect(importBlock).not.toContain('cargoImported')
+    expect(importBlock).toContain('prepareExcelImport({ file, locale, t })')
+    expect(importHelper).toContain('parseWorkbookFileInWorker(file)')
+    expect(importHelper).not.toContain("import('xlsx')")
+    expect(importBlock).not.toContain("import('xlsx')")
+    expect(source.match(/type: 'cargoImported'/g)).toHaveLength(1)
+    expect(source.indexOf("type: 'cargoImported'")).toBeGreaterThan(source.indexOf('onConfirm={(items, messages) =>'))
   })
 
   it('delegates template manager drafts and rendering to the page boundary', () => {
@@ -122,5 +151,104 @@ describe('Workbench packing-session boundary', () => {
     expect(source).not.toMatch(/\bexportTemplateManagerPanel\b/)
     expect(source).not.toMatch(/\bonImport(?:Created|Updated|Deleted)=/)
     expect(source).not.toMatch(/\bonExport(?:Created|Deleted)=/)
+  })
+
+  it('uses one active compliance context for every command and result button', () => {
+    const workbenchSource = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+    const resultsSource = readFileSync(path.resolve(process.cwd(), 'src/components/ResultsPanel.tsx'), 'utf8')
+
+    expect(workbenchSource).toContain('getActivePlanCompliance')
+    expect(workbenchSource).toContain('const activePlanCompliance')
+    expect(workbenchSource).toContain('planCompliance={activePlanCompliance}')
+    expect(workbenchSource).not.toMatch(/assertPlanCompliant\(activeResult, manualIssues\)/)
+    expect(resultsSource).toContain('planCompliance: ActivePlanCompliance')
+    expect(resultsSource).toContain('planCompliance.ok')
+    expect(resultsSource).not.toContain('evaluatePlanCompliance')
+  })
+  it('routes every plan export through one visible error boundary', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+    const workspaceSource = readFileSync(path.resolve(process.cwd(), 'src/components/VisualizationWorkspace.tsx'), 'utf8')
+
+    expect(source).toContain('const runPlanExport = async')
+    expect(source).toContain('await operation()')
+    expect(source).toContain("console.error('[plan-export]'")
+    expect(source).toContain("alert(message || (locale === 'zh' ? '导出失败' : 'Export failed'))")
+    expect(workspaceSource).toContain("reject(new Error('3D canvas export failed'))")
+    expect(source).toContain('try {')
+    expect(source).toContain('catch (error)')
+    for (const handler of [
+      'exportExcel = () => runPlanExport',
+      'exportPlaybackInstructions = () => runPlanExport',
+      'exportLoadingSheet = () => runPlanExport',
+      'exportReviewChecklistJson = () => runPlanExport',
+      'exportReviewChecklistExcel = () => runPlanExport',
+      'onExportView={runPlanExport}',
+    ]) {
+      expect(source).toContain(handler)
+    }
+  })
+
+  it('keeps pure visual chrome and visible-box derivation inside VisualizationWorkspace', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+    const workspaceSource = readFileSync(path.resolve(process.cwd(), 'src/components/VisualizationWorkspace.tsx'), 'utf8')
+
+    expect(source).not.toMatch(/const \[workspaceView, setWorkspaceView\]/)
+    expect(source).not.toMatch(/const \[sceneViewMode, setSceneViewMode\]/)
+    expect(source).not.toMatch(/const \[planViewMode, setPlanViewMode\]/)
+    expect(source).not.toMatch(/const \[clearanceEnabled, setClearanceEnabled\]/)
+    expect(source).not.toMatch(/const \[workspaceMaximized, setWorkspaceMaximized\]/)
+    expect(source).not.toMatch(/const \[resetViewTick, setResetViewTick\]/)
+    expect(source).toContain('deriveVisibleWorkspaceBoxes')
+    expect(source).toContain('onChromeChange={setVisualizationChrome}')
+    expect(workspaceSource).toContain('deriveVisibleWorkspaceBoxes')
+    expect(workspaceSource).toMatch(/const \[workspaceView, setWorkspaceView\]/)
+    expect(workspaceSource).toMatch(/const \[sceneViewMode, setSceneViewMode\]/)
+    expect(workspaceSource).toMatch(/const \[planViewMode, setPlanViewMode\]/)
+    expect(workspaceSource).toMatch(/const \[clearanceEnabled, setClearanceEnabled\]/)
+    expect(workspaceSource).toMatch(/const \[workspaceMaximized, setWorkspaceMaximized\]/)
+    expect(workspaceSource).toMatch(/const \[resetViewTick, setResetViewTick\]/)
+  })
+
+  it('uses useManualPlacementSession state.mode as the only placementMode source', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+
+    expect(source).toContain('mode: placementMode')
+    expect(source).toContain('setMode: setPlacementMode')
+    expect(source).not.toMatch(/const \[placementMode,\s*setPlacementMode\]/)
+    expect(source).not.toMatch(/useState<\s*['"]auto['"]\s*\|\s*['"]manual['"]\s*>/)
+    expect(source).toMatch(/placementMode(?:=\{placementMode\}|,)/)
+  })
+
+  it('dispatches workspace keys from one hook and keeps the scene pointer-only', () => {
+    const workbenchSource = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+    const hotkeysSource = readFileSync(path.resolve(process.cwd(), 'src/hooks/useWorkspaceHotkeys.ts'), 'utf8')
+    const workspaceSource = readFileSync(path.resolve(process.cwd(), 'src/components/VisualizationWorkspace.tsx'), 'utf8')
+    const sceneSource = readFileSync(path.resolve(process.cwd(), 'src/components/ContainerScene.tsx'), 'utf8')
+
+    expect(workbenchSource).not.toContain('useManualWorkspaceHotkeys')
+    expect(workspaceSource).toContain('useWorkspaceHotkeys({')
+    expect(hotkeysSource).toContain('resolveWorkspaceHotkey')
+    expect(sceneSource).not.toContain('onManualDelete')
+    expect(sceneSource).not.toContain("window.addEventListener('keydown'")
+    expect(sceneSource).not.toContain('manualKeyboardEnabled')
+  })
+
+  it('delegates activeResultTab, activeLayerId, and activeLabelId ownership to ResultsPanel', () => {
+    const source = readFileSync(path.resolve(process.cwd(), 'src/Workbench.tsx'), 'utf8')
+    const resultsSource = readFileSync(path.resolve(process.cwd(), 'src/components/ResultsPanel.tsx'), 'utf8')
+
+    // Workbench must not own these states
+    expect(source).not.toMatch(/useState.*activeLayerId/)
+    expect(source).not.toMatch(/useState.*activeLabelId/)
+    expect(source).not.toMatch(/useState.*activeResultTab/)
+    // Workbench reads them from ResultsPanel via onStateChange
+    expect(source).toContain('resultsPanelRef')
+    expect(source).toContain('setResultsPanelState')
+    expect(source).toContain('resultsPanelState.activeLayerId')
+
+    // ResultsPanel owns the three states
+    expect(resultsSource).toMatch(/activeLayerId.*useState\('all'\)/)
+    expect(resultsSource).toMatch(/activeLabelId.*useState\('all'\)/)
+    expect(resultsSource).toMatch(/activeResultTab.*useState<ResultTab>\('layers'\)/)
   })
 })

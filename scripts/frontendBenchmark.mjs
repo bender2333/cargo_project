@@ -123,10 +123,10 @@ function finiteNonNegative(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0
 }
 
-export function validateBenchmarkReport(report) {
+export function validateBenchmarkReport(report, { requireContractHashes = true } = {}) {
   const failures = []
   if (report?.schemaVersion !== 1) failures.push('schemaVersion must be 1')
-  failures.push(...exactKeyFailures('contractHashes', report?.contractHashes, REQUIRED_ALGORITHM_CASES))
+  if (requireContractHashes) failures.push(...exactKeyFailures('contractHashes', report?.contractHashes, REQUIRED_ALGORITHM_CASES))
   failures.push(...exactKeyFailures('algorithm.cases', report?.algorithm?.cases, REQUIRED_ALGORITHM_CASES))
   failures.push(...exactKeyFailures('browser.metrics', report?.browser?.metrics, REQUIRED_BROWSER_METRICS))
 
@@ -143,8 +143,10 @@ export function validateBenchmarkReport(report) {
   }
 
   for (const name of REQUIRED_ALGORITHM_CASES) {
-    const digest = report?.contractHashes?.[name]
-    if (typeof digest !== 'string' || !/^[a-f0-9]{64}$/.test(digest)) failures.push(`contractHashes.${name} must be SHA-256`)
+    if (requireContractHashes) {
+      const digest = report?.contractHashes?.[name]
+      if (typeof digest !== 'string' || !/^[a-f0-9]{64}$/.test(digest)) failures.push(`contractHashes.${name} must be SHA-256`)
+    }
     const metric = report?.algorithm?.cases?.[name]
     if (!Array.isArray(metric?.samples) || metric.samples.length !== 5 || !metric.samples.every(finiteNonNegative)) {
       failures.push(`algorithm.${name}.samples must contain five finite non-negative values`)
@@ -188,11 +190,6 @@ export function validateBenchmarkReport(report) {
 function validateHardGateBaseline(report) {
   const failures = []
   if (report?.schemaVersion !== 1) failures.push('schemaVersion must be 1')
-  failures.push(...exactKeyFailures('contractHashes', report?.contractHashes, REQUIRED_ALGORITHM_CASES))
-  for (const name of REQUIRED_ALGORITHM_CASES) {
-    const digest = report?.contractHashes?.[name]
-    if (typeof digest !== 'string' || !/^[a-f0-9]{64}$/.test(digest)) failures.push(`contractHashes.${name} must be SHA-256`)
-  }
   for (const field of requiredBundleFields) {
     if (!finiteNonNegative(report?.bundle?.[field])) failures.push(`bundle.${field} must be finite and non-negative`)
   }
@@ -208,11 +205,10 @@ function validateHardGateBaseline(report) {
   return failures
 }
 
+// Frontend baseline contractHashes are metadata only; packing-results.json is authoritative.
+
 function hardGateComparisonFailures(baseline, actual) {
   const failures = []
-  for (const [name, hash] of Object.entries(baseline.contractHashes)) {
-    if (actual.contractHashes[name] !== hash) failures.push(`${name} contract hash mismatch`)
-  }
   for (const [field, label] of [
     ['initialHtmlGzipBytes', 'initial HTML gzip'],
     ['initialCssGzipBytes', 'initial CSS gzip'],
@@ -239,7 +235,7 @@ export function gateBenchmarkUpdate(baseline, actual) {
 
 export function gateBenchmark(baseline, actual) {
   const failures = [
-    ...validateBenchmarkReport(baseline).map((failure) => `baseline ${failure}`),
+    ...validateBenchmarkReport(baseline, { requireContractHashes: false }).map((failure) => `baseline ${failure}`),
     ...validateBenchmarkReport(actual).map((failure) => `actual ${failure}`),
   ]
   const timingComparable = failures.length === 0 && comparableEnvironmentFields.every(
@@ -287,9 +283,9 @@ export function newBaselineRefusal(baselinePath, allowNewBaseline) {
  * List timing metrics an update is about to widen past the 20% gate.
  *
  * `gateBenchmarkUpdate` intentionally does not compare timings — refreshing them is
- * what an update is for. But that also means a run on a loaded machine can silently
- * become the new tolerance. This does not block; it makes the widening auditable so
- * the accepted numbers are stated in the log and can be reviewed.
+ * what an update is for. `timingRegressionRefusal` now requires explicit approval
+ * before a comparable update widens any timing gate beyond 20%; approved widening is
+ * printed here for the decision record.
  */
 export function acceptedTimingRegressions(baseline, actual) {
   const comparable = comparableEnvironmentFields.every(
@@ -308,19 +304,27 @@ export function acceptedTimingRegressions(baseline, actual) {
       for (const statistic of ['medianMs', 'p95Ms']) {
         const before = expected?.[statistic]
         const after = observed?.[statistic]
-        if (!Number.isFinite(before) || !Number.isFinite(after) || before <= 0) continue
+        if (!Number.isFinite(before) || !Number.isFinite(after) || before < 0) continue
         if (after > before * 1.2) {
           entries.push({
             metric: `${section}.${name}.${statistic}`,
             before,
             after,
-            growthPercent: ((after - before) / before) * 100,
+            growthPercent: before === 0 ? Infinity : ((after - before) / before) * 100,
           })
         }
       }
     }
   }
   return { comparable, entries }
+}
+
+export function timingRegressionRefusal(baseline, actual, allowTimingRegression) {
+  const { comparable, entries } = acceptedTimingRegressions(baseline, actual)
+  if (allowTimingRegression || !comparable || entries.length === 0) return null
+  return 'Refusing to update benchmark baseline timing gates without explicit approval '
+    + '(re-run with --allow-timing-regression):\n'
+    + entries.map((entry) => `  ${entry.metric}: ${entry.before.toFixed(3)} ms -> ${entry.after.toFixed(3)} ms`).join('\n')
 }
 
 function reportAcceptedTimingRegressions(baseline, actual) {
@@ -337,7 +341,7 @@ function reportAcceptedTimingRegressions(baseline, actual) {
     )
   }
   console.warn(
-    'If the machine was under load, discard this baseline and re-run when idle.\n'
+    'Approval supplied via --allow-timing-regression. If the machine was under load, discard this baseline and re-run when idle.\n'
     + 'If the slowdown is real, record the acceptance in decision.md.\n',
   )
 }
@@ -435,6 +439,8 @@ async function measureAlgorithm() {
 async function main() {
   const update = process.argv.includes('--update')
   const allowNewBaseline = process.argv.includes('--allow-new-baseline')
+  const allowTimingRegression = process.argv.includes('--allow-timing-regression')
+
   mkdirSync(resultDir, { recursive: true })
   run('npm run build')
   const algorithm = await measureAlgorithm()
@@ -480,10 +486,8 @@ async function main() {
       if (hardGate.failures.length > 0) {
         throw new Error(`Frontend benchmark baseline update rejected by hard gates:\n- ${hardGate.failures.join('\n- ')}`)
       }
-      // By design this path accepts new timing samples (that is what an update is
-      // for, including iterationsPerSample migrations), so a slow machine can widen
-      // the window without any gate firing. Print what is being accepted so the
-      // widening is visible in the log rather than silent.
+      const timingRefusal = timingRegressionRefusal(previous, actual, allowTimingRegression)
+      if (timingRefusal) throw new Error(timingRefusal)
       reportAcceptedTimingRegressions(previous, actual)
     } else {
       const refusal = newBaselineRefusal(baselinePath, allowNewBaseline)

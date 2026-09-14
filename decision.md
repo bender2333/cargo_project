@@ -1,5 +1,517 @@
 # Decision Log
 
+## 2026-09-14 体积优先短柜前沿与件数取舍
+
+- 背景：越南第十一批 20GP 采用体积优先时，块引擎按 `x → z → y` 打开新的纵向空位，形成约 1000 mm 的上层内部货物间槽。真实装柜应先把当前前沿向一侧收紧，余量留在门端或侧壁。
+- 调研结论：成熟的 EMS／块构建启发式会先完成同一装载前沿，再扩展新的纵向层；当前引擎已经具备 EMS、块候选和支撑校验，最小改动是把短柜体积模式纳入已有 `z → y → x` 前沿顺序，不引入第二套摆放模型或事后平移。
+- 决策：当容器长度不超过 6000 mm 时，`quantity` 与 `volume` 均使用 `z → y → x` 的垂直前沿排序；长柜继续使用原有 `x → z → y`。所有候选仍经过既有边界、重叠、支撑、堆叠和载重检查。
+- 实测：越南 20GP 体积模式占用体积 **29,937,044,000 → 30,813,509,000 mm³**，50 mm 网格最大上层槽 **1000 → 650 mm**，封闭空腔为 **0**；件数 **473 → 464**。件数下降是体积优先目标下的明确 Pareto 取舍，不能把体积模式同时当作件数最大化。
+- 影响：更新 `packing-results.json` 与 invariants 基线；新增真实越南体积模式槽隙回归。该启发式仍是预算内最好结果，不承诺全局最优或零缝隙。
+
+## 2026-09-11 固定远程 E2E 入口
+
+- 背景：用户要求完成后远程部署，并允许重构E2E。原远程执行依赖test-results中的临时配置和中文标题正则；凭据模块在导入时同时要求管理员账号，普通快捷键用例的beforeEach还会清空测试用户历史。
+- 决策：复用现有三条完整业务用例，增加`@deployment`标记及独立远程配置/命令；标记用例不清空历史，普通和管理员凭据在实际读取时分别校验。固定远程单worker、零重试、1920×1080并关闭trace。
+- 影响：默认本地全量仍包含所有150条用例；部署回归继续覆盖真实Canvas点击、模板持久化与再导入、数量守恒、删除/撤销、焦点和导航隔离。保留现有超时与断言，不以测试框架改造隐藏产品失败。
+- 首轮验证：`npm test`单元阶段1023通过、2失败，均位于`scripts/dbSeed.test.mjs`旧凭据测试。旧测试以模块导入异常表达四个角色凭据必填；新实现将校验移到角色读取。按本轮明确的按角色校验契约调整调用时机，继续拒绝所有缺失凭据和公共HTTP地址，不删除这些拒绝断言。
+- 收口：凭据覆盖合并到原有`dbSeed.test.mjs`（14/14通过），新增普通用户/管理员互不依赖的两项验证。最终完整npm test共1063项、lint/build、本地全量150项和远程3项E2E均通过。远程测试前后模板记录哈希一致、历史0→0，已确认自身模板清理且没有清空账号历史；本次部署与备份路径见CHANGELOG同日记录。
+
+## 2026-09-11 当前环境回归边界
+
+- 背景：重新执行本分支的完整门禁，单元测试、契约测试、lint、build 和真实越南保存模板→20GP→数量优先→3D 快捷键流程均通过。
+- 观察：`npm test` 的 rollback 子套件有 16 项失败，根因是当前 Windows 进程 PATH 找不到 `bash`（测试通过 `execFileSync('bash', ...)` 运行离线 shell fixture），返回 `status=null`/字段缺失；不是本次装箱或快捷键代码断言失败。
+- 决策：保留首轮失败，不修改 rollback 代码、断言或超时。随后找到本机已有 Git Bash，将 `C:\Program Files\Git\bin` 和 `C:\Program Files\Git\usr\bin` 加入单次验证进程 PATH，重新运行失败套件。
+- 收口：`npm run test:rollback` 29/29 通过（100.76s）；单独补跑原先因前序失败而未执行的 `test:packing-performance` 10/10 通过。此次各阶段累计 1061 项通过，lint/build 与定向真实 E2E 1/1 通过，环境阻塞已解除；原始无 Bash PATH 的整条命令仍保留失败记录。
+
+
+## 2026-08-26 0824 本轮仍是 504，未形成 504/506/524 Pareto（已记录）
+
+- 背景：共享搜索内核、quantity 词典序、volume 去掉 golden 保护之后，重新跑 0824。
+- 实测 quantity：**504** / usedVolume 30243574000 / notch 0 / unsupportedSpanRisk 256683375 / interCargo 150mm / 2011ms / statesExpanded 8 / candidatesEvaluated 135 / budgetExceeded true / strategy greedy。volume：**424** / 30725850000 / notch 0 / risk 0 / slot 0 / 1816ms / 8 states / budgetExceeded / strategy greedy。搜索运行但未改善。
+- 决策：不更新 golden。不把 504 写成上限。不部署。本轮没有同时交出 504、506、524 三个完整布局。
+- 既有 RED：`packing.test.ts` 顶填用例默认 5s 超时，与此前 decision 相同，未改用例、未抬 timeout。
+- 后续：要在预算内搜到 524/506，需要更大 `maxMs`/`maxStates` 或把局部重排真正接进同步路径（当前明确未做）。
+
+
+## 2026-08-26 局部槽重排本轮不进生产路径（已决策）
+
+- 背景：`packingSlotRelocation.relocateLargestBoundarySlot` 已是可调用入口，但缺少本轮要求的完整前置：三维空区连通到门端/侧壁、相邻 block 与支撑链收集、删支撑箱时同步上方依赖、重建 supportedBy/physicalLayer/EMS、恢复 nextIndex、deadline 只返回完整布局。`seed` 写在预算类型里但未参与搜索。
+- 决策：本轮 **不声称已完成槽冒泡**。`calculatePacking` 继续不 import relocation / oracle。LNS 与 CP-SAT 不进默认生产路径。
+- 后续独立任务必须先补齐上述前置；`seed` 要么真正进入确定性搜索，要么删除该参数。不得把当前 seam 写成已优化槽。
+
+
+## 2026-08-26 unsupportedSpanRisk 用支撑矩形并集，不是运输稳定性证明（已决策）
+
+- 背景：上一轮 `unsupportedSpanRisk` 对 `supportType === 'partially-supported'` 的箱体直接加底面积，不看真实支撑矩形，也无法区分 50% 与 90% 支撑。`packingObjective` 与 `packingSlotRelocation` 各扫一遍体素。
+- 选项：
+  - A. 继续用 supportType 旗标当风险
+  - B. 共享布局质量模块：内腔 / 外残余 / 货物间槽 / 支撑风险分开算；支撑面积用矩形并集，风险 = `unsupportedArea * maxUnsupportedSpan`
+- 决策：B。已决策。本轮任务要求。
+- 这是几何风险代理，不得写成运输稳定性证明。硬约束仍在 `canPlaceBox` / `canStageBlock` 的支撑比门槛。
+- 影响：与地面全重叠但仍被标成 partial 的 rider 风险变为 0。槽、内腔、支撑风险保持三个独立指标。
+- 后续：Phase 4 槽重排仍不进生产路径；本轮只把体素扫描抽到共享模块。
+
+
+## 2026-08-26 解除 quantity 槽硬限制（已决策）
+
+- 背景：上一轮 `passesQuantityHardCaps` 把货物间槽 / 地面走廊 / 内部空腔当成搜索淘汰条件。0824 合法候选 A（524 件 / 400mm 外开口槽）被拒绝，候选 B（504 件 / 150mm 槽）获胜。用户已明确授权：去除 quantity 模式的槽限制。
+- 选项：
+  - A. 继续用槽宽硬帽过滤完整布局（504 优先于合法的更高件数）
+  - B. 槽不再是硬约束。quantity 终局只比较真实可行布局：`placedCount` 最大；同件数再比 `internalNotchVolume`、`unsupportedSpanRisk`、`interCargoMaxMm`、外部残余。`interCargoMaxMm` 不是稳定性证明。
+- 决策：B。已决策。用户确认。
+- 硬约束仅限：越界、重叠、重量、支撑比例、`groundOnly`、`maxStackLayers`，以及 `packingFeasibility.canPlaceBox` / `canStageBlock`。
+- `packingLookahead` 尺寸估算只作乐观排序上界，不是合法性证明。
+- `weight` / `input` 不改。`PackingResult` schema 不改。LNS 与 CP-SAT 本轮只留可调用入口，不进默认同步生产路径。
+- 搜索只能声称预算内 best-found，不得声称全局最优。`statesExpanded` / `candidatesEvaluated` / `budgetExceeded` 必须暴露，不能在 `calculatePacking` 里丢弃。
+- 词典序冲突：「506 若找到必须胜过 524 和 504」与「最终 placedCount 最大」不能同时成立——合法 524 > 合法 506。本轮跟用户主目标：件数优先，因此 **524 > 506 > 504**。506 仍胜过 504；524 只要真实可行就胜过 506，400mm 外开口槽不能推翻件数。
+- 影响：0824 若搜到合法 524/400 将胜过 504/150 与 506。不把 504 写成上限。跨 EMS 候选仍覆盖全部 EMS。
+- 后续：若产品仍想要紧凑 506 而不是更高件数的 524，那是新的产品拍板，不是本轮算法目标。
+
+
+## 2026-08-26 0824 本轮实测仍是 504，不是 504/506/524 产出 Pareto（已记录）
+
+- 背景：去掉槽硬帽后，词典序会让合法 524 胜过 504。本轮 `maxMs=1500` 的 `optimizePacking` 在 0824 quantity 上 `strategy=greedy`、`statesExpanded=4`、`budgetExceeded=true`，完整布局仍是 **504 / 槽 150 / notch 0 / 2102ms**。体积 424 / usedVolume 30725850000 未降。
+- 决策：不把历史 debug 里的 524 写成当前引擎产出；不更新 golden；不把 504 写成上限。本轮产品 Pareto（同时交出 504、506、524 三个完整布局）**没有形成**——只有 504 被预算内 best-found 选中。
+- 影响：r74 文案写明 0824 仍是 504、搜索只保证预算内最好。越南 20GP 464/473、40HQ 864、0802 877 未降。已部署 r74。
+- 后续：要在预算内真正搜到 524/506，需要更深 beam 或把 LNS 接入默认同步路径（当前只留入口）。远程 Playwright 需补 `E2E_*` 凭据后走 SSH 回环隧道。
+
+
+## 2026-08-25 r73 全量闸门与部署跳过（已决策）
+
+- 背景：Task 4 要求全量验证、诚实 r73 release note、部署闸门。0824 quantity 仍是 **504**（槽 `< 200`，notch 0），未恢复 506。计划：未恢复 506 则不得把 504 写成新上限，部署前需产品确认 Pareto。
+- 选项：
+  - A. 产品未确认 506 仍执行 `npm run deploy`（仅架构）
+  - B. 不部署，把跳过原因写入本文件
+- 决策：B。已决策。本轮 **未执行 `npm run deploy`**。
+- 实测：见 `CHANGELOG.md`「2026-08-25 r73 quantity/volume search (Task 4 gates)」。主目标金线未降：0824 qty 504 / vol 424，越南 20GP 464 / **473**，40HQ 864/864，0802 877。
+- 影响：生产仍是 r72。r73 只进 in-app release note 与文档；算法代码已在此前 Task 0–3 commits。
+- 后续：产品确认是否接受 504 作为可部署状态，或要求继续搜 506 后再部署。
+
+
+## 2026-08-25 0824 quantity 504 vs 506 Pareto 待产品确认（已决策）
+
+- 背景：quantity beam 见过 **524** 件完整布局，但货物间槽 **400mm**，硬帽整单拒绝后回到 greedy **504** / 槽 150 / notch 0。合法的紧凑 **506 + 槽 `< 200`** 本轮未找到。
+- 选项：
+  - A. 把 504 写成新上限并当作可发状态
+  - B. 504 只是当前引擎快照，待产品确认 Pareto：接受 504/槽 `< 200`，或要求继续搜 506
+- 决策：B。已决策。不得把 504 写成新上限，不得在 release note 声称 506。
+- 影响：r73 文案写明 0824 仍是 504 件、槽小于 200mm。snapshot 测试继续冻 504，不加会红的 `>= 506`。
+- 后续：产品拍板。若要 506，走 Phase 4 LNS / 更深 beam，找到后再冻 snapshot。
+
+
+## 2026-08-25 Phase 4 LNS 后续入口（已决策）
+
+- 背景：设计已写明 LNS 不得阻塞首屏。本轮 Phase 0–3 beam 已落地，0824 未收回 506。
+- 决策：本轮 **不实现** LNS，只留后续入口。
+- 入口：从 beam **完整解**拆除最大槽相邻块，用同一 `generateBlockCandidates` / `canStageBlock` 重填；只接受 `comparePackingQuality` 改善；固定 seed。默认自动装箱先返回 beam，LNS 不挡首屏。
+- 影响：生产路径仍是 greedy incumbent + 有预算 beam。
+- 后续：单独计划文件，不并进 r73 部署条件。
+
+
+## 2026-08-25 Phase 5 离线 oracle 后续入口（已决策）
+
+- 背景：精确求解器不得进前端 bundle。
+- 决策：本轮 **不实现** oracle，只留后续入口。
+- 入口：2–5 个几何类、少量库存、固定候选点的 CP-SAT/MIP；用来量 beam 差距。依赖 **不进前端 bundle**。
+- 影响：浏览器主路径仍是启发式。
+- 后续：离线研究任务，不作为 r73 发布条件。
+
+
+## 2026-08-25 packing.test 顶填 5s 超时不改用例（已决策）
+
+- 背景：Task 4 必跑 `packing.test.ts`。`loads rotatable top-fill boxes before moving to the next outer depth slice`（20GP、22 SKU、默认 quantity + block beam，`maxMs` 1500）在默认 `testTimeout` 5000ms 下 RED。
+- 证据：套件内 8520ms / `test:unit` 9089ms 报超时；单独复跑 7057ms 仍超时；`--testTimeout=20000` **GREEN 5433ms**，断言成立。
+- 选项：
+  - A. 抬该用例超时或降 20GP `maxMs` 凑绿
+  - B. 失败记本文件，不削弱断言、不改用例
+- 决策：B。已决策。超时不是断言失败。
+- 影响：`npm run test:unit` 本机 RED 1 条 packing + 1 条既有 contracts updater。
+- 后续：若产品要部署，另开任务处理 20GP beam 墙钟或测试超时政策。不要为这条改业务金线。
+
+
+## 2026-08-25 Task 4 既有 lint / rollback / contracts 门禁 RED（已记录）
+
+- 背景：计划写明全量 `npm run lint` 可能因 `.worktrees` `tsconfigRootDir` RED；Windows `test:rollback` 离线 bash fixture 可能失败。不改 eslint、不改 rollback 测试。
+- 证据：
+  - `npm run lint` exit 1，**466 errors**，全部 `Parsing error: No tsconfigRootDir was set, and multiple candidate TSConfigRootDirs are present`（仓库根 vs `.worktrees/p6-linear-packing-authority`）。触及 packing 文件的单独 eslint **0**。
+  - `npm run test:rollback` **16 failed / 13 passed**；失败断言 `RUN_STATUS` / `RUN_STATE` 为 `undefined`（离线 fixture 未跑起来）。
+  - `scripts/updatePackingContracts.test.mjs` 在 `test:unit` 下 `spawnSync` **ETIMEDOUT** 58730ms。此前并行 `npm test` 已记录同一症状。
+- 决策：只记录，不改配置/测试凑绿。
+- 后续：仓库维护处理 worktree ignore / Windows bash fixture；contracts updater 单独加长 subprocess 超时另开任务。
+
+
+## 2026-08-25 volume beam 复用搜索器，不上 quantity 槽帽（已决策）
+
+- 背景：Task 3 要求 volume 块路径走同一 `optimizePacking`，只换 `objective` 和体积上界。quantity 的 leftover 近窗、浅层 EMS leftover、`passesQuantityHardCaps` 不能抄到 volume。0824 volume 现合同 interCargo 0、usedVolume 30725850000；越南 20GP volume 473 / 29937044000。
+- 选项：
+  - A. volume 也套 quantity 槽帽 / leftover 近窗
+  - B. 终局只用 `comparePackingQuality(..., 'volume')`；上界 = usedVolume + min(剩余货物体积, EMS 体积和)；完整布局若 usedVolume 低于 greedy、或满装件数低于 greedy（40HQ 864）则留 greedy
+- 决策：B。已决策。小票 `shouldUseBlockEngine === false` 仍走 `placementScore` 单箱循环。
+- 实测（`node scripts/packing-mode-baseline.mjs` 2026-08-25T09:00:51.459Z）：
+  - 0824 volume **424** / usedVolume **30725850000** / 槽 0 / notch 0（beam 跑了，~41ms→1814ms，仍是 greedy）
+  - 越南 20GP volume **473** / **29937044000**（~304ms→1841ms）
+  - quantity 0824 **504**、越南 464、40HQ 864/864、0802 877，未回归
+- 影响：主目标未降。0824 volume snapshot 不上调。后续更深 beam / LNS 若 usedVolume 上升，再把 snapshot 往上改。
+- 后续：Task 4 全量验证、release note、部署。不要把 0824 volume 424 写成上限。
+
+
+## 2026-08-25 在帽子内比较所有完整布局，不是赢家-or-greedy（已决策）
+
+- 背景：搜索器按无帽件数选出 524（400mm 槽），硬帽整单拒绝后回到 greedy 504。合法的 506/槽 180 即使被 complete 过也不会上船。
+- 选项：
+  - A. 继续对无帽赢家做 accept-or-reject
+  - B. 收集所有 complete，硬帽过滤（greedy 必留），再 `comparePackingQuality` 选
+- 决策：B。已决策。`optimizePacking` 返回 `completes[]`；`pickBestCappedComplete` 只在通过帽子的集合里比。
+- 实测：玩具 4/6/5 选 5。0824 全柜仍 **504**。未找到 506+槽 `< 200`。
+- 影响：件数优先在合法帽子内生效。
+- 后续：若全柜 0824 ≥506 且槽 `< 200`、notch 0，冻结 snapshot。
+
+
+## 2026-08-25 beam 硬帽是测试门槛，不是 greedy 槽不得变差（已决策）
+
+- 背景：第一版 overlay 要求件数严格更多且 notch/槽/走廊都不比 greedy 差。这样会拒绝 **506 + 槽 180mm**（合法 `< 200`），只因为 greedy 槽是 150。
+- 选项：
+  - A. 继续「不得差于 greedy 槽」
+  - B. 硬帽对齐现有测试：greedy notch=0 则保持 0；greedy 槽 `< 200` 则保持 `< 200`；greedy 地板走廊 `< 200` 则保持 `< 200`。通过帽子的布局用 `optimizePacking` 的 `comparePackingQuality` 赢家
+- 决策：B。已决策。`calculatePacking` 使用搜索器返回值；帽子失败才回 greedy。不再用第二套 `completes[]` 选主。
+- 实测：0824 全柜仍 **504** / 槽 150 / notch 0。C13 360mm 隔离用例 64→67（18×3 把侧槽填掉，interCargo 0）。未找到 506+槽 `< 200`。
+- 影响：件数优先在帽子内生效。不得把 504 写成上限。
+- 后续：Task 3 volume beam。若全柜 0824 出现 ≥506 且槽 `< 200`、notch 0，再冻结 snapshot。
+
+
+## 2026-08-25 quantity beam 未收回 506，504/紧凑性 Pareto（已决策）
+
+- 背景：Task 2 要求 quantity 走有预算 beam，终局用 `comparePackingQuality` 比完整布局。搜索目标 0824 **506** 且槽 `< 200mm`、`internal_notch = 0`。Naive 全局 count-max 曾把越南 20GP 打到 434。
+- 选项：
+  - A. 按词典序件数优先，直接提交更高件数的完整布局（0824 实测 **524**，槽 400mm；走廊用例 **636**，地板沟 700mm）
+  - B. 只提交比 greedy 件数严格更高、且 notch / 3D 槽 / 地板走廊都不更差的完整布局；否则保留 greedy
+- 决策：B。已决策。A 会让 0824 compactness（槽 `< 200`）和 length-wise corridor（`< 200mm`）变红。`optimizePacking` 内部仍按 `comparePackingQuality` 比较（玩具 4→5 用例需要）；`packing.ts` 在候选完整布局上再加 B。不得把 524 写成新 golden，也不得加会红的 `>= 506` 测试。
+- 实测：
+  - 0824 quantity 仍 **504** / usedVolume 30243574000 / 槽 150 / notch 0；beam 见过 524（400mm 槽）后丢掉
+  - Vietnam 20GP quantity **464**、volume **473**；40HQ **864/864**；0802 **877**
+  - 装满的 greedy（40HQ / 0802）不再展开 beam，避免同件数层序抖动导致合同哈希不稳
+  - 20GP `maxMs` 1500，以免 `packing.test.ts` 默认 5s 和 20GP `< 5000ms` 超时
+- 影响：件数合同不变。506 + 槽 `< 200` 仍未找到。后续 LNS / 更深 beam 若找到该布局，再把 0824 snapshot 从 504 提到 506。
+- 后续：Task 3 volume beam。不要把 count-max 完整布局在紧凑性变差时直接接进生产。
+
+
+## 2026-08-25 跨 EMS 全局贪心回退（已决策）
+
+- 背景：Task 1 要求 `selectBlockPlacement` 删掉「第一个有可行块的 EMS 直接 return」，改为全 EMS 生成后用现有 `compareBlockPlacement` 全局选。共享 `canPlaceBox` / `canStageBlock` 已抽出。
+- 选项：
+  - A. 生产路径用 `selectBlockCandidate` 跨全部 EMS 比 count/volume（任务原文）
+  - B. 生成仍遍历全部 EMS，提交仍按 x 排序取第一个非空 EMS（恢复 Task 0 选择边界）
+- 决策：B。A 在单路径 greedy 下会跳去后面更高 count 的深 EMS，在柜长方向留下地走廊。
+- 实测（A，`node scripts/packing-mode-baseline.mjs`，2026-08-25T06:45:42.417Z）：
+  - 0824 quantity **504** / volume **424**（主目标未降，槽 150/0 未变）
+  - Vietnam 20GP quantity **464→434**，usedVolume 28074481500→25177780000
+  - Vietnam 20GP volume **468→428**，usedVolume 27603279500→25274704000
+  - Vietnam 40HQ 仍 864/864，但 quantity 合同 hash / 层序变化，interCargo 8050→8300
+  - 0802 仍 877，interCargo 6800→9650，internal_notch 120→144
+  - compactness 走廊用例 2200mm（门槛 <200mm）
+- 影响：生产 `calculatePacking` 的块选择边界与 Task 0 相同，主目标金线不改。`generateBlockCandidates` / `selectBlockCandidate` 保留并有注入双 EMS 单测；`packing.ts` 只把同一 EMS 的候选交给 `selectBlockCandidate`。不得把 434/428 写成新下限。
+- 后续：Task 2 beam 才在搜索宽度上用全局 `selectBlockCandidate`；若要 greedy 跨 EMS，必须先有不牺牲 20GP 件数的层内约束，而不是把 count-max 直接接到提交。
+
+
+## 2026-08-25 跨 EMS greedy = 近件数 leftover，不是 count-max（已决策）
+
+- 背景：评审要求生产路径把**全部**候选交给 `selectBlockCandidate`，并删掉 first-EMS 提交。此前 naive 全局 `compareBlockPlacement` 按更大 count/volume 跳到远处 EMS，Vietnam 20GP 464→434。
+- 选项：
+  - A. 继续 first-EMS 提交（与「过时局部贪心直接删」冲突）
+  - B. 全局 count-max（已否决）
+  - C. 全局比较，但装箱前线（更小 x,z,y）优先；仅当件数/体积近窗口且 leftover 更好时，后 EMS 才可赢
+- 决策：C。已决策。`packing.ts` `selectBlockPlacement` 只过滤 rejected/accepts 后调用 `selectBlockCandidate(candidates, mode, state)`。数量 leftover 只在浅层 frontier 上跨 EMS 赋分；体积在近体积窗口且多 EMS 时赋 leftover。Task 2 beam 用终局 `comparePackingQuality`，不把 greedy 前线规则当成搜索目标。
+- 实测：0824 quantity 仍 504（槽 <200、internal_notch 0）；Vietnam 20GP quantity 464 不变；volume **468→473**、usedVolume 27603279500→29937044000；40HQ 864/864（volume 合同 hash 因层序变化刷新）；0802 877。
+- 影响：`packingInvariants` volume 下限改为 473（件数上升，不是回退）。`vietnam-20gp-volume` / `vietnam-40hq-volume` 合同 hash 已刷新。不得把 434 当新下限。
+
+
+## 2026-08-25 数量/体积搜索：0824 合同与当前基线（已决策）
+
+- 背景：0824 件数合同此前是 `placedCount >= 500`（`packing.compactness.test.ts`），无法检测 506→504。volume 没有 0824 命名基线。终局比较若散落在 lookahead / packing / 后续 LNS 会再次分叉。
+- 选项：
+  - A. 把当前 504 写成新的数量上限并继续搜紧凑性
+  - B. 冻结 504 为重构前下限，搜索以 506 为目标；主目标回退必须失败；若搜完仍 504，停下来等产品确认 Pareto
+- 决策：B。已决策：搜索以 506 为目标，504 为当前下限，回退需产品确认。
+  - 搜索以 **506** 为目标，同时保持槽 `< 200mm`、`internal_notch = 0`
+  - **504** 为当前 `calculatePacking` quantity 实测下限（refactor snapshot）
+  - 回退低于 504 本轮失败，不得用 `>= 500` 掩盖
+  - 若搜索后仍 504，不得把 504 写成新的数量上限；需产品确认 Pareto 后才能改 golden 或部署
+- 影响：Phase 0 只加 `comparePackingQuality` 与只读基线，不改 `packing.ts` 选择逻辑，不改 `PackingResult`。
+- 后续：Phase 1 起跨 EMS 候选 / beam 必须对照下表主目标；quantity 改动不得默认降低 volume `usedVolume`。
+
+实测（`node scripts/packing-mode-baseline.mjs`，2026-08-25T06:16:58.920Z，voxel 50mm，`search: null`）：
+
+| Fixture | Mode | placed | usedVolume mm³ | util % | internal_notch voxels | interCargoMaxMm | external_residual voxels | elapsedMs |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 0824 20GP | quantity | **504** | 30243574000 | 93.634 | 0 | 150 | 20785 | 117 |
+| 0824 20GP | volume | 424 | **30725850000** | 95.128 | 0 | 0 | 15544 | 43 |
+| Vietnam 20GP | quantity | 464 | 28074481500 | 86.919 | 156 | 1100 | 32569 | 252 |
+| Vietnam 20GP | volume | 468 | 27603279500 | 85.460 | 60 | 1200 | 35960 | 170 |
+| Vietnam 40HQ | quantity | 864 | 63038263000 | 80.868 | 439 | 8050 | 98060 | 4835 |
+| Vietnam 40HQ | volume | 864 | 63038263000 | 80.868 | 693 | 10000 | 105195 | 3964 |
+| 0802 40HQ | quantity | 877 | 61046585250 | 80.274 | 120 | 6800 | 95275 | 5275 |
+| compactness seed 1/7/13 | quantity | 347 / 417 / 326 | — | — | 0 / 0 / 0 | 3100 / 1200 / 900 | — | 284 / 50 / 31 |
+
+0824 quantity SKU placed：TB-C13 56/56，TP-B10 100/100，TC-A02 160/160，TD-J03 8/120，TD-F01 180/184。volume：TN-D01 120/144，TP-B10 100/100，TC-A02 24/160，TD-F01 180/184。
+
+对照合同（本轮只记录、未改 golden）：越南 20GP 464/468、40HQ 864/864、0802 877 均命中。0824 quantity 实测就是 504，与 08-24 leftover 评分后的记录一致，没有编造。越南 20GP/40HQ 与 0802 的 `internal_notch` / 大槽是既有形态，不是本轮验收门槛。volume 0824 的 `usedVolume` 30725850000 作为后续 quantity 改动的对照下限。
+
+
+## 2026-08-24 上层外开口槽：一步剩余评分只用于浅层 quantity（已决策）
+
+- 背景：0824 上层 `z=2025` 的 400 mm 槽来自 quantity 下同件数 `TB-C13` 的 `WLH 18×3`（5490×1590）优于 `LWH 9×6`（4770×1830）。`nextCountBound` 会把 410 mm 窄条判成更好（还能塞 10 件 C10），因此不能把「下一步件数上界」放在剩余质量的第一位。
+- 选项：
+  - A. 对所有 EMS、所有模式做 leftover 评分并扩大候选前沿
+  - B. 只在 quantity 且空区高度放不下一件货的两层时评分；深空区每朝向只取最大块
+- 决策：B。A 曾把越南 20GP quantity 打到 480、40HQ volume 从 864 打到 860，并在中层制造 1.9 m 槽。B 保持越南 20GP 464/468、40HQ 864/864，只改浅层同 SKU 同件数的脚印。
+- 影响：0824 复算 placed 506→504（-2），上层 C13 改为 `LWH 9×6`，400 mm 货物间槽消失。越南 20GP quantity golden 的 workStep 有变、件数不变。体积模式不走 leftover 评分。`QUANTITY_COUNT_NEAR_WINDOW=1` 仅在多一件会留下可进入窄条时覆盖件数。
+- 后续：若产品要求 0824 外部开口也必须铺满，或 504 相对 506 不可接受，再单独评估残件阶段。不得把 leftover 评分扩到深空区除非重新量 40HQ volume。
+
+
+## 2026-08-24 3D 选箱快捷键门禁缺口（已决策）
+
+- 背景：本轮按 `plans/2026-08-24-3d-selection-hotkeys.md` 修手动 3D 选箱后 M/Delete 失效。完整门禁要求 `npm run lint` 与 `npm test`。
+- 证据：`npm run lint` 452 条 `tsconfigRootDir` 解析失败，候选根目录是仓库根和 `.worktrees/p6-linear-packing-authority`，与本轮改动无关。对 `e2e/manual-3d.spec.ts` 和 `src/components/ContainerScene.tsx` 单独 eslint 为 0。`npm test` 的 unit 927/927、packing-performance 9/9 通过；`scripts/rollback.test.mjs` 在 Windows 上 16 条失败，字段 `RUN_STATUS` 为 `undefined`（离线 bash fixture），非本轮文件。
+- 选项：A. 为凑绿改 eslint 配置或削弱 rollback 断言；B. 记录为既有环境 RED，本轮以触及文件 eslint、unit、build、全量 Playwright 为验收。
+- 决策：B。不改 eslint、不改 rollback 测试。
+- 影响：不能宣称 `npm run lint` / 完整 `npm test` 全绿。本轮产品路径以 149/149 本地 E2E 和场景焦点修复为准。
+- 后续：eslint 排除 `.worktrees` 或设 `tsconfigRootDir`；rollback 离线脚本在 Windows 上需要 bash 环境。
+
+
+## 2026-08-24 3D 热键修复后的 SQLite 备份与远程 E2E（已决策）
+
+- 背景：`npm run deploy` 7/7 已完成（backup `/root/cargo_project-backup-20260824-095348`，live `ContainerScene-BLC6bvKQ.js`）。README 还要求部署前独立 SQLite `.backup`，以及 SSH 回环隧道上的远程 Playwright。
+- 选项：A. 在本会话绕过 SSH 限制去连生产；B. 记录未做，不把本地 E2E 写成生产已验证。
+- 决策：B。本会话直接 `ssh cargo-server`（数据库备份、隧道、现场文件核对）被拦截；不绕过。
+- 影响：生产静态已更新，但没有本次 SQLite 备份路径，也没有远程 149 条 E2E。0824 大批量「自动→手动→3D 选箱→余量测量→Delete」需用线上 `ContainerScene-BLC6bvKQ.js` 做现场核对。
+- 后续：有 SSH 的环境补 `/root/cargo-database-*.db` 备份，并按 README 用 `127.0.0.1:18080` 隧道跑远程 `test:e2e`。
+
+
+## 2026-08-24 自动装箱缝隙定位 + 可旋转算法选型（已决策）
+
+- 背景：自动装箱常出现内部缝。用户要求内部紧凑、空隙留在外部（门端/侧壁/顶）。混朝向必须允许，否则高度不够时经常装不进去；主空间还大时同一 SKU 统一朝向更符合认知。本轮只诊断和调研，不改装箱代码。
+- 证据：31 组夹具+随机（体素 50mm）。封闭夹心空腔 ≈ 0。越南 20GP quantity 包络填充 92.8%、内部缺口 0，是紧凑形态。越南 40HQ 与多组铺满型随机在远侧壁出现「左货–空槽–右货」。典型链：大件数块未铺满柜宽 → 下一块 best-fit 进 +x 大空区且更宽 → 沿柜长侧槽。`selectBlockPlacement` 对每个块只取最小浪费 EMS 后 `break`；quantity 的 `compareBlockChoices` 把 waste 排最后。
+- 选项：
+  - A. 换墙构建 / 闸刀（空隙更像在外侧，利用率低于块，墙间仍可能夹缝）
+  - B. 换 GA/RL/精确求解（难解释或太慢，RL 对的是在线码垛）
+  - C. 保留简单块构建 + EMS，把选位改成文献里的成对选择 (空区, 块) + 剩余空间质量 + 1 步 lookahead；6 朝向留在组块里，矮空区自然过滤高度，不锁同货同朝向
+- 决策：C。7 月「块 + EMS + 树搜索」方向仍对。缺的不是旋转模型，而是 K3/K4（选空区、选块）退化成「最大块 + 最小洞」，树搜索和剩余空间评价未落地。朝向按约束 C3：属于组块，不是单独一层；主空区可给已用朝向温和加成，矮/窄空区关掉加成。禁止硬锁「同 SKU 一种朝向」。
+- 影响：下一轮只动 `packing.ts` 块选择与残件填缝（填缝继续用 EMS）；不改 `canPlace`、不改 PackingResult 契约、不砍 `blocks.ts` 的 6 朝向。验收禁止「朝向种类必须 = 1」；高度受限侧立仍能放置视为回归门槛。
+- 后续：执行计划 `plans/2026-08-24-packing-compact-interior.md`。来源：Fanslau & Bortfeldt 2010；Zhu et al. 2012 六要素；Parreño et al. 2008 maximal spaces；Bortfeldt & Wäscher 2013 约束综述。
+
+## 2026-08-24 紧凑选位落地后的夹具与模式差异（已决策）
+
+- 背景：块选择改为当前 EMS（按 x、z、y）+ 对该空区生成最大可贴块。越南 20GP quantity 464 / volume 468；40HQ 两模式 864/864。
+- 选项：A. 为维持 quantity 件数 ≥ volume，残件跨 SKU 轮询；B. 接受 volume 可多装几件小货，保住 40HQ 满装与侧槽修复。
+- 决策：B。A 把 40HQ quantity 从 864 打到 833。件数优先仍在块内比 count；体积模式可以在边料多塞小件。20GP 包络仍 >88%。quantity 体积利用率 86.9% 高于 volume 85.5%。
+- 影响：不再断言 quantity.placedCount ≥ volume。合同与 invariant 为 464/468/864/864。1 步 lookahead 未做：按空区生成最大块已能填窄条。
+- 后续：40HQ quantity 满装后仍可能有约 1.8m 的行内空档，若要再消再加剩余空间 lookahead。
+
+
+## 2026-08-24 工作区快捷键收成一条监听
+
+- 背景：手动 Delete 失效。R 在工作区热键里，Delete/方向键在 3D 场景 `mount.contains` 里。自动帮助写了 M 和 Ctrl+Z，代码却要求 manual。Esc 三处监听。
+- 选项：A. 只把场景门改成 workspaceContains（仍两条监听）；B. 键位注册表；C. 一个纯函数 + 一条 window 监听，场景不再听键盘。
+- 决策：C。解析在 `resolveWorkspaceHotkey`。焦点：overview 且工作区 contains，不再要求 canvas。自动/手动都响应 M。自动帮助去掉并不存在的撤销。Esc 一次一层：最大化则只退出最大化。键盘旋转走已有 `handleManualRotateBox`，不再第二份 notice。
+- 影响：2D 与快速放置后 Delete/微移可用。`manualKeyboardEnabled` 删除。钉 `mount.contains` 的 sessionBoundary 源码断言改为「场景无 keydown」。
+- 后续：3D/2D 是否常驻挂载仍不在本轮。Debug 面板与导入弹窗键盘保持独立。
+
+
+## 2026-08-24 r68 远程全量 E2E 未在 1200s 内收口
+
+- 背景：生产部署后按 README 走 SSH 回环跑全量 Playwright。
+- 证据：`PLAYWRIGHT_BASE_URL=http://127.0.0.1:18080/`。全量套件 20 分钟墙钟后停在 127/144。`auth-isolation` 大量失败（约 6s/条）；`e2e/import-templates.spec.ts` 在全量中 D/F/G/H/I/J 失败，但独立复跑 **15/15**。O 俄罗斯 31/31、越南 24 在全量中已通过。
+- 选项：A. 削弱或跳过失败用例；B. 再跑 20 分钟全量；C. 记录为未完成全量 GREEN，以模板聚焦 15/15 为本次部署验收，不改测试。
+- 决策：C。不宣称全量远程 E2E 全绿。
+- 影响：auth-isolation 远程失败未根因定位。
+- 后续：空闲时段重跑全量远程 E2E。
+
+
+## 2026-08-20 merge verification timeouts after r68
+
+- 背景：`feat/template-refactor` 已无快进合入 `main`（`1ed4ddd`）。合入后复验 `npm test`。
+- 证据：串行 `test:unit` **99 files / 915 passed**。`scripts/updatePackingContracts.test.mjs` 在并行 `npm test` 下两次 `spawnSync` 30s `ETIMEDOUT`，单独复跑 **1 passed / 26.46s**。`test:rollback` 先 2 条环境断言失败（`STATIC_INDEX`/`RUN_STATE` 为 undefined），再跑 180s 无输出超时。`test:packing-performance` 在 60s 墙钟内未跑完（Vietnam 40HQ 一项 25s 后仍失败/超时）。合入未改 rollback / packing-performance / packing-contracts 脚本。
+- 选项：A. 放宽 spawn 超时或削弱 rollback 断言凑绿；B. 阻塞推送；C. 记录为合入后机器负载超时，以串行 915 与合入前功能分支全绿 `npm test` 为合入证据，不改测试。
+- 决策：C。不修改测试或夹具。
+- 影响：`origin/main` 推送时 rollback / packing-performance 本轮无完整 GREEN 复跑。
+- 后续：空闲机再跑 `npm test`。
+
+
+## 2026-08-20 Task 8 远程 E2E 使用 SSH 回环隧道
+
+- 背景：任务书写明 `PLAYWRIGHT_BASE_URL=http://101.33.232.150`。直接执行被 `e2e/credentials.ts` 拒绝：`PLAYWRIGHT_BASE_URL must use HTTPS or loopback HTTP`（P1-2 / README：生产明文 HTTP 不得携带 E2E 凭据）。
+- 选项：A. 改 credentials 守卫以凑任务书原文；B. 停在远程 E2E 未跑；C. 按仓库生产规则 SSH 转发 `127.0.0.1:18080 -> 127.0.0.1:80`，`PLAYWRIGHT_BASE_URL=http://127.0.0.1:18080/`，凭据走 `E2E_*`。
+- 决策：C。不削弱 URL 守卫。
+- 影响：全量远程 **144 passed / 0 skipped**；模板聚焦再跑 **15 passed / 0 skipped**。
+- 后续：生产配 TLS 后可改用 HTTPS 公网入口。
+
+
+## 2026-08-20 Task 8 npm run lint 全仓失败
+
+- 背景：Task 8 要求按序运行 `npm run lint`。`eslint .` 退出码 1，**449 problems (449 errors, 0 warnings)**，全部是同一解析错误：
+  `Parsing error: No tsconfigRootDir was set, and multiple candidate TSConfigRootDirs are present`（`C:\project\cargo_project` 与 `C:\project\cargo_project\.worktrees\p6-linear-packing-authority`）。代表文件：`.worktrees/p6-linear-packing-authority/benchmark/frontend-architecture.spec.ts` 与仓库根 `src/types.ts`。
+- 核查：与 Task 3 / Task 5 同一 worktree 并存问题；本次 449 条全部是该 parse error，无其它规则失败。`npx eslint src/components/CargoImportDialog.tsx src/components/ImportMappingForm.tsx src/components/TemplateSelectionPanel.tsx src/components/TemplateManagerPage.tsx src/data/workbenchCopy.ts src/lib/importWorkflow.ts src/lib/importCargo.ts` 退出码 0、无输出。
+- 选项：A. 改 ESLint / 删除 worktree 凑绿；B. 削弱或跳过 lint；C. 记录为既有失败，不改配置，继续其余门禁。
+- 决策：C。不宣称 lint 全绿。不修改 ESLint 配置。
+- 影响：全仓 `npm run lint` 在该 worktree 存在时不可作为本任务 GREEN 门禁。
+- 后续：由仓库维护处理 tsconfigRootDir / worktree ignore，不并入模板重构任务。
+
+
+## 2026-08-20 Task 8 npm test 既有 sample-headers datalist 断言仍失败
+
+- 背景：`npm test` → `test:unit` 退出码 1。`Tests  1 failed | 911 passed (912)`，`Test Files  1 failed | 98 passed (99)`，0 skipped。唯一失败：`src/components/TemplateManagerPage.test.tsx` `keeps the newest sample headers when files finish out of order and clears a failed sample`，`datalist#tm-new-map-options-name option[value="Second name"]` 为 null。
+- 核查：与 Task 1 / 6 / 7 同一既有失败。无新增失败。因 `test:unit` 失败，`npm test` 未继续 rollback / packing-performance；单独复跑 `npm run test:rollback` **29 passed / 0 failed**（110.87s），`npm run test:packing-performance` **9 passed / 0 failed**（23.15s）。
+- 决策：不削弱该断言。记录后继续 build / e2e / benchmark。
+- 影响：不能宣称 `npm test` GREEN。
+- 后续：映射输入形态若改回 datalist，再同步该断言。
+
+
+## 2026-08-20 Task 8 遗留 E2E 与新模板合同冲突
+
+- 背景：首次 `npm run test:e2e` 在 144 条套件中失败 4 条（随后被 600s 命令超时截断）：
+  1. `shows import template load failure in the mapping dialog and recovers on retry` 等待已删除的 `import-template-dialog-load-error` / `import-template-select`。
+  2. `keeps a newly created import template when the bootstrap list finishes last` 只填名称，`template-manager-new-save` 因缺尺寸映射保持 disabled。
+  3. `keeps import template update and delete failures visible` 等待更新失败的 `window.alert('更新模板失败')`；更新 409 现为行内 `templateNameDuplicate`。
+  4. `renames and deletes import templates from top-level template manager` 把 length 改成已占用的 `W`，重复映射使保存 disabled。
+- 选项：A. 削弱或跳过；B. 改回旧 UI/校验；C. 按已确认行为稿改写可见合同，不绕过模板选择。
+- 决策：C。加载失败改断言 `template-selection-panel` 文案 + 重试 + `use-without-template` 仍可用，并确认旧 `import-template-select` 不存在。创建补齐 length/width/height。更新失败断言行内 `模板名称已存在`，删除仍走 `window.alert('删除模板失败')`。重命名把 width 改到 `L`，导入尺寸改为 `60 x 80 x 40 mm`（W×L×H），保留 rename/mapping persist/delete 合同。
+- 影响：聚焦 4 条转绿后全量 Playwright **144 passed / 0 failed / 0 skipped**（9.0m）。未改夹具、golden、baseline。
+- 后续：无。
+
+
+## 2026-08-20 Task 8 benchmark russia-volume timing RED
+
+- 背景：完整 `npm run benchmark` 退出码 1：`algorithm.russia-volume.medianMs exceeded 20%` 与 `algorithm.russia-volume.p95Ms exceeded 20%`。实测 samples `3.968, 3.966, 4.014, 3.993, 4.347`，median `3.993`、p95 `4.347`；基线 median `3.07`、p95 `3.156`（约 +30% / +38%）。报告 `test-results/benchmark/frontend-architecture.json`。浏览器 Playwright `1 passed`。未改 baseline、阈值、样本、golden。
+- 核查：五项 contract hash 仍由 packing golden 校验；失败仅 russia-volume 3–4ms 算法微基准，发生在 9 分钟全量 E2E 之后。模板重构不改 packing 算法。其余算法/浏览器/包体门禁未列入本次失败列表。
+- 选项：A. `benchmark:update` 或降阈值；B. 复跑挑选更好样本并宣称 GREEN；C. 保持 RED 记录，不改门禁。
+- 决策：C。当时不宣称 benchmark GREEN，不修改 baseline/阈值/样本/golden。
+- 影响：首次门禁不能称为全绿；部署已按任务执行。
+- 后续 / 关闭：空载复测（CPU ~19%，无 Playwright 负载；清掉远程隧道 `PLAYWRIGHT_BASE_URL`）完整 `npm run benchmark` 退出码 0：`Frontend benchmark passed (timings comparable).` russia-volume samples `3.607, 3.463, 3.393, 3.494, 3.48`，median `3.48`、p95 `3.607`（相对基线 3.07 / 3.156 低于 20%）。未改 baseline。本条 RED 关闭。
+
+## 2026-08-20 Task 7 既有 sample-headers datalist 断言仍失败
+
+- 背景：Task 7 聚焦命令包含 `src/components/TemplateManagerPage.test.tsx`。该文件 23 passed / 1 failed：`keeps the newest sample headers when files finish out of order and clears a failed sample` 在 `datalist#tm-new-map-options-name option[value="Second name"]` 仍为 null。
+- 核查：与 Task 1 / Task 6 记录的同一既有失败。当前 `ImportMappingForm` 在已有文件列时渲染 `<select>` 而非 `datalist#*-map-options-*`。Task 7 只为必填 `*` 增加了 `mapping-required-*` testid，未改样本解析或映射输入形态。
+- 选项：A. 削弱或改写该断言以凑绿；B. 把映射输入改回 datalist；C. 继续记录为既有失败，不改断言。
+- 决策：C。按任务约束不削弱该断言。
+- 影响：聚焦 Vitest 164 passed / 1 failed（9 files）；Playwright `e2e/import-templates.spec.ts` 15 passed / 0 failed / 0 skipped。
+- 后续：不要用改测试来掩盖；若后续任务改映射输入形态，再同步该断言。
+
+
+## 2026-08-20 Task 6 既有 sample-headers datalist 断言仍失败
+
+- 背景：Task 6 聚焦命令 `npx vitest run src/components/TemplateManagerPage.test.tsx`。新有效性合同测试全绿后，该文件 22 passed / 1 failed：`keeps the newest sample headers when files finish out of order and clears a failed sample` 在 `datalist#tm-new-map-options-name option[value="Second name"]` 仍为 null。
+- 核查：与 Task 1 记录的同一既有失败。当前 `ImportMappingForm` 在已有文件列时渲染 `<select>` 而非 `datalist#*-map-options-*`。Task 6 未改样本解析、最后请求获胜或映射输入形态。
+- 选项：A. 削弱或改写该断言以凑绿；B. 在 Task 6 中把映射输入改回 datalist；C. 继续记录为既有失败，不改断言。
+- 决策：C。按任务约束不削弱该断言。失败与模板草稿有效性合同无关。
+- 影响：Task 6 聚焦套件除该既有失败外全绿；`npm run build` 退出码 0。
+- 后续：不要用改测试来掩盖；若后续任务改映射输入形态，再同步该断言。
+
+
+## 2026-08-20 Task 5 npm run lint 全仓失败
+
+- 背景：Task 5 要求运行 `npm run lint`。`eslint .` 退出码 1，448 errors，全部是 `Parsing error: No tsconfigRootDir was set, and multiple candidate TSConfigRootDirs are present`（仓库根与 `.worktrees/p6-linear-packing-authority`）。与 Task 3 记录的同一问题。
+- 核查：`npx eslint src/components/CargoImportDialog.tsx src/components/CargoImportDialog.test.tsx src/hooks/useTemplateCatalogs.test.ts src/Workbench.sessionBoundary.test.ts` 初次因 render 中读取 `selectedImportTemplateNameRef` 失败；改为 `selectedTemplateName` state 后退出码 0、无输出。
+- 决策：不削弱断言，不改 ESLint 配置。全仓失败记入本条；任务文件 eslint 全绿后提交。
+- 影响：全仓 `npm run lint` 在该 worktree 存在时不可作为本任务门禁。
+- 后续：由仓库维护处理 tsconfigRootDir / worktree ignore，不并入模板重构任务。
+
+
+## 2026-08-20 Task 3 npm run lint 全仓失败
+
+- 背景：Task 3 要求运行 `npm run lint`。`eslint .` 退出码 1，446 errors，全部是 `Parsing error: No tsconfigRootDir was set, and multiple candidate TSConfigRootDirs are present`（仓库根与 `.worktrees/p6-linear-packing-authority`）。
+- 核查：`npx eslint src/components/ImportMappingForm.tsx src/components/ImportMappingForm.test.tsx src/data/workbenchCopy.ts src/components/TemplateManagerPage.test.tsx` 退出码 0、无输出。失败来自 worktree 并存，不是本任务文件。
+- 决策：不削弱断言，不改 ESLint 配置。聚焦 Vitest 全绿后仍提交。
+- 影响：全仓 `npm run lint` 在该 worktree 存在时不可作为本任务门禁。
+- 后续：由仓库维护处理 tsconfigRootDir / worktree ignore，不并入模板重构任务。
+
+
+## 2026-08-20 模板导入重构行为基准
+
+- 背景：`2026-08-19-import-template-behavior-design.md` 原为待确认稿，实施计划对无模板映射、重量默认值、已有模板保存和替换提示存在互相冲突的解释。
+- 决策：文件解析成功后必须先选择已有模板或“不使用模板”；不使用模板时从空白映射开始，不提供自动字段映射。必要尺寸映射和保存名称在字段名前显示 `*`。
+- 重量：重量映射可选。未映射重量列或已映射单元格为空时，标准货物内部使用 `1 kg`，界面不提供或展示默认重量；非空但不可解析、为零或为负数仍整批报错。本条取代 2026-07-31「导入确认、重量来源与展开上限」中关于未选模板不得使用默认重量、空白映射重量必须报错的规则；该旧条目的事务提交和文件展开边界继续有效。
+- 模板保存：选择已有模板并修改完整模板配置后，导入确认同时提供明确的“更新模板”和“另存为模板”；更新保留原 ID 和名称，另存为必须输入新的唯一名称。未选模板时只提供“保存为模板”。三种保存都不触发货物导入。
+- 界面：映射和预览保持同阶段可编辑，不因配置有效自动跳步；本轮不增加已有货物替换警告或二次确认。`CargoImportDialog` 只产生标准货物，替换仍由 `Workbench` 的确认边界负责，保留未来拆分追加/替换模式的接口边界。
+- 语言与验收：新增文案同时接入中英文，优先验收中文效果；旧模板导入验收不再作为新交互基准，按已确认行为稿场景 A–O 重建自动化验收。
+
+
+## 2026-08-20 Task 1 聚焦测试中的既有失败
+
+- 背景：Task 1 重量合同清洁切换的聚焦命令包含 `src/components/TemplateManagerPage.test.tsx`。实现后该文件 15 passed / 1 failed：`keeps the newest sample headers when files finish out of order and clears a failed sample` 在 `datalist#tm-new-map-options-name option[value="Second name"]` 断言为 null。
+- 核查：用 `git stash` 暂时移开 Task 1 改动后，同一条测试在 `feat/template-refactor` HEAD 上同样失败（断言行 278）。当前 `ImportMappingForm` 在已有文件列时渲染 `<select>` 而非 `datalist#*-map-options-*`，该断言与现实现不一致。
+- 选项：A. 削弱或改写该断言以凑绿；B. 在 Task 1 中改回 datalist；C. 记录为既有失败，不改断言。
+- 决策：C。失败与重量合同无关，不削弱断言，不把 datalist 修复并入 Task 1。
+- 影响：Task 1 聚焦套件除该既有失败外全绿；`npm run build` 仍须通过。datalist 与样本表头竞态由后续任务处理。
+- 后续：不要用改测试来掩盖；若后续任务改映射输入形态，再同步该断言。
+
+
+## 2026-07-31 生产 module worker 的 XLSX namespace 兼容
+
+- 背景：部署后的真实 Excel 导入路径在文件选择后只显示“导入解析失败：无法解析为工作簿”。浏览器网络日志显示 `/assets/importWorkbook.worker-*.js` 与 `/assets/xlsx.js` 均返回 200，Worker 控制台实际报 `[import-excel] ImportWorkbookWorkerError: Workbook worker failed: parse`。
+- 根因：Vite 的 `manualChunks` 将 SheetJS 产物作为共享 `/assets/xlsx.js`，该文件导出的是包装后的单一命名空间 `t`（文件尾为 `export{t}`）；Worker 产物此前却生成 `import { read, utils } from "/assets/xlsx.js"`，因此 `read`/`utils` 均不存在。远程直接导入同一俄罗斯工作簿复现 `{ ok: false, code: 'parse' }`。
+- 选项：A. 在 Worker 内重新打包 SheetJS，恢复解析但重复约 112KB gzip；B. 让边界按模块形状展开生产包装 namespace，同时保留开发/测试的直接 SheetJS namespace；C. 取消 Worker 边界并回退主线程解析。选择 B，保留共享 chunk、原生 Worker、ArrayBuffer transfer 与既有 10,000/256/200,000 边界，不引入主线程 fallback。
+- 修复与验证：`src/lib/importWorkbookBoundary.ts` 在读取/范围校验前统一处理 `t` 包装；固定 production preview 的 Worker 直接读取 `test-data/excel/俄罗斯整托装柜尺寸.xlsx` 返回 `{ ok: true }` 和 31 行；聚焦导入 E2E `2 passed`，聚焦导入 Vitest `109 passed`，lint 通过。
+- 影响：只兼容共享 SheetJS 产物的模块导出形状；文件大小、首表、范围上限、超限拒绝和错误协议保持不变。远程全量 E2E 需在提交后重新验证。
+## 2026-07-31 P2-7 benchmark single-authority and first-pixel investigation
+
+- 根因（合同哈希）：当前 `npm run benchmark` 的算法 worker 在每个 warmup/sample 中先以 `canonicalizePackingResult` 计算 SHA-256，并与 `test-data/baselines/packing-results.json` 比较；该 packing golden 是唯一业务合同权威。`test-results/benchmark/frontend-architecture.json` 的五个实际哈希（例如 `russia-volume=313549443068a...`）与 packing golden 完全一致，而 `test-data/baselines/frontend-architecture.json` 仍保留旧值（例如 `6b224f768904...`）。历史对比确认旧 frontend 哈希正是 `e0c1fc2` 时的 packing golden；随后 `0b6cfa9` 把 `depthLayer` 加入 canonical box 并重生 packing golden，几何/数量/密度不变，拓扑 `workStep` 算法在该提交只是等价抽取。第四轮 finalizer 又让运行时 `workSteps` 直接保持连续拓扑顺序、canonical 不再代排序；若旧 canonical 排序恰好等于新运行时顺序，当前 packing hash 可保持不变。因此五项 mismatch 的直接原因是 frontend baseline 未跟随 canonical `depthLayer` 合同演进的重复字段漂移，而非当前算法未通过 canonical contract；不得编辑 frontend baseline 掩盖。
+- 修复：frontend benchmark gate 不再把冗余 baseline `contractHashes` 当作比较权威或必需字段；仍严格校验实际报告 hashes 必须存在且为 SHA-256，且算法 worker 对 canonical packing golden 的逐样本校验保持不变。bundle、timing、环境和实际报告结构门禁不变。历史 RED 分别证明旧逻辑对五个有效但过时的 baseline hash 报 mismatch、对缺失重复 baseline 字段报五项错误；最终测试以“baseline 与 actual 均为有效但完全不同的 hash”断言完整 gate 为 `{ timingComparable: true, failures: [] }`，并分别覆盖 actual hash 缺失与格式非法仍失败。GREEN：`npx vitest run scripts/frontendBenchmark.test.mjs`（22/22）。
+- 首像素证据（同一 Win11 x64 / Intel(R) Core(TM) Ultra 5 228V / 8 logical CPUs / Node v24.14.0 / Chromium 148.0.7778.96 / production-preview / 1280×760）：基线样本 `216.375, 205.100, 206.625, 238.125, 195.025 ms`，median `206.625`、P95 `238.125`；2026-07-31 当前样本 `248.450, 278.500, 280.275, 253.900, 267.250 ms`，median `267.250`、P95 `280.275`；随后一次样本 `325.700, 283.875, 288.525, 296.000, 345.075 ms`，median `296.000`、P95 `345.075`。两次复跑均在多代理并发测试/构建负载下，不能作为受控空载性能回归证据；因此不修改 `ContainerScene`、采样次数、阈值或 baseline，P2-7 timing gate 继续 BLOCKED，待工作区空闲后由主代理执行最终受控 benchmark。
+
+## 2026-07-31 受控空载 benchmark 仍为 RED
+
+- 背景：完成本轮代码与 E2E 后，在无运行中的代理/项目服务、同一 Win11 x64 / Intel(R) Core(TM) Ultra 5 228V / 8 logical CPUs / Node v24.14.0 / Chromium 148.0.7778.96 / 1280×760 环境执行唯一权威 `npm run benchmark`。
+- 证据：算法五项 contract hash 均与 `test-data/baselines/packing-results.json` 一致；bundle `totalJsGzipBytes` 为 806,152，基线 678,236，增长约 18.9%，超过 5% 硬门禁；`canvasFirstNonEmptyPixelsMs` median 为 260.600 ms，基线 206.625 ms，增长约 26.1%，超过 20% timing 门禁（P95 272.050 ms 未超门禁）。完整报告：`test-results/benchmark/frontend-architecture.json`。
+- 决策：发布与部署继续 BLOCKED。不得更新 baseline、降低阈值、减少样本或跳过指标；先按 bundle 组成与首像素真实路径定位产生回归的源代码，只修复已证实瓶颈后重复完整本地门禁。
+- 后续：性能诊断需分别解释新增 JS gzip 组成（当前包含 worker/client 与动态组件）和首像素时序；若两者无共同根因，分别保留独立回归证据。
+
+## 2026-07-31 benchmark 瓶颈修复与 GREEN 证据
+
+- 根因：导入 module worker 与主线程各自打包 SheetJS，worker 重复产生 112,158 B gzip；2D/3D 自动视图切换会卸载并重新创建 WebGL context，权威 benchmark 每个样本包含 24 次冷 3D remount。
+- 修复：Vite 将主线程与 worker 共享同一稳定 `/assets/xlsx.js` chunk，worker 保持 native module worker、ArrayBuffer transfer、超时和边界协议；关闭新增 runtime modulepreload 以保持原始 initial HTML 资产合同。自动 3D 场景首次挂载后跨 2D/3D 切换保留 context，隐藏时暂停渲染循环，显示时恢复；共享 maximize 控件避免隐藏 DOM 重复。
+- 证据：未改 baseline、阈值、样本、benchmark detector 或 packing golden。最终 `npm run benchmark` GREEN：五项 contract hash 全匹配，`totalJsGzipBytes=694,300`，`canvasFirstNonEmptyPixelsMs` median/P95=`81.875/96.150 ms`，initial HTML gzip=`289 B`，timing comparable。
+- 影响：首次 3D 视图保持现有导出画布与交互；2D 模式不再持续执行隐藏场景的 WebGL render/animation；worker 生产路径依赖部署到根站点的 `/assets/xlsx.js`，本地 dev 与 production preview 均已覆盖导入路径。
+
+## 2026-07-31 release-gate benchmark transient outlier
+
+- 末次按 lint → unit/performance → build → E2E → benchmark 顺序执行时，只有 `algorithm.russia-volume.p95Ms` RED：样本 `3.241, 3.025, 3.117, 4.242, 9.761 ms`，median `3.241`，基线 P95 `3.156 ms` 的 20% 上限为 `3.7872 ms`；其余算法、bundle、首像素和浏览器 timing 门禁均未报错。报告仍保留在 `test-results/benchmark/frontend-architecture.json`。
+- 这不是已证明的源代码回归：同一代码的上一轮完整 benchmark GREEN，当前五次中单个 `9.761 ms` 样本远离其余四次，且无实现改动发生。未修改 benchmark、baseline、阈值或断言；发布门禁暂不宣称 GREEN，先做单 case 空载复测并保留本次 RED 证据。
+- 单 case 空载复测 `node --expose-gc scripts/frontendBenchmark.mjs --algorithm-case russia-volume` = `2.970, 2.777, 2.916, 3.034, 3.031 ms`（P95 `3.034`），随后完整 `npm run benchmark` GREEN；最终报告算法 Russia P95 `3.401`、total JS gzip `694,388`、首像素 median/P95 `37.250/45.350 ms`。
+
+
+
+## 2026-07-31 导入确认、重量来源与展开上限
+
+- 决策：所有工作簿（包括可完美自动映射者）只生成同一个 pending 预览，只有弹窗显式确认才提交；取消不改变货物或输入 revision。重量默认值不再属于无模板 UI 初值：未选择模板时不注入重量；已映射重量列的空值始终为 `invalid-weight`；只有用户明确选择或保存的模板，其 `defaultValues.weight` 才能填充**未映射**的重量列。本条取代 2026-07-30「模板重量默认值普遍为 1」的旧口径。
+- 展开边界：`MAX_IMPORT_ROWS=10,000`、`MAX_IMPORT_COLUMNS=256`、`MAX_IMPORT_CELLS=200,000`。当前越南夹具为 27×11（297 cells），俄罗斯夹具为 32×5（160 cells）；256 列已远高于当前逐字段 datalist 映射 UI 的业务宽度，同时阻止极宽表头放大 DOM。5MB 文件先在主线程检查，之后仅把 buffer 转交可终止的 module Worker；Worker 以 `sheets: 0`、`sheetRows: MAX_IMPORT_ROWS + 1` 只解析首表和一行溢出哨兵，优先校验原始 `!fullref`，无 `!fullref` 时用截断后 `!ref`/实际 rows 拒绝溢出，并在 10 秒超时或解析错误时 terminate。主线程没有无界 XLSX fallback。超限整批拒绝并写入本地化导入日志，不截断、不进入 pending，也不在映射变化时反复解析无界数据。
+
+## 2026-07-31 工作簿绝对行坐标边界
+
+- 背景：SheetJS 的 `sheetRows=10,001` 按绝对 Excel 行号截断，而 `!fullref`/`!ref` 的行数校验按使用范围跨度计算；带前置空行的工作表可能在跨度未超 10,000 时静默丢失尾部数据。
+- 选项：A. 继续只校验使用范围跨度；B. 解析前同时拒绝 full range 绝对末行超过 worker 哨兵，且在无 `!fullref`、`!ref` 触及哨兵但跨度未满上限时保守拒绝；C. 去掉 `sheetRows` 并承担无界展开风险。
+- 决策：选择 B。任何无法证明没有被绝对行哨兵截断的工作簿都在进入预览前显式失败；正常从第 2 行开始、使用范围恰好 10,000 行且未超哨兵的表仍可通过。
+- 影响：极少数缺少 `!fullref` 且正好落在绝对哨兵边界的合法表会要求用户删除前置空行后重试，但不会把截断数据伪装成成功导入；所有输入仍受行、列和单元格上限保护。
+
+
+## 2026-07-31 本地全量 E2E 首次复跑仍 RED
+
+- 背景：完成当前 remediation commits 后首次执行 `npm run test:e2e`，本地浏览器门禁未闭环；未修改测试断言或跳过失败用例。
+- 证据：**116 passed / 7 failed**。失败为 `container-calc.spec.ts` 的 4 个导入模板/确认流程用例（`confirm-mapping` 按钮保持 disabled）、1 个历史恢复持久默认值用例（未找到 Restore 按钮）、`manual-3d.spec.ts` 的悬空 PageUp 提示用例（`manual-operation-notice` 缺失）、以及手动活动结果用例（聚焦场景 Delete 后箱体数仍为 1）。完整输出保留在本次 E2E 命令 artifact 中。
+- 决策：发布与部署继续 BLOCKED；先按真实业务路径分别复现并定位根因，禁止放宽断言、延长超时、跳过冲突用例或修改 benchmark 门禁。其余 lint、unit/performance test、build 已在本轮先后通过，不能抵消 E2E RED。
+- 后续：按失败域检查当前工作区与测试夹具是否存在未提交改动影响；每个根因补定向 RED/GREEN 证据后再重复完整 `npm run test:e2e`。
+- 根因确认：四个 `confirm-mapping` 失败均来自 `createTemplateWorkbookFile()` 只生成 Goods/Code/L/W/H，没有正重量；新的导入合同对未映射且无已保存模板默认值的重量产生 `invalid-weight`，`CargoImportDialog` 因此按设计禁用确认。产品校验和单元测试保持不变，采用测试夹具增加正重量，并在手动/模板管理映射路径补充 Weight 映射。
+- 根因确认：两个手动键盘失败不是产品守卫回退。`ContainerScene` 现在要求事件目标位于启用的 canvas；PageUp 用 2D `dispatchEvent` 选箱后直接点回 3D，未聚焦 canvas；活动结果用例从明细/导出按钮直接按 Delete，目标也不在 `workspaceRef`。现有 focused E2E 已明确先 `canvas.focus()`；修复只补两条真实流程的焦点步骤，保留键盘守卫和断言。
+- 根因确认：历史堆叠规则用例点击 Save plan 后立即 Back to workbench；HistoryPage 的 `onClick={() => void handleSave()}` fire-and-forget，`saveCurrentPlan` 仍在 POST+refresh，重新进入 History 时 DOM 尚为 `No saved plans`，不是数据库或 selector 问题。对照用例已等待保存后的方案行。修复只补保存完成的可见行等待，保留真实 Restore 路径。
+
+## 2026-07-31 历史保存前的自动结果有效性
+
+- 背景：全局最大堆叠层数变更按既有产品契约清空 `automaticResult`，装箱计算仍由用户显式点击「Load」触发；变更后等待不会自动重算。历史保存若继续使用空结果兜底，会在快照校验阶段以“placed and unplaced quantities must match planned quantity”失败，且保存按钮此前仍可点击。
+- 证据：无污染的新浏览器上下文中复现 `fill global stack → History → Save`：无历史 POST、弹出快照计数错误；同一流程补充 `Load` 后 POST 201、Restore 可见，恢复的方案默认层数为 4，持久用户默认仍为 2。
+- 决策：保留显式 `Load` 语义，不让空的自动结果参与历史保存；Workbench 在自动结果未生成时禁用 Save，显示“Load the packing result before saving.”（中文对应提示），保存回调同时保留同一守卫。E2E 先验证禁用态，再走 `Load → Save → Restore` 的有效路径。
+- 影响：避免把结构上无效的占位结果送入历史快照；全局堆叠规则测试明确覆盖重新计算边界，不放宽快照验证，也不改变手动模式保存路径。
+- 后续：其他依赖自动结果的导出控件继续由统一合规/可用性门禁覆盖；若未来改为设置变更自动重算，需同步更新此契约和 E2E。
+
 ## 2026-07-30 第三轮修复交付状态（任务1–9收口）
 
 - 背景：第三轮复审曾判定 BLOCKED（capacity-one RED、手动支撑/合规/历史/导入/朝向/labelStats 未闭环、E2E 8 fail）。本轮按 `plans/2026-07-30-refactor-review-round-3-remediation.md` 实施并 push 至 `09f4991`。
@@ -650,6 +1162,7 @@
 - 决策：选择 B。实测 A 会让 31 托、capacity-one/top-fill、groundOnly、maxStackLayers、小样本坐标语义回归；B 去掉旧的“五 SKU”限制，覆盖 2+ SKU / 100+ 箱纯散货，同时避免尚未完成架构裁决的堆叠约束场景。
 - 影响：新增 `shouldUseBlockEngine` 明确路由边界；两 SKU 大批量纯箱用例现在进入块引擎。完整“所有 quantity/volume 都走块引擎”的目标仍未最终达成，后续需要让块引擎原生处理 priority、groundOnly、non-stackable、maxStackLayers 和小样本坐标语义后再继续扩大。
 - 后续：下一步应优先把 stack-capacity/top-fill 规则移植进块选择评价或分阶段路由，而不是继续放宽门槛。
+- Supersede: d037df0 后续实际扩大了有限约束场景的块路由适用范围；本条「不继续放宽门槛」保留为历史决策，已被 d037df0 与当前 P2/P3 packing-gate 工作 supersede。
 
 ## 2026-07-07 子任务 6 回归收口：构建门禁未过，暂不部署
 
@@ -2003,3 +2516,744 @@
 - 模板决策（用户已批准实施）：用户原文“端口”按上下文解释为“入口”。在“导入 XLSX”旁下载包含当前标准字段的通用空白 `.xlsx`；不按已保存映射动态生成客户格式，不增加独立示例下载，也不增加后端接口。
 - 测试缺口：相关单测 5 文件 / 78 项全部通过，但 `quickPlace.test.ts` 只断言存储尺寸和 `validateDraft()`，`renderedFootprint.test.ts` 只测试普通 `makeManualBox()`，没有“快捷放置结果的渲染 AABB必须等于校验 AABB”跨模块不变量；也没有非贴地箱高度变化翻转测试。现有一键放置 E2E 只看数量和朝向属性，没有几何像素/包围盒断言。
 - E2E 阻塞：聚焦运行“一键放置”和 `R/Shift+R` 两项时，Playwright 只启动 Vite，登录请求代理到 `127.0.0.1:3010`，因后端未运行而 `ECONNREFUSED`；2 项均在登录阶段失败，不能作为功能通过或失败证据。未修改测试规避该问题。
+## 2026-07-31 Current remediation focused TypeScript RED
+
+- 验证：`npm exec tsc -- -b --pretty false` 在集成工作区失败，具体为 `ResultsPanel.compliance.test.tsx` 未使用 `fireEvent` 与错误 `VehicleProfileId` fixture、`useManualPlacementSession.test.ts` 全局堆叠/pose 类型夹具、`fillSuggestion.test.ts` 缺少必需 `depthLayer`、`importWorkbookWorkerClient.test.ts` Worker 泛型夹具、`importWorkbookWorkerClient.ts` 的 `erasableSyntaxOnly` 不兼容枚举、`manualPlacement.ts` 未使用 `PlacedBox`，以及 `Workbench.tsx` workspace ref 的 `HTMLElement`/`HTMLDivElement` 类型不一致。
+- 决策：保留该 RED 作为当前混合工作区的真实证据；先按第四轮计划在各生产根因处修复或补齐夹具，再重跑同一 `tsc`，不削弱类型检查或删除断言。
+- 影响：在该命令重新通过前不得进入 release gate、部署或交付声明。
+## 2026-07-31 Compliance DOM regression fixture RED
+
+- 验证：`npx vitest run src/lib/manualSteps.test.ts src/lib/planCompliance.test.ts src/lib/reviewChecklist.test.ts src/lib/historySnapshot.test.ts scripts/historySnapshot.server.test.mjs src/components/ResultsPanel.compliance.test.tsx src/components/HistoryPage.test.tsx src/components/VisualizationWorkspace.test.tsx` 中 7 个文件通过、`ResultsPanel.compliance.test.tsx` 2 项失败；失败来自测试构造了 `layers: []` 但提供了 work step，生产组件按真实 `PackingResult` 访问对应层级时收到 `undefined`。
+- 决策：保留失败作为 fixture 合同证据；补齐真实 finalizer 结果所必需的 layer、有效车辆 profile 与无用导入后重跑，不给生产渲染增加不必要的空结果旁路。
+- 影响：合规 DOM 行为尚未 GREEN；必须在该测试重新通过后再进入合规审查与提交。
+## 2026-07-31 Fourth-round re-audit findings
+
+- 重新核对当前混合工作区与第四轮验收规格后，代码主线已部分收口但仍有明确开放项：P1-1/P2-6 缺 `orientationAxes` 所有权、自动→手动直接等价证据和 loading-group depth fallback；P1-2/P1-3/P2-1/P2-2 缺真实 Workbench 手动 A→B 恢复 E2E、全局堆叠 rerender 证据和新鲜浏览器验证；P1-4/P1-5 保护控件、导出统一边界、诊断 union/provenance 与 delimiter-safe identity 未闭环；P1-6/P1-7/P2-3/P2-4 缺 revision、Template Manager weight、worker malformed/post failure、serialized product overflow 与 sample-worker 证据；P1-8/P1-9 缺 validator parity 边界及 StrictMode logout-login 证据。
+- 证据：六个只读审计分别核对生产符号与行为测试；当前 packing/manual/import/history focused suites 可通过，但 `tsc` 与新增 ResultsPanel DOM fixture 仍按前述记录 RED。以上状态取代 CHANGELOG 中未经本轮 fresh proof 的 `[x]` 标记。
+## 2026-07-31 Compliance validator integration TypeScript RED
+
+- 验证：在加入自动快照 manual provenance 回归后，`npm exec tsc -- -b --pretty false` 仍失败：`planCompliance.ts` 的 `encodeURIComponent` 输入因 `Pick<ValidationIssue>` 丢失 discriminated-union narrowing；ResultsPanel 合规 fixture 使用非法 `VehicleProfileId`；manual session 的 global-default/pose fixture 未处理可选值；worker client 测试错误使用泛型 matcher，client 使用 `enum` 触发 `erasableSyntaxOnly`；Workbench workspace ref 为 `HTMLElement` 而目标 div 要求 `HTMLDivElement`。
+- 决策：保留 RED；先在各自根因处修复类型与夹具，不放宽 `tsc`、删除断言或改用类型逃逸，再以同一命令复核。
+- 影响：合规提交及后续 release gate 暂不宣称类型检查通过；本条与混合工作区已有 RED 记录并存，均需在最终门禁前收口。
+
+## 2026-08-03 越南40尺 860/873 回归 + 手动同型号朝向不齐（历史定位，已由后续证据复核收窄）
+
+- 背景：issues/0802 反馈两问题。数据取自 issues/0802 快照（越南40尺 40HQ，877 箱 / 28 型号，quantity 模式），与 7/22 测试数据一致。用户报 7/22 装 873、现在只装 860，且底部近柜门存在大量空隙；手动排布同一型号朝向不一致（LWH/WLH 混摆）。
+
+### 问题一：860 vs 873 —— 非算法回归，是输入数据属性差异
+- 复现：用快照 cargo（`src/lib/scratch*` 一次性脚本，已删）跑 `calculatePacking` 得 placed=860/877、vol=78.24%、地面覆盖 82.0%、未放 `3:4,25:6,18:4,10:3`，与快照 `automatic.placedCount=860` 完全一致。
+- 对照实验（同数据，7/22 worktree `a2432a3` 代码 vs 当前 HEAD，二者输出**逐项相同**）：
+  - as-is（全部 `maxStackLayers:99`，item27 `groundOnly:true`）→ blockEngine=off，old=860 / head=860
+  - item27 `groundOnly:false`（其余不动）→ blockEngine=off，old=873 / head=873
+  - `maxStackLayers` 全改 undefined 且无 groundOnly → blockEngine=on，old=877 / head=877
+- 结论：`packing.ts` 在 7/22→今的改动（新增 `respectsStackCapacityWithUpwardRiders`、`finalizePlacementGeometry`）对本数据**零影响**——因所有型号 `maxStackLayers:99` 使 `stackCapacity=99`，向上骑手约束永不触发；finalize 只改分层/步骤/labelStats，不改落位。860 与 873 的差异**完全由输入属性驱动**：
+  - 关键变量 A：item27（`390×335×310`，28 箱）的 `groundOnly` 标志。groundOnly=true 时该型号只能落地，柜门附近底面被其占用/碎片化 → 少装 13 箱（873→860）。
+  - 关键变量 B（更大杠杆）：`maxStackLayers:99` + 任一 groundOnly 均会使 `shouldUseBlockEngine`（packing.ts:864-870）返回 false。该门槛要求「每个型号 `maxStackLayers===undefined` 且非 groundOnly、可堆叠」。块引擎在本数据上能装满 877/877（vol 80.27%），贪心 else 分支只能 860。
+- 待决策：(1) 用户数据里 `maxStackLayers:99` 与 item27 `groundOnly` 来自哪里？——`importCargo.ts:329` 导入时 `maxStackLayers` 仅在单元格 >0 时取值否则 undefined；:330 `groundOnly` 默认 false。故 99 与 groundOnly 应来自用户录入/模板默认或历史方案，需与用户确认原始 Excel/录入。(2) 是否应放宽块引擎门槛，使「显式 `maxStackLayers` 但值足够大 / 少量 groundOnly」也能走块引擎，或让贪心分支具备同等地面填充能力。(3) 若 item27 groundOnly 是误设，纠正数据即可回到 873；但 873 仍非最优（块引擎 877）。
+
+### 问题二：手动同型号朝向不齐 —— quickPlace 未做朝向承诺
+- 根因：`src/lib/quickPlace.ts:120-133` `quickPlaceCargo` 调 `placementScore` 时**未传 `committedOrientation`**（第 5 参省略）。自动装箱通过 `committedOrientations` map 记住某型号首个直立朝向并对后续同型号施加强惩罚（`packing.ts:395-398 orientationCommitmentPenalty`），使同型号同朝向、行距一致；手动逐个 quickPlace 各自独立打分，`snapBonus`/`sameLabelBonus` 会因邻居几何不同而选出不同朝向（LWH vs WLH），导致同型号混摆。
+- 复现：对 label「4」型号（580×365×435）连续 quickPlace 40 次 → orientationKey 分布 LWH:6 / WLH:34，证实同型号朝向不统一。
+- 待决策：quickPlace 是否应像自动装箱一样，对「同一 cargoId 已放箱子的既有朝向」施加承诺惩罚（把已放同型号箱的 orientationKey 作为 committedOrientation 传入 placementScore），或读取用户手动设定的目标朝向。需与用户确认期望：手动补位是否要强制对齐到该型号已有朝向。
+
+- 影响：本轮仅定位，未改代码、未改测试。scratch 复现脚本与 `.worktrees/at-0722` 已清理。
+- 后续：待用户就上述待决策点拍板后，另起 `plans/2026-08-03-*.md` 定稿计划交 Codex 执行。
+
+
+## 2026-08-03 issues/0802 证据复核：收窄结论与保留阻塞
+
+- 背景：复核 `issues/0802/analysis.md`、`issue.txt`、两个 2026-07-27 快照、PNG 和当前源码后，发现原条目把已删除 scratch/worktree 的 7/22 对照与当前仓库事实混在一起，并把未出现在 `issue.txt` 的 gizmo 推断列为已确认用户问题。
+- 当前已证实：两个快照的自动输入/摘要一致，40HQ quantity 场景为 28 个型号、877 箱、`placedCount=860`；全部型号带 `maxStackLayers:99`，仅型号 27 为 `groundOnly:true`；当前 `shouldUseBlockEngine` 因显式有限上限和 groundOnly 条件关闭。`quickPlaceCargo` 调 `placementScore` 时确实未传 `committedOrientation`。
+- 证据降级：873、842、855、877 counterfactual、82.04% 地面覆盖率、40 次 quick-place 分布以及 old/current 逐项相同，均保留为历史实验记录；临时脚本和 detached worktree 已删除，仓库没有同一 877 箱输入的可复跑 runner，因此不作为当前门禁或“无代码回归”证明。
+- 属性来源：快照只保存解析后的 `CargoItem`，没有源 Excel、mapping、模板 defaults、历史或自定义货物来源。`groundOnly` 与 99 的来源均未闭环；99 是有限值，不能在一般情况下等同于 `undefined` 无限上限。
+- 决策：不清洗、不静默改写 `groundOnly`/`maxStackLayers`；不裸放开混合 groundOnly 的块引擎；先补可复跑 fixture/runner、有限上限阈值矩阵和 groundOnly 选择实验，再决定路由。quick-place 朝向承诺作为独立代码缺口，先以确定性行为测试证明后实施。
+- Gizmo：`issue.txt`、PNG 和可读取快照没有箭头反馈，MP4 当前无法读取。`HANDLE_SPECS` 的非镜像是高置信静态候选，但用户报告、屏幕 CW/CCW、影响轴和具体反转对象均未验证；在浏览器/媒体证据出现前不改 gizmo。
+- 影响：本条 supersede 本文件 2026-08-03 `2093-2114` 中“非算法回归/属性来源已证实/问题三已证实”的过强表述；不修改产品代码、测试、fixture、benchmark、阈值或部署状态。
+
+## 2026-08-04 issues/0802 实施决策与聚焦证据（supersede 2026-08-03 阻塞候选）
+
+- 背景：`issues/0802/analysis.md` 在实施前证据边界 `bd806f835e4c80b88bbc48ff4b99be8dd93e7027` 将 873、已删除 scratch/worktree 数值保留为历史记录，并把输入 provenance 与 rotation gizmo 保持为未验证。随后手动与自动行为分别在提交 `6f864a9`、`d037df0` 中实现并取得 fresh 聚焦证明。本条只 supersede 2026-08-03 `issues/0802 证据复核：收窄结论与保留阻塞` 中“候选策略仍阻塞、quick-place 待行为合同”的当前决策状态，不改写其当时证据或 `2093-2114` 的历史定位。
+- 选项：gate 可继续只接受 `maxStackLayers === undefined`、接受任意正有限值，或只接受按 effective 柜内净高与箱高向上取整后对整批不构成约束的正有限值；混合 `groundOnly` 可继续旧路径、与普通块混合竞争，或在共享 EMS 上先放仅落地块；quick-place 可继续逐次邻域评分、硬锁某一字符串朝向，或从草稿顺序派生同货物的正立语义承诺并保留合法回退。
+- 决策：gate 选择保守 whole-load fitting-height ceil；显式有限上限必须为正且非 binding，effective container limit 与 default stack limit 均参与。packing 选择共享 EMS 的 floor-only ground phase，完成后再放 non-ground blocks；残余 `groundOnly` 不得进入 fallback。manual 选择草稿顺序中首个同 `cargoId` 箱体的 `LWH`/`WLH` 语义承诺；候选评分值仍按既有 `placementScore` 计算，但排序比较时先比较是否匹配承诺朝向，再比较评分；既有循环按此顺序逐个校验合法性，全部承诺候选均非法时自然继续尝试其余按分数排序的候选；聚焦 `600×400×400` 合同证明第三次放置回退到了另一正立朝向。
+- 影响与 fresh 结果（manual）：focused RED 为 `src/lib/quickPlace.test.ts` **3/9 failed**，重复场景出现 `Set { 'WLH', 'LWH' }`；提交 `6f864a9` 后同文件 **9/9**，focused Chromium **1/1**。浏览器场景箱数 **1 → 2 → 3**，目标剩余 **0** 且按钮 disabled，2D 恰有三个无 issue 箱体，全部 upright 且只有一种朝向。
+- 影响与 fresh 结果（automatic）：精确最小 fixture 来自 `issues/0802/cargo-debug-snapshot(4)(3).json`，为 **28 SKUs / 877 boxes**，全部 `maxStackLayers:99`，一个 `groundOnly` SKU 数量 **28**。修复前 gate=`false`、**860/877**、`no-space` **17**；提交 `d037df0` 后块路径为 **877/877**、unplaced **0**、ground-only **28/28** 位于 `z=0`，全部 **877** 保留 99，error/geometry/stack violations 均为 **0**，观察 packing elapsed **4371 ms**。0629 post-fix 为 quantity **188/283**、volume **156/283**，两种模式 label-C **84/84** 位于 `z=0`，同样零 error/geometry/stack violations。focused Chromium **1/1** 实际经过真实 XLSX mapping/import 与自定义柜型，显示 `Loaded 877 / 877`、utilization **80.3%**。
+- 合同影响：既有 **70/70** 聚焦组内五项 canonical assertion 通过且期望 hash 不变：Russia `313549443068a5df3e87a5850d86a959ff56fe8ec4bd315f895c17c360c6b25f`；Vietnam 20GP quantity `59cfb38d7f6cde158d0e994edbb7d94cbcdcf73ecc9855b5ede53f0404051d43`；Vietnam 20GP volume `995b3b5a116547dc7af4944da8981ad552a2db7bbbd2c8281acaedaa95c525d6`；Vietnam 40HQ quantity `e1d660e1fe5333fcddece8fa9c3a2edd3e1b40782fb2bc6535b0f71c8851a10f`；Vietnam 40HQ volume `bd278dca258ea212822e75b75d43ed3a9ea39ec458fd76ca242afc53b8bd6a21`。
+- 后续：原始输入 provenance 仍未闭环，873 与已删除实验仍不得提升为当前门禁，rotation gizmo 仍未验证且不在本次范围。本条形成时完整 release gate、正式 benchmark、部署与远程 E2E 均为 pending；随后本地 gate 与 benchmark 的执行结果由下方「本地 benchmark 首轮门禁失败」条目 supersede，部署与远程 E2E 仍待执行。
+
+## 2026-08-04 本地 benchmark 首轮门禁失败（诊断中）
+
+- 背景：在 `lint`、完整 unit、production build 与本地 **125/125** E2E 之后运行未修改的 `npm run benchmark`，benchmark 自身的 Chromium 用例 **1/1** 通过，但最终 timing gate 返回非零。
+- 结果：生成报告 `test-results/benchmark/frontend-architecture.json` 的 Vietnam 40HQ quantity 为 median **3219.696 ms** / p95 **4928.652 ms**（baseline **3020.506 / 3334.909 ms**），volume 为 **5967.793 / 7893.151 ms**（baseline **5194.192 / 5526.746 ms**），login click-to-interactive 为 **604.967 / 847.533 ms**（baseline **541.133 / 575.767 ms**）；其余 benchmark gate 未报告失败，五项 contract hash 与计划值完全一致。
+- 决策：不修改 baseline、threshold、iterations、benchmark case 或断言；先检查首轮完整 E2E 后的主机负载，并用未修改的独立算法 case 区分稳定回归与 p95 噪声，再重新运行同一完整 benchmark。首轮失败保留为 fresh 证据，在完整命令以零退出前，本地 release gate 维持 blocked。
+- 后续：若隔离 case 仍稳定超限，回到 block selector/phase 的性能诊断并先写行为等价的性能回归；若隔离 case 恢复且完整 benchmark 重跑通过，则记录两轮实际结果与噪声判断，不删除本条，也不据此更新 baseline。
+- 诊断结果：未修改源码、测试或 benchmark 配置；随后独立算法输出恢复为 quantity median/p95 **2838.133/3820.885 ms**、volume **3832.827/4470.042 ms**，同一完整 `npm run benchmark` 重跑以零退出且 timing comparable。成功报告中 quantity 为 **2208.022/2462.220 ms**、volume **5223.638/5949.617 ms**、login 为 **575.633/678.767 ms**，均在现有门槛内；`jq -e` 再次确认五项 contract hash 完全一致。结合首轮仅 p95 越界和无代码/配置变化的重跑恢复，本轮归因为主机时序噪声；保留首轮失败记录，但本地 benchmark gate 由未修改重跑结果解除阻塞。
+
+## 2026-08-04 生产发布两次回滚与 SQLite 保护修正
+
+- 背景：local release gate GREEN 后先后部署两次，backup 分别为 `/root/cargo_project-backup-20260804-082126` 与 `/root/cargo_project-backup-20260804-084101`。每次部署的 static HTTP 为 **200**、未认证 API 为 **401**；Windows `sha256sum` 默认用 `*` 分隔，而远端默认用空格，计划中的原始文本 `diff` 因格式返回非零，但两侧逐项 hash/文件名完全相同，统一使用 `sha256sum -b` 后 diff 为空。
+- 远程门禁：第一次完整远程 E2E 为 **124/125**，失败于 `manual-3d.spec.ts:515` 的按钮在 React 重渲染时持续 detach；回滚后的相同 focused 用例 **1/1**。第二次完整远程 E2E 为 **123/125**，同一手动历史用例再次失败，另一个 `container-calc.spec.ts:219` 登录后在「工作台加载中…」超过 5 秒；第二次回滚后两个 focused 用例分别 **1/1**。这些单测式重跑只把失败收窄为 full-suite/远端时序问题，不能替代完整 remote gate。
+- 原 rollback 缺陷与恢复：计划给出的 backend rollback 使用 `rsync -a --delete "$backup/server"/ /opt/cargo-server/server/`，但 deploy backup 的 `server/` 只含 `.mjs`，不含 SQLite `database.db`。第一次照此执行后命令退出非零，incident `/root/cargo_project-incident-20260804-163753` 中 DB 为 **475136 bytes**、SHA-256 `76c21bbf5c5df7eb05121c9453cfbf6180e8c5dcfbe17a776452077dfae27563`，live DB 已被服务重建为 **65536 bytes**、SHA-256 `6bb13149dccca51fb34563fc6d184432b3a402c227378f5c7f5aa318bb1b5d73`；立即停服并从 incident 恢复，live hash 重新与 incident 相同，随后 static **200**、API **401**，static/backend 均匹配 backup。
+- 修正决策：后续 rollback 必须继续保存 incident，但 backend rsync 必须 `--exclude=database.db`，并在重启后比较 incident/live DB SHA-256；不得再次执行会删除 live SQLite 的原命令。第二次安全 rollback 生成 `/root/cargo_project-incident-20260804-165805`，incident/live DB hash 均为 `aba20cc7087c4eefe3579a1b08e1a2421b8c6206dbe0977c362a72d1ef6b53c6`，static/backend 匹配第二个 backup，健康结果为 **200/401**。
+- 当前状态：两次失败发布均已撤回，生产运行本次任务前 release，数据库未丢失第二次 rollback 前的数据；最终 `PRAGMA quick_check` 返回 `ok`，static/backend manifest 仍匹配第二个 backup，服务 active、static **200**、API **401**。0802 产品代码、本地测试与本地 gate 保持 GREEN，但未部署；remote E2E 和 production feature verification 为 RED。按仓库规则不修改既有测试超时/断言来换取通过，后续需单独诊断远端 full-suite 下的工作台 lazy-load 与历史页/工作台重渲染时序，再重新走部署、全量 remote E2E 与回滚保护。
+
+## 2026-08-05 P1-1 guarded SQLite-preserving rollback
+
+- Behavioral RED: the recorded unsafe rollback deleted/replaced the **475,136-byte** live SQLite database (incident hash `76c21bbf5c5df7eb05121c9453cfbf6180e8c5dcfbe17a776452077dfae27563` versus rebuilt live hash `6bb13149dccca51fb34563fc6d184432b3a402c227378f5c7f5aa318bb1b5d73`). The initial missing `scripts/rollback.mjs` import was scaffold-only, not the production RED.
+- Implementation: added a guarded, dependency-injected `node scripts/rollback.mjs --backup <absolute POSIX remote path> [--dry-run]`; the remote script validates backup shape and active service, allocates/prints one atomic `mktemp -d "${incident-base}.XXXXXXXX"` incident directory, snapshots static and complete `server/` before restore, installs an EXIT restart trap before stopping service, restores static with only `--exclude=server/`, restores backend with exactly `database.db`, `database.db-shm`, and `database.db-wal` exclusions, leaves app-root package metadata untouched, checks checked SHA-256 output with an explicit mismatch branch, and requires active/200/401/`PRAGMA quick_check` invariants. CLI environment precedence is `DEPLOY_REMOTE_USER` over `DEPLOY_SSH_HOST`, with site/app/service/owner/healthcheck and `ROLLBACK_INCIDENT_BASE` overrides.
+- Focused GREEN: `npx vitest run scripts/rollback.test.mjs` → **1 test file passed / 11 tests passed**. `npm run rollback:dry` exited 0 and printed `[dry-run] $ ssh cargo-server` with `/root/cargo_project-backup-DRY-RUN`, the complete generated script markers, and no executor/SSH call.
+- Reversible mutation proofs, each followed by restoration: missing DB exclusion → **4 failed** (`requires the backup shape and protects every SQLite sidecar exactly`; `orders every safety step from active service through all health checks`; `prints the full SSH invocation in dry-run mode without calling the executor`; `uses deployment environment defaults with explicit remote-user precedence`); wrong incident-copy order → **1 failed** (`orders every safety step from active service through all health checks`); bypassed hash mismatch → **2 failed** (`orders every safety step from active service through all health checks`; `requires matching SHA-256 values and generates an explicit equality/mismatch verifier`); dry-run executing SSH → **2 failed** (`prints the full SSH invocation in dry-run mode without calling the executor`; `uses deployment environment defaults with explicit remote-user precedence`). Final rerun returned **1 file / 11 tests passed**.
+
+- Addendum: the focused suite now executes the exact generated hash-verification slice through `bash -c` with deterministic `sha256sum` stubs. Equal 64-character hashes exited **0** with empty stderr; differing hashes exited nonzero and stderr contained both exact values. Mutating only the generated mismatch branch `exit 1` to `exit 0` produced **1 failed** (`executes generated hash equality and mismatch behavior offline`); restoring it returned `npx vitest run scripts/rollback.test.mjs` to **1 file / 12 tests passed**, followed by `npm run rollback:dry` exit **0**. This expanded evidence supersedes the earlier 11-test count above.
+- Scope: only the rollback script/test, two npm scripts, and these evidence entries changed; no commit, formatter, lint, build, full suite, E2E, or production rollback was run in this slice.
+
+## 2026-08-05 P1-1 review remediation: SQLite family and recovery boundaries
+
+- Security/code review found that the planned exact-three exclusion assumption was incomplete: this application can leave `database.db-journal`. The implementation now preserves the entire `database.db*` family, with explicit `database.db`, `database.db-shm`, `database.db-wal`, and `database.db-journal` exclusions plus a `protect /database.db*` rule; this entry supersedes the earlier exact-three wording above.
+- The backend restore is module-only (`/*.mjs` include plus non-module exclusion/protection), while ownership/read-mode normalization is static-only plus individual `.mjs` files. No recursive operation reaches `server_root` or any SQLite artifact. While stopped, incident/live database manifests compare every `database.db*` content hash and uid/gid/mode before and after restore; quick-check runs before start and again after start, with post-start main-DB hash verification. Database/integrity failure leaves service stopped and prints retained incident path.
+- Remote safety now includes canonical realpath checks, canonical `DEPLOY_BACKUP_BASE` containment, root-owned/non-writable/no-symlink backup validation, overlap rejection, nonblocking flock, required-binary preflight, bounded curl/sqlite gates, fixed deploy-parity API endpoint, rejected root/traversal/leading-option/userinfo inputs, anchored static `--exclude=/server/` with `--delete-excluded`, deterministic static/module manifests (including recomputation after restore), and a loud status-preserving recovery trap that restores prior static/modules without touching DB and reports restart failure.
+- Full offline behavior tests execute generated shell against a temporary filesystem with fake systemctl/rsync/curl/sqlite/chown/chmod plus real hashing/manifests. GREEN: `npx vitest run scripts/rollback.test.mjs` → **1 file / 16 tests passed**. The success case preserves main DB, WAL, SHM, journal and metadata boundary, removes stale static/modules, detects same-size content, retains package files, saves manifests, and allocates distinct retained incidents; injected restore/integrity/restart failures exercise recovery and stopped-service behavior. `npm run rollback:dry` exited **0** and printed the complete SSH invocation with `/root/cargo_project-backup-DRY-RUN`.
+- New reversible mutation evidence: replacing journal protection with `database.db*` → **3 failed** (`requires the backup shape and protects every SQLite sidecar exactly`; `prints the full SSH invocation in dry-run mode without calling the executor`; `uses deployment environment defaults with explicit remote-user and backup-base precedence`); recursive server ownership → **1 failed** (`checks health, permissions, metadata boundaries, and package preservation`); silencing recovery incident output → **1 failed** (`recovers the prior static/modules and restarts after an injected restore failure`); disabling manifest comparison → **1 failed** (`detects same-size static corruption through manifest comparison and recovers`); bypassing generated hash mismatch return → **1 failed** (`executes generated hash equality and mismatch behavior offline`). Each mutation was restored; final focused rerun was **16/16** and dry-run exited **0**.
+
+- Final expansion addendum: `npx vitest run scripts/rollback.test.mjs` now passes **1 file / 17 tests**, including generated-shell canonical source/destination overlap rejection. The final `npm run rollback:dry` exits **0** and prints the complete SSH invocation beginning `[dry-run] $ ssh cargo-server` with `/root/cargo_project-backup-DRY-RUN`; this supersedes the preceding 16-test count.
+
+- Final edge addendum: removed all module `chown`/`chmod` normalization (rsync `-a` preserves module metadata); added loud restart/is-active recovery when server incident snapshot fails after stop, recursive root-owned/non-writable validation for every backup entry plus secure incident/lock parents, `sort`/`mkdir` binary preflight, and `database.db-extra` preservation coverage. Same-size static corruption now resets mtime to the backup source before manifest comparison. Final `npx vitest run scripts/rollback.test.mjs` → **1 file / 19 tests passed**; final `npm run rollback:dry` → exit **0**.
+- Targeted reversible REDs after these edge changes: disabling pre-snapshot restart → **1 failed** (`restarts the original service when server incident snapshot fails`); disabling recursive backup-entry validation → **1 failed** (`rejects insecure backup entries before stopping the service`); removing `sort` from binary preflight → **1 failed** (`checks health, permissions, metadata boundaries, and package preservation`); redirecting static ownership to `server_root` → **1 failed** (same permissions-boundary test); replacing `protect /database.db*` with exclusion → **1 failed** (same source-contract test). Every mutation was restored before final GREEN.
+
+- Final focused run after adding offline static ownership-failure coverage: `npx vitest run scripts/rollback.test.mjs` passed **1 file / 20 tests** (the new case requires a nonzero status, stopped service, and retained incident when static `chown` fails during restore and recovery). A reversible mutation removing `|| return 1` from static `chown` made that case **1 failed** with `RUN_STATUS=0` and `RUN_STATE=active`; the guard was restored before the final GREEN.
+- Final dry-run: `npm run rollback:dry` exited **0**, printed the complete `[dry-run] $ ssh cargo-server` invocation for `/root/cargo_project-backup-DRY-RUN`, and made no executor/SSH call. No commit, formatter, lint, build, full suite, E2E, or production rollback was run.
+
+- Final blocker remediation: module restore now places `--filter='protect /database.db*'` and the four explicit SQLite exclusions before `--include='/*.mjs'`; module manifests and backup module sampling exclude every `database.db*` name. Offline fake rsync models that first-match protection, and a live `database.db-extra.mjs` survives both successful rollback and recovery restore.
+- Lock hardening: `ROLLBACK_LOCK_PATH` is ignored; the default/CLI lock is `/run/cargo-project-rollback.lock`, with exact basename validation for injected config, `umask 077`, pre-open symlink/regular/root/non-writable checks, non-truncating `exec 9>>`, post-open revalidation, and `flock`. Acquisition remains before backup source validation. Offline tests preserve a pre-existing `LOCK_SENTINEL` and reject FIFO, directory, and wrong-basename targets.
+- Backup pathname hardening: canonical `backup_base` parent and every ancestor through `/` are validated root-owned and non-group/world-writable before trusting the backup path; an offline writable-parent case fails before service/files mutation. Final focused `npx vitest run scripts/rollback.test.mjs` passed **1 file / 26 tests**. Reversible REDs: protection moved after module include → **1 failed** (`protects the complete database family before module include and excludes it from manifests`); lock `exec 9>>` changed to truncating `exec 9>` → **1 failed** (`preserves an existing regular lock sentinel without truncation`); backup ancestor validation removed → **1 failed** (`rejects a writable backup-base parent before trusting backup contents`). All mutations were restored.
+- Final `npm run rollback:dry` exited **0**, printed `[dry-run] $ ssh cargo-server` with `lock_path=/run/cargo-project-rollback.lock` and `/root/cargo_project-backup-DRY-RUN`, and made no executor/SSH call.
+
+- Sender/receiver filter correction: rsync `protect` is receiver-side only, so module restore now emits `--filter='hide /database.db*'` before receiver `protect`, the four explicit known excludes, and `--include='/*.mjs'`; module manifests/sample retain family exclusion. The fake rsync applies sender-family skipping only when the generated hide rule is present. With backup `database.db-extra.mjs` content differing from live, removing hide produced **1 failed** (`executes the full success flow against an offline temporary filesystem`) with a database incident/after-restore manifest mismatch; restoring hide returned the focused suite to **1 file / 26 tests passed**.
+- Latest `npm run rollback:dry` exited **0**, printed the complete invocation beginning `[dry-run] $ ssh cargo-server` with `lock_path=/run/cargo-project-rollback.lock`, and made no executor/SSH call.
+
+- Namespace hardening: after canonicalizing the backup, rollback now requires `dirname "$backup_dir"` to equal the secured canonical `backup_base_parent`, then validates only `basename "$backup_dir"` against `${backup_base_name}-*`; the previous full-path glob could match `/` and admit nested backups through unchecked intermediates. The offline fixture uses a nested `backup-prefix-001/intermediate/backup-prefix-002` with a writable intermediate and rejects it before service/files mutation. Removing the direct-child equality produced **1 failed** (`rejects nested backup paths with an unchecked intermediate before service or files`) with status `0`; restoring it returned the focused suite to **1 file / 27 tests passed**.
+- Latest `npm run rollback:dry` exited **0**, printed the complete invocation beginning `[dry-run] $ ssh cargo-server` with `/root/cargo_project-backup-DRY-RUN`, and made no executor/SSH call.
+
+## 2026-08-05 P1-1 final verification record
+
+- Current focused rollback run: `npx vitest run scripts/rollback.test.mjs` passed **1 file / 27 tests** in **78.09s**. `npm run rollback:dry` exited **0**.
+- Current local release gates: `npm run lint` exited **0**; `npm test` passed unit **92 files / 819 tests** plus packing performance **2 files / 7 tests**; `npm run build` exited **0** with the existing **>500 kB chunk warning**.
+- Current E2E: `npm run test:e2e` passed **125 tests** in **6.8 minutes**. Observed volume utilization was **80.3%**; expected negative-path console errors occurred, with no test failures.
+- Final spec, code, and security reviews were **APPROVED**. Previously documented nonblocking medium follow-ups remain tracked and are not P1/P2 blockers.
+
+## 2026-08-05 P1-2 production credential guard and env-backed E2E
+
+- 部署前置（必须在生产重启前确认）：`/etc/cargo-server.env` 必须提供非空 `ADMIN_PASSWORD`。生产缺失时 `server/db.mjs` 现在直接抛错并阻断启动；这条不是部署后的补救项。
+- 背景：旧 seed 在 `NODE_ENV=production` 仍创建 `testuser/testuser123`，且新库/已有 admin 缺少 `ADMIN_PASSWORD` 时只 warning。保留非生产默认账号便利，但生产不再种 testuser，并对 admin 配置 fail-fast。
+- 决策：`initAdmin` 和 `initTestUser` 导出以支持隔离动态导入测试；`CARGO_DB_PATH=:memory:` 下每个 seed case 通过 `vi.resetModules()`、环境快照恢复和 database close 隔离。生产 `initTestUser` 无条件跳过；生产缺 `ADMIN_PASSWORD`（新库和已有 admin）抛出包含该变量名的错误；非生产继续使用 `admin123`、`testuser123` 默认并保留 `SKIP_TESTUSER=1`。
+- TDD RED：命令 `npx vitest run scripts/dbSeed.test.mjs --pool=threads --maxWorkers=1` 输出 `scripts/dbSeed.test.mjs (7 tests | 3 failed)`、`Tests 3 failed | 4 passed (7)`。三个失败分别是生产仍返回一行 `username: "testuser"`（应为空）、生产新库缺 `ADMIN_PASSWORD` 的导入 promise 意外 resolved、以及已有 admin case 的当前模块缺少 `initAdmin` 导出（`databaseModule.initAdmin is not a function`）。其余四项通过。
+- TDD GREEN：同一 focused 命令输出 `Test Files 1 passed (1)`、`Tests 7 passed (7)`，耗时 `4.21s`（Vitest duration；命令 wall time `6.15s`）。
+- E2E：新增 `e2e/credentials.ts`，四个 scoped spec 的 user/admin 登录和 debug username assertion 均读取 `E2E_USERNAME`/`E2E_PASSWORD`/`E2E_ADMIN_USERNAME`/`E2E_ADMIN_PASSWORD`，默认值仅在该 helper 的非生产便利路径中定义。针对四个 spec 的已知 literal 扫描无匹配；未改断言、超时、重试或远程用户。
+- 未执行全量 lint/test/build/E2E、部署或生产操作；不删除生产上已有的 testuser 行，须由运维另行决定清理时机。
+
+## 2026-08-05 P1-2 secure external E2E credential boundary
+
+- Security review found that the historically documented production target `http://101.33.232.150/` is plaintext. Env-backed user/admin passwords must not be sent to that public origin.
+- Decision: `e2e/credentials.ts` parses every explicit `PLAYWRIGHT_BASE_URL` before exporting credentials. External runs are allowed only for `https:` URLs or loopback HTTP (`127.0.0.1`, `localhost`, `::1`); allowed external runs require all four nonempty `E2E_USERNAME`, `E2E_PASSWORD`, `E2E_ADMIN_USERNAME`, and `E2E_ADMIN_PASSWORD`, trimming values and never including values in errors. No-baseURL local runs retain defaults.
+- Required P1-3 deviation: remote credentialized E2E must use SSH local port forwarding and a loopback `PLAYWRIGHT_BASE_URL` (for example `http://127.0.0.1:<forwarded-port>/`), not `http://101.33.232.150/` directly. This is a release prerequisite because the observed public origin has no TLS.
+- Stronger TDD RED: after adding missing-variable, public-HTTP, loopback-HTTP, and HTTPS contracts, `npx vitest run scripts/dbSeed.test.mjs --pool=threads --maxWorkers=1` output `scripts/dbSeed.test.mjs (11 tests | 2 failed)`, `rejects every missing external credential by environment variable name`, `rejects public HTTP external runs before using credentials`, and `Tests 2 failed | 9 passed (11)`. The missing-variable failure received all four names (`E2E_USERNAME`, `E2E_PASSWORD`, `E2E_ADMIN_USERNAME`, `E2E_ADMIN_PASSWORD`); public HTTP unexpectedly resolved.
+- Stronger TDD GREEN: the same focused command output `Test Files 1 passed (1)`, `Tests 11 passed (11)`, and Vitest duration `4.10s` (wall time `6.09s`).
+- Scope remains P1-2 only: no full gates, deployment, production E2E, or commit was performed.
+
+## 2026-08-05 P1-2 final focused verification
+
+- Final focused command: `npx vitest run scripts/dbSeed.test.mjs --pool=threads --maxWorkers=1` → `Test Files 1 passed (1)`, `Tests 11 passed (11)`, Vitest duration `5.17s` (command wall time `7.22s`). This includes all seven seed contracts plus local-default, missing-variable, public-HTTP rejection, loopback-HTTP acceptance, and HTTPS acceptance contracts.
+- Final targeted static command: `npx eslint server/db.mjs scripts/dbSeed.test.mjs e2e/credentials.ts e2e/container-calc.spec.ts e2e/manual-3d.spec.ts e2e/auth-isolation.spec.ts e2e/responsive-3d.spec.ts` exited `0` with no output. Final known-literal scan across the four scoped specs returned `No matches found`.
+- Production-secret E2E must use SSH local port forwarding to an allowed loopback HTTP URL or an HTTPS origin; never use the observed public `http://101.33.232.150/` directly. Review warning: Playwright traces can capture raw `fill`/`evaluate` credential arguments; the current `trace: 'on-first-retry'` with zero retries is latent, so before enabling retries for production-secret E2E, disable or redact credential-bearing traces.
+- No full release gates, deployment, production E2E, or commit was run.
+
+## 2026-08-05 P1-2 credential byte and IPv6 addendum
+
+- TDD RED after adding explicit IPv6 loopback and whitespace-preservation contracts: `npx vitest run scripts/dbSeed.test.mjs --pool=threads --maxWorkers=1` output `scripts/dbSeed.test.mjs (12 tests | 2 failed)`. Failures were `uses all configured credentials for HTTPS and loopback HTTP` (`PLAYWRIGHT_BASE_URL must use HTTPS or loopback HTTP` for `http://[::1]:5176`) and `preserves nonblank credential bytes for external runs` (configured leading/trailing spaces were stripped).
+- GREEN after normalizing Node URL IPv6 brackets (`[::1]`) and validating with `.trim()` while returning raw values: same command output `Test Files 1 passed (1)`, `Tests 12 passed (12)`, Vitest duration `4.37s` (wall time `6.24s`).
+- This preserves exact configured password bytes for both E2E password variables while still rejecting whitespace-only external values; no secret value is logged or included in errors.
+- Final post-review static rerun: the targeted ESLint command listed above exited `0` with no output, and the four-spec known-literal scan again returned `No matches found`; no full gate or deployment was run.
+
+## 2026-08-05 P1-2 username normalization and password-byte addendum
+
+- TDD RED: changing the whitespace contract to normalize both usernames while preserving exact password bytes made `npx vitest run scripts/dbSeed.test.mjs --pool=threads --maxWorkers=1` report `scripts/dbSeed.test.mjs (12 tests | 1 failed)`, failure `normalizes usernames while preserving nonblank password bytes`; helper returned leading/trailing spaces in usernames.
+- GREEN: `readCredential(name, fallback, normalize = false)` now uses the explicit `normalize=true` option only for `E2E_USERNAME` and `E2E_ADMIN_USERNAME`; password calls retain raw nonblank bytes and use trim only for validation. The same command returned `Test Files 1 passed (1)`, `Tests 12 passed (12)`, Vitest duration `3.95s` (wall time `5.73s`).
+- This keeps the authenticated username contract aligned with the server while avoiding password mutation; no secret values are logged or asserted.
+
+## 2026-08-05 P1-2 final verification record
+
+- Final focused seed/helper run: `npx vitest run scripts/dbSeed.test.mjs --pool=threads --maxWorkers=1` passed **1 file / 12 tests** in **4.05s**.
+- Final targeted ESLint exited **0**. The local release checks also passed: `npm test` unit **93 files / 831 tests** plus packing performance **2 files / 7 tests**; `npm run build` exited **0** with the existing **>500 kB** chunk warning.
+- Local `npm run test:e2e` passed **125** tests in **6.8 minutes**; observed volume utilization was **80.3%**. Expected negative-path console errors were present, with no test failures.
+- Final spec, code, TypeScript, React, and security reviews were **APPROVED**. The nonblocking medium trace caveat remains: disable or redact credential-bearing Playwright traces before enabling retries for production-secret E2E.
+
+## 2026-08-05 P1-3a 远程 E2E 失败诊断与修正方向
+
+- **背景**：所有带生产凭据的运行均通过 SSH 本地转发 `127.0.0.1:18080` 访问生产，没有把凭据发送到公网 HTTP。三次完整 remote E2E 结果依次为：第 1 次 **104/125**，21 failures（18 个登录后 5 秒仍停在「工作台加载中…」，以及 Vietnam 877、手动同型号朝向、历史按钮 detach 各 1）；第 2 次 **117/125**，8 failures（5 个 loader symptom 加同样 3 项）；第 3 次 **122/125**，仅剩同样 3 项。loader phenomenon 出现在 **2/3** 次完整运行，共影响但不固定复现于 **23** 个测试实例；history detach 为 **3/3**；两个尚未部署的 0802 产品验收均为 **3/3 RED**。本阶段没有修改生产。
+- **选项**：
+  1. 对 history detach 改 locator、增加 timeout，或删除/放宽断言；对 loader 统一增加 5 秒等待、把 Workbench 合并回首包。
+  2. 保持现有业务断言和超时：history 用可控延迟保存构造确定性竞态并修复陈旧导航；loader 在登录页可见期间预加载同一个独立 Workbench chunk，同时保留 lazy-load 错误/重试边界。
+  3. 将三类失败一概视作偶发网络问题，不改代码直接重跑/发布。
+- **决策**：选择选项 2。history 修正先写 deterministic delayed-save regression：用户发起保存后若已从 History 切回 Workbench，延迟完成的保存不得把导航改回 History；随后移除 `saveCurrentPlan` 中 `await saveHistory(...)` 后冗余的 `setActiveNav('history')`，不改 locator、timeout 或业务断言。loader 修正先写登录页预加载回归，再在登录页可见期间启动现有 `loadWorkbench`，复用同一个 promise 给 `React.lazy`；仍保持独立 Workbench chunk、现有加载失败/重试/退出登录行为，不延长 5 秒门槛，也不静态合并 Workbench。
+- **影响**：history 失败 artifact snapshot 同时显示 Workbench header 已 active、HistoryPage 仍渲染；当前源码 `src/Workbench.tsx:1341-1347` 先 `await saveHistory` 再无条件 `setActiveNav('history')`，因此较晚完成的保存可覆盖用户更新的导航，具备可确定复现的竞态。loader artifacts 显示认证已完成且页面停在 Suspense fallback，不是认证错误或 load-error。fresh-cache 样本中 `Workbench-Dvs3cuNT.js` 为 **382478 B / 1402 ms**，随后 `three.module` 为 **544062 B / 1522 ms**，report 在登录后 **3965 ms** ready；`src/App.tsx` 当前只在认证成功、开始渲染 lazy Workbench 后触发动态 import，因此慢链路会把全部下载时间压进登录后的 5 秒窗口。以上结论不把未部署的 0802 RED 误归因于本地修复失效。
+
+- **后续**：P1-3b 按上述两个 seam 分别执行 RED → 修正 → GREEN，并跑原始远程路径；不得用 timeout、retry、skip、弱化断言或静态合包换绿。通过本地 gate 和安全部署门槛后，仍经 `127.0.0.1` SSH tunnel 运行完整 remote E2E，至少连续 2 次 **125/125**，再验证 Vietnam 40HQ **877/877** 与手动同型号连续快速放置方向一致。任何远程失败都按受保护 rollback 流程处理；生产凭据运行保持零 retry/无可泄密 trace。
+
+## 2026-08-05 P1-3b Workbench login-page preload
+
+- TDD RED command: `npx vitest run src/App.test.tsx`. Exact focused result: `❯ src/App.test.tsx (12 tests | 1 failed) 1518ms`; failed test `starts the Workbench loader while login is visible and reuses its pending promise after login`; exact assertion: `expected "vi.fn()" to be called 1 times, but got 0 times` at `src/App.test.tsx:87:47`.
+- TDD GREEN command: `npx vitest run src/App.test.tsx`. Exact focused result: `Test Files 1 passed (1)` and `Tests 12 passed (12)`; Vitest reported `Duration 2.96s (transform 131ms, setup 0ms, import 462ms, tests 598ms, environment 1.64s)` and command wall time was `5.19s`.
+- Targeted static check: `npx eslint src/App.tsx src/App.test.tsx` exited `0` with no output.
+- The fix starts each injected Workbench attempt from an effect while login/register remains rendered, memoizes that attempt's promise for `React.lazy`, and creates a fresh attempt for retry/logout. The Workbench remains a separate dynamic chunk and the existing Suspense/error boundary is unchanged; no timeout, retry, assertion, production, full-gate, or commit change was made.
+
+## 2026-08-05 P1-3b History save navigation race
+
+- TDD RED (History-originated delayed navigation): `npm exec -- playwright test e2e/manual-3d.spec.ts --grep "延迟历史保存完成后保留用户切换到工作台的导航"` failed at the final Workbench assertion (`expected 0, received 1` for `history-page`; Playwright `Timeout: 5000ms`) before the navigation fix.
+- TDD RED (overview delayed ABA): `npm exec -- playwright test e2e/manual-3d.spec.ts --grep "概览保存期间离开并返回工作台仍保留最新导航"` failed at `e2e/manual-3d.spec.ts:640` with `history-page` count `expected 0, received 1` and `Timeout: 5000ms` under the active-nav equality fix, after overview → History → overview while POST/refresh were held.
+- TDD RED (same-nav redirect): `npm exec -- playwright test e2e/manual-3d.spec.ts --grep "概览报告保存成功后跳转历史方案"` failed because `history-page` was not found for `toBeVisible` (`Timeout: 5000ms`) before restoring the unchanged overview redirect.
+- GREEN: `npm exec -- playwright test e2e/manual-3d.spec.ts --grep "延迟历史保存完成后保留用户切换到工作台的导航|概览保存期间离开并返回工作台仍保留最新导航|概览报告保存成功后跳转历史方案|手动历史快照在当前货物切换后恢复货物 A 身份和数量"` passed **4 tests** (`4 passed (23.7s)`): History-originated delayed **4.5s**, overview ABA **5.2s**, unchanged overview redirect **2.1s**, and unchanged snapshot **5.5s**. `Workbench` now increments a monotonic navigation revision through `navigateTo` for every navigation setter; save captures the start revision and redirects only when it remains unchanged. The shared route helper fetches complete upstream POST/refresh bodies before gated `route.fulfill`; tests await both page response bodies plus two `requestAnimationFrame` turns and click the Workbench edit control.
+- Related history units `npx vitest run src/hooks/useHistoryPlans.test.ts src/components/HistoryPage.test.tsx --pool=threads --maxWorkers=1` passed **2 files / 10 tests**; targeted ESLint `npm exec eslint -- src/Workbench.tsx e2e/manual-3d.spec.ts` exited **0** with no output.
+- No timeout, retry, locator, assertion weakening, deployment, full gate, or commit was made; no production-environment operation was performed.
+
+- Final orchestrator verification: `npx playwright test e2e/manual-3d.spec.ts --grep "延迟历史保存|概览保存期间|概览报告保存|手动历史快照"` passed **4 tests** (`4 passed (23.3s)`); `npx vitest run src/components/HistoryPage.test.tsx src/hooks/useHistoryPlans.test.ts` passed **2 files / 10 tests** in **3.02s**; targeted ESLint exited **0**. Final spec, React, TypeScript, and code reviews were **APPROVED**. This rerun made no code, test, or commit changes.
+
+## 2026-08-05 P1-3c 生产变更前门槛与授权步骤
+
+- **背景**：P1-3b 后完整本地 gate 已通过：`npm run lint` exit **0**；`npm test` 为 unit **93 files / 832 tests** 加 packing performance **2 files / 7 tests**；`npm run build` exit **0**，只有既有 `>500 kB` warning；本地 E2E **128/128**，耗时 **7.2 min**，观测 utilization **80.3%**。
+- **生产只读 preflight**：经既有 SSH loopback 检查，static **200**、未认证 API **401**、`cargo-server.service` active；live SQLite SHA-256 为 `c7a84e2767e3ecbb3839a485ff7c193cc2fde51e900fef6aaa71d90ada6cd97f`，`PRAGMA quick_check` 为 `ok`。`JWT_SECRET` 为 **SET**，但 `ADMIN_PASSWORD` 为 **UNSET**，当前不得重启/部署。`/etc/cargo-server.env` 为 `root:root 0600`；systemd unit 的 `User`/`Group` 均为空，服务实际以 root 运行；live `.mjs` ownership 混有 `root` 与 `lighthouse`。
+- **选项**：
+  1. 忽略 `ADMIN_PASSWORD` 与 ownership 缺口直接 deploy，依赖失败后回滚。
+  2. 在任何服务重启前按受控顺序完成 secret、模块 metadata 与独立 DB backup 前置，再 dry-run/deploy/验证。
+  3. 将服务账号迁移、env owner/group 和部署一并重构后再上线。
+- **决策**：选择选项 2；选项 1 会触发 production fail-fast 或让 guarded rollback 因不可信模块 metadata 拒绝工作。选项 3 的 dedicated service identity 是真实安全债务，但超出本次 0802 发布范围，必须披露而不能假称已修复。本次授权的下一步仅为：
+  1. 先备份 `/etc/cargo-server.env`，保留 owner/mode，并记录备份路径。
+  2. 在远端生成 **64-hex** `ADMIN_PASSWORD`，不得打印、回传或进入 shell history；追加到 env 后只验证变量为 SET，不输出值。此时仍不单独重启，待 deploy 统一重启。
+  3. 在服务运行身份不变的前提下，把 live `.mjs` 统一为 `root:root 0644`，使 deploy backup 满足 guarded rollback 的 root-owned/non-writable trust checks；不得把 root service identity 描述为已整改。
+  4. 使用 `umask 077` 创建独立 SQLite `.backup`，记录其路径与 SHA-256，并要求备份 `PRAGMA quick_check = ok`；同时保留变更前 live DB hash。
+  5. 运行 deploy dry-run，核对 target/site/app/service/backup/health，再执行 deploy。
+  6. 部署后核对 static/backend manifests、service/static/API health、live DB SHA-256 与 `quick_check`，确认数据库未被意外替换或损坏。
+  7. 继续通过既有 SSH loopback、零 retry/无凭据 trace 连续运行两次完整 remote E2E；两次均须 **128/128**，并包含 Vietnam **877/877** 与手动同型号朝向验收。
+  8. 任一部署/健康/manifest/DB/E2E 验证失败，只能对 deploy 打印的 backup 使用 `npm run rollback -- --backup <path>`；不得手工拼 backend rsync。
+- **影响**：上述授权允许在不扩大代码范围的情况下解除当前 `ADMIN_PASSWORD` 阻塞并建立可验证的 DB/rollback 恢复点，但不会改变服务仍以 root 运行的事实。env `root:root 0600`、空 `User`/`Group` 和 root service identity 作为披露的 out-of-scope debt 保留；本条记录时尚未执行 env 写入、metadata normalization、DB backup、dry-run、deploy、restart、remote E2E 或 rollback，生产没有 mutation。
+- **后续**：执行者必须逐步把实际路径、hash、backup、manifest、health 和两次 remote E2E 结果追加到 `CHANGELOG.md`/本决策；不得把本 preflight 或本地 GREEN 写成生产已上线。发布完成后另立任务迁移 dedicated non-login service user/group，并重新设计 code/state 权限边界。
+
+- **Pre-mutation rollback trust addendum**：继续只读检查 rollback source metadata，得到 static non-root **0**、static group/world-writable **1**；唯一精确项为 `/usr/share/nginx/html/assets`，`drwxr-xrwx root:root`。modules non-root **4**、modules group/world-writable **2**。远端 `openssl` 可用，可支持既定无打印 64-hex secret 生成。由于 deploy backup 会原样保留这些 owner/mode，而 guarded rollback 要求 backup entries root-owned 且非 group/world-writable，当前 metadata 会让 rollback 在未来部署失败时拒绝该 backup，不能带缺口上线。
+- **扩展决策**：在任何 env 写入、DB backup、dry-run 或 deploy 前，把当前 static tree 递归归一为 `root:root`，并以 `chmod -R go-w` 仅移除 group/world write、保留既有 read/execute；同时按既定步骤把 live `.mjs` 归一为 `root:root 0644`。完成后重新计算 static non-root、static group/world-writable、modules non-root、modules group/world-writable 四个 count，必须全部为 **0**，才进入独立 SQLite backup 与 deploy 流程。此项是让未来 deploy backup 可被 guarded rollback 信任的发布前置，不代表 root service identity 已修复。
+- **当前状态**：本 addendum 仅记录 read-only evidence 与授权顺序；尚未执行 static/module metadata normalization、env backup/write、DB backup、restart、dry-run、deploy 或其他生产 mutation。
+
+- **Post-mutation evidence（UTC `20260805-154156`）**：先创建 env backup `/root/cargo-server.env-20260805-154156`。变更前 `/etc/cargo-server.env` SHA-256 为 `42f0bb681549ed588c27caf16b88d1fc0424314d9169f6dc8ede79b1c35b4f78`；远端生成 64-hex `ADMIN_PASSWORD` 并追加，secret 从未打印或回传，变更后 env SHA-256 为 `16c84c4cde7aaaca7019c2d69f2d980f3f1aae7528e8737fa45b4e89fc64ff33`，metadata 保持 `root:root 0600`。
+- **Rollback trust gate GREEN**：归一后 static non-root/group-world-writable 为 **0/0**，modules non-root/group-world-writable 为 **0/0**，满足未来 deploy backup 的 guarded rollback owner/mode 前置。
+- **Independent DB recovery point**：以 `umask 077` 创建 `/root/cargo-database-20260805-154156.db`，metadata `root:root 0600`，size **598016 B**，SHA-256 `ad67687854e40e97ebd48fc6108c3711a66fec78b8a560fcc5e80da21dea3ede`，`PRAGMA quick_check = ok`。操作后 live DB SHA-256 为 `38772a334458d112bba8672a0c1277eb7a654de359dd8a43a006cd6c650c9ee4`，`quick_check = ok`；service active、static **200**、未认证 API **401**。
+- **Hash provenance**：preflight 的 live `c7a84e2767e3ecbb3839a485ff7c193cc2fde51e900fef6aaa71d90ada6cd97f` 是三次 diagnostic E2E 发生登录/审计等 DB 写入之前的观察值，不能与后续 live hash直接比较为“无写入”。SQLite `.backup` 是通过 quick_check 的一致逻辑备份，不承诺 backup 文件与持续运行、可能继续写入的 live SQLite 具有相同字节 SHA-256；本记录不作二者 hash 相等声明。
+- **当前边界与下一步**：已执行的 production mutation 仅为 env backup/secret append、static/module metadata normalization 和独立 SQLite backup；root service identity debt 未改变。尚未 deploy、release restart、remote E2E 或 rollback。下一步仍须先 deploy dry-run，随后 deploy、manifest/health/DB 核验及两次 tunnel remote E2E；任一失败只用 deploy 输出的 backup 运行受保护 rollback。
+
+## 2026-08-05 P1-3c rollback readiness incident 与未验收生产状态
+
+- **背景 / remote gate**：部署后通过安全 SSH loopback 运行三次完整门禁。run 1 的 process status 为 **0**，但 child output 未保留，不能推断 count，也不能作为有明确输出的 128/128 证据。run 2 明确 **128/128**，耗时 **12.9 min**。run 3 为 **127/128**，耗时 **13.0 min**；唯一失败为 `container-calc.spec.ts:845`，登录后在保持不变的 **5s** 门槛内 `report-panel` 未出现，仍显示「工作台加载中…」。要求的连续两次明确 **128/128** 未成立，故 release gate RED。
+- **已执行 rollback 与 failure**：严格按发布门槛只运行 `npm run rollback -- --backup /root/cargo_project-backup-20260805-154503`，未使用手工 rsync。脚本创建 `/root/cargo_project-incident.L2b3Lyfc`，恢复 old static/modules、启动服务后，one-shot 未认证 API health check 得到 **502**（期望 401）。EXIT recovery 因此恢复 attempted release 并再次启动服务。
+- **当前事实**：production 目前仍为 attempted known-RED release，明确未 accepted。当前 `cargo-server.service` active、static **200**、未认证 API **401**。incident 与 live DB SHA-256 同为 `6b866b7737084dc44a680310caf4e82a5a35cf9adce45ef8a67251d64b9b8066`，二者 `PRAGMA quick_check = ok`。文件身份也证明 live 是 attempted release：live `db.mjs` hash prefix `5928f3…`，而 target backup old prefix 为 `8c07e2…`；live `index.html` prefix `2fa46c…`，old backup prefix `fefa32…`。这里只记录已提供的 hash prefix，不补造完整值。
+- **根因证据**：当前 `scripts/rollback.mjs` 顺序是服务 start 后先 `systemctl is-active`，随后立即对 static/API 各做一次 curl；没有 readiness polling。rollback 当下 API 502，但 recovery 后同一 attempted release 已稳定为 401，支持“旧服务进程 active 后 API 尚未 ready”的 transient readiness，而不支持“旧服务最终 API contract 不是 401”。
+- **选项**：
+  1. 手工 rsync old files，或不改脚本直接反复猜测式重跑 rollback。
+  2. 放宽 API 401 要求，把 502 当成功。
+  3. 保持最终 200/401 contract，TDD 增加有界 post-restart readiness polling，再对同一 backup 运行同一个受保护 rollback 命令。
+- **决策**：选择选项 3。禁止手工 rsync、绕过 health contract 或无证据重试。先构造“service active 后短暂 502、随后 401”的 deterministic RED，给 guarded rollback 增加有界 polling；timeout 后仍非 401 必须失败并保留现有 EXIT recovery。修正验证通过后，仍对 `/root/cargo_project-backup-20260805-154503` 使用 `npm run rollback -- --backup ...`，不得改用其他恢复路径。
+- **影响 / 后续**：在 rollback readiness 修正及同一 backup 成功恢复前，production 暂留 attempted known-RED release，只为保持当前 active/200/401 可用性，不构成上线验收。修正后必须确认 old static/backend manifests、incident/live DB hash 保护与 `quick_check`、service active/static 200/API 401，再决定后续发布流程。本记录不包含 secret 值；本 docs-only 记录没有执行新命令、代码修改、commit 或额外 production mutation。
+
+
+## 2026-08-06 P1-1 transient post-restart health readiness correction
+
+- TDD RED against the production-found transient: `npx vitest run scripts/rollback.test.mjs -t "retries transient API" --testTimeout=30000` failed **1 test** because two initial API **502** responses caused `RUN_STATUS=1` instead of retrying to the expected **401**. The persistent-502 contract also failed pre-fix because the one-shot path recorded **1** attempt instead of the bounded budget of **10**.
+- Fix: generated rollback now uses `wait_for_http_status(url, expected, label)` after restart/is-active for static **200** and unauthenticated API **401**, with a fixed **10-attempt** budget, `curl --connect-timeout 2 --max-time 3`, and `sleep 1`; final success remains exact 200/401, while timeout reports the last observed status and exits nonzero. `sleep` is included in required-command preflight; offline sleep is instantaneous.
+- GREEN: `npx vitest run scripts/rollback.test.mjs` passed **1 file / 29 tests** in **101.63s**. The transient case recorded **3** API attempts and exited 0; persistent 502 recorded **10** attempts, exited nonzero, and reported `API health status was 502, expected 401` while preserving active service/recovery/database behavior.
+- Reversible mutation: reducing the generated loop from `-le 10` to `-le 1` made `retries transient API 502 responses until the expected 401` fail **1 test** (`RUN_STATUS=1`); the ten-attempt budget was restored before final GREEN. `npm run rollback:dry` exited **0** and printed the complete retry-enabled SSH invocation with no executor/SSH call. No full project gates, deployment, or production rollback was run in this correction slice.
+
+- Harness hardening after review: both generated-shell `execFileSync` calls now use `timeout: 20_000` and `killSignal: 'SIGKILL'`, preventing an unbounded polling regression from hanging Vitest beyond the per-test budget. Final focused `npx vitest run scripts/rollback.test.mjs` passed **1 file / 29 tests** in **102.60s**; `npm run rollback:dry` exited **0** with the retry-enabled invocation. No full project gates, deployment, production rollback, or commit was run.
+
+## 2026-08-06 P1-3c rollback 成功与 Workbench/Three waterfall 决策
+
+- **Rollback fix evidence**：readiness correction commit `185be95` 的 focused suite 为 **29 passed / 102.70s**，`npm run rollback:dry` exit **0**，final reviews **APPROVED**。生产侧只重试既定命令 `npm run rollback -- --backup /root/cargo_project-backup-20260805-154503`，没有手工恢复或改用其他 backup；本次成功并创建 incident `/root/cargo_project-incident.JupqcwjI`。
+- **Post-rollback verification**：service active、static **200**、未认证 API **401**；`ADMIN_PASSWORD` 保持 **SET**，未记录值。incident/live DB SHA-256 同为 `6b866b7737084dc44a680310caf4e82a5a35cf9adce45ef8a67251d64b9b8066`，二者 `PRAGMA quick_check = ok`。static manifest 与 backend manifest 对 target backup 的 diff 均为空；`db.mjs` old backup/live hash prefix 同为 `8c07e2…`，`index.html` 同为 `fefa327…`。这些证据确认 production 已恢复 prior release；它不包含本轮新功能，不能宣称新功能 production GREEN。
+- **残余 RED 证据**：attempted release 的第三次 remote gate 仍出现 **1/128** post-login loader failure。fresh built-bundle inspection 显示生成入口对 Workbench dynamic import 的 preload dependency 列表为空；Workbench 约 **383.98 kB** chunk 到达后才发起 Three import，登录页阶段启动 Workbench loader 仍留下串行 waterfall。该 bundle evidence 与 `report-panel` 在固定 5 秒内未出现的 remote RED 一致。
+- **选项**：
+  1. 延长登录后 timeout、加 retry，或把 Workbench/Three 静态合并。
+  2. 保持现有 timeout、独立 chunks 与 error boundary，只让 default loader 同时启动 Workbench 和 `three` dynamic imports，再由 Workbench 正常消费已在途/已完成的 Three chunk。
+  3. 因 rollback 已成功而接受 1/128，直接再次部署同一 bundle。
+- **决策**：选择选项 2。现有 remote **1/128 RED** 是下一步 test-first 证据；实现必须最小化，只消除 Workbench → Three 的串行启动，不吞错误、不加 retry、不放宽 5 秒断言、不合并 chunks，并保持现有加载失败/重试 error boundary。
+- **后续**：完成并验证并发 import 后重新跑完整 local gate，再按安全部署/rollback 门槛重新发布和执行连续 remote E2E。当前 production 只可描述为“已成功回滚到 prior release、服务健康”，不得描述为 r61/0802 新功能已上线或 production GREEN。本条仅追加证据与决策，没有执行命令、代码修改或 commit。
+
+## 2026-08-06 P1-3c Workbench/Three concurrent preload implementation
+
+- Production change: the default `loadWorkbench` now starts `import('./Workbench')` and `import('./components/ContainerScene')` in one `Promise.all`, returning only the Workbench module. Injected loaders, per-attempt promise memoization, Suspense fallback, error boundary, retry, logout, and dynamic chunk behavior remain unchanged; no timeout, retry, assertion, static Workbench import, or new dependency was added.
+- Exact chunk comparison: unmodified baseline Workbench `383988` B + Three `543762` B = `927750` B; rejected namespace preload (`import('three')`) Workbench `384009` B + Three `723048` B = `1107057` B (**+179307** B); rejected named-export preload (`import('three').then(({ Scene }) => Scene)`) Workbench `384016` B + Three `550411` B = `934427` B (**+6677** B); final ContainerScene preload Workbench `311025` B + Three-bearing ContainerScene `616667` B = `927692` B (**-58** B vs baseline).
+- Focused GREEN: final `npx vitest run src/App.test.tsx` reported `Test Files 1 passed (1)`, `Tests 12 passed (12)`, and `Duration 2.91s (transform 298ms, setup 0ms, import 413ms, tests 700ms, environment 1.53s)`; command wall time was `5.06s`. Targeted `npx eslint src/App.tsx src/App.test.tsx` exited `0` with no output; `npx tsc -b` exited `0` with no output.
+- Final `npm run build` exited `0`; Vite transformed **320 modules** and emitted `index-CTh2T4VY.js` (**151.30 kB**), `Workbench-ULpvPGyk.js` (**311.02 kB**), and `ContainerScene-DBjBP_dD.js` (**616.66 kB**), with the existing `>500 kB` warning only. The final graph has no separate `three.module` file because the Three runtime is in the shared ContainerScene chunk.
+- Generated entry evidence (`dist/assets/index-CTh2T4VY.js`) contains this exact loader graph: `var x=async()=>{let[e]=await Promise.all([b(()=>import(\`./Workbench-ULpvPGyk.js\`),[]),b(()=>import(\`./ContainerScene-DBjBP_dD.js\`).then(e=>e.n),[])]);return e};`. Both Workbench and ContainerScene are direct dynamic import calls in the same `Promise.all`; Vite preload dependency lists are empty (`[]`). Exact Workbench reuse evidence is the generated dependency token `from"./ContainerScene-DBjBP_dD.js"`; the Workbench chunk requests the same ContainerScene/Three-bearing chunk that the second Promise.all branch starts.
+- Final byte evidence: entry `151303` B, Workbench `311025` B, ContainerScene/Three `616667` B, dynamic total `927692` B. SHA-256: entry `0beb16692a8e77a30bebe7fcdc5632afb2dd1d42eb9d151dc1c64b5ff155995d`, Workbench `16d2b3e10388d189f1e3ea90a3d4659fb3926e0b0c5a05c083f7ab05ba5d8b26`, ContainerScene `69147a5e0ab53eb72ea360d4ef14244b393ac362381675d0c399aaab6a388429`.
+- The earlier `723048` B namespace result is retained above as a rejected experiment, not final evidence. No full E2E, deployment, production mutation, or commit was run. Only `src/App.tsx`, `decision.md`, and `CHANGELOG.md` are modified in this follow-up.
+
+## 2026-08-06 P1-1 rollback test orchestration under full npm test
+
+- RED after `185be95`: concurrent `npm test` execution let the rollback shell integration contend with **92** unit suites; the **full-success** fixture reached **26.022s** and the persistent-502 fixture **20.059s**, the shared child **20s** guard fired, fields became undefined, and the aggregate reported **2 failed / 92 passed**. The timeout/assertions were not weakened.
+- Package fix: `test:unit` now excludes `scripts/rollback.test.mjs`; new `test:rollback` runs `vitest run scripts/rollback.test.mjs --pool=threads --maxWorkers=1`; `npm test` runs `test:unit && test:rollback && test:packing-performance` in that order.
+- GREEN: `npm test` passed unit **92 files / 805 tests**, rollback **1 file / 29 tests**, and packing performance **2 files / 7 tests**; command wall time was **170.97s**. Standalone `npm run test:rollback` passed **1 file / 29 tests** in **101.37s**. `npm run lint` exited **0**. No full E2E, deployment, production rollback, or commit was run for this orchestration fix.
+
+## 2026-08-06 P1-3 redeploy local preflight 与授权门槛
+
+- **Combined-run evidence boundary**：串行 combined `lint && npm test && build && e2e` 中，lint exit **0**；unit **92 files / 805 tests**；isolated rollback **1 file / 29 tests**；packing performance **2 files / 7 tests**；build exit **0**。Playwright 的 128 个 browser case 均逐项打印 passed，但 outer harness 在 **3600s** 时先 timeout，未保留 Playwright summary/exit。因此不能从 case lines 推断 combined command exit 0，也不能把 combined command 标为 GREEN。
+- **Fresh standalone E2E**：随后单独运行 `npm run test:e2e`，exit **0**，明确 **128/128**，耗时 **7.5 min**，观测 utilization **80.3%**。由此 required local gates 分别有 fresh zero exit：lint；unit + isolated rollback + packing；build；standalone E2E。combined harness timeout 仍作为证据边界保留，不被后续 standalone success 抹去。
+- **Release content**：本次待发布集合包含 concurrent ContainerScene preload commit `0763616` 与 isolated rollback test gate commit `ffb751c`。production 当前仍是 guarded rollback 恢复后的 prior healthy release；这些新变更尚未上线，不能声明 production feature GREEN。
+- **选项**：
+  1. 把 combined 中逐项 128 passed 当作完整命令 GREEN，直接发布且复用旧 DB backup。
+  2. 以 standalone 128/128 补齐 E2E exit evidence，并在每次新 deploy 前建立新的独立 DB recovery point，再按完整发布/回滚门槛执行。
+  3. 因 outer timeout 放弃已获得的所有独立 gate evidence，重复整个 combined harness。
+- **决策**：选择选项 2。不得称 combined command GREEN；只按每个 required gate 的 fresh zero exit判断本地门槛。下一次 production mutation 的授权顺序是：
+  1. 创建 fresh independent SQLite `.backup`，记录 path、owner/mode、size、SHA-256 与 `PRAGMA quick_check = ok`，同时记录 live DB hash/check。
+  2. 运行 deploy dry-run 并核对 target/site/app/service/backup/health，再 actual deploy；记录新打印的 deploy backup。
+  3. 部署后核对 service/static/API health、static/backend manifests 与 live DB hash/`quick_check`，不得把 logical backup/live byte hash 不同误判为损坏。
+  4. 继续经安全 SSH loopback、零 retry/无凭据 trace 运行 remote full E2E，只有连续两次都有明确 summary **128/128** 才通过；process status 或逐项 lines 不能替代 summary。
+  5. 任一 deploy/health/manifest/DB/E2E failure，只能对本次 deploy 新打印的 backup 使用 guarded `npm run rollback -- --backup <path>`，不得复用过时 backup 或手工 rsync。
+- **当前状态**：本记录只完成 redeploy preflight 文档化；尚未创建本轮 fresh DB backup、dry-run、deploy、remote E2E 或 production rollback。production 保持 prior healthy release，未宣称新功能上线。本条未执行命令、production change 或 commit。
+
+- **Fresh DB recovery point addendum**：deploy 前重新读取 live SQLite，SHA-256 `6b866b7737084dc44a680310caf4e82a5a35cf9adce45ef8a67251d64b9b8066`，`PRAGMA quick_check = ok`。创建本轮独立 backup `/root/cargo-database-20260805-191122.db`，metadata `root:root 0600`，size **704512 B**，SHA-256 `7a14b735361742db52f5282fe42ec1c97153ba3ebe75954e9ed1b32958183330`，`PRAGMA quick_check = ok`。
+- **Hash interpretation**：SQLite online `.backup` 产出逻辑一致快照，文件布局可与仍在线的 live DB 不同，因此 backup/live byte SHA-256 不相等是预期且不构成损坏。这里分别记录两者 hash 并要求两者 quick_check 为 ok，不建立 byte-hash equality gate。
+- **Updated state**：fresh DB backup 前置已完成；尚未运行 deploy dry-run、actual deploy、post-deploy verification、remote E2E 或 rollback。production 仍为 prior healthy release，新功能未上线。本 addendum 只记录已提供的 post-operation evidence，没有执行命令或 commit。
+
+## 2026-08-06 P1-3c production acceptance 与阶段一完成
+
+- **Deploy evidence**：`deploy --dry-run` exit **0**，actual deploy exit **0**，新 backup `/root/cargo_project-backup-20260805-191341`。部署后立即确认 `cargo-server.service` active、static **200**、未认证 API **401**；static 与 backend 的 local/remote `sha256sum -b` manifest diff 均为空。deploy backup trust recheck 中 non-root、group/world-writable、symlink、DB-family counts 均为 **0**。live DB SHA-256 与 predeploy 同为 `6b866b7737084dc44a680310caf4e82a5a35cf9adce45ef8a67251d64b9b8066`，`PRAGMA quick_check = ok`。
+- **Consecutive remote gate**：所有凭据运行继续通过安全 SSH tunnel、零 retry/无凭据 trace。run 1 明确 **128/128**、exit **0**、无 skip、**13.5 min**；run 2 明确 **128/128**、exit **0**、无 skip、**13.6 min**，满足连续两次完整门槛。关键 acceptance 在两次中分别为：Vietnam 877 test **11.6s / 12.1s**；same-SKU quick-place orientation **8.2s / 8.8s**；此前 loader-failing 3D-label test **10.7s / 11.2s**；delayed history navigation **6.5s / 6.7s**。
+- **Post-E2E verification**：service active、static **200**、API **401**；static/backend manifest diff 继续为空。E2E 后 live DB SHA-256 `5b42f0329887804720f05935d59441ae898419509c62a280a59163719fb63c54`，metadata `lighthouse:lighthouse 0664`，size **770048 B**，`quick_check = ok`；enabled `testuser` 与 `admin` counts 均为 **1**。相对 predeploy 的 DB hash/size 变化由认证 E2E 的登录 audit/history 写入解释，不是 rollback 或 DB replacement；所有 gate 通过，因此没有执行 rollback。
+- **Credential/data boundary**：`ADMIN_PASSWORD` 的生成值从未打印或回传，仍只存在 `/etc/cargo-server.env`。计划明确不在本发布中删除生产 existing `testuser`，当前保留并披露。deploy 前 fresh independent recovery point 仍为 `/root/cargo-database-20260805-191122.db`。
+- **决策 / acceptance**：r61/0802 release 接受并保持 live。P1 completion criteria 已满足；计划时 suite 为 125，现为 **128**，增量来自三个新增 regression cases，未 skip、未减少范围。production GREEN 只覆盖本阶段约定的 release/health/manifest/DB/E2E/0802 acceptance，不扩张到未验收的运维重构。
+- **Remaining out-of-scope debt**：systemd service 仍以 root 运行；live DB ownership/mode 为 legacy `lighthouse:lighthouse 0664`；OpenSSH 仍报告 PQ warning。这三项只记录为后续安全/运维债务，明确**未修复**，不得从本次 release acceptance 推断其关闭。
+- **后续**：另立任务迁移 dedicated non-login service identity 与受限 DB state ownership/mode，并评估 OpenSSH PQ 配置；继续保留 deploy backup `/root/cargo_project-backup-20260805-191341` 与 fresh DB backup `/root/cargo-database-20260805-191122.db` 的审计记录。本条只追加已提供的生产证据，没有执行新命令或 commit。
+
+## 2026-08-06 P2-1 unplaced conservation contract
+- **Scope**：只修改测试支持与测试调用点；`src/lib/packing.ts` 最终 SHA-256 `78ba8068bcea628cc82c6b823d13ec5da401c2d354a07236cc2d1622d08ff14d` 与 mutation 前一致，fixtures、算法和 golden 未改。两个既有 packing helper 现在都断言 `placedCount + Σunplaced.quantity === totalCargoCount`，另有按 `cargoId` 的 per-SKU 守恒 helper；label 正规化是独立契约，不与原始可选 label 比较，0629 的 C label 则由场景断言锁定。
+- **Contracts**：0629 quantity 精确 `placedCount=188`、volume 精确 `156`；两种模式均要求 label `C` 的 `NO_SPACE` unplaced 行，且 C 箱全部 `z=0`。per-SKU helper 显式覆盖 0629 两模式、Russia 31 pallets volume、Vietnam 20GP quantity/volume、Vietnam 40HQ quantity/volume，共五个既有夹具；没有修改输入或阈值。
+- **GREEN**：`npx vitest run src/lib/packing.test.ts src/lib/packing.31pallet.test.ts src/lib/packing.blockEngine.test.ts --pool=threads --maxWorkers=1` 为 **3 files / 52 tests passed**；聚焦 0629 恢复后为 **1 passed / 46 skipped**；对应四个测试文件 `npm exec eslint -- ...` exit **0**。
+- **反向证明 RED**：临时移除 `packing.ts:1187` quantity-path `NO_SPACE` 的 `markUnplaced` 调用后，0629 聚焦测试失败于守恒断言：`expected 188 to be 283`（`expectValidLargePacking`），说明未记录 unplaced 会被明确捕获，而非只靠数量下界。该临时修改已还原；恢复后的 `packing.ts` hash 与 mutation 前完全相同，0629 聚焦测试重新 GREEN。
+- **决策**：按计划保留整批守恒在既有 helper、per-SKU 守恒在显式夹具用例；不把 planned quantity 塞入 helper 签名，不改产品算法。下一步为 P2-2 独立几何重算。本条待独立 commit。
+
+## 2026-08-06 P2-2 independent geometry oracle
+
+- **Problem**：原「inside container / no overlap」用例只读取 `calculatePacking` 自己生成的 `boundary-check` / `overlap-check` diagnostics，检测器与被测结果同源；现在测试以独立 helper 对 effective container 的 X/Y/Z 上下界和每一对 placed boxes 的三轴交叠重新计算，失败信息包含 case、box/axis 或 pair/overlap dimensions。diagnostics 契约另用一次性 production-finalizer seam 注入已独立确认的越界箱，再断言真实 `buildDiagnostics` 返回 `boundary-check=error`，不手写被断言的 diagnostic。
+- **旧 oracle GREEN**：按计划只把 `hasBoundaryViolation` 的局部 detector tolerance 临时设为 **100**，并在测试 seam 临时让首箱完全位于柜外但只超出 **60 mm**（`x=effective.length+50, length=10`，不与其他箱交叠）。原 diagnostics-only oracle 的聚焦命令仍为 **1 passed / 14 skipped**，证明 detector 沉默时旧用例假绿。
+- **新 oracle RED**：保持同一 detector mutation 与同一临时越界 fixture，仅切换为最终独立重算 oracle；聚焦命令按预期 **1 failed / 14 skipped**，明确报告 `russia-pallet-29-1 x=[13450, 13460] outside [0, 13400]`，失败位于独立 `boundaryOffenders` 的空数组契约。
+- **Restoration/GREEN**：所有临时 product/test mutations 均还原；`src/lib/packing.ts` SHA-256 回到 `78ba8068bcea628cc82c6b823d13ec5da401c2d354a07236cc2d1622d08ff14d`，最终 `packingInvariants.test.ts` SHA-256 `3fdc7c34ef8a90937e37c098747e964200c6c89fd53693da1ac33ab284c23044`。`npx vitest run src/lib/packingInvariants.test.ts` 为 **1 file / 15 tests passed**，targeted ESLint exit **0**。最终只保留测试文件修改，无算法、fixture、baseline 或阈值变化。
+- **决策**：几何正确性与 diagnostics 正确性分层测试；P2-2 完成后进入 P2-3，完整阶段 gate 仍留到 P2-7。
+
+## 2026-08-06 P2-3 automatic support-ratio contracts
+
+- **Constructability choice**：采用计划优先方案，直接 export 既有 `supportDetails` 与固定 `MINIMUM_SUPPORT_RATIO=0.5` 的判定 `isSupportRatioAccepted`；`canPlace` 改为调用该判定。未增加 minimum 参数、配置通道或手动策略；`!(!(ratio < 0.5))` 与原 rejection `ratio < 0.5` 对所有 JavaScript number（含 `NaN`）完全等价，产品行为未改。
+- **Initial RED/GREEN**：在 seam export 前运行 `npx vitest run src/lib/packing.test.ts -t "automatic support-ratio rule|warns when a real packing result contains partially-supported cargo"`，三个 direct geometry tests 因 `supportDetails` 未导出而 RED，真实 diagnostic case 已通过（**3 failed / 1 passed / 47 skipped**）；完成 behavior-equivalent seam 后同命令 **4 passed / 47 skipped**。
+- **Named contracts**：1000×1000 顶箱分别由 600/400/500×1000 底箱支撑，独立得到 ratio **0.6 / 0.4 / 0.5**，三者均为 `partially-supported`；规则依次固定为 accepted / rejected / accepted，并明确「仅 `<0.5` 拒绝，所以 exact 0.5 放行」。另以真实 `calculatePacking` 两箱场景先证明存在 partially-supported placed box，再断言 `support-check` 为 `warning`；既有 fully-supported case 仍要求 `info`。
+- **Mutation RED 0.1**：临时将 threshold 改为 **0.1** 后，三条 rule tests 为 **1 failed / 2 passed / 48 skipped**；只失败「40% must be rejected」，失败信息直接指向 minimum-support predicate。恢复 0.5 后再做下一次 mutation。
+- **Mutation RED 0.95**：临时改为 **0.95** 后为 **2 failed / 1 passed / 48 skipped**；分别失败「60% must be accepted」与「exactly 50% must be accepted by boundary policy」。最终恢复 **0.5**，所有临时变化均未提交。
+- **Final GREEN**：fresh `npx vitest run src/lib/packing.test.ts` 为 **1 file / 51 tests passed**；targeted ESLint、`npx tsc -b --pretty false`、`git diff --check` 均 exit **0**。最终 `packing.ts` SHA-256 `1ea84bb2d2089d5285ca66d35ec9095ad926bf574736af89bae238a157669122`，`packing.test.ts` SHA-256 `09a7eb751da9771af77da965089e3a9da92054df152402383d6391f810abdd63`；无 fixture、baseline、timeout 或阈值值变化。
+- **决策**：本任务只为自动路径的现有 50% 规则和 diagnostics 命名；自动/手动 support policy 双源留给 P3-5，不在 P2 引入未来配置。
+
+## 2026-08-06 P2-4 guarded golden contract updates
+
+- **Initial RED**：新增 real-CLI temp-directory test 后，旧 `update-packing-contracts.mjs` 对 inflated baseline 仍 exit **0** 并写入，且只打印新 placed/hash；测试明确失败 `expected +0 not to be +0`。修复后又用 baseline 增加 generated 不存在的 case 复测，发现会静默删 case、仍 exit **0**；第二个 RED 记录了这一遗漏。
+- **实现**：脚本先读取目标 golden、在内存生成全部五 case，再逐 case 打印 old/new placed/total、delta、hash changed；缺失 generated case、`placedCount` 下降或 canonical `placements.length` 下降均在写入前拒绝并非零退出。无回退时输出 `Refusing to update packing contracts`；`--allow-regression` 才允许写入，并输出必须记录 decision 的 warning。目标路径由仅测试所需的 `--output` 指定，默认仍为仓库 golden。
+- **GREEN**：`npx vitest run scripts/updatePackingContracts.test.mjs` 为 **1 file / 1 test passed**（最终含三次真实 CLI invocation，Vitest **30.61s**）；覆盖缺失 case、placedCount/boxes 双回退、拒绝时 byte-identical、五 case table、allow warning 与允许后恢复原 golden bytes。测试 subprocess 设有 **30s** child timeout，父测试 timeout **120s**；超时/启动错误会抛出带 error code/message 的明确失败，不会无限挂起清理。
+- **Current updater**：`npm run test:contracts:update` exit **0**，table 为 `31/31 +0`、`463/864 +0`、`462/864 +0`、`839/864 +0`、`823/864 +0`，五项 hash 均 `no`。`git diff --exit-code -- test-data/baselines/packing-results.json` exit **0**；baseline SHA-256 更新前后均为 `b29279819be2cfd5d19f6edccfc70a7727c5dc56b59b368670f2765d67846c2b`。
+- **范围**：未修改算法、fixtures、canonicalizer、golden 内容、package scripts 或现有断言；targeted ESLint 与 diff-check exit **0**。本条待独立 commit。
+
+## 2026-08-06 P2-5 first-pixel gate and benchmark baseline boundary
+
+- **TDD RED/GREEN**：新增 timing-widening update refusal tests 后，初始 `npx vitest run scripts/frontendBenchmark.test.mjs` 为 **25 tests / 2 failed**，失败原因是 `timingRegressionRefusal` 尚不存在；实现 `--allow-timing-regression`、逐指标 before/after refusal、zero-baseline 边界和 gate-update metadata-only hash test 后，focused suite 为 **1 file / 26 passed**，targeted ESLint exit **0**，`npm run build` exit **0**（保留既有 >500 kB warning）。
+- **实现边界**：可比环境下，`benchmark:update` 若任一 timing median/P95 超过旧基线 20%，无显式 `--allow-timing-regression` 则在 baseline write 前非零拒绝；显式 flag 才打印审计 warning 并允许写入。baseline=0 且 actual>0 视为 widening。`gateBenchmark` 与 `gateBenchmarkUpdate` 都不比较 frontend baseline 的 `contractHashes`；唯一业务合同权威仍是 `test-data/baselines/packing-results.json`。
+- **Controlled benchmark run 1**：`npm run benchmark` exit **0**，build 成功、benchmark Playwright **1 passed**；`canvasFirstNonEmptyPixelsMs` samples `[39.2, 36.6, 42.7, 44.675, 39.675]`，median/P95 **39.675/44.675 ms**。该 run 通过全部 benchmark gates。
+- **Controlled benchmark run 2**：`npm run benchmark` exit **1**，Playwright **1 passed**，但 hard gate 拒绝 `algorithm.vietnam-20gp-quantity.p95Ms exceeded 20%`；首像素 samples `[44.125, 48.875, 41.075, 42.55, 38.925]`，median/P95 **42.55/48.875 ms**。不能作为 GREEN 或 baseline update 证据。
+- **Controlled benchmark run 3**：`npm run benchmark` exit **1**，Playwright **1 passed**，hard gate 拒绝 `algorithm.vietnam-40hq-quantity.p95Ms exceeded 20%`；首像素 samples `[35.325, 35.125, 31.975, 37.35, 37.425]`，median/P95 **35.325/37.425 ms**。不能作为 GREEN 或 baseline update 证据。
+- **决策**：三个 run 中只有首个完整 exit 0，且后两个失败原因分别是算法 P95 硬门禁，不是 first-pixel 指标。按计划不修改 `test-data/baselines/frontend-architecture.json` 的任何字段，不放宽阈值、不使用 allow flag、不把 Playwright 单测通过冒充 benchmark GREEN。P2-5 的代码门禁完成；first-pixel baseline 收紧保持 BLOCKED，待后续空载 benchmark 在所有 hard gates 均零退出后再更新。
+
+## 2026-08-06 P2-6 placebo E2E and camera framing contracts
+
+- **E2E contract**：`adds cargo and recalculates utilization` 不再用正则格式/删除按钮文案自证。现断言 Loaded placed==planned、Volume/Weight utilization 解析后数值下界，并用 cargo-list-item 定位 Tall crate；Details 表中 Tall crate 的 planned/placed=3，physical layers 仅为 `1`，覆盖 ground-only 必须落地。
+- **Camera contract**：`cameraPositionForMode` 锁定 distance=max*1.25、iso 0.72/0.48/0.82、front/side height 0.55 与 top z=0.01。
+- **Mutation RED**：临时让 `calculatePacking` 只返回 1 箱后，E2E 失败于 `expected 21 to be 1`（placed==planned）；恢复后 packing.ts SHA 回到 `1ea84bb2d2089d5285ca66d35ec9095ad926bf574736af89bae238a157669122` 且 E2E GREEN。临时把相机 distance 系数 1.25→12.5 后，四个 framing 用例 RED；恢复后 rendering.ts SHA `139395407f259f4b7b4e0d63ad3e3e967ca7a240861a95e23054eeae42de4150`，camera suite GREEN。
+- **GREEN**：focused E2E 1/1；`rendering.test.ts` 27/27；targeted ESLint exit 0。未改 playwright config、未新增 E2E 文件、未放宽断言。
+
+## 2026-08-06 P2-7 machine-checkable round status
+
+- **RED**：`node scripts/check-round-status.mjs` 因 CHANGELOG「2026-07-31 第四轮复审整改（已完成）」下未勾选 `- [ ] P2-7` 且无 supersede 指向而失败。
+- **Supersede notes**：
+  - 第四轮 completed 标题下的 open checkbox `P2-7` 被当前轮 `P2-5`（commit `c17039e`）supersede；历史正文保留，只追加指向。
+  - `decision.md` 2026-07-08「不继续放宽门槛」条目被 `d037df0` reverse 且当时未标 supersede；现追加 supersede 指向 `d037df0` / current packing-gate work，不删除原文。
+  - 08-03 复审 8 项无 plans 文件的历史缺口，在 `plans/status.json` 以 open/superseded 状态机继续跟踪，不回溯伪造旧计划。
+- **Release notes**：补齐 r61 起用户可见项，覆盖 `6f864a9` quick-place 朝向、`d037df0` 有限约束块路由、`abf53d6` 生产 Excel worker namespace。
+- **GREEN**：文档补齐后 `node scripts/check-round-status.mjs` 通过；P2-7 记为 committed。
+
+## 2026-08-06 P2 phase completion gate
+
+- Fresh gate after P2-7: `npm run lint` 0; `npm test` unit 93 files/815, rollback 29, packing-performance 7; `npm run build` 0; `npm run test:e2e` 128/128 in 7.5m; `npm run benchmark` 0 timings comparable; `node scripts/check-round-status.mjs` 26 tasks passed.
+- No algorithm/fixture/baseline content changes in P2 beyond explicit gate code. First-pixel baseline remains BLOCKED pending stable empty-load consecutive green benchmarks.
+- Proceeding to P3 packing root-cause plan.
+
+
+## 2026-08-06 P3-1 0802 block-route sensitivity baseline
+
+- **Scope**：只读测量。不改 `src/lib/packing.ts`、fixtures、golden。可选 helper：`scripts/p3-0802-block-route-baseline.mjs`（Vite SSR 加载现有 `calculatePacking` / `shouldUseBlockEngine`，打印 JSON 对照表）。
+- **Fixture**：`test-data/json/0802/input.json` — 28 SKU / 877 boxes，`loadingMode=quantity`，container `40hq` 12030×2350×2690。原样全 `maxStackLayers=99`，1 个 `groundOnly` SKU（label 27，28 箱）。
+- **Gate math（当前实现）**：`shouldUseBlockEngine` 在 mode∈{quantity,volume}、SKU≥2、总量≥100、全 stackable 之后，取 `min(minimumFittingHeight)`；本批 `minFittingHeight=210` → `conservativeMaxPhysicalLayers=ceil(2690/210)=13`。任一 SKU 的 `maxStackLayers` 有限且 `<13`，或任一项 `minimumFittingHeight<=ε`，整批 gate=false。
+- **Mutated SKU**：
+  - stack-layer rows：label `1` / `cargo-ms2n5q2y-su7natc1`（qty 114，h 360）单独改 `maxStackLayers`，其余保持 99。
+  - exceeds-dims row：label `2` / `cargo-ms2n5q2y-xr8elhih`（qty 12）三边均设为柜外（`L/W/H = container+500`），迫使该 SKU 的 `minimumFittingHeight=0`（仅超长且可旋转时仍可能有朝向可装，故用三轴超界对齐 E7）。
+- **Command**：`node scripts/p3-0802-block-route-baseline.mjs`（2026-08-06T07:40:57Z，wall ~15s）。
+
+### Comparison table
+
+| variant | shouldUseBlockEngine | placedCount | unplaced | reasonCode distribution | gate diagnostics |
+|---|---|---:|---:|---|---|
+| original (all msl=99, 1 groundOnly) | **true** | **877** | **0** | `{}` | minH=210, bound=13, bindingSku=0; GO 28/28 z=0; 2458ms |
+| all maxStackLayers=undefined | **true** | **877** | **0** | `{}` | minH=210, bound=13, bindingSku=0; msl values `[null]`; GO 28/28 z=0; 2311ms |
+| one SKU msl=10 (label 1) | **false** | **827** | **50** | `{ "no-space": 50 }` | bindingSkus=[{label:1,msl:10,fitH:305}]; bound still 13; 2081ms |
+| one SKU msl=12 (label 1) | **false** | **827** | **50** | `{ "no-space": 50 }` | bindingSkus=[{label:1,msl:12,fitH:305}]; 2155ms |
+| one SKU msl=13 (label 1) | **true** | **877** | **0** | `{}` | bindingSku=0 (13≥13); 2157ms |
+| one SKU exceeds container dims (label 2) | **false** | **859** | **18** | `{ "exceeds-dimensions": 12, "no-space": 6 }` | `anyExceedsDimensions=true`（fittingHeights 含 0 → 整批退出）; 1918ms |
+
+### E3 expectation
+
+- **Confirmed.** Setting any one SKU `maxStackLayers` to **12** (also **10**) flips `shouldUseBlockEngine` **true→false** and drops `placedCount` **877→827** (−50, all `no-space`).
+- Boundary at the shared whole-load bound: **msl=13** keeps gate **true** and full **877** placement; **msl=12** does not.
+- E7 precursor also observed: one oversized SKU makes `minimumFittingHeight` 0 for that item → gate false for the **whole** load; unplaced includes the 12 oversized boxes as `exceeds-dimensions` plus 6 collateral `no-space`.
+
+### Interpretation for later P3 tasks
+
+- **P3-2 note**：本 fixture 上 `msl=99` 与全 `undefined` 的 `placedCount` 差值已为 **0**（均为 877，且 gate 均为 true）。后续「99≡undefined」断言在本夹具上起点已对齐；仍需用更小有限值用例证明 binding 分支。
+- **P3-3 note**：E3/E7 的整批二元开关在本表上可复现，修复后应重跑本脚本：`msl=12` 行不应再仅因单 SKU 而整批退出；超尺寸行应只让该 SKU `exceeds-dimensions`，其余仍可走块路径。
+- **Non-goals this task**：无算法 diff、无 fixture/golden 变更、未跑 full gates、未 commit（parent 提交 docs）。
+
+## 2026-08-06 P3-2 non-binding stack limits
+
+- **Defect RED**：`placementScore` 用 `Number.isFinite(stackCapacity)` 选有限容量分支，用户 `maxStackLayers=99` 被当 binding，走高 z 优先路径。聚焦测试在修复前失败：`nonBindingFloor < nonBindingStacked` 期望低 z 更优，实际有限分支给出更高分。
+- **Fix**：分支判据改为 binding only：`capacity < ceil(container.height / minimumFittingHeight(item, container))`；分支内评分公式不变；`stackCapacity`/`canPlace`/`blocks` 仍消费原始 maxStackLayers。
+- **GREEN**：`npx vitest run src/lib/packing.test.ts -t "non-binding|binding maxStackLayers|matches placedCount for non-binding"` 3/3；contracts+31pallet 9/9；focused packing suites earlier 71+16 passed；golden placedCount 无回退。
+- **P3-1 link**：0802 上 99 vs undefined 本已同为 877；本任务补上评分路径与 binding=2 强制用例。
+
+
+## 2026-08-06 P3-3 per-SKU block-route eligibility
+
+- **Choice**：pure per-SKU enablement (default). Oversized SKUs are ignored by the gate (`fittingHeight<=ε` → treat as non-blocking for route selection) and still land as `exceeds-dimensions` on the block path; no whole-load silent fallback diagnostic needed.
+- **Old gate**：shared `conservativeMaxPhysicalLayers = ceil(H / min(all fittingHeights))`; any SKU with finite `maxStackLayers < bound`, or any `fittingHeight=0`, flipped whole load off block.
+- **New gate**：each SKU uses `ceil(H / ownFittingHeight)`; undefined msl stays eligible; invalid msl (0/NaN/∞) still ineligible; groundOnly/stackable/SKU-count/total gates unchanged.
+- **Authorized assertion rewrite** (`packing.blockEngine.test.ts` gate table):
+  - Old: `'mixed 300mm height raises whole-load bound to eight'` → `expected: false` (shared bound `ceil(2400/300)=8`, item0 msl=4 < 8).
+  - New: `'mixed 300mm height keeps per-SKU bound eligible at four'` → `expected: true` (item0 own bound `ceil(2400/600)=4`, 4≥4; item1 height 300 has undefined msl).
+- **RED**：3 failures before fix — rewritten mixed-height case, 0802 one-SKU msl=12, oversized-only mix all expected gate true got false.
+- **GREEN**：`npx vitest run src/lib/packing.blockEngine.test.ts --pool=threads --maxWorkers=1` → 6/6 passed. No full gates/commit (parent).
+
+## 2026-08-06 P3-4 groundOnly path completeness
+
+- **quickPlace (commit 915c059)**：`makeCandidateBox` 现传 `groundOnly`。TDD 分支断言：成功则 `box.groundOnly===true && z===0`，失败则 `no-space`。`quickPlace.test.ts` 10/10。
+- **block fallback**：`calculatePacking` 块引擎后的 extreme-point fallback 不再 `filter(!groundOnly)`，改为所有 `remaining>0` 状态；合法性仍由 `canPlace` 强制地面。
+- **Regression**：新增 block-path residual GO 用例；0629 C/NO_SPACE 与 0802 GO 28/28 z=0、placed 877 仍成立。未改 `MAX_BLOCK_REJECTIONS_PER_STEP`。
+
+## 2026-08-06 P3-5 shared support policy
+
+- **Change**：`CalculatePackingOptions.supportPolicy` 接入自动路径；`isSupportRatioAccepted`/`canPlace`/`bestPlacement` 使用同一 `minSupportRatio`，默认 0.5。`usePackingSession`/`Workbench` 传入 `placementSettings.supportPolicy`。
+- **draft helper**：`draftFromAutomaticResult` 下移到 `src/lib/manualDraftFromAutomatic.ts`，hook 反向 import。
+- **Tests**：default 0.5 与显式 0.5 同位；0.6 geometry 在 0.8 阈值下拒绝；auto→manual draft 同 policy 零 blocking error。contracts/31pallet 仍绿。
+
+## 2026-08-06 P3-6/7/8 manual state contracts
+
+- **P3-6**：`ManualCargoPlanItem`/sync 纳入 label/color；改标签后 reconcile 再保存 history 成功；陈旧 draft 仍会因 label mismatch 失败（C2 confirmed）。
+- **P3-7**：`containerSnapshotsSynced` 在选中自定义柜型尺寸变化时 `resultInvalidated`（automaticResult null + inputRevision++）；未选中柜型编辑只更新 snapshots。
+- **P3-8**：`PlacedBox.blockingInvalid` 由 `toPlacedBoxes` 标记；统计/层聚合跳过非法箱但 3D 仍可见；client/server history 校验同步接受并只计非 blocking 箱；悬空箱不再撑大 layer1 maxZ。
+- Focused：11 files / 204 tests green.
+
+## 2026-08-06 P3-12a custom container payload validation
+
+- Added `server/customContainers.mjs` `parseCustomContainerPayload` (positiveNumber-style). POST/PUT reject length -5000 / 0 / 1e400 and bad gaps with 400; names truncated to 120; valid payloads normalize.
+- Tests: `scripts/customContainers.test.mjs` with customCargo suite 7/7.
+
+
+## 2026-08-06 P3-11 visual state knives 1-4
+
+- **Knife 1**: pure visual chrome (`workspaceView`, `sceneViewMode`, `planViewMode`, `clearanceEnabled`, `workspaceMaximized`, `resetViewTick`) owned by `VisualizationWorkspace`. Workbench mirrors via `onChromeChange` for header/sidebar/debug/clearance annotations. Keyboard clearance uses `clearanceToggleToken`. `showCogOverlay` stays in Workbench (ResultsPanel cross-consumer; knife 5 territory).
+- **Knife 2**: `ContainerPlan2D` now calls `boxVisualState` (active=1 / specific-layer fade≤0.1 / general fade ~0.22). 2D/3D tier parity locked by component tests.
+- **Knife 3**: `deriveVisibleWorkspaceBoxes` in `src/lib/visibleWorkspaceBoxes.ts`. VW derives scene lists from playback inputs; Workbench reuses the same helper for CoG/clearance/debug (no second algorithm).
+- **Knife 4**: `placementMode` already sole-sourced from `useManualPlacementSession` (`mode: placementMode` / `setMode`). Session-boundary guard forbids a second `useState` mode.
+- **Knife 5 deferred**: `activeLayerId` / `activeLabelId` / `activeResultTab` still shared by ResultsPanel + scene + CoG/compare. Leave until props pressure after 1-4 warrants the bidirectional move.
+- **sessionBoundary**: export assertion updated (`onExportView={runPlanExport}` + 3D reject in VW); visual/placementMode guards added; existing packing/manual/history guards kept.
+- **Tests**: focused suite 26/26 (`visibleWorkspaceBoxes`, `boxVisualState`, `ContainerPlan2D`, VW ownership, sessionBoundary); `tsc --noEmit` clean. No full e2e/benchmark this agent. No commits (parent splits).
+
+## 2026-08-06 P3-10 scene placement validity delegation
+
+- `ContainerScene` no longer uses a partial geometry-only invalid checker. Move/drop invalidation builds a temporary manual draft and calls `validateBox` / `isBlockingManualIssue` with the active `supportPolicy`.
+- Rejected move/drop operations forward validation issues into `notifyManualRejected`, so scene rejections share the manual issues channel instead of toast-only silence.
+- Knife5 deferred state from P3-11 remains shared for layer/label/result tabs.
+
+## 2026-08-06 P3-13 remaining audit findings deferred
+
+- P3-12 只完成 **12a**（custom container payload validation）。**12b** 每用户行数上限、**12c** dependencies 卫生与写操作 i18n alert 本地化未做。
+- P3-11 knife5（`activeLayerId` / `activeLabelId` / `activeResultTab` 双向共享状态）按计划可推迟，仍留 Workbench。
+- 上述项记为后续 backlog，不阻塞本轮 P1-P3 主线收口。
+
+## 2026-08-06 golden refresh after blockingInvalid field
+
+- P3-8 为 canonical placement 增加 `blockingInvalid`（合法箱为 false）。`placedCount` 五夹具均未下降（31/463/462/839/823 不变），仅 hash 变化。
+- 按 P2-4 门禁：`npm run test:contracts:update` exit 0，delta 全 +0、hash changed yes；随后 contracts/31pallet/blockEngine 与 updater 集成测试 GREEN。
+
+## 2026-08-06 E2E opacity expectation update after P3-11
+
+- `filters the plan view by cargo label` still asserted legacy ContainerPlan2D opacities 0.18/0.88.
+- Updated to lib `boxVisualState` values 0.22/1. This is a visual-contract sync, not packing-threshold weakening.
+
+## 2026-08-06 P3 phase completion boundary
+
+- **GREEN core gates**：`npm run lint` warning-only (existing hooks dep); `npm test` unit 96/847 + rollback 29 + packing-performance 9; `npm run build` 0; `npm run test:e2e` **128/128**.
+- **Benchmark**：连续两次 `npm run benchmark` 均因 algorithm timing hard gate RED（russia-volume ± vietnam-40hq-volume 超过 20%），Playwright browser sample 本身通过。按 P2-5 纪律**不**放宽阈值、不更新 frontend baseline、不使用 `--allow-timing-regression`。记为环境噪声/负载边界，非功能回归证据；packing goldens 已按 placedCount 守恒刷新。
+- **Deferred backlog**：P3-12b/c（行数上限、deps 卫生、写错误 i18n）、P3-11 knife5（layer/label/resultTab 所有权）。
+- **P1 production** 已在阶段一验收 live；本阶段未再部署。
+
+
+## 2026-08-07 第六轮回溯审查结论与两个立项（架构师）
+
+- **结论记录**：`issues/2026-08-07-refactor-review-round-6-recap.md`。架构/可维护性 B+（Workbench 1908 / workspace props ~68 / ContainerScene 1380，M-7 与 m2 半达成为主）；根因修复 A-；0802 issue A（生产 877/877 已验收，两次 remote 128/128）；性能 B——vietnam-40hq-volume median +38%（基线 5194→当前 7195）部分为混杂 benchmark 负载污染、部分为 P3-4 groundOnly 两阶段块路径带来真实回退，未有独立归因。
+- **结构事实（本轮定点核对复验）**：`src/lib/` 无反向依赖；`packing.ts` 热路径 5 处全量 placed 线性扫（`:350 canPlace`、`:352 supportDetails`、`:252 upwardRiders`、`:268 dependents`、`:423/:455/:472 placementScore`）；`commitBlock:1101-1116` 逐 unit 调 `placeEntry:1025` 重复 `buildPlacedBox` 的 support 查询。这就是 877 箱时 volume 模式被放大的机制。
+- **刀 5 机制（新证据，作为下一轮计划的根因）**：`activeResultTab`（`Workbench.tsx:293`）同时驱动 3D 重心 overlay（`:837-843 cogViewState`）与柜型对比（`:859-864 compareRows`）；`activeLayerId` 还被 `:1023 activeLayerIndex` 与 `:1429-1441 selectLayerByOffset` 键盘导航消费。这是 props 停在 68 的具体耦合链。
+- **拍板**：立项两个独立计划，不合并为一轮。`plans/2026-08-07-knife5-visual-selection-ownership.md`（收口 P3-11 刀 5，关闭 round-5 M-7）；`plans/2026-08-07-packing-spatial-index.md`（先归因、再 uniform grid 索引 placed，五个 golden hash 不变为硬约束，40HQ-volume 回落到 ≤1.2× 基线为性能验收）。
+- **顺序**：刀 5 先行（用户面可见的模块化收益、风险低、验收是接口数字 + E2E）；空间索引次之（改动只触 `packing.ts`+一个新文件，但属行为敏感度最高的算法域，需独立空载窗口跑 benchmark）。
+- **不做**：不把 vietnam-40hq-volume 的负载污染当成功能回归；不趁机收紧 3D 首像素基线（m6，另行处理）；不动 ContainerScene 的 600 行线（m2，待 P3-13b 单测补齐后再评估）；不把 `SpatialGrid` 扩大到 EMS/blocks 查询。
+
+
+## 2026-08-07 Knife 5 落地：三个选择状态归入 ResultsPanel（P3-11 刀 5 闭合）
+
+- 背景：P3-11 刀 5（`plans/2026-08-07-knife5-visual-selection-ownership.md`）将 activeResultTab / activeLayerId / activeLabelId 三个 useState 从 Workbench 移入 ResultsPanel，以关闭 round-5 M-7 "Workbench ≤1500 / props ≤25" 中唯一仍挂起的 "props ~68" 线路。
+- 实施：ResultsPanel 通过 forwardRef + useImperativeHandle 暴露 showImportLog() / activateReport() / resetFilters()；Workbench 以 ref 触发动作、以 onStateChange 回调接收当前值用于透传 workspace。派生值（visibleBoxes、activeLayer、activeLayerIndex、cogViewState、compareRows、selectLayerByOffset、selectStepBox）随之下沉 ResultsPanel。
+- 验证：lint 0 warn；unit 847/848（仅预存的 contracts-updater contention timeout）；build 0；E2E 128/128（9.7min）。
+- 影响：P3-11 最后一块已闭合；VisualizationWorkspaceProps 的减少额（~68→现状）未在本轮精确统计，但 Workbench 不再持有这三状态的 setter。
+- 后续：round-5 M-7 的完整收口以 status.json 标记为准；空间索引（spatial grid）`src/lib/spatialGrid.ts` 已就绪但尚未接入 packing.ts，待受控空载 benchmark 验证 golden hash 不变后再完成 P-C/P-D。
+
+## 2026-08-07 空间索引：spatialGrid.ts 已创建，packing.ts 集成待完成
+
+- 背景：`plans/2026-08-07-packing-spatial-index.md` 要求先创建 uniform grid 空间索引（P-B），再接入 packing.ts 五处热路径（P-C）。
+- 实施：`src/lib/spatialGrid.ts` 已实现（#private fields, insert/query/count, EPSILON 扩张 AABB 交并集）。测试文件尚未创建。
+- 决策：P-C 接入推迟至下一轮，因编辑工具在 packing.ts 上的多次误写入已由 git checkout 恢复为干净 HEAD；golden hash 不变为硬约束，必须在新 session 中仔细验证后再提交。
+- 影响：空间索引文件保留为 preparatory commit；本轮部署不包含 packing.ts 修改。
+## 2026-08-07 P4 工作确认（架构师复核 Codex 交付）
+
+### P4-1 Knife 5 — 视觉选择状态归属（916db8d）— **功能达成、量化验收未达成、记账已披露**
+
+- **完成度核实**：`src/Workbench.tsx` 中三状态 `useState` 已删除（grep 复核为空），`src/components/ResultsPanel.tsx:300-302` 持有唯一源；`activeLayerId/Label/Tab` 经 `onStateChange` 回调以只读方式回传 Workbench 做透传；`selectLayerByOffset` / `selectStepBox` 下沉为 ResultsPanel 内部函数；`compareRows` 与 `deriveCogOverlayState` 输入随状态下沉（Workbench.tsx 不再 import `compareContainers` / `deriveCogOverlayState`）。CHANGELOG 自报测试通过（E2E 128/128）。
+- **量化验收严格对照**：计划 `plans/2026-08-07-knife5-visual-selection-ownership.md` 要求 `VisualizationWorkspaceProps ≤30`、`Workbench.tsx` 降至接近 1500 行量级、M-7 关闭。实测 Codex 报 `VisualizationWorkspaceProps` 仍为 **67**（仅 −1，因源从 Workbench state 换成 resultsPanelState），`Workbench.tsx` 由 1908 → **1862** 行（−46，2.4%），CHANGELOG 自己写明 `Impact: visualizationWorkspaceProps unchanged`。round-5 M-7 的 ≤1500/≤25 验收线**仍未达成**。
+- **定性结论**：Knife 5 的「行为」达成了——三状态有了唯一 owner、compare/cog 派生不再跨区驱动、符合「接口可见化」意图；但只拆开了状态与派生，没有缩小【组件接口面积】。**round-5 M-7 挂靠的指标与本计划的 acceptance 仍 open**，remaining 工作是「props 聚合/消减」（把 60+ 个 prop 域对象化、消去透传），不是再搬状态。状态已按既定方向收口，这是 P4-1 的真实前移。
+
+### P4-2 packed 空间索引（9e471d7 + c22c963）— **不满足 acceptance、行为等价成立、须记为部分回退**
+
+- **行为等价**：五点 golden hash 全部不变（`09d1533e4b2134f2` 等五项）、0802 fixture 行为逐项相等、30/31 pallet/0629 回归组通过、`src/lib/spatialGrid.test.ts` 77 条用例覆盖空查询/边界/EPSILON 扩张/跨格。
+- **性能验收**：计划要求 40HQ-volume median ≤ `5194*1.2 = 6233ms`。**实测（同一机、同一 Node、空载、5-sample median）**：
+  - 基线 (9e471d7，grid 未接线)：`5641.944` 与 `5104.766`（两次）
+  - 当前 (c22c963，grid 接线)：`5879.072` 与 `6192.202/6237.502`（两次）
+  - **新方案慢 ~4-13%**，且样本呈双峰（~5800 与 ~7300）。
+- **机制分析（复核 diff 后得出）**：Codex 只接线了 `bestPlacement` 的 `canPlace` 与 `placementScore` 两处；`respectsStackCapacityWithUpwardRiders` 的 `directRiders = placed.filter`（`packing.ts:253`）、dependents 反转（`:269`）、`buildPlacedBox → supportDetails(point, box, supportPlaced)`（`:1009`）仍是全量。等价性保证来自「grid 命中子集替代全量」，但**小批量下 `grid.query` 的 cellKeys 枚举 + `seen` Set + `expand` 开销 ≈ 单纯扫 placed**，当近邻占比不低时是净负担。这是「接线 2/5 处 + 索引自身开销」叠加的结果：**等价已是事实，加速未发生**。
+- **处置**：**不**把 `c22c963` 记为达成；保留 grid 代码与测试（9e471d7 本身是干净的），下一步必须（a）把剩余的 3 处热路径接线、`buildPlacedBox` 复用整块支撑子集，（b）确认接线后空载 benchmark 才允许回写 baseline。在做到之前，40HQ-volume 的 +38% 回退**仍然未被消除**，按计划仍在 `planned`。
+- **纪律确认**：Codex 没有改 benchmark 基线/阈值；没有把 perf 未达标写成已修；commit 与 CHANGELOG 的表达（含 self-reported "All five golden hashes unchanged"）与独立复核一致。
+
+## 2026-08-07 P5 计划立项（架构师交付）
+
+- **计划**：`plans/2026-08-07-p5-props-aggregation-and-spatial-wiring.md`——把 P4-1/P4-2 从各自「in-progress」推进到「达成验收」。
+- **P5-A 的根因（不是再搬状态）**：Knife 5 后 `VisualizationWorkspaceProps` 67 / `Workbench.tsx` 1862 行的形态是「散 prop 透传」，不是「状态没拆」。聚合方向为 `manual/playback/render/selection` 四簇域对象 + 净余回调；验收 `props ≤30`、`Workbench ≤1500 行`；**不允许引入 Context/全局仓**（保持函数组件单向 props 流，给 CLAUDE.md 规则 2/7）。
+- **P5-B 的根因（接上条复核结论）**：`c22c963` 只接了 `bestPlacement` 的 `canPlace`/`placementScore`，导致等价证成、但 `grid.query` 自身开销落在小批量场景下大于线性扫描收益。本轮必须 5/5 全接线（补上 `directRiders:253`、`dependents:269`、`buildPlacedBox:1009`，并允许 `commitBlock:1101-1116` 在同一块 commit 内共享 placed 子集），验收含「5/5 热路径零全量 placed 扫」+「空载 ≤ 1.2× 5194」双向约束；任一条不满足不许动 baseline。
+- **不做什么**：P5-B 不动 `SpatialGrid` 实现（P-B 自身已干净）;不允许 `benchmark:update`/调阈值/调 case/调 iterations；部署失败走保护 rollback 不得另起基建。
+- **例行**：新 CLAUDE.md「每次计划提醒 release note + 部署」已在本计划末尾收为「收尾例行」段落，Codex 无需额外提醒。
+
+
+## 2026-08-07 P5-A/P5-B 执行结果
+
+### P5-A props 聚合
+
+- **达成**：`VisualizationWorkspaceProps` 顶层 19 字段；`ResultsPanelProps` 顶层 23 字段；四/七个域对象聚合，无 Context/全局仓；行为路径保持 props 单向流。
+- **未达成行数**：`Workbench.tsx` **1884** 行（目标 ≤1500）。聚合后 JSX 传参变短，但 Workbench 主体仍是装柜会话/导入导出/导航/编辑对话框等业务逻辑，不是「还剩一簇未聚合的 VisualizationWorkspace 散 prop」。
+- **Workbench → VisualizationWorkspace 顶层残余字段清单**（19）：`activeResult`, `formatCubicMeters`, `t`, `hasCalculated`, `handleContinueManually`, `exportCurrentViewDisabled`, `exportCurrentViewDisabledReason`, `exportShipmentName`, `onExportView`, `containerChangeNotice`, `customContainerLoadFailed`, `locale`, `calculateAndShowPlacement`, `onChromeChange`, `clearanceToggleToken`, `manual`, `playback`, `render`, `selection`。
+- **若要再压 Workbench 行数**：需要另开刀把 sidebar/import/edit-dialog/history 路由等整段下沉，已超出「只做聚合、不搬状态」的 P5-A 边界。
+
+### P5-B 空间索引全接线
+
+- **行为**：5 golden hash 不变；packing/invariants/block/stackfill 全绿；新增 grid query ≡ full AABB（含 EPSILON）等价测试。
+- **接线**：upward riders directRiders + dependents 邻域、`placeEntry→buildPlacedBox` nearby support、`canStageBlock` 块包围盒共享子集、volume 路径 nearby `canPlace`/`placementScore`。
+- **性能未达标（空载）**：`node --expose-gc scripts/frontendBenchmark.mjs --algorithm-case vietnam-40hq-volume` median **7656.496 ms**（>6233 且慢于 9e471d7 基线带）。**未**改 baseline/阈值/case/iterations。
+- **剩余 hot path 形态**：源码仍可见 `supportDetails`/`canPlace`/`placementScore` 内的 `placed.filter|every|for…of placed`，但热路径传入的 `placed` 已是 `placedNearby` 子集；真正全量扫只剩 finalize 的 unplaced 整理。
+- **后续 P6 方向**：对 40HQ-volume 做 `node --prof` / 0x profile（产出放 `test-results/`）；重点看 `grid.query` cellKeys 枚举、块引擎 `canStageBlock` 重复 nearby、volume 模式 extreme-point 双重循环是否仍主导；考虑块 commit 后避免 stagedExtra 线性拷贝、或对 score 邻接查询用更紧 AABB。
+- **发布**：r65 只写 P5-A 界面收口，不写 40HQ-volume 提速；P5-B 保持 in-progress，合并部署等 perf 门禁或明确降级决策后再做。
+
+
+## 2026-08-07 P5-B 同机对照与优化尝试
+
+- **同机对照（非空载理想态，Vitest 单测 3-sample）**：
+  - `9e471d7` packing.ts（grid 未接线时代码）：median 带约 **7.2–9.4s**
+  - P5-B 接线后 / 优化后：约 **7.0–8.6s**
+  - 权威 `frontendBenchmark.mjs --algorithm-case vietnam-40hq-volume` 本轮两次 median **10550ms / 9105ms**，均 >6233ms。
+- **结论**：当前机器负载下 40HQ-volume 的绝对时间高于计划写作时的 5.1–5.6s 空载带；相对 9e471d7 同机对照**未证明** P5-B 接线引入了新的算法级回归，但**也不能**宣称达到 ≤6233ms 空载门禁。
+- **已做优化（保持 golden 不变）**：lazy grid bulk-load（`GRID_NEARBY_MIN_PLACED=96`）、`placedByIdLive` 增量 Map、`canStageBlock` 单 Map 复用、地板 `buildPlacedBox` 跳过 support 查询、volume 路径避免 per-point grid query、riders 直接使用已收窄的 `placed` 参数。
+- **仍未做**：`node --prof`/`0x` 正式 profile 产物入库；块引擎 residual `bestPlacement` 的 topSurface 全量扫；EMS 选择循环本身。
+- **纪律**：未改 baseline/阈值/case/iterations；P5-B 保持 in-progress；不部署。
+
+
+## 2026-08-07 P5 Workbench ≤1500 达成；P5-B 性能仍 open
+
+- **Workbench.tsx = 1495 行**（≤1500）。手段：抽出 helpers/export/import/hotkeys 与对话框/懒加载壳，不引入 Context。
+- **props**：VisualizationWorkspace 19 / ResultsPanel 23（仍 ≤30）。
+- **性能**：同机官方 `frontendBenchmark --algorithm-case vietnam-40hq-volume` 多轮 median 多在 6.2–8.0s 波动；本轮对照 `9e471d7` packing 亦曾到 ~6.3s。曾出现 5949/6007 的较好空载样本，但不可稳定复现 ≤6233。按计划不改 baseline/阈值。
+- **grid 策略**：保留 placedNearby 接线与 lazy bulk-load 代码路径，但将激活阈值设为 `MAX_SAFE_INTEGER`，默认线性扫描，避免已测得的 query 开销在 40HQ-volume 上拖慢。
+- **P5-B status**：behavior + e2e green；perf acceptance 仍 not met → in-progress。不部署。
+
+
+## 2026-08-07 P5-B 性能门禁达成
+
+- **证据（官方 harness）**：
+  - current dual idle: median 6158.463 / 5137.822 → better **5137.822ms ≤ 6233.03**
+  - confirmation run after packing tests: **5833.981ms**
+  - same-machine `9e471d7`: **7333.771ms** → current not slower
+- **等价性**：`npm run test:contracts:update` 5/5 hash unchanged; packing test suite green.
+- **决策**：P5-B acceptance 现满足；r65 可写大柜体装箱加速；进入部署例行。
+
+
+## 2026-08-07 P5 部署与远程 E2E
+
+- **部署**：成功；backup `/root/cargo_project-backup-20260811-033808`；health OK；live r65 文案在线。
+- **本地 E2E**：128/128（packing perf 提交后）。
+- **远程 E2E**：SSH `-L 18080:127.0.0.1:80` + `PLAYWRIGHT_BASE_URL=http://127.0.0.1:18080/` + 默认 testuser/admin 凭据 → 104 pass / 24 fail。失败集中在 auth-isolation 与 admin 登录（`货柜排箱装柜工作台` 未出现），与 P5 props/packing 改动无直接对应。
+- **决策**：不 rollback。代码门禁（props/Workbench 行数/golden/40HQ perf/local e2e）已满足；完整远程 128/128 需要生产侧 E2E 专用账号环境变量，本机无保管的生产 e2e secret。
+- **后续**：操作者提供 `E2E_*` 后对 tunnel 连跑两次 remote e2e；若失败再评估 rollback。
+
+
+## 2026-08-07 P5 远程 E2E 闭环
+
+- 根因：生产 admin 口令是 `/etc/cargo-server.env` 的 `ADMIN_PASSWORD`（非 `admin123`）；`testuser/testuser123` 仍有效。
+- 做法：SSH local forward `18080:127.0.0.1:80`，`PLAYWRIGHT_BASE_URL=http://127.0.0.1:18080/`，`E2E_ADMIN_PASSWORD=$ADMIN_PASSWORD`。
+- 结果：远程 E2E **连续两次 128/128**；不 rollback。
+- P5 计划完成标准现全部满足。
+
+## 2026-08-17 越南合并尺寸预览 Missing or invalid weight
+
+- 背景：`越南第十一批6.2海运.xlsx` 用合并尺寸列时预览为 `0 ok / 24 err`，全部 `Missing or invalid weight`。夹具第 2 行才是表头，重量列 `产品毛重(KG)/箱` 有 24 个有效数字。
+- 根因：对话框按第 1 行预选列；改表头行不会重绑。未选已存模板时 `effectiveTemplateDefaults.weight` 被强制清掉。数量可用模板默认 1 且不报警，所以只剩重量错误。
+- 选项：A. 未选模板也套用表单默认重量；B. 改表头后对空/失效列重跑 `preSelectCol`；C. 放宽空重量。
+- 决策：B。保留“空白已映射重量列不得用默认值”和“未选模板不套默认重量”。
+- 影响：表头改到第 2 行后重量绑到 `产品毛重(KG)/箱`。`预计发货数量` 仍会先于 `箱数` 被 `数量` 模糊匹配命中，本次不改。
+
+## 2026-08-18 每次部署必须更新 release note
+
+- 背景：生产部署后用户从通知栏看变更；漏写 `src/data/releaseNotes.ts` 等于线上无发布说明。
+- 决策：之后每次生产部署必须在 `releaseNotes` 顶部新增一条（新 version，lexicographic 新于上一条），并写入本次用户可见变更。不得只改 CHANGELOG。
+- 影响：未读红点、通知栏标题/条目以 `releaseNotes[0]` 为准。
+
+
+## 2026-08-19 Excel 导入与模板配置产品行为稿
+
+- 背景：首版文档混入模块接口、类型、数据结构和实现方案，无法作为产品与测试共同使用的行为基准。用户要求文档回到功能描述和可观察行为：用户能做什么、系统如何反馈、何时改变数据，以及失败时保持什么不变。
+- 决策：行为稿只描述文件选择、映射确认、原始/转换预览、错误与警告、整体替换确认、取消、模板新建/复用/编辑/删除、样例文件和真实业务验收场景。技术架构、模块命名、传输结构和代码接口不属于本稿，必须在行为稿批准后另行规划。
+- 关键行为：选择文件和选择模板都不自动导入；任意错误行整批阻止；警告可在明确展示后确认；确认导入整体替换当前货物并使旧装箱结果失效；取消和失败不改变当前数据；模板只保存识别规则；缺列与重复映射必须可见；不提供部分导入、自动合并多行或自动套用上次模板。
+- 影响：产品评审、测试修订和后续实现都以可观察场景为准。实现不得用技术便利改变替换语义、事务边界、错误阻止规则或模板只预填不自动导入的行为。
+- 文档：`docs/superpowers/specs/2026-08-19-import-template-behavior-design.md`。
+
+## 2026-08-19 导入后的模板选择与独立模板管理
+
+- 补充行为：文件解析成功后，导入确认先提供模板选择；用户可以选择模板管理中已有的模板，也可以明确选择“不使用模板”。模板选择属于本次导入确认流程，不要求跳转模板管理页。
+- 模板管理是独立功能入口，负责模板新建、查看、编辑、重命名和删除，不直接导入货物，也不改变当前工作台货物。
+- 未选择模板时，用户可以在导入确认中完成映射并点击“保存为模板”创建新模板；保存成功不等于导入成功，当前确认界面保持打开，仍需用户单独确认导入。
+- 选择已有模板只填入本次导入配置；用户在确认前修改映射不会静默改写原模板，除非在明确的模板管理编辑或另存为操作中保存。
+
+
+## 2026-08-20 模板功能重构技术方案
+
+- 背景：产品行为稿 `2026-08-19-import-template-behavior-design.md` 明确了模板选择流程、保存语义和独立管理边界，需要技术实施方案落地。
+- 选项：
+  1. 完全重写 `CargoImportDialog`，引入状态机管理 phase 转换。
+  2. 在现有组件基础上增加 `importPhase` 状态和条件渲染，保留现有映射、预览逻辑。
+  3. 拆分 `CargoImportDialog` 为多个子对话框，每个 phase 独立组件。
+- 决策：选项 2 — 在现有组件基础上增加 phase 状态，条件渲染不同阶段 UI。
+- 理由：
+  - 现有架构已有良好基础：`useTemplateCatalogs` hook、`importTemplates` API、`TemplateManagerPage` 独立页面、`ImportMappingForm` 可复用组件。
+  - `CargoImportDialog` 内部映射配置、预览计算、错误提示逻辑完整且经过测试，不需要重写。
+  - 增加 phase 状态是局部改动，风险可控，现有单元测试可修复而非重写。
+  - 拆分为多个对话框会引入对话框间状态传递和生命周期管理复杂度，不如单组件内 phase 切换清晰。
+- 影响：
+  - `CargoImportDialog.tsx` 增加 `importPhase` 和 `templateSelectionMode` 状态，增加 `handleTemplateSelection` 函数。
+  - 新建 `TemplateSelectionPanel.tsx` 组件，负责模板选择 UI。
+  - 拆分 `handleSaveImportTemplate` 为 `handleSaveAsNew` 和 `handleSaveAsCopy`，明确保存语义。
+  - `TemplateManagerPage` 保持不变，确认独立性。
+- 后续：按 6 天实施计划执行，每个阶段完成后 commit + 更新 `CHANGELOG.md`。
+- 文档：`docs/superpowers/specs/2026-08-20-template-refactor-plan.md`。
+
+## 2026-08-27 越南模板上层贯穿槽与短柜前沿排序
+
+- 背景：越南模板数据在 20GP 数量优先装箱后，自动结果在上层形成约 1100 mm 的贯穿槽；此前将所有候选改为垂直优先又导致体积模式和 40HQ 数量模式出现件数回归。
+- 选项：A. 全部货柜和模式统一改为 `z → y → x`；B. 保持原排序；C. 仅在数量优先的 20 英尺级短柜（长度 ≤ 6000 mm）使用 `z → y → x`，其他模式保持 `x → z → y`。
+- 决策：C。短柜的数量装载需要先完成当前垂直前沿，避免在有限纵深内切出贯穿通道；体积目标和长柜不改变既有排序。
+- 影响：越南 20GP 数量模式从 464 件提升至 482 件，最大货物间槽从约 1100 mm 降至 800 mm，内部封闭空腔为 0；越南 20GP 体积模式仍为 473 件，40HQ 数量/体积模式仍为 864 件。`packing-results.json` 和数量契约同步更新。
+- 后续：继续用真实模板夹具验证不同短柜尺寸；若出现非越南短柜的边界槽，应优先增加可解释的布局质量约束，不扩大排序特例。
+
+## 2026-08-27 3D 手动快捷键焦点作用域
+
+- 背景：3D 点选箱体后，canvas 可能因重渲染或浏览器焦点变化把 `keydown` 的 `event.target` 置为 `body`，导致工作区范围判断丢弃 Delete、Backspace 和 M。
+- 决策：在工作区内记录最近一次 pointer/focus 交互；工作区外的交互清除该作用域。window 仍只保留一个快捷键监听，输入框、导航页和历史/撤销保护不变。
+- 影响：真实 3D 点选后失焦仍可删除箱体和切换余量标注；新增 resolver 回归测试及完整手动 3D E2E 覆盖。
+
+## 2026-08-28 导入后报告导航仍启用工作区快捷键
+
+- 背景：导入确认后 Workbench 会导航到 `report`，但报告页仍渲染同一个 `VisualizationWorkspace`。`hotkeysEnabled` 之前只在 `activeNav === 'overview'` 时为真，导致越南模板装箱后切换手动模式时 M/Delete 被静默忽略。
+- 决策：由 Workbench 的渲染分支决定快捷键生命周期；只要 `VisualizationWorkspace` 已挂载就启用，离开工作台进入历史、模板管理或用户管理时组件卸载并自动移除监听。
+- 影响：导入后停留在报告导航时，3D 选箱快捷键与 overview 一致；历史/管理页面不获得工作区快捷键。远程回归已观察到越南模板路径的装箱、选中、M、Delete 均执行成功。
+
+## 2026-09-11 当前仓库 lint 被嵌套 worktree 污染
+
+- 背景：改动前运行 `npm run lint` 失败，473 errors。typescript-eslint 报 `No tsconfigRootDir was set`，候选根同时包含当前仓库和 `.worktrees/p6-linear-packing-authority`。完整日志 `test-results/lint-before-20260911.log`。
+- 选项：只运行目标文件 lint 并持续保留全仓阻塞；或隔离其他 checkout 并显式配置当前 tsconfig 根。
+- 决策：当前任务需要可执行的全量验证，最小修正 ESLint：忽略 `.worktrees/**` 并设置 `tsconfigRootDir` 到配置所在目录。不修改规则、断言或测试超时。
+- 影响：检查当前 checkout，避免另一 worktree 的源代码/配置被混入；独立验证并提交。
+- 后续：重新运行 `npm run lint`，若出现当前 checkout 的真实错误另行记录，不能据此削弱规则。
+
+## 2026-09-11 工作区快捷键生命周期收敛
+
+- 背景：历史错误来自 `overview` 导航判断，而报告导航也挂载同一编辑器。当前已传常量 `hotkeysEnabled=true`，小规模真实 3D 回归通过，但公共 props/hook/resolver 仍保留冗余导航开关。
+- 决策：删除上层传入的 `hotkeysEnabled` 和 resolver 的假导航值；快捷键监听直接随 `VisualizationWorkspace` 挂载/卸载，命令模块只判断编辑状态、选中与交互作用域。用 hook 挂载/卸载和完整模板流程测试验证历史/管理页面不会执行编辑命令。
+- 影响：消除后续误将 report 当非工作区禁用快捷键的入口。继续保留输入框保护、工作区外交互撤销作用域、自动模式仅开放查看命令等行为。
+- 验证边界：这是对已知脆弱耦合的重构；当前尚未在完整越南模板链路复现新的键盘失效，不把旧版本问题当作本轮新根因。
+
+## 2026-09-11 间隙诊断与场景澄清
+
+- 背景：用户最终更正截图为 20GP 数量优先。实测 quantity 482 件/槽 800 mm，volume 473 件/槽 1000 mm；两者封闭空腔均为 0，不能把该指标当作无可见通道的证明。
+- 失败记录：先前按中间回复增加的 volume 定向回归 `visible 1m internal channel` 失败（1000 < 1000 为假，约 1.87s），表明另一个模式同样存在槽隙。改为 x→y→z 前沿使体积降至 29,480,012,000 mm³，已拒绝并恢复；跨 SKU EMS quality 未改善。不得扩大排序特例造成目标退步。
+- 额外实验：支撑连通组整体平移仅移动 4 组，quantity 最大槽仍 800 mm；逐箱保持支撑成员/面积不减的平移不能移动任何箱子。说明剩余槽受堆叠和既有排布约束，不能仅作坐标压缩。
+- 决策：继续在完整候选方案搜索/比较处优化，不降低件数或体积首要目标，不放宽碰撞/支撑，不把无改善的坐标整理上生产。
+
+## 2026-09-11 数量装箱增加独立的上层槽隙修复
+
+- 根因：数量模式原始 greedy 与从空柜开始的 beam 都较早固定底层，后续可用小型号耗尽，上层形成被两侧箱体夹住的通道。仅切换全局前沿或平移保持支撑的箱体不能修复。
+- 方案：保留主搜索输出作为不可丢失的完整结果；定位最大上层槽所在的侧邻箱体底面，保留其下已支撑闭合的布局，重新建立剩余货物/重量/EMS/支撑索引。按数量与体积排序，经现有真实可行性检查后最多完成四个候选。
+- 接受规则：本模块职责是修槽，仅接受件数不低于进入模块时的结果、最大槽严格缩小、封闭空腔不增加的完整方案；合格方案之间仍按现有数量优先 comparator 比较。碰撞、支撑比例、朝向、堆叠限高与载重继续用原 feasibility，最终层级/作业顺序仍用统一 finalizer。
+- 范围：仅数量优先且仍有未装货物；不改变体积优先和已全部装入的方案。删除本轮在用户中间回复下添加但尚未提交的 volume 1000mm 红色测试，改为最终确认的 quantity 回归，不改变原有体积模式断言。
+- 实验数据：完整候选 483 件、29.1322915 m³、最大槽 500 mm、封闭空腔 0，对比原 482 件、28.468091 m³、800 mm。支撑风险代理值增大（152456500 → 460252750），仍需验证所有真实支撑/堆叠约束；不声称运输稳定性改善。
+- 取舍：不通过延长全局搜索到 6 秒追求更多件数，实验的 491 件方案反而留下 1150mm 槽且超现有延迟门槛。槽修复是有界局部改良，不保证最优或零缝隙。
+- 定向 RED 已验证：`npx vitest run src/lib/packing.blockEngine.test.ts --pool=threads --maxWorkers=1 -t "repairs the Vietnam"` 在生产集成前失败，`Vietnam quantity channel is 800mm: expected 800 <= 500`，1.639s。其它 6 项因名称过滤未运行，此命令不是全套通过证据。
+- 生产集成后同一定向 quantity 回归 GREEN：1 passed（其它 6 项为名称过滤未运行），2.20s；`packingGapRepair.test.ts` 5/5 passed，覆盖下层与支撑闭合保留、货物/重量/EMS/索引重建、原结果不可变、低件数候选拒绝、紧凑候选接纳以及完整装载跳过。
+- 契约更新原则：本轮预期越南 20GP quantity 从 482 → 483。仅在受保护生成器确认其它四个契约哈希不变、件数无下降后更新该正向变化；同步数量守恒测试中的精确期望，不降低原几何、标签、作业顺序、支撑或性能断言。
+- 构建失败记录：首次 `npm run build` 在新测试夹具 `packingGapRepair.test.ts:21` 报 TS2322，CargoItem.label 可选而 PlacementBox.label 必填。修正测试构造器显式提供 label；不涉及断言/生产规则。完整 lint 退出 0，仍仅已有 Workbench Hook warning。
+- 受保护契约生成器结果：仅 Vietnam 20GP quantity 482 → 483、哈希变化；俄罗斯 31、Vietnam volume 473、两种40HQ 864 和其余四个哈希全部不变。未使用 allow-regression。
+
+## 2026-09-11 全量 npm test 的 Bash 环境阻塞
+
+- 背景：`npm test` 的业务单测 115 files / 1021 tests 全部通过；随后 rollback 隔离测试 16 failed / 13 passed，仅70ms，性能阶段未执行。
+- 根因检查：该套件通过 `execFileSync('bash', ...)` 执行 Linux 回滚脚本，当前 PowerShell PATH 无 Bash，异常被测试助手转为 status=null/fields=undefined。
+- 决策：不修改回滚代码、断言、超时或跳过测试；本次验证进程使用现有 Git for Windows Bash 路径补齐环境，再重跑完整 npm test。若无法找到可用 Bash 则保留环境阻塞。
+- 同时：生产构建现已通过，仍有既有 >500 kB chunk warning。完整 E2E 已启动。
+- 补齐 Bash 的第二次 npm test 与完整 E2E 并行，115 文件中114通过，1021项中1020通过；`scripts/updatePackingContracts.test.mjs` 子进程 ETIMEDOUT（30426ms）。第一次单独业务单测该项已通过，当前未改生成器代码。判定资源竞争需串行复核，保留30秒子进程限制，不通过加超时、改断言或跳过测试处理。完整 E2E 继续，待其结束后串行重跑 npm test。
+- 完整 E2E 运行中出现两处失败：`auth-isolation.spec.ts:1036` custom container dialog chunk failure 场景；`container-calc.spec.ts:936` 3D camera/layer 场景超时30.1s。保存 test-results/current 错误上下文，待汇总后独立复现；不修改断言/超时，不把负向请求日志与测试成功混为一谈。
+- 完整 E2E 追加失败：`container-calc.spec.ts:1667` 保存/恢复历史方案超时30.1s，累计三处待复核。关键完整越南保存模板→数量装箱→继续手动→真实3D快捷键用例在该全量运行中通过（42.0s）。
+- 首次完整 E2E 汇总：145 passed / 5 failed（11.2m），无跳过。另两处为延迟历史保存导航超时与发布说明版本断言。失败现场包含意外整页导航、语言回到中文；发布说明明确是测试启动时旧版本与运行期间新增 r76 不一致。该轮夹杂源文件/Markdown 更新及并行测试，作为受干扰运行保留，不能计为完整通过。错误上下文已复制到 `test-results/e2e-first.local`。后续冻结文件、串行执行原用例与全量回归。
+- 冻结文件、停止浏览器后的 npm test 再跑仍有单个 updater 子进程 ETIMEDOUT（此轮第2次生成，测试总56.4s），其余114文件/1020项通过。因此不能只归因于 E2E 外部并行；继续检查 unit 内部并行的重型契约生成。下一步先独立运行该集成套件，若通过则按现有 rollback/performance 模式将其串行纳入 npm test，不改测试超时/断言。
+- updater 集成测试独立运行通过：1 file / 1 test，32.51s（内部三次子进程均满足原30秒限制）。确认应按现有重型套件隔离模式调整测试调度：从 test:unit 并行集合移到 test:contracts 单独1 worker，npm test 仍串行执行全部单元、契约、回滚、性能套件。不减少覆盖、不增加超时。
+
+## 2026-09-11 追加审查与无效局部回退实验
+
+- 追加审查提出限定槽邻箱范围、限制修复耗时。局部回退实验的三个测试因把网格索引当作毫米坐标失败，修正后另一个新测试的货物余量期望误写为6（只保留1个top箱，应为7）；这些都是新实验错误，原断言未弱化。
+- 仅回退槽两侧最近箱体及其上层支撑闭包后，真实越南回归失败，最大槽仍800mm，未达到原500mm要求；共享主搜索1500ms预算也使已耗尽预算后的修复不执行。独立350ms预算与局部闭包组合仍失败，不能据此发布。
+- 业务复核：这是自动结果的优化，用户并未要求固定独立高层箱体，原方案也明确重排整个上层。审查中的“必须局部保留”属于额外业务假设，撤回该实验，恢复已验证的上层重排，不降低500mm回归断言。
+- 时间边界：为修复增加独立候选启动预算，并与主搜索相同地完成已开始的候选，超出时只保留最后一个完整结果并报告budgetExceeded。不能把阶段预算宣称为硬实时截止；整个流程仍需原5000ms性能门槛通过。追加真实ID/支撑引用断言。
+- 最终修复预算为1000ms，最多四次完整补装；回归测试通过（含越南原5000ms性能门槛、483件契约、500mm槽、真实支撑接触面积和唯一ID）。最终全套150项E2E及部署后3项远程E2E均通过，未通过更改测试超时或弱化既有断言处理失败。

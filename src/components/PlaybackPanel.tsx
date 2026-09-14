@@ -68,6 +68,8 @@ type Props = {
   onReset: () => void
   onFinish: () => void
   onExport: () => void
+  exportDisabled?: boolean
+  exportDisabledReason?: string | null
 }
 
 export function PlaybackPanel({
@@ -83,6 +85,8 @@ export function PlaybackPanel({
   onReset,
   onFinish,
   onExport,
+  exportDisabled = false,
+  exportDisabledReason = null,
 }: Props) {
   const t = T[locale]
 
@@ -163,12 +167,16 @@ export function PlaybackPanel({
             {s === 'slow' ? t.speedSlow : s === 'normal' ? t.speedNormal : t.speedFast}
           </button>
         ))}
+        {exportDisabled && exportDisabledReason && (
+          <p id="playback-export-disabled-reason" data-testid="playback-export-disabled-reason" className="basis-full text-xs text-red-700">{exportDisabledReason}</p>
+        )}
         <button
           type="button"
           className="ml-auto archive-button"
           data-testid="playback-export"
           onClick={onExport}
-          disabled={sequence.total === 0}
+          aria-describedby={exportDisabled && exportDisabledReason ? 'playback-export-disabled-reason' : undefined}
+          disabled={exportDisabled || sequence.total === 0}
         >
           {t.exportInstructions}
         </button>

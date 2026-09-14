@@ -39,6 +39,12 @@ function depthSegment(box: PlacedBox) {
   return Math.floor(box.x / DEPTH_SEGMENT_MM)
 }
 
+function assertCompletedDepthLayer(box: PlacedBox): void {
+  if (!Number.isFinite(box.depthLayer) || box.depthLayer <= 0) {
+    throw new Error(`Placed box ${box.id} has invalid depthLayer`)
+  }
+}
+
 function shouldStartNewGroup(current: GroupDraft | null, next: PlacedBox) {
   if (!current || current.boxes.length === 0) return false
 
@@ -56,7 +62,7 @@ function shouldStartNewGroup(current: GroupDraft | null, next: PlacedBox) {
   // overwritten by the push-against relation. `supportTypes` is a list precisely because
   // a stage may span floor and stacked boxes.
   return (
-    (next.depthLayer ?? 1) !== (first.depthLayer ?? 1) ||
+    next.depthLayer !== first.depthLayer ||
     depthSegment(next) !== depthSegment(first) ||
     next.workStep !== previous.workStep + 1 ||
     labels.size > MAX_LABELS_PER_GROUP
@@ -97,7 +103,7 @@ function toGroup(draft: GroupDraft, sequence: number): LoadingTaskGroup {
     sequence,
     stepStart,
     stepEnd,
-    depthLayer: boxes[0].depthLayer ?? 1,
+    depthLayer: boxes[0].depthLayer,
     labels,
     boxIds: boxes.map((box) => box.id),
     bounds: { xMin, xMax, yMin, yMax, zMin, zMax },
@@ -115,6 +121,7 @@ export function buildLoadingTaskGroups(result: PackingResult | null | undefined)
     .sort((a, b) => a.step - b.step)
     .map((step) => boxesById.get(step.boxId))
     .filter((box): box is PlacedBox => !!box)
+  orderedBoxes.forEach(assertCompletedDepthLayer)
 
   const drafts: GroupDraft[] = []
   let current: GroupDraft | null = null

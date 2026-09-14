@@ -3,14 +3,16 @@ import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import * as XLSX from 'xlsx'
 import { releaseNotes } from '../src/data/releaseNotes'
+import { e2eCredentials } from './credentials'
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }, testInfo) => {
   await page.goto('/')
   if (await page.locator('#username').isVisible()) {
-    await page.fill('#username', 'testuser')
-    await page.fill('#password', 'testuser123')
+    await page.fill('#username', e2eCredentials.user.username)
+    await page.fill('#password', e2eCredentials.user.password)
     await page.click('button[type="submit"]')
     await expect(page.getByTestId('report-panel')).toBeVisible()
+    if (testInfo.tags.includes('@deployment')) return
     await page.evaluate(async () => {
       const token = window.localStorage.getItem('cargo_token')
       if (!token) return
@@ -25,6 +27,78 @@ async function ensureChinese(page: Page) {
     await zhButton.click()
   }
 }
+async function gateNextHistorySave(page: Page) {
+  let releaseSaveResponse!: () => void
+  const saveResponseGate = new Promise<void>((resolve) => {
+    releaseSaveResponse = resolve
+  })
+  let resolveSaveRequest!: () => void
+  const saveRequestSeen = new Promise<void>((resolve) => {
+    resolveSaveRequest = resolve
+  })
+  let resolveSaveResponseReady!: () => void
+  const saveResponseReady = new Promise<void>((resolve) => {
+    resolveSaveResponseReady = resolve
+  })
+  let saveResponseForwarded = false
+  let releaseRefreshResponse!: () => void
+  const refreshResponseGate = new Promise<void>((resolve) => {
+    releaseRefreshResponse = resolve
+  })
+  let resolveRefreshRequest!: () => void
+  const refreshRequestSeen = new Promise<void>((resolve) => {
+    resolveRefreshRequest = resolve
+  })
+  let resolveRefreshResponseReady!: () => void
+  const refreshResponseReady = new Promise<void>((resolve) => {
+    resolveRefreshResponseReady = resolve
+  })
+
+  await page.route('**/api/history', async (route) => {
+    const method = route.request().method()
+    if (method === 'POST') {
+      resolveSaveRequest()
+      const upstreamResponse = await route.fetch()
+      await upstreamResponse.body()
+      resolveSaveResponseReady()
+      await saveResponseGate
+      saveResponseForwarded = true
+      await route.fulfill({ response: upstreamResponse })
+      return
+    }
+    if (method === 'GET' && saveResponseForwarded) {
+      resolveRefreshRequest()
+      const upstreamResponse = await route.fetch()
+      await upstreamResponse.body()
+      resolveRefreshResponseReady()
+      await refreshResponseGate
+      await route.fulfill({ response: upstreamResponse })
+      return
+    }
+    await route.continue()
+  })
+
+  const saveResponse = page.waitForResponse((response) => (
+    response.url().includes('/api/history')
+    && response.request().method() === 'POST'
+    && response.ok()
+  ))
+  return {
+    saveRequestSeen,
+    saveResponseReady,
+    releaseSaveResponse,
+    refreshRequestSeen,
+    refreshResponseReady,
+    releaseRefreshResponse,
+    saveResponse,
+    waitForRefreshResponse: () => page.waitForResponse((response) => (
+      response.url().includes('/api/history')
+      && response.request().method() === 'GET'
+      && response.ok()
+    )),
+  }
+}
+
 
 async function enterManualMode(page: Page) {
   await page.getByTestId('placement-mode-manual').click()
@@ -36,6 +110,56 @@ async function enterManualModeEmpty(page: Page) {
   await enterManualMode(page)
   await page.keyboard.press('Control+z')
   await expect(page.getByTestId('container-scene')).toHaveAttribute('data-box-count', '0')
+}
+
+async function waitTwoAnimationFrames(page: Page) {
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  }))
+}
+
+async function aimSceneNearTop(page: Page) {
+  const scene = page.getByTestId('container-scene')
+  await scene.evaluate((element) => {
+    element.setAttribute('data-camera-command', 'near-top')
+    element.dispatchEvent(new Event('test-camera-command'))
+  })
+  await waitTwoAnimationFrames(page)
+}
+
+async function poolRemainingTotal(page: Page) {
+  return page.getByTestId('manual-pool-item').evaluateAll((els) => (
+    els.reduce((sum, el) => sum + Number(el.getAttribute('data-remaining') ?? 0), 0)
+  ))
+}
+
+/** Real 3D canvas pointer hit. Do not use 2D dispatchEvent as a stand-in. */
+async function selectBoxBy3dCanvasHit(page: Page) {
+  const scene = page.getByTestId('container-scene')
+  const canvas = scene.locator('canvas')
+  await expect(canvas).toBeVisible()
+  const box = await canvas.boundingBox()
+  if (!box) throw new Error('3D canvas has no bounding box')
+
+  const candidates: Array<{ x: number; y: number }> = []
+  const cols = 6
+  const rows = 4
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      candidates.push({
+        x: box.width * (0.22 + (0.56 * col) / (cols - 1)),
+        y: box.height * (0.28 + (0.52 * row) / (rows - 1)),
+      })
+    }
+  }
+
+  for (const position of candidates) {
+    await aimSceneNearTop(page)
+    await canvas.click({ position })
+    const selected = await scene.getAttribute('data-selected-orientation')
+    if (selected) return
+  }
+  throw new Error('3D canvas pointer hit did not select a box')
 }
 
 async function placeSingleManualBoxForRotation(page: Page) {
@@ -86,12 +210,12 @@ async function placeSingleManualBoxForRotation(page: Page) {
   return { boxId, before }
 }
 
-test('默认装载规则为数量优先', async ({ page }) => {
+test('默认装载规则为体积优先', async ({ page }) => {
   await ensureChinese(page)
   const select = page.getByLabel('装载规则')
-  await expect(select).toHaveValue('quantity')
+  await expect(select).toHaveValue('volume')
   const selectedText = await select.locator('option:checked').textContent()
-  expect(selectedText?.trim()).toBe('数量优先')
+  expect(selectedText?.trim()).toBe('体积优先')
 })
 
 test('允许堆叠时显示最大堆叠层数输入，取消后隐藏', async ({ page }) => {
@@ -175,6 +299,58 @@ test('手动模式一键放置从 pool 添加货物并减少剩余数量', async
   await expect(scene).not.toHaveAttribute('data-selected-orientation', '')
 })
 
+test('同型号一键放置沿用首个正立朝向', async ({ page }) => {
+  await ensureChinese(page)
+  await page.getByLabel('货柜类型').selectOption('custom')
+  await page.getByLabel('长 mm').first().fill('1000')
+  await page.getByLabel('宽 mm').first().fill('1000')
+  await page.getByLabel('高 mm').first().fill('1200')
+
+  await page.getByRole('button', { name: '编辑货物: Carton A' }).click()
+  const editCargo = page.getByRole('form', { name: '编辑货物项目' })
+  await editCargo.getByLabel('长 mm').fill('580')
+  await editCargo.getByLabel('宽 mm').fill('365')
+  await editCargo.getByLabel('高 mm').fill('435')
+  await editCargo.getByLabel('数量', { exact: true }).fill('3')
+  await editCargo.getByRole('button', { name: '保存修改' }).click()
+
+  const cargoForm = page.locator('form')
+  await cargoForm.getByLabel('名称', { exact: true }).fill('Pool sentinel')
+  await cargoForm.getByLabel('标识', { exact: true }).fill('Z')
+  await cargoForm.getByLabel('长 mm').fill('50')
+  await cargoForm.getByLabel('宽 mm').fill('50')
+  await cargoForm.getByLabel('高 mm').fill('50')
+  await cargoForm.getByLabel('重量 kg').fill('1')
+  await cargoForm.getByLabel('数量', { exact: true }).fill('1')
+  await page.getByRole('button', { name: '+ 添加货物' }).click()
+
+  await page.getByRole('button', { name: '装箱', exact: true }).click()
+  await enterManualModeEmpty(page)
+  const scene = page.getByTestId('container-scene')
+  const quickPlace = page.getByTestId('pool-quick-place-sample-1')
+  const poolItem = page.getByTestId('manual-pool-item').filter({ has: quickPlace })
+
+  for (const count of ['1', '2', '3']) {
+    await quickPlace.click()
+    await expect(scene).toHaveAttribute('data-box-count', count)
+  }
+
+  await expect(poolItem).toHaveAttribute('data-remaining', '0')
+  await expect(quickPlace).toBeDisabled()
+  await page.getByRole('button', { name: '2D', exact: true }).click()
+
+  const boxes = page.locator('[data-testid="manual-placement-2d"] g[data-box-id][data-orientation]')
+  await expect(boxes).toHaveCount(3)
+  const boxAttributes = await boxes.evaluateAll((nodes) => nodes.map((node) => ({
+    hasIssue: node.getAttribute('data-has-issue'),
+    orientation: node.getAttribute('data-orientation') ?? '',
+  })))
+  expect(boxAttributes.map(({ hasIssue }) => hasIssue)).toEqual(['false', 'false', 'false'])
+  expect(boxAttributes.every(({ orientation }) => Boolean(orientation))).toBe(true)
+  expect(boxAttributes.every(({ orientation }) => orientation === 'LWH' || orientation === 'WLH')).toBe(true)
+  expect(new Set(boxAttributes.map(({ orientation }) => orientation)).size).toBe(1)
+})
+
 test('手动模式默认即可旋转视角与拖箱，显示旋转提示', async ({ page }) => {
   await ensureChinese(page)
   await enterManualMode(page)
@@ -198,6 +374,141 @@ test('手动模式键盘帮助展示 Z 轴与快捷键说明', async ({ page }) 
   await expect(popover).toContainText('Esc')
   await expect(popover).toContainText('M')
   await expect(popover).toContainText('尺规')
+})
+
+test('手动快捷键只在概览聚焦工作区时修改草稿', async ({ page }) => {
+  await ensureChinese(page)
+  await enterManualMode(page)
+
+  const scene = page.getByTestId('container-scene')
+  await page.getByTestId('placement-mode-manual').focus()
+  await page.keyboard.press('Control+z')
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+
+  const quickPlace = page.locator('[data-testid^="pool-quick-place-"]').first()
+  await quickPlace.click()
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+  const initialOrientation = await scene.getAttribute('data-selected-orientation')
+  expect(initialOrientation).toBeTruthy()
+
+  await page.keyboard.press('Delete')
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+  await page.keyboard.press('Control+z')
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+  await page.keyboard.press('Control+y')
+  await expect(scene).toHaveAttribute('data-box-count', '0')
+  await page.keyboard.press('Control+z')
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+
+  const historyNav = page.getByTestId('nav-history')
+  await historyNav.focus()
+  await page.keyboard.press('Control+z')
+  await page.keyboard.press('R')
+  await page.keyboard.press('Delete')
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+
+  await historyNav.click()
+  await page.keyboard.press('Control+z')
+  await page.keyboard.press('Delete')
+  await page.getByTestId('nav-overview').click()
+  await expect(scene).toHaveAttribute('data-box-count', '1')
+})
+
+test('手动 2D 选中后按 Delete 移除箱体', async ({ page }) => {
+  await ensureChinese(page)
+  await enterManualModeEmpty(page)
+  await page.locator('[data-testid^="pool-quick-place-"]').first().click()
+  await expect(page.getByTestId('container-scene')).toHaveAttribute('data-box-count', '1')
+
+  await page.getByRole('button', { name: '2D', exact: true }).click()
+  const box = page.locator('[data-box-id]').first()
+  await expect(box).toBeVisible()
+  const boxId = await box.getAttribute('data-box-id')
+  expect(boxId).toBeTruthy()
+  await page.keyboard.press('Delete')
+  await expect(page.locator(`[data-box-id="${boxId}"]`)).toHaveCount(0)
+
+  await page.getByRole('button', { name: '3D', exact: true }).click()
+  await expect(page.getByTestId('container-scene')).toHaveAttribute('data-box-count', '0')
+})
+
+test('手动 3D 真实选箱后 M 与 Delete 立即生效', { tag: '@deployment' }, async ({ page }) => {
+  await ensureChinese(page)
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-box-count', /^[1-9]\d*$/)
+  const inheritedCount = Number(await scene.getAttribute('data-box-count'))
+
+  await enterManualMode(page)
+  await expect(scene).toHaveAttribute('data-box-count', String(inheritedCount))
+  await expect(scene).toHaveAttribute('data-selected-orientation', '')
+
+  await page.getByTestId('export-excel').focus()
+  await expect(page.getByTestId('export-excel')).toBeFocused()
+
+  const remainingBefore = await poolRemainingTotal(page)
+  await selectBoxBy3dCanvasHit(page)
+  await expect(scene).not.toHaveAttribute('data-selected-orientation', '')
+  await expect(scene).toBeFocused()
+
+  await page.keyboard.press('m')
+  await expect(scene).toHaveAttribute('data-clearance-enabled', 'true')
+  await expect(scene).not.toHaveAttribute('data-clearance-annotation-count', '0')
+
+  await page.keyboard.press('Delete')
+  await expect(scene).toHaveAttribute('data-box-count', String(inheritedCount - 1))
+  await expect(scene).toHaveAttribute('data-selected-orientation', '')
+  await expect(page.getByTestId('archive-stat-grid').locator('.archive-stat-value').first()).toHaveText(String(inheritedCount - 1))
+  await expect(page.getByTestId('report-panel')).toContainText(`已装载: ${inheritedCount - 1} / ${inheritedCount}`)
+  expect(await poolRemainingTotal(page)).toBe(remainingBefore + 1)
+
+  await page.keyboard.press('Control+z')
+  await expect(scene).toHaveAttribute('data-box-count', String(inheritedCount))
+  await page.keyboard.press('Control+y')
+  await expect(scene).toHaveAttribute('data-box-count', String(inheritedCount - 1))
+})
+
+test('手动 3D 选箱后点击余量测量再按 Backspace 仍删除', { tag: '@deployment' }, async ({ page }) => {
+  await ensureChinese(page)
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-box-count', /^[1-9]\d*$/)
+  const inheritedCount = Number(await scene.getAttribute('data-box-count'))
+
+  await enterManualMode(page)
+  await expect(scene).toHaveAttribute('data-box-count', String(inheritedCount))
+
+  await page.getByTestId('export-excel').focus()
+  await expect(page.getByTestId('export-excel')).toBeFocused()
+  await selectBoxBy3dCanvasHit(page)
+  await expect(scene).not.toHaveAttribute('data-selected-orientation', '')
+  await expect(scene).toBeFocused()
+
+  await page.getByTestId('toggle-clearance').click()
+  await expect(scene).toHaveAttribute('data-clearance-enabled', 'true')
+  await page.keyboard.press('Backspace')
+  await expect(scene).toHaveAttribute('data-box-count', String(inheritedCount - 1))
+  await expect(scene).toHaveAttribute('data-selected-orientation', '')
+})
+
+test('自动模式工作区按 M 切换余量', async ({ page }) => {
+  await ensureChinese(page)
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).toHaveAttribute('data-clearance-enabled', 'false')
+  await page.getByTestId('auto-keyboard-help').click()
+  await page.keyboard.press('m')
+  await expect(scene).toHaveAttribute('data-clearance-enabled', 'true')
+})
+
+test('最大化时 Esc 只退出最大化并保留选中', async ({ page }) => {
+  await ensureChinese(page)
+  await enterManualModeEmpty(page)
+  await page.locator('[data-testid^="pool-quick-place-"]').first().click()
+  const scene = page.getByTestId('container-scene')
+  await expect(scene).not.toHaveAttribute('data-selected-orientation', '')
+  await page.getByTestId('maximize-workspace').click()
+  await expect(page.getByTestId('manual-workspace')).toHaveAttribute('data-workspace-maximized', 'true')
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('manual-workspace')).toHaveAttribute('data-workspace-maximized', 'false')
+  await expect(scene).not.toHaveAttribute('data-selected-orientation', '')
 })
 
 test('手动模式阻止键盘把箱体移动到悬空位置', async ({ page }) => {
@@ -301,6 +612,8 @@ test('自动模式 3D 视图提供键盘帮助并说明尺规快捷键', async (
   const popover = page.getByTestId('auto-keyboard-help-popover')
   await expect(popover).toContainText('M')
   await expect(popover).toContainText('尺规')
+  await expect(popover).not.toContainText('Ctrl')
+  await expect(popover).not.toContainText('撤销')
 })
 
 test('自动模式更换货柜后清空旧画布并提示重新计算', async ({ page }) => {
@@ -398,10 +711,149 @@ test('从历史方案恢复自定义柜型后 3D 场景重建并显示新箱体'
   expect(colors).toBeGreaterThanOrEqual(4)
 })
 
+test('延迟历史保存完成后保留用户切换到工作台的导航', async ({ page }) => {
+  await page.reload()
+  await expect(page.getByTestId('report-panel')).toBeVisible()
+  await ensureChinese(page)
+  await page.getByRole('button', { name: '装箱', exact: true }).click()
+  await page.getByTestId('nav-history').click()
+  await expect(page.getByTestId('history-page')).toBeVisible()
+  await expect(page.getByTestId('history-empty-state')).toBeVisible()
+
+  const historySave = await gateNextHistorySave(page)
+  await page.getByRole('button', { name: '保存方案' }).click()
+  await historySave.saveRequestSeen
+
+  await page.getByTestId('nav-overview').click()
+  await expect(page.getByTestId('report-panel')).toBeVisible()
+  await expect(page.getByTestId('history-page')).toHaveCount(0)
+
+  historySave.releaseSaveResponse()
+  await historySave.saveResponseReady
+  await historySave.refreshRequestSeen
+  const refreshResponse = historySave.waitForRefreshResponse()
+  await historySave.refreshResponseReady
+  historySave.releaseRefreshResponse()
+  const [saveResponseResult, refreshResponseResult] = await Promise.all([historySave.saveResponse, refreshResponse])
+  await Promise.all([saveResponseResult.body(), refreshResponseResult.body()])
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  }))
+
+  await expect(page.getByTestId('history-page')).toHaveCount(0)
+  await expect(page.getByTestId('report-panel')).toBeVisible()
+  const editCargo = page.getByRole('button', { name: '编辑货物: Carton A' })
+  await expect(editCargo).toBeVisible()
+  await expect(editCargo).toBeEnabled()
+  await editCargo.click()
+  await expect(page.getByRole('form', { name: '编辑货物项目' })).toBeVisible()
+})
+
+test('概览保存期间离开并返回工作台仍保留最新导航', async ({ page }) => {
+  await page.reload()
+  await expect(page.getByTestId('report-panel')).toBeVisible()
+  await ensureChinese(page)
+  await page.getByRole('button', { name: '装箱', exact: true }).click()
+
+  await page.getByTestId('nav-history').click()
+  await expect(page.getByTestId('history-page')).toBeVisible()
+  await expect(page.getByTestId('history-empty-state')).toBeVisible()
+  await page.getByTestId('nav-overview').click()
+  await expect(page.getByTestId('report-panel')).toBeVisible()
+
+  const reportPanel = page.getByTestId('report-panel')
+  const saveButton = reportPanel.getByRole('button', { name: '保存方案' })
+  await expect(saveButton).toBeEnabled()
+  const historySave = await gateNextHistorySave(page)
+  await saveButton.click()
+  await historySave.saveRequestSeen
+
+  await page.getByTestId('nav-history').click()
+  await expect(page.getByTestId('history-page')).toBeVisible()
+  await page.getByTestId('nav-overview').click()
+  await expect(page.getByTestId('report-panel')).toBeVisible()
+
+  historySave.releaseSaveResponse()
+  await historySave.saveResponseReady
+  await historySave.refreshRequestSeen
+  const refreshResponse = historySave.waitForRefreshResponse()
+  await historySave.refreshResponseReady
+  historySave.releaseRefreshResponse()
+  const [saveResponseResult, refreshResponseResult] = await Promise.all([historySave.saveResponse, refreshResponse])
+  await Promise.all([saveResponseResult.body(), refreshResponseResult.body()])
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  }))
+
+  await expect(page.getByTestId('history-page')).toHaveCount(0)
+  await expect(page.getByTestId('report-panel')).toBeVisible()
+  const editCargo = page.getByRole('button', { name: '编辑货物: Carton A' })
+  await expect(editCargo).toBeVisible()
+  await expect(editCargo).toBeEnabled()
+  await editCargo.click()
+  await expect(page.getByRole('form', { name: '编辑货物项目' })).toBeVisible()
+})
+
+test('概览报告保存成功后跳转历史方案', async ({ page }) => {
+  await ensureChinese(page)
+  await page.getByRole('button', { name: '装箱', exact: true }).click()
+  const reportPanel = page.getByTestId('report-panel')
+  const saveButton = reportPanel.getByRole('button', { name: '保存方案' })
+  await expect(saveButton).toBeEnabled()
+  await saveButton.click()
+  await expect(page.getByTestId('history-page')).toBeVisible()
+  await expect(page.getByTestId('history-plan-snapshot')).toHaveCount(1)
+})
+
+test('手动历史快照在当前货物切换后恢复货物 A 身份和数量', async ({ page }) => {
+  await ensureChinese(page)
+
+  await page.getByRole('button', { name: '编辑货物: Carton A' }).click()
+  const editA = page.getByRole('form', { name: '编辑货物项目' })
+  await editA.getByLabel('名称', { exact: true }).fill('Manual cargo A')
+  await editA.getByLabel('标识', { exact: true }).fill('A')
+  await editA.getByLabel('数量', { exact: true }).fill('1')
+  await editA.getByRole('button', { name: '保存修改' }).click()
+  await page.getByRole('button', { name: '装箱', exact: true }).click()
+  await expect(page.getByTestId('report-panel')).toContainText('已装载: 1 / 1')
+
+  await enterManualModeEmpty(page)
+  await page.getByTestId('pool-quick-place-sample-1').click()
+  await expect(page.getByTestId('container-scene')).toHaveAttribute('data-box-count', '1')
+
+  await page.getByTestId('nav-history').click()
+  await expect(page.getByTestId('history-page')).toBeVisible()
+  await page.getByRole('button', { name: '保存方案' }).click()
+  await expect(page.getByTestId('history-plan-snapshot')).toHaveCount(1)
+
+  await page.getByRole('button', { name: '工作台', exact: true }).click()
+  await page.getByRole('button', { name: '编辑货物: Manual cargo A' }).click()
+  const editB = page.getByRole('form', { name: '编辑货物项目' })
+  await editB.getByLabel('名称', { exact: true }).fill('Manual cargo B')
+  await editB.getByLabel('标识', { exact: true }).fill('B')
+  await editB.getByLabel('数量', { exact: true }).fill('2')
+  await editB.getByRole('button', { name: '保存修改' }).click()
+  await page.getByRole('button', { name: '装箱', exact: true }).click()
+  await expect(page.getByTestId('cargo-list-item').filter({ hasText: 'Manual cargo B' })).toBeVisible()
+  await page.getByTestId('placement-mode-auto').click()
+  await expect(page.getByTestId('report-panel')).toContainText('已装载: 2 / 2')
+
+  await page.getByTestId('nav-history').click()
+  await expect(page.getByTestId('history-plan-snapshot')).toHaveCount(1)
+  await page.getByRole('button', { name: '恢复' }).click()
+  await expect(page.getByTestId('manual-workspace')).toBeVisible()
+  await expect(page.getByTestId('container-scene')).toHaveAttribute('data-box-count', '1')
+  await expect(page.getByTestId('cargo-list-item').filter({ hasText: 'Manual cargo A' })).toBeVisible()
+  await expect(page.getByTestId('cargo-list-item').filter({ hasText: 'Manual cargo B' })).toHaveCount(0)
+  await page.getByRole('button', { name: '明细表', exact: true }).click()
+  await expect(page.getByTestId('report-panel')).toContainText('Manual cargo A')
+  await expect(page.getByTestId('report-panel')).toContainText('已装载: 1 / 1')
+})
+
 test('?debug=1 显示调试面板并展示当前状态', async ({ page }) => {
   await page.goto('/?debug=1')
   await expect(page.getByTestId('debug-panel')).toBeVisible()
-  await expect(page.getByTestId('debug-panel')).toContainText('testuser')
+  await expect(page.getByTestId('debug-panel')).toContainText(e2eCredentials.user.username)
   await expect(page.getByTestId('debug-panel')).toContainText('Container')
 })
 
@@ -435,22 +887,31 @@ test('调试面板可下载手动排布复现场景快照', async ({ page }) => 
 })
 
 test('调试面板 admin 可拉取服务器日志', async ({ page }) => {
-  await page.evaluate(async () => {
+  await page.evaluate(async ({ username, password }) => {
     await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+      body: JSON.stringify({ username, password }),
     }).then((r) => r.json()).then((data) => {
       window.localStorage.setItem('cargo_token', data.token)
     })
+  }, {
+    username: e2eCredentials.admin.username,
+    password: e2eCredentials.admin.password,
   })
   await page.goto('/?debug=1')
   await expect(page.getByTestId('debug-panel')).toBeVisible()
   const fetchBtn = page.getByTestId('debug-fetch-logs')
   await expect(fetchBtn).toBeVisible()
   await fetchBtn.click()
-  await expect(page.getByTestId('debug-panel')).toContainText('E2E server log ready')
-  await expect(page.getByTestId('debug-panel')).not.toContainText('HTTP 500')
+  const debugPanel = page.getByTestId('debug-panel')
+  await expect(debugPanel).not.toContainText('HTTP 500')
+  if (process.env.PLAYWRIGHT_BASE_URL) {
+    await expect(debugPanel.locator('pre')).toHaveCount(1)
+    await expect(debugPanel.locator('pre')).toHaveText(/\S+/)
+  } else {
+    await expect(debugPanel).toContainText('E2E server log ready')
+  }
 })
 
 test('网格吸附按钮切换 data-grid-snap', async ({ page }) => {
@@ -568,6 +1029,7 @@ test('手动活动结果统一驱动汇总、明细、导出和撤销历史', as
     unplacedQuantity: 17,
   })
 
+  await page.getByTestId('placement-mode-manual').click()
   await page.keyboard.press('Delete')
   await expect(scene).toHaveAttribute('data-box-count', '0')
   await expect(page.getByTestId('report-panel')).toContainText('已装载: 0 / 18')
@@ -872,15 +1334,18 @@ test('通知栏按钮显示未读红点，点击后已读', async ({ page }) => 
 })
 
 test('管理员主导航包含用户管理入口', async ({ page }) => {
-  // beforeEach logged in as testuser; switch to admin.
-  await page.evaluate(async () => {
+  // beforeEach logged in as the E2E user; switch to admin.
+  await page.evaluate(async ({ username, password }) => {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+      body: JSON.stringify({ username, password }),
     }).then((r) => r.json())
     window.localStorage.setItem('cargo_token', res.token)
     window.localStorage.setItem('cargo_user', JSON.stringify(res.user))
+  }, {
+    username: e2eCredentials.admin.username,
+    password: e2eCredentials.admin.password,
   })
   await page.goto('/')
   await expect(page.getByTestId('nav-users')).toBeVisible()

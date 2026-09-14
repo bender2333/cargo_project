@@ -15,17 +15,24 @@
 import { readFileSync } from 'node:fs'
 import { dirname, resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import * as XLSX from 'xlsx'
 import type { ContainerSpec, CargoItem, LoadingMode, PackingResult, PlacedBox } from '../types'
-import { containers } from '../data/containers'
+import { containers, effectiveContainer } from '../data/containers'
 import { parseCargoRows } from './importCargo'
+import { finalizePlacementGeometry } from './finalizePackingResult'
+import type { finalizePlacementGeometry as FinalizePlacementGeometry } from './finalizePackingResult'
 import { calculatePacking } from './packing'
+
+vi.mock('./finalizePackingResult', async (importOriginal) => {
+  const original = await importOriginal<{ finalizePlacementGeometry: typeof FinalizePlacementGeometry }>()
+  return { ...original, finalizePlacementGeometry: vi.fn(original.finalizePlacementGeometry) }
+})
 
 const moduleDir = dirname(fileURLToPath(import.meta.url))
 const dataDir = resolve(moduleDir, '../../test-data')
 
-type Case = { name: string; result: PackingResult }
+type Case = { name: string; container: ContainerSpec; result: PackingResult }
 
 const cases: Case[] = []
 
@@ -76,6 +83,7 @@ beforeAll(() => {
 
   for (const spec of specs) {
     cases.push({
+      container: spec.container,
       name: spec.name,
       result: calculatePacking(spec.container, spec.items, { loadingMode: spec.loadingMode }),
     })
@@ -106,6 +114,37 @@ function describeFew<T>(items: T[], render: (item: T) => string, limit = 3): str
   return items.length > limit ? `${shown}; ... (+${items.length - limit} more)` : shown
 }
 
+const GEOMETRY_EPSILON = 0.001
+
+function boundaryViolations(box: PlacedBox, container: ContainerSpec): string[] {
+  const effective = effectiveContainer(container)
+  const axes = [
+    ['x', box.x, box.x + box.length, effective.length],
+    ['y', box.y, box.y + box.width, effective.width],
+    ['z', box.z, box.z + box.height, effective.height],
+  ] as const
+  return axes
+    .filter(([, start, end, limit]) => start < -GEOMETRY_EPSILON || end > limit + GEOMETRY_EPSILON)
+    .map(([axis, start, end, limit]) => `${box.id} ${axis}=[${start}, ${end}] outside [0, ${limit}]`)
+}
+
+function overlapViolations(placed: PlacedBox[]): string[] {
+  const violations: string[] = []
+  for (let firstIndex = 0; firstIndex < placed.length; firstIndex += 1) {
+    const first = placed[firstIndex]
+    for (let secondIndex = firstIndex + 1; secondIndex < placed.length; secondIndex += 1) {
+      const second = placed[secondIndex]
+      const overlapX = Math.min(first.x + first.length, second.x + second.length) - Math.max(first.x, second.x)
+      const overlapY = Math.min(first.y + first.width, second.y + second.width) - Math.max(first.y, second.y)
+      const overlapZ = Math.min(first.z + first.height, second.z + second.height) - Math.max(first.z, second.z)
+      if (overlapX > GEOMETRY_EPSILON && overlapY > GEOMETRY_EPSILON && overlapZ > GEOMETRY_EPSILON) {
+        violations.push(`${first.id}/${second.id} overlap=${overlapX}x${overlapY}x${overlapZ}mm`)
+      }
+    }
+  }
+  return violations
+}
+
 describe('PackingResult layering invariants (PRD 9.3)', () => {
   it('assigns physical layer 1 to every box resting on the floor', () => {
     for (const { name, result } of cases) {
@@ -118,15 +157,15 @@ describe('PackingResult layering invariants (PRD 9.3)', () => {
     }
   })
 
-  it('marks a box as floor-supported exactly when it has no supporters', () => {
+  it('marks a box as floor-supported exactly when its base rests on the floor', () => {
     for (const { name, result } of cases) {
       const offenders = result.placed.filter(
-        (box) => (box.supportType === 'floor') !== (box.supportedBy.length === 0),
+        (box) => (box.supportType === 'floor') !== (box.z <= 0.001),
       )
       expect(
         offenders.length,
-        `${name}: supportType and supportedBy disagree — `
-        + describeFew(offenders, (b) => `${b.id}(type=${b.supportType}, supporters=${b.supportedBy.length})`),
+        `${name}: supportType does not match floor contact — `
+        + describeFew(offenders, (b) => `${b.id}(z=${b.z}, type=${b.supportType}, supporters=${b.supportedBy.length})`),
       ).toBe(0)
     }
   })
@@ -194,6 +233,37 @@ describe('PackingResult loading-order invariants', () => {
     }
   })
 
+  it('publishes consecutive work steps in runtime array order', () => {
+    for (const { name, result } of cases) {
+      expect(
+        result.workSteps.map((workStep) => workStep.step),
+        `${name}: runtime workSteps are not consecutive in array order`,
+      ).toEqual(result.workSteps.map((_, index) => index + 1))
+
+      const arrayIndexByBoxId = new Map(result.workSteps.map((workStep, index) => [workStep.boxId, index]))
+      const reversed = result.placed.flatMap((box) => box.supportedBy
+        .filter((supporterId) => (arrayIndexByBoxId.get(supporterId) ?? Infinity) >= (arrayIndexByBoxId.get(box.id) ?? -1))
+        .map((supporterId) => `${supporterId} after ${box.id}`))
+      expect(reversed, `${name}: runtime workSteps publish dependents before supporters`).toEqual([])
+    }
+  })
+
+  it('matches the shared finalizer for identical automatic coordinates', () => {
+    for (const { name, container, result } of cases) {
+      const finalized = finalizePlacementGeometry(result.placed, container)
+      expect(result.placed, `${name}: automatic placed output differs from shared finalizer`).toEqual(finalized.placed)
+      expect(result.layers, `${name}: automatic layers differ from shared finalizer`).toEqual(finalized.layers)
+      expect(result.workSteps, `${name}: automatic workSteps differ from shared finalizer`).toEqual(finalized.workSteps)
+    }
+  })
+
+  it('assigns every completed placement a finite positive depth layer', () => {
+    for (const { name, result } of cases) {
+      const invalid = result.placed.filter((box) => !Number.isFinite(box.depthLayer) || (box.depthLayer ?? 0) <= 0)
+      expect(invalid, `${name}: completed placements must have finite positive depthLayer`).toEqual([])
+    }
+  })
+
   it('only steps back to a shallower depth when support order or x position requires it', () => {
     // Loading runs far-wall-outward, but support edges outrank depth, and `depthLayer`
     // is not monotonic in x (a box further out can be in an earlier push-against wave
@@ -203,18 +273,13 @@ describe('PackingResult loading-order invariants', () => {
       const byId = new Map(result.placed.map((box) => [box.id, box]))
       const sequence = [...result.placed].sort((a, b) => a.workStep - b.workStep)
       const unjustified: string[] = []
-      // depthLayer is optional on input but must be populated on every result box.
-      const depthOf = (box: PlacedBox) => {
-        expect(box.depthLayer, `${name}: ${box.id} has no depthLayer`).toBeDefined()
-        return box.depthLayer as number
-      }
       for (let i = 1; i < sequence.length; i++) {
         const previous = sequence[i - 1]
         const current = sequence[i]
-        if (depthOf(previous) <= depthOf(current)) continue
+        if (previous.depthLayer <= current.depthLayer) continue
         const waitedOnOutwardSupporter = current.supportedBy.some((id) => {
           const supporter = byId.get(id)
-          return supporter !== undefined && depthOf(supporter) >= depthOf(current)
+          return supporter !== undefined && supporter.depthLayer >= current.depthLayer
         })
         const previousWasSupporter = result.placed.some((box) => box.supportedBy.includes(previous.id))
         const xStillAdvances = current.x >= previous.x
@@ -268,17 +333,18 @@ describe('PackingResult depth invariants (loading from the far end outward)', ()
 })
 
 describe('PackingResult geometry is unchanged by the layering fix', () => {
-  // Guards the fix from altering placement: these numbers come from the golden
-  // contract as it stood before the layer/support split.
+  // Placed counts after 2026-08-24 compact space-first block selection.
+  // 40HQ mixed cartons now pack completely; 20GP places more pieces than the
+  // 2026-07-28 layering baseline (463/462/839/823).
   const expectedPlacement: Record<string, { placed: number; total: number }> = {
     'russia-volume': { placed: 31, total: 31 },
-    'vietnam-20gp-quantity': { placed: 463, total: 864 },
-    'vietnam-20gp-volume': { placed: 462, total: 864 },
-    'vietnam-40hq-quantity': { placed: 839, total: 864 },
-    'vietnam-40hq-volume': { placed: 823, total: 864 },
+    'vietnam-20gp-quantity': { placed: 483, total: 864 },
+    'vietnam-20gp-volume': { placed: 464, total: 864 },
+    'vietnam-40hq-quantity': { placed: 864, total: 864 },
+    'vietnam-40hq-volume': { placed: 864, total: 864 },
   }
 
-  it('keeps placed and planned counts identical to the pre-fix baseline', () => {
+  it('keeps placed and planned counts identical to the compactness baseline', () => {
     for (const { name, result } of cases) {
       const expected = expectedPlacement[name]
       expect(expected, `${name}: missing expected placement`).toBeDefined()
@@ -288,11 +354,66 @@ describe('PackingResult geometry is unchanged by the layering fix', () => {
   })
 
   it('keeps every placed box inside the effective container and free of overlap', () => {
-    for (const { name, result } of cases) {
-      const boundary = result.diagnostics.find((d) => d.id === 'boundary-check')
-      const overlap = result.diagnostics.find((d) => d.id === 'overlap-check')
-      expect(boundary?.severity, `${name}: boundary check regressed`).not.toBe('error')
-      expect(overlap?.severity, `${name}: overlap check regressed`).not.toBe('error')
+    for (const { name, container, result } of cases) {
+      const boundaryOffenders = result.placed.flatMap((box) => boundaryViolations(box, container))
+      const overlapOffenders = overlapViolations(result.placed)
+      expect(
+        boundaryOffenders,
+        `${name}: placed boxes exceed the effective container — ${describeFew(boundaryOffenders, (entry) => entry)}`,
+      ).toEqual([])
+      expect(
+        overlapOffenders,
+        `${name}: placed box pairs overlap — ${describeFew(overlapOffenders, (entry) => entry)}`,
+      ).toEqual([])
     }
+  })
+
+  it('reports an error diagnostic for a known placed-box boundary violation', () => {
+    const container: ContainerSpec = {
+      id: 'diagnostic-boundary',
+      label: 'Diagnostic boundary',
+      description: 'Diagnostic boundary fixture',
+      length: 100,
+      width: 100,
+      height: 100,
+      maxWeight: 1_000,
+      doorGap: 0,
+      topGap: 0,
+      sideGap: 0,
+    }
+    const cargo: CargoItem = {
+      id: 'boundary-cargo',
+      name: 'Boundary cargo',
+      label: 'B',
+      length: 10,
+      width: 10,
+      height: 10,
+      weight: 1,
+      quantity: 1,
+      color: '#000000',
+      canRotate: false,
+      stackable: true,
+    }
+    const mockedFinalizer = vi.mocked(finalizePlacementGeometry)
+    const productionFinalizer = mockedFinalizer.getMockImplementation()
+    if (!productionFinalizer) throw new Error('Expected finalizePlacementGeometry to retain its production implementation')
+    mockedFinalizer.mockImplementationOnce((placed, effective) => {
+      const finalized = productionFinalizer(placed, effective)
+      return {
+        ...finalized,
+        placed: finalized.placed.map((box, index) => index === 0 ? { ...box, x: effective.length } : box),
+      }
+    })
+
+    const result = calculatePacking(container, [cargo])
+    const violatingBox = result.placed[0]
+    expect(
+      violatingBox.x + violatingBox.length,
+      'fixture must place the box beyond the effective container before exercising diagnostics',
+    ).toBeGreaterThan(effectiveContainer(container).length)
+    expect(
+      result.diagnostics.find((diagnostic) => diagnostic.id === 'boundary-check')?.severity,
+      'production boundary diagnostics must reject the known out-of-bounds placed box',
+    ).toBe('error')
   })
 })

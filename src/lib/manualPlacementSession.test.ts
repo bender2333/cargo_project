@@ -145,6 +145,50 @@ describe('manualPlacementSessionReducer', () => {
     expect(next.history.present.boxes.map((candidate) => candidate.id)).toEqual(['pump-1'])
   })
 
+  it('reconciles only the incoming draft during an ordinary commit', () => {
+    const historicalDraft = { boxes: [box('historical-b', 'cargo-b')] }
+    const state = createManualPlacementSessionState({
+      history: {
+        past: [historicalDraft],
+        present: { boxes: [box('current-a')] },
+        future: [],
+      },
+    })
+
+    const next = manualPlacementSessionReducer(state, {
+      type: 'draftCommitted',
+      draft: { boxes: [box('next-a'), box('excess-a')] },
+      cargoPlan: [{ id: 'cargo-a', quantity: 1 }],
+    })
+
+    expect(next.history.past[0]).toBe(historicalDraft)
+    expect(next.history.past[0].boxes.map((candidate) => candidate.id)).toEqual(['historical-b'])
+    expect(next.history.present.boxes.map((candidate) => candidate.id)).toEqual(['next-a'])
+  })
+
+  it('restores a snapshot draft against its snapshot cargo plan rather than the current plan', () => {
+    const current = reconcileManualPlacementSessionState(
+      createManualPlacementSessionState(),
+      [{ id: 'cargo-b', quantity: 1 }],
+    )
+    const restoredDraft = {
+      boxes: [
+        { ...box('snapshot-a-1'), x: 25, orientationKey: 'WLH' as const },
+        { ...box('snapshot-a-2'), x: 425, orientationKey: 'WLH' as const },
+      ],
+    }
+
+    const restored = manualPlacementSessionReducer(current, {
+      type: 'historyDraftRestored',
+      draft: restoredDraft,
+      mode: 'manual',
+      draftInitialized: true,
+      snapshotCargoPlan: [{ id: 'cargo-a', quantity: 2 }],
+    })
+
+    expect(restored.history.present.boxes).toEqual(restoredDraft.boxes)
+  })
+
   it('rejects a stale selection that no longer exists after an undo in the same batch', () => {
     const firstDraft = addBox(emptyDraft(), box('box-1'))
     const secondDraft = addBox(firstDraft, { ...box('box-2'), x: 400 })
@@ -231,16 +275,21 @@ describe('cargo attribute sync on reconcile', () => {
     expect(reconciled.history.future[0].boxes[0].weight).toBe(42)
   })
 
-  it('syncs base dimensions and canRotate, resetting only newly forbidden rotations', () => {
+  it('canonicalizes every pose field and dimension when rotation becomes forbidden', () => {
     const draft = addBox(emptyDraft(), {
       ...box('b1'),
       baseLength: 400,
-      baseWidth: 400,
-      baseHeight: 400,
-      length: 400,
-      width: 400,
+      baseWidth: 300,
+      baseHeight: 200,
+      length: 300,
+      width: 200,
       height: 400,
-      orientationKey: 'WLH',
+      orientationKey: 'WHL',
+      labelRotationDeg: 270,
+      yawQuarterTurn: 1,
+      pitchQuarterTurn: 1,
+      orientationAxes: { x: 'W+', y: 'H-', z: 'L-' },
+      orientationLabel: 'X:W+ Y:T- Z:L-',
       canRotate: true,
     })
     const state = createManualPlacementSessionState({
@@ -270,7 +319,62 @@ describe('cargo attribute sync on reconcile', () => {
       width: 300,
       height: 200,
       orientationKey: 'LWH',
+      labelRotationDeg: 0,
+      yawQuarterTurn: 0,
+      pitchQuarterTurn: 0,
+      orientationAxes: { x: 'L+', y: 'W+', z: 'H+' },
+      orientationLabel: 'X:L+ Y:W+ Z:T+',
       canRotate: false,
     })
   })
 })
+
+// P3-6 — label/color must sync into draft reconciliation
+
+describe('cargo label and color sync on reconcile', () => {
+  it('updates label and color on placed boxes when cargo label/color change', () => {
+    const draft = addBox(emptyDraft(), box('b1'))
+    const state = createManualPlacementSessionState({
+      mode: 'manual',
+      history: { past: [], present: draft, future: [] },
+    })
+
+    const reconciled = reconcileManualPlacementSessionState(state, [
+      {
+        id: 'cargo-a',
+        quantity: 2,
+        weight: 10,
+        stackable: true,
+        label: 'RELABELED',
+        color: '#00ff00',
+      },
+    ])
+
+    expect(reconciled.history.present.boxes[0]).toMatchObject({
+      label: 'RELABELED',
+      color: '#00ff00',
+    })
+  })
+
+  it('preserves identity when label and color are unchanged', () => {
+    const draft = addBox(emptyDraft(), { ...box('b1'), label: 'A', color: '#f59e0b', weight: 10 })
+    const state = createManualPlacementSessionState({
+      mode: 'manual',
+      history: { past: [], present: draft, future: [] },
+    })
+
+    const reconciled = reconcileManualPlacementSessionState(state, [
+      {
+        id: 'cargo-a',
+        quantity: 2,
+        weight: 10,
+        stackable: true,
+        label: 'A',
+        color: '#f59e0b',
+      },
+    ])
+
+    expect(reconciled).toBe(state)
+  })
+})
+

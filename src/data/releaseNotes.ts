@@ -14,6 +14,336 @@ export type ReleaseNote = {
  */
 export const releaseNotes: ReleaseNote[] = [
   {
+    version: '2026-09-14-r77-volume-front-compaction',
+    date: '2026-09-14',
+    title: {
+      en: 'Volume packing now keeps the upper front compact in short containers',
+      zh: '体积优先装箱收紧短柜上层前沿并设为默认模式',
+    },
+    items: {
+      en: [
+        'New workspaces and packing comparisons now use volume priority by default.',
+        'Volume packing in 20-foot-class containers completes the current vertical loading front before opening the next longitudinal slot, improving occupied volume and reducing the Vietnam template upper gap while preserving support and stacking checks.',
+      ],
+      zh: [
+        '新建工作台和装箱比较现在默认使用体积优先。',
+        '20 英尺级货柜的体积优先装箱先完成当前垂直前沿再打开下一纵向空位；越南模板实测占用体积提升、上层货物间槽由 1000 mm 降至 650 mm，同时继续执行支撑和堆叠检查。',
+      ],
+    },
+  },
+  {
+    version: '2026-09-11-r76-upper-gap-workspace',
+    date: '2026-09-11',
+    title: {
+      en: 'Tighter quantity packing and reliable manual editing shortcuts',
+      zh: '数量装箱收紧上层缝隙，手动微调快捷键流程完善',
+    },
+    items: {
+      en: [
+        'Quantity packing can rearrange the upper load to reduce gaps while preserving the number of loaded cartons and checking support and stacking rules.',
+        'After importing a saved template and continuing manually, select a carton in 3D to use M, Delete, Backspace, and undo. Text fields retain their normal keyboard behavior.',
+      ],
+      zh: [
+        '数量优先装箱增加上层重排，在不减少已装件数的前提下收紧货物间缝隙，并继续检查支撑和堆叠规则。',
+        '使用保存的模板导入并继续手动微调后，3D 选箱可使用 M、Delete、Backspace 和撤销；输入框保持正常文字编辑行为。',
+      ],
+    },
+  },
+  {
+    version: '2026-08-27-r75-vietnam-manual-hotkeys',
+    date: '2026-08-27',
+    title: {
+      en: 'Vietnam template packing closes the upper-layer slot and keeps 3D editing shortcuts active',
+      zh: '越南模板装箱收紧上层贯穿槽，3D 手动编辑快捷键恢复可用',
+    },
+    items: {
+      en: [
+        'Quantity packing in 20-foot containers now builds the loading front vertically first, avoiding a long upper-layer channel in the Vietnam template load.',
+        'After selecting a carton in the 3D view, Delete, Backspace, and M remain active even if the canvas briefly loses DOM focus.',
+      ],
+      zh: [
+        '20 英尺级货柜的数量优先装箱现在按垂直前沿优先构建，避免越南模板装载时形成贯穿上层的长槽。',
+        '3D 点选箱体后，即使画布短暂丢失 DOM 焦点，Delete、Backspace 和 M 仍然有效。',
+      ],
+    },
+  },
+
+  {
+    version: '2026-08-26-r74-quantity-first-slot',
+    date: '2026-08-26',
+    title: {
+      en: 'Quantity packing now keeps extra pieces even when a slot opens to the door or side wall',
+      zh: '数量优先现在会保留件数更多的方案，即使货物间出现通向门或侧壁的槽',
+    },
+    items: {
+      en: [
+        'Quantity mode ranks finished layouts by how many pieces they load. A boundary-connected gap is no longer a reason to throw away a higher count.',
+        'When two layouts load the same number of pieces, packing still prefers no enclosed cavity, then lower unsupported span, then a smaller gap between cartons.',
+        'The 0824 mixed 20GP load is still 504 pieces in the current search budget. The search reports the best layout it found in time, not a proven global optimum.',
+        'Volume mode is unchanged: occupied volume first. Vietnam 20GP volume packing stays at 473 pieces.',
+      ],
+      zh: [
+        '数量优先按最终装入件数比较完整方案。通向柜门或侧壁的槽不再用来否决更高件数。',
+        '件数相同时，仍优先没有封闭内腔，再看支撑风险，再看货物间槽。',
+        '0824 混装 20GP 在当前搜索预算内仍是 504 件。搜索只保证预算内找到的最好方案，不是全局最优。',
+        '体积优先仍然先比占用体积。越南 20GP 体积模式仍是 473 件。',
+      ],
+    },
+  },
+
+  {
+    version: '2026-08-25-r73-quantity-volume-search',
+    date: '2026-08-25',
+    title: {
+      en: 'Quantity packing now compares complete layouts by piece count; volume packing compares occupied volume',
+      zh: '数量优先按最终件数比较完整方案，体积优先按最终占用体积比较',
+    },
+    items: {
+      en: [
+        'Quantity mode compares finished layouts by how many pieces they actually load, instead of scoring only the block in front of the searcher.',
+        'Volume mode compares finished layouts by occupied volume. Mixed 20GP Vietnam volume packing went from 468 to 473 pieces.',
+        'Long gaps between cartons are still squeezed, but the engine will not reopen a 400 mm slot just to load extra pieces. The 0824 load remains 504 pieces with slots under 200 mm.',
+        'Door-end and side-wall leftover remains legal.',
+      ],
+      zh: [
+        '数量优先按最终装入件数比较完整方案，不再只看眼前一块是否塞得满。',
+        '体积优先按最终占用体积比较。越南 20GP 体积模式件数从 468 提到 473。',
+        '货物间长槽仍会压，但不会为了多装而重新打开 400 mm 槽（0824 仍是 504 件、槽小于 200 mm）。',
+        '门端和侧壁的合法余量仍然允许。',
+      ],
+    },
+  },
+
+  {
+    version: '2026-08-24-r72-upper-gap-packing',
+    date: '2026-08-24',
+    title: {
+      en: 'Automatic packing no longer leaves a 400 mm slot between cartons on the top layer',
+      zh: '自动装箱不再在上层货物之间留下 400 mm 的槽',
+    },
+    items: {
+      en: [
+        'When two carton layouts hold the same number of pieces, packing now prefers the leftover space that can still take a useful next block instead of a long narrow channel.',
+        'Door-end and side-wall leftover is still allowed. Mixed orientations stay legal so a carton can tilt when the remaining height is short.',
+      ],
+      zh: [
+        '同样件数的两种摆法里，现在会选后续还能继续装的剩余空区，而不是留下一条又长又窄的槽。',
+        '门端和侧壁的合法余量仍然保留。高度不够时仍允许换朝向侧立。',
+      ],
+    },
+  },
+
+  {
+    version: '2026-08-24-r71-3d-selection-hotkeys',
+    date: '2026-08-24',
+    title: {
+      en: 'Selecting a box in 3D now lets Delete and the clearance ruler work immediately',
+      zh: '3D 里点选箱体后，Delete 和余量测量立刻可用',
+    },
+    items: {
+      en: [
+        'After you click a carton in the manual 3D view, M toggles the clearance ruler on the first keypress.',
+        'Delete and Backspace remove that one carton. Clicking Clearance first, then Delete, still works.',
+      ],
+      zh: [
+        '手动 3D 里点选箱体后，按一次 M 就会打开余量标注。',
+        'Delete / Backspace 删除当前这一件。先点“余量测量”再按 Delete 同样有效。',
+      ],
+    },
+  },
+
+  {
+    version: '2026-08-24-r70-compact-packing',
+    date: '2026-08-24',
+    title: {
+      en: 'Automatic packing fills from the closed end and leaves leftover on the outside',
+      zh: '自动装箱从里端填实，空隙留在外侧',
+    },
+    items: {
+      en: [
+        'Same-size cartons are still packed as blocks, but each block is chosen for the current empty space instead of being stuffed into the smallest leftover hole.',
+        'A mixed 40HQ load that previously left boxes out now packs completely. Mixed orientations stay allowed so a carton can tilt when the remaining height is too short.',
+      ],
+      zh: [
+        '相同纸箱仍按块来装，但每一块对着当前空区来选，不再塞进最小的缝里。',
+        '原先装不满的 40HQ 混合货现在可以装满。高度不够时仍允许换朝向侧立，不会为了整齐而装不进去。',
+      ],
+    },
+  },
+
+  {
+    version: '2026-08-24-r69-workspace-hotkeys',
+    date: '2026-08-24',
+    title: {
+      en: 'Manual Delete and arrows work from the workspace, not only the 3D canvas',
+      zh: '手动 Delete 和方向键在工作区内即可用，不必点进 3D 画布',
+    },
+    items: {
+      en: [
+        'After quick-place or while editing in 2D, Delete removes the selected cargo. Arrow keys and PageUp/PageDown nudge it the same way.',
+        'Escape peels one layer: leave maximized view first, then clear the selection.',
+        'In automatic mode, M toggles the clearance ruler. The automatic help list no longer mentions undo keys that did not exist.',
+      ],
+      zh: [
+        '一键放置后或在 2D 编辑时，Delete 即可删除选中货物。方向键和 PageUp/PageDown 同样可微调位置。',
+        'Esc 一次只退一层：先退出最大化，再取消选中。',
+        '自动模式下 M 切换尺规。自动模式帮助不再列出并不存在的撤销快捷键。',
+      ],
+    },
+  },
+
+  {
+    version: '2026-08-20-r68-import-template-flow',
+    date: '2026-08-20',
+    title: {
+      en: 'Import starts with template choice and blank mapping',
+      zh: '导入先选模板，不用模板则空白映射',
+    },
+    items: {
+      en: [
+        'After a file is read, choose an existing template or “Don’t use a template”. Without a template, every source column starts blank — nothing is auto-mapped.',
+        'Required fields show *. Weight is optional: missing or blank becomes 1 kg; a non-empty invalid, zero, or negative weight blocks the whole import.',
+        'Update template and Save as are separate actions. Saving a template never imports cargo. Confirm is blocked when columns conflict or a template column is missing.',
+      ],
+      zh: [
+        '文件读入后先选已有模板或“不使用模板”。不使用模板时所有源列从空白开始，不会自动映射。',
+        '必填字段带 *。重量可选：未映射或空白按内部 1 kg；非空非法、零或负数整批阻止导入。',
+        '“更新模板”和“另存为模板”是两个独立动作。保存模板不会导入货物。列冲突或模板缺列时不能确认导入。',
+      ],
+    },
+  },
+
+  {
+    version: '2026-08-18-r67-import-mapping-columns',
+    date: '2026-08-18',
+    title: {
+      en: 'Import mapping columns are freely selectable',
+      zh: '导入映射列可自由选择',
+    },
+    items: {
+      en: [
+        'After you set the real header row, empty mapping fields are suggested from the file columns. You can still change any field, including quantity and weight.',
+        'Vietnam combined-size sheets now suggest per-carton gross weight and carton count, not planned piece quantity or total gross weight.',
+        'When the file has columns, mapping pickers are full dropdowns of every column instead of a filtered suggestion box.',
+      ],
+      zh: [
+        '改到真实表头行后，空着的映射字段会按文件列给出建议；数量、重量等仍可改成任意列。',
+        '越南合并尺寸表会优先建议单箱毛重和箱数，而不是预计发货数量或总毛重。',
+        '文件里已有列时，映射控件是完整下拉，不再被当前输入过滤成只剩一项。',
+      ],
+    },
+  },
+
+  {
+    version: '2026-08-07-r65-workspace-props-aggregation',
+    date: '2026-08-07',
+    title: {
+      en: 'Cleaner workspace and report panel component boundaries',
+      zh: '工作区与报告面板组件边界收口',
+    },
+    items: {
+      en: [
+        '3D/2D workspace props are grouped into manual, playback, render, and selection domain objects instead of dozens of loose fields.',
+        'Results panel props are grouped into playback, loading steps, COG, compare, fill, export, and selection domains for the same reason.',
+        'Behavior is unchanged: layer/label filtering, manual placement, export blockers, and keyboard shortcuts keep the same user-facing paths.',
+        'Large-container packing is faster after finishing spatial-index wiring and hot-path scan reductions (same packing results).',
+      ],
+      zh: [
+        '3D/2D 工作区 props 收成 manual / playback / render / selection 四个域对象，不再以几十个散字段透传。',
+        '报告面板 props 同样收成回放、装柜步骤、重心、柜型对比、补货、导出与选择等域对象。',
+        '行为不变：层级/标签过滤、手动装柜、导出阻断与键盘快捷键仍走原来的用户路径。',
+        '完成空间索引热路径接线与扫描收口后，大柜体装箱更快（装箱结果不变）。',
+      ],
+    },
+  },
+
+  {
+    version: '2026-08-07-r64-visual-selection-ownership',
+    date: '2026-08-07',
+    title: {
+      en: 'Report panel now owns layer, label, and tab selection',
+      zh: '报告面板收口层级、标签与页签选择状态',
+    },
+    items: {
+      en: [
+        'Layer, label, and result-tab selection states now live inside the Results Panel instead of the main Workbench, reducing cross-component wiring.',
+        'Keyboard layer navigation and step-box selection are handled locally in the Results Panel without Workbench needing to track these states.',
+        'Import failures and navigation shortcuts still trigger the correct report tabs as before — just through a cleaner internal path.',
+        'Spatial grid index (SpatialGrid) added to the packing library as a foundation for future placed-box query performance improvements.',
+      ],
+      zh: [
+        '层级、标签和结果页签的选择状态现由报告面板自行管理，不再由主工作台持有，减少跨组件接线。',
+        '键盘层级导航和步骤选箱在报告面板内部处理，工作台不再需要追踪这些状态。',
+        '导入失败和导航快捷键照常触发正确的报告页签，仅通过更清晰的内路径完成。',
+        '空间网格索引（SpatialGrid）已加入装箱算法库，为后续已装箱查询性能优化打底。',
+      ],
+    },
+  },
+
+  {
+    version: '2026-08-06-r63-packing-root-cause-and-boundaries',
+    date: '2026-08-06',
+    title: {
+      en: 'Packing root-cause fixes and safer plan boundaries',
+      zh: '装箱根因修复与更安全的方案边界',
+    },
+    items: {
+      en: [
+        'Automatic packing no longer treats non-restrictive stack limits like 99 as hard constraints, and block routing decides eligibility per SKU instead of flipping the whole load off one short box.',
+        'Ground-only cargo stays enforced in Quick Place and in the automatic block-engine fallback, so floor-only goods are not silently stacked or skipped.',
+        'Automatic and manual packing now share the same minimum support-ratio setting, so raising support stability in settings applies consistently across both modes.',
+        'Editing a cargo label/color or the selected custom container no longer leaves a stale manual/automatic plan that cannot be saved or still uses old dimensions.',
+        'Invalid manual boxes remain visible for editing but are excluded from loaded counts, volume, and layer summaries; custom container create/update now rejects impossible dimensions on the server.',
+      ],
+      zh: [
+        '自动装箱不再把 99 这类非限制性堆叠上限当成硬约束；块路由按 SKU 判断资格，不会因为一只矮箱就把整批切出块引擎。',
+        '必须落地货物在快捷放置和自动块引擎补装路径中都会继续强制落地，不会被静默上堆或跳过。',
+        '自动与手动装箱共用同一套最小支撑率设置，在设置里提高稳定性后两种模式行为一致。',
+        '修改货物标签/颜色或当前选中的自定义柜型后，不再留下无法保存的陈旧手动方案，也不会继续使用旧柜尺寸计算结果。',
+        '违规手动箱体仍可见可改，但不再计入已装件数、体积和分层汇总；服务端创建/更新自定义柜型时会拒绝不可能的尺寸。',
+      ],
+    },
+  },
+
+  {
+    version: '2026-08-06-r62-test-integrity-and-packing-gates',
+    date: '2026-08-06',
+    title: { en: 'Packing gates and reliability notes', zh: '装箱门禁与可靠性说明' },
+    items: {
+      en: [
+        'Automatic packing keeps finite stack and ground-only constraints visible in block routing (d037df0), so non-restrictive max stack values are no longer treated as hard blockers by themselves.',
+        'Same-SKU Quick Place continues to prefer the first upright orientation (6f864a9) when space and constraints allow.',
+        'Production Excel import remains compatible with the shared SheetJS worker namespace shape (abf53d6).',
+        'Release/test accounting is now machine-checkable: completed changelog sections cannot keep open checkboxes without an explicit supersede pointer.',
+      ],
+      zh: [
+        '自动装箱在块路由中继续显式保留有限堆叠与必须落地约束（d037df0），非限制性最大堆叠层数本身不再被当作硬阻断。',
+        '同 SKU 快捷放置在空间与约束允许时继续优先首个正立朝向（6f864a9）。',
+        '生产 Excel 导入继续兼容共享 SheetJS worker 的命名空间导出形状（abf53d6）。',
+        '发布/测试记账现可机器校验：已完成 CHANGELOG 段落不得在无 supersede 指向时保留未勾选项。',
+      ],
+    },
+  },
+  {
+    version: '2026-08-05-r61-0802-packing-and-reliability',
+    date: '2026-08-05',
+    title: { en: 'Packing and reliability fixes', zh: '装箱与可靠性修正' },
+    items: {
+      en: [
+        'Vietnam 40HQ automatic packing now places 877/877 boxes while preserving ground-only, stacking, geometry, and other packing constraints.',
+        'Repeated Quick Place for the same SKU now prefers the first upright box orientation and reuses it when space and constraints permit; the existing alternate-upright fallback remains when that orientation is not legal.',
+        'The Workbench chunk now preloads while the login screen is visible to reduce the wait after sign-in.',
+        'Delayed history saves no longer override navigation that happens after the save starts.',
+      ],
+      zh: [
+        '越南 40HQ 自动装箱现可装入 877/877 箱，并继续遵守必须落地、堆叠、几何等装箱约束。',
+        '同一 SKU 连续使用「快捷放置」时，现在优先首个正立箱体的朝向，并在空间与约束允许时复用；该朝向不合法时仍沿用现有的其他正立朝向回退。',
+        '登录界面显示期间现会预加载工作台 chunk，以减少登录后的等待。',
+        '延迟完成的历史保存不再覆盖保存开始后发生的导航。',
+      ],
+    },
+  },
+  {
     version: '2026-07-30-r60-plan-integrity-and-history-snapshots',
     date: '2026-07-30',
     title: {

@@ -22,6 +22,7 @@ function placedBox(overrides: Partial<PlacedBox>): PlacedBox {
     canRotate: true,
     stackable: true,
     physicalLayer: 2,
+    depthLayer: 2,
     workStep: 2,
     supportType: 'fully-supported',
     supportedBy: ['support-z', 'support-a'],
@@ -79,11 +80,33 @@ describe('canonicalizePackingResult', () => {
       supportedBy: ['support-a', 'support-z'],
     })
     expect(summary.layers.map((layer) => layer.physicalLayer)).toEqual([1, 2])
-    expect(summary.workSteps.map((step) => step.step)).toEqual([1, 2])
+    expect(summary.workSteps.map((step) => step.step)).toEqual([2, 1])
     expect(summary.labelStats.map((stat) => stat.label)).toEqual(['A', 'B'])
     expect(summary.unplaced.map((entry) => entry.cargoId)).toEqual(['cargo-a', 'cargo-z'])
     expect(summary.diagnostics.map((entry) => entry.id)).toEqual(['a-check', 'z-check'])
     expect(summary.diagnostics[1].params).toEqual({ a: 'first', z: 1.234568 })
     expect(summary.diagnostics[1]).not.toHaveProperty('message')
+  })
+
+  it('preserves runtime work-step order instead of hiding it with canonical sorting', () => {
+    const summary = canonicalizePackingResult(packingResult())
+
+    expect(summary.workSteps.map((step) => step.step)).toEqual([2, 1])
+  })
+
+  it.each([
+    ['missing', undefined],
+    ['zero', 0],
+    ['negative', -1],
+    ['NaN', Number.NaN],
+    ['positive infinity', Number.POSITIVE_INFINITY],
+    ['negative infinity', Number.NEGATIVE_INFINITY],
+  ])('rejects a completed placement with %s depthLayer', (_case, depthLayer) => {
+    const result = packingResult()
+    const invalid = result.placed[0] as unknown as { depthLayer?: number }
+    if (depthLayer === undefined) delete invalid.depthLayer
+    else invalid.depthLayer = depthLayer
+
+    expect(() => canonicalizePackingResult(result)).toThrow(/depthLayer/)
   })
 })

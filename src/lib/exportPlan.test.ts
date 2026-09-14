@@ -216,17 +216,39 @@ describe('buildExportPlanRows orientation accuracy', () => {
   it('splits mixed orientations into one row per orientationKey with exact counts', () => {
     const item: CargoItem = cargo({ id: 'a', name: 'Mixed', label: 'A', length: 600, width: 400, height: 300, quantity: 2, weight: 10 })
     const result = calculatePacking({ ...container, maxWeight: 1000 }, [item])
-
-    if (result.placed.length < 2) return
-
-    result.placed[0]!.orientationKey = 'LWH'
-    result.placed[0]!.length = 600
-    result.placed[0]!.width = 400
-    result.placed[0]!.height = 300
-    result.placed[1]!.orientationKey = 'WLH'
-    result.placed[1]!.length = 400
-    result.placed[1]!.width = 600
-    result.placed[1]!.height = 300
+    expect(result.placed).toHaveLength(2)
+    const lwhPatch = {
+      orientationKey: 'LWH',
+      length: 600,
+      width: 400,
+      height: 300,
+      labelRotationDeg: 0,
+      yawQuarterTurn: 0,
+      pitchQuarterTurn: 0,
+      orientationAxes: { x: 'L+', y: 'W+', z: 'H+' },
+      orientationLabel: 'X:L+ Y:W+ Z:T+',
+    } satisfies Partial<(typeof result.placed)[number]>
+    const wlhPatch = {
+      orientationKey: 'WLH',
+      length: 400,
+      width: 600,
+      height: 300,
+      labelRotationDeg: 90,
+      yawQuarterTurn: 1,
+      pitchQuarterTurn: 0,
+      orientationAxes: { x: 'W+', y: 'L+', z: 'H+' },
+      orientationLabel: 'X:W+ Y:L+ Z:T+',
+    } satisfies Partial<(typeof result.placed)[number]>
+    Object.assign(result.placed[0]!, lwhPatch)
+    Object.assign(result.placed[1]!, wlhPatch)
+    expect(result.placed.map((box) => ({
+      orientationKey: box.orientationKey,
+      labelRotationDeg: box.labelRotationDeg,
+      orientationAxes: box.orientationAxes,
+    }))).toEqual([
+      { orientationKey: 'LWH', labelRotationDeg: 0, orientationAxes: { x: 'L+', y: 'W+', z: 'H+' } },
+      { orientationKey: 'WLH', labelRotationDeg: 90, orientationAxes: { x: 'W+', y: 'L+', z: 'H+' } },
+    ])
 
     const rows = buildExportPlanRows([item], result)
     expect(rows).toHaveLength(2)

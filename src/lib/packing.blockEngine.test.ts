@@ -1,10 +1,14 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { containers, effectiveContainer } from '../data/containers'
-import type { ContainerSpec, CargoItem, PlacedBox } from '../types'
+import type { ContainerSpec, CargoItem, LoadingMode, PlacedBox } from '../types'
 import { calculatePacking, shouldUseBlockEngine } from './packing'
 import { expectPackingResultContract } from './packingContract.testSupport'
+import { expectQuantityConservation } from './packingContract.testSupport'
+import { MINIMUM_SUPPORT_RATIO, supportDetails } from './packingFeasibility'
 import { isGapFillBox } from './placementSource'
+import { largestInterCargoGap } from './packingLayoutQuality'
+import { violatesStackChain } from './stackCapacity'
 
 const VOXEL_MM = 50
 
@@ -18,6 +22,7 @@ function vietnamFixture(): { container: ContainerSpec; items: CargoItem[] } {
     })),
   }
 }
+
 
 function packingMetrics(placed: PlacedBox[], container: ContainerSpec) {
   const effective = effectiveContainer(container)
@@ -104,7 +109,7 @@ function expectNoOverlapOrBounds(container: ContainerSpec, placed: PlacedBox[]) 
 }
 
 describe('block-building packing engine', () => {
-  it('uses the block path for large pure carton loads even below the old five-SKU gate', () => {
+  it('uses the block path only for whole loads that meet every conservative gate', () => {
     const container: ContainerSpec = {
       id: 'two-sku-cartons',
       label: 'Two SKU carton container',
@@ -122,15 +127,182 @@ describe('block-building packing engine', () => {
       { id: 'b', name: 'B carton', label: 'B', length: 800, width: 600, height: 600, weight: 10, quantity: 51, color: '#0ea5e9', canRotate: false, stackable: true },
     ]
 
-    expect(shouldUseBlockEngine(items, 'quantity')).toBe(true)
-    expect(shouldUseBlockEngine(items.slice(0, 1), 'quantity')).toBe(false)
-    expect(shouldUseBlockEngine([{ ...items[0], maxStackLayers: 2 }, items[1]], 'quantity')).toBe(false)
+    const gateCases: Array<{
+      name: string
+      cargoItems: CargoItem[]
+      loadingMode: LoadingMode
+      expected: boolean
+    }> = [
+      { name: 'quantity mode eligible', cargoItems: items, loadingMode: 'quantity', expected: true },
+      { name: 'volume mode eligible', cargoItems: items, loadingMode: 'volume', expected: true },
+      { name: 'input mode ineligible', cargoItems: items, loadingMode: 'input', expected: false },
+      { name: 'weight mode ineligible', cargoItems: items, loadingMode: 'weight', expected: false },
+      { name: 'one SKU ineligible', cargoItems: [{ ...items[0], quantity: 100 }], loadingMode: 'quantity', expected: false },
+      { name: 'total quantity 99 ineligible', cargoItems: [{ ...items[0], quantity: 48 }, items[1]], loadingMode: 'quantity', expected: false },
+      { name: 'undefined maxStackLayers eligible', cargoItems: items.map((item) => ({ ...item, maxStackLayers: undefined })), loadingMode: 'quantity', expected: true },
+      { name: '600mm boxes with four layers eligible', cargoItems: [{ ...items[0], maxStackLayers: 4 }, items[1]], loadingMode: 'quantity', expected: true },
+      { name: '600mm boxes with three layers ineligible', cargoItems: [{ ...items[0], maxStackLayers: 3 }, items[1]], loadingMode: 'quantity', expected: false },
+      { name: 'zero maxStackLayers ineligible', cargoItems: [{ ...items[0], maxStackLayers: 0 }, items[1]], loadingMode: 'quantity', expected: false },
+      { name: 'NaN maxStackLayers ineligible', cargoItems: [{ ...items[0], maxStackLayers: Number.NaN }, items[1]], loadingMode: 'quantity', expected: false },
+      { name: 'infinite maxStackLayers ineligible', cargoItems: [{ ...items[0], maxStackLayers: Number.POSITIVE_INFINITY }, items[1]], loadingMode: 'quantity', expected: false },
+      { name: 'stackable ground-only cargo eligible', cargoItems: [{ ...items[0], groundOnly: true }, items[1]], loadingMode: 'quantity', expected: true },
+      { name: 'non-stackable ground-only cargo ineligible', cargoItems: [{ ...items[0], groundOnly: true, stackable: false }, items[1]], loadingMode: 'quantity', expected: false },
+      { name: 'mixed 300mm height keeps per-SKU bound eligible at four', cargoItems: [{ ...items[0], maxStackLayers: 4 }, { ...items[1], height: 300 }], loadingMode: 'quantity', expected: true },
+    ]
+
+    for (const gateCase of gateCases) {
+      expect(shouldUseBlockEngine(gateCase.cargoItems, gateCase.loadingMode, container), gateCase.name).toBe(gateCase.expected)
+    }
 
     const result = calculatePacking(container, items, { loadingMode: 'quantity' })
 
     expect(result.placedCount).toBeGreaterThan(0)
     expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
   })
+
+  it('scopes stack-layer eligibility to each SKU reachable height, not the shared shortest box', () => {
+    const fixture = JSON.parse(readFileSync('test-data/json/0802/input.json', 'utf8')) as {
+      loadingMode: LoadingMode
+      container: ContainerSpec
+      items: CargoItem[]
+    }
+    const effective = effectiveContainer(fixture.container)
+    // P3-1 baseline: shared shortest fitting height is 210mm → whole-load bound 13.
+    // Mutate one taller SKU to msl=12 (< 13) while others stay 99; per-SKU bound for that
+    // SKU is ceil(height / ownFitH) and must not force the whole batch off block.
+    const items = fixture.items.map((item, index) => (
+      index === 0 ? { ...item, maxStackLayers: 12 } : { ...item, maxStackLayers: 99 }
+    ))
+
+    expect(shouldUseBlockEngine(items, fixture.loadingMode, effective)).toBe(true)
+
+    const limited = items[0]
+    const ownFitHeight = Math.min(
+      ...[
+        [limited.length, limited.width, limited.height],
+        [limited.width, limited.length, limited.height],
+      ]
+        .filter(([length, width, height]) =>
+          length <= effective.length && width <= effective.width && height <= effective.height,
+        )
+        .map(([, , height]) => height),
+    )
+    const ownBound = Math.ceil(effective.height / ownFitHeight)
+    expect(ownBound).toBeLessThan(13)
+    expect(12).toBeGreaterThanOrEqual(ownBound)
+  })
+
+  it('keeps block route when only one SKU exceeds container dimensions', () => {
+    const container: ContainerSpec = {
+      id: 'oversized-mix',
+      label: 'Oversized mix container',
+      description: 'Block-eligible load with one impossible SKU',
+      length: 5000,
+      width: 2400,
+      height: 2400,
+      maxWeight: 50_000,
+      doorGap: 0,
+      topGap: 0,
+      sideGap: 0,
+    }
+    const items: CargoItem[] = [
+      {
+        id: 'fit-a',
+        name: 'Fit A',
+        label: 'A',
+        length: 1000,
+        width: 600,
+        height: 600,
+        weight: 10,
+        quantity: 60,
+        color: '#f59e0b',
+        canRotate: false,
+        stackable: true,
+      },
+      {
+        id: 'fit-b',
+        name: 'Fit B',
+        label: 'B',
+        length: 800,
+        width: 600,
+        height: 600,
+        weight: 10,
+        quantity: 50,
+        color: '#0ea5e9',
+        canRotate: false,
+        stackable: true,
+      },
+      {
+        id: 'oversized',
+        name: 'Oversized',
+        label: 'Z',
+        length: container.length + 500,
+        width: container.width + 500,
+        height: container.height + 500,
+        weight: 10,
+        quantity: 5,
+        color: '#ef4444',
+        canRotate: false,
+        stackable: true,
+      },
+    ]
+
+    expect(shouldUseBlockEngine(items, 'quantity', container)).toBe(true)
+
+    const result = calculatePacking(container, items, { loadingMode: 'quantity' })
+    const oversizedUnplaced = result.unplaced.filter((entry) => entry.cargoId === 'oversized')
+
+    expect(oversizedUnplaced).toEqual([
+      expect.objectContaining({
+        cargoId: 'oversized',
+        quantity: 5,
+        reasonCode: 'exceeds-dimensions',
+      }),
+    ])
+    expect(result.placed.every((box) => box.cargoId !== 'oversized')).toBe(true)
+    expect(result.placedCount).toBeGreaterThan(0)
+    expect(result.placed.some((box) => box.cargoId === 'fit-a' || box.cargoId === 'fit-b')).toBe(true)
+  })
+
+  it('packs the captured 0802 Vietnam 40HQ quantity load completely with its constraints retained', () => {
+    const fixture = JSON.parse(readFileSync('test-data/json/0802/input.json', 'utf8')) as {
+      source: string
+      capturedAt: string
+      loadingMode: LoadingMode
+      container: ContainerSpec
+      items: CargoItem[]
+    }
+    const totalQuantity = fixture.items.reduce((sum, item) => sum + item.quantity, 0)
+    const groundOnlyItems = fixture.items.filter((item) => item.groundOnly)
+
+    expect(fixture.items).toHaveLength(28)
+    expect(totalQuantity).toBe(877)
+    expect(fixture.items.every((item) => item.maxStackLayers === 99)).toBe(true)
+    expect(groundOnlyItems).toHaveLength(1)
+    expect(groundOnlyItems[0]?.quantity).toBe(28)
+    expect.soft(shouldUseBlockEngine(fixture.items, fixture.loadingMode, effectiveContainer(fixture.container))).toBe(true)
+
+    const startedAt = Date.now()
+    const result = calculatePacking(fixture.container, fixture.items, { loadingMode: fixture.loadingMode })
+    const elapsedMs = Date.now() - startedAt
+    const groundOnlyBoxes = result.placed.filter((box) => box.cargoId === groundOnlyItems[0]?.id)
+
+    expect.soft(result.totalCargoCount).toBe(877)
+    expect.soft(result.placedCount).toBe(result.totalCargoCount)
+    expect.soft(result.placedCount).toBe(877)
+    expect.soft(result.unplaced).toEqual([])
+    expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
+    expect(groundOnlyBoxes).toHaveLength(28)
+    expect(groundOnlyBoxes.every((box) => box.z === 0)).toBe(true)
+    expect(result.placed.every((box) => box.maxStackLayers === 99)).toBe(true)
+    expectNoOverlapOrBounds(fixture.container, result.placed)
+
+    const graph = new Map(result.placed.map((box) => [box.id, box]))
+    for (const box of graph.values()) {
+      expect(violatesStackChain(box, graph)).toBeNull()
+    }
+    expect(elapsedMs).toBeLessThan(20_000)
+  }, 25_000)
 
   it('removes the Vietnam 20GP vertical-gap regression in both optimization modes', () => {
     const fixture = vietnamFixture()
@@ -151,15 +323,42 @@ describe('block-building packing engine', () => {
       expectNoOverlapOrBounds(fixture.container, result.placed)
       expect(elapsedMs).toBeLessThan(5000)
       expectPackingResultContract(`vietnam-20gp-${mode}`, result)
+      expectQuantityConservation(fixture.items, result)
     }
 
     const [quantity, volume] = outcomes
     expect(outcomes.some(({ result }) => result.placed.some(isGapFillBox))).toBe(true)
-    expect(quantity.result.placedCount).toBeGreaterThanOrEqual(volume.result.placedCount)
     expect(
       quantity.result.placedCount !== volume.result.placedCount
       || placedDistributionKey(quantity.result.placed) !== placedDistributionKey(volume.result.placed),
     ).toBe(true)
+  })
+
+  it('repairs the Vietnam 20GP quantity upper channel without losing loaded cartons', () => {
+    const fixture = vietnamFixture()
+    const result = calculatePacking(fixture.container, fixture.items, { loadingMode: 'quantity' })
+    const gap = largestInterCargoGap(result.placed, fixture.container)
+
+    expectQuantityConservation(fixture.items, result)
+    expectNoOverlapOrBounds(fixture.container, result.placed)
+    const graph = new Map(result.placed.map((box) => [box.id, box]))
+    expect(graph.size).toBe(result.placed.length)
+    for (const box of result.placed) expect(violatesStackChain(box, graph)).toBeNull()
+    for (const box of result.placed) {
+      const support = supportDetails(
+        { x: box.x, y: box.y, z: box.z },
+        { length: box.length, width: box.width, height: box.height },
+        result.placed.filter((candidate) => candidate.id !== box.id),
+      )
+      expect(box.supportedBy.every((id) => graph.has(id)), `${box.id} has missing support`).toBe(true)
+      expect(box.supportedBy.slice().sort(), `${box.id} support references`).toEqual(
+        support.supportedBy.map((candidate) => candidate.id).sort(),
+      )
+      expect(support.supportRatio, `${box.id} support ratio`).toBeGreaterThanOrEqual(MINIMUM_SUPPORT_RATIO)
+    }
+    expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
+    expect(result.placedCount).toBeGreaterThanOrEqual(482)
+    expect(gap?.mm ?? 0, `Vietnam quantity channel is ${gap?.mm ?? 0}mm`).toBeLessThanOrEqual(500)
   })
 
   it('keeps Vietnam 40HQ utilization above the frozen baseline', () => {
@@ -173,11 +372,13 @@ describe('block-building packing engine', () => {
       const elapsedMs = Date.now() - startedAt
       const metrics = packingMetrics(result.placed, container)
 
+      expect(result.placedCount).toBe(result.totalCargoCount)
       expect(metrics.utilPct).toBeGreaterThan(76.5)
       expect(result.diagnostics.filter((entry) => entry.severity === 'error')).toEqual([])
       expectNoOverlapOrBounds(container, result.placed)
       expect(elapsedMs).toBeLessThan(20_000)
       expectPackingResultContract(`vietnam-40hq-${mode}`, result)
+      expectQuantityConservation(fixture.items, result)
     }
   }, 25_000)
 })

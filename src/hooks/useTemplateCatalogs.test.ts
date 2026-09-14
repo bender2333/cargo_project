@@ -181,6 +181,40 @@ describe('useTemplateCatalogs', () => {
     expect(mockedReadExport).toHaveBeenCalledTimes(1)
   })
 
+  it('routes create to POST and update to PUT without inferring from name equality', async () => {
+    mockedReadImport.mockResolvedValue([importTemplate])
+    mockedReadExport.mockResolvedValue([])
+    mockedSaveImport.mockResolvedValue(createdImportTemplate)
+    mockedUpdateImport.mockResolvedValue({ ...importTemplate, name: 'Renamed in place' })
+
+    const { result } = renderHook(() => useTemplateCatalogs())
+    await waitFor(() => expect(result.current.importTemplates).toEqual([importTemplate]))
+
+    await act(async () => {
+      await result.current.createImportTemplate({
+        name: importTemplate.name,
+        mapping: createdImportTemplate.mapping,
+        units: createdImportTemplate.units,
+      })
+    })
+    expect(mockedSaveImport).toHaveBeenCalledTimes(1)
+    expect(mockedUpdateImport).not.toHaveBeenCalled()
+
+    mockedSaveImport.mockClear()
+    await act(async () => {
+      await result.current.updateImportTemplate(importTemplate.id, {
+        name: 'Renamed in place',
+        mapping: importTemplate.mapping,
+        units: importTemplate.units,
+      })
+    })
+    expect(mockedUpdateImport).toHaveBeenCalledWith(
+      importTemplate.id,
+      expect.objectContaining({ name: 'Renamed in place' }),
+    )
+    expect(mockedSaveImport).not.toHaveBeenCalled()
+  })
+
   it('runs import CRUD through the API and reconciles with authoritative lists', async () => {
     mockedReadImport
       .mockResolvedValueOnce([importTemplate])

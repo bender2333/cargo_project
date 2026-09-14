@@ -22,7 +22,16 @@ function canonicalParams(params: PackingDiagnostic['params']): Record<string, st
   )
 }
 
+function assertCompletedDepthLayers(result: PackingResult) {
+  for (const box of result.placed) {
+    if (!Number.isFinite(box.depthLayer) || box.depthLayer <= 0) {
+      throw new Error(`Placed box ${box.id} has invalid depthLayer`)
+    }
+  }
+}
+
 export function canonicalizePackingResult(result: PackingResult) {
+  assertCompletedDepthLayers(result)
   return {
     totals: {
       totalCargoCount: result.totalCargoCount,
@@ -60,9 +69,7 @@ export function canonicalizePackingResult(result: PackingResult) {
         supportedBy: sorted(layer.supportedBy),
       }))
       .sort((a, b) => a.physicalLayer - b.physicalLayer || compareText(a.id, b.id)),
-    workSteps: result.workSteps
-      .map((step) => ({ ...step }))
-      .sort((a, b) => a.step - b.step || compareText(a.boxId, b.boxId)),
+    workSteps: result.workSteps.map((step) => ({ ...step })),
     placements: result.placed
       .map((box) => ({
         id: box.id,
@@ -88,8 +95,9 @@ export function canonicalizePackingResult(result: PackingResult) {
         stackable: box.stackable,
         maxStackLayers: box.maxStackLayers ?? null,
         groundOnly: box.groundOnly ?? null,
+        blockingInvalid: box.blockingInvalid === true,
         physicalLayer: box.physicalLayer,
-        depthLayer: box.depthLayer ?? null,
+        depthLayer: roundNumber(box.depthLayer),
         workStep: box.workStep,
         supportType: box.supportType,
         supportedBy: sorted(box.supportedBy),

@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { ContainerSpec, PlacedBox } from '../types'
-import { MIN_SUPPORT_OVERLAP_RATIO, type ManualRotationDirection } from '../lib/manualPlacement'
+import { type ManualRotationDirection } from '../lib/manualPlacement'
 import { snapToGrid } from '../lib/snap'
 import { resolveDropTarget } from '../lib/sceneDrop'
 import { snapToEdges } from '../lib/snapEdges'
 import { applyManualPlacementSnap } from '../lib/manualPlacementSnap'
+import { isBlockingManualIssue, validateBox, type ManualDraft, type ManualPlacedBox, type ValidationIssue } from '../lib/manualPlacement'
 import type { CogOverlay } from '../lib/cogVisual'
 import { DEFAULT_PLACEMENT_SETTINGS, type PlacementSettings } from '../lib/placementSettings'
 import { manualMoveCommitArgs } from '../lib/manualMoveCommit'
@@ -17,7 +18,7 @@ import {
   syncLabelFaceSampleAttribute, applyBoxVisualState, getCachedBoxMaterials,
   boxOrientationQuaternion,
   boxGeometryForPlaced, sameBoxGeometry, applyBoxTransform,
-  cameraPositionForMode, rectsOverlap, isOutOfBounds, overlapAreaXY,
+  cameraPositionForMode,
   disposeSceneCaches,
   type MeshEntry,
 } from './containerScene/rendering'
@@ -30,7 +31,8 @@ import {
   advanceBoxAnimations, ensureGhost, positionGhost, clearGhost,
 } from './containerScene/interactions'
 
-export type SceneViewMode = 'iso' | 'top' | 'front' | 'side'
+import type { SceneViewMode } from './containerScene/rendering'
+export type { SceneViewMode }
 
 export type HoverBoxInfo = {
   id: string
@@ -61,11 +63,11 @@ type ContainerSceneProps = {
   onSelectBox?: (boxId: string) => void
   invalidBoxIds?: Set<string>
   manualEditable?: boolean
+  renderEnabled?: boolean
   onManualMove?: (boxId: string, x: number, y: number, z?: number) => void
   onManualDropFromPool?: (cargoId: string, x: number, y: number, z?: number) => void
   onManualRotate?: (boxId: string, direction?: ManualRotationDirection) => void
-  onManualDelete?: (boxId: string) => void
-  onManualOperationRejected?: (operation: 'move' | 'drop', boxId?: string, cargoId?: string) => void
+  onManualOperationRejected?: (operation: 'move' | 'drop', boxId?: string, cargoId?: string, issues?: ValidationIssue[]) => void
   selectedManualBoxId?: string | null
   onClearSelection?: () => void
   onHoverBox?: (info: HoverBoxInfo | null) => void
@@ -119,10 +121,10 @@ export function ContainerScene({
   onSelectBox,
   invalidBoxIds,
   manualEditable,
+  renderEnabled = true,
   onManualMove,
   onManualDropFromPool,
   onManualRotate,
-  onManualDelete,
   onManualOperationRejected,
   selectedManualBoxId,
   onClearSelection,
@@ -137,6 +139,9 @@ export function ContainerScene({
   const sceneStateRef = useRef<SceneState | null>(null)
   const invalidBoxIdsRef = useRef<Set<string>>(invalidBoxIds ?? new Set())
   const manualEditableRef = useRef<boolean>(manualEditable ?? false)
+  const renderEnabledRef = useRef(renderEnabled)
+  const animationFrameRef = useRef<number | null>(null)
+  const startAnimationRef = useRef<(() => void) | null>(null)
   const gridSnapRef = useRef<boolean>(gridSnap ?? true)
   const edgeSnapRef = useRef<boolean>(edgeSnap ?? true)
   const placementSettingsRef = useRef<PlacementSettings>(placementSettings ?? {
@@ -149,7 +154,6 @@ export function ContainerScene({
   const onManualMoveRef = useRef<typeof onManualMove>(onManualMove)
   const onManualDropFromPoolRef = useRef<typeof onManualDropFromPool>(onManualDropFromPool)
   const onManualRotateRef = useRef<typeof onManualRotate>(onManualRotate)
-  const onManualDeleteRef = useRef<typeof onManualDelete>(onManualDelete)
   const onManualOperationRejectedRef = useRef<typeof onManualOperationRejected>(onManualOperationRejected)
   const onSelectBoxRef = useRef<typeof onSelectBox>(onSelectBox)
   const onClearSelectionRef = useRef<typeof onClearSelection>(onClearSelection)
@@ -171,6 +175,18 @@ export function ContainerScene({
   useEffect(() => {
     manualEditableRef.current = manualEditable ?? false
   }, [manualEditable])
+
+  useEffect(() => {
+    renderEnabledRef.current = renderEnabled
+    if (renderEnabled) {
+      startAnimationRef.current?.()
+      return
+    }
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
+    }
+  }, [renderEnabled])
 
   useEffect(() => {
     gridSnapRef.current = gridSnap ?? true
@@ -215,10 +231,6 @@ export function ContainerScene({
   useEffect(() => {
     onManualRotateRef.current = onManualRotate
   }, [onManualRotate])
-
-  useEffect(() => {
-    onManualDeleteRef.current = onManualDelete
-  }, [onManualDelete])
 
   useEffect(() => {
     onManualOperationRejectedRef.current = onManualOperationRejected
@@ -396,6 +408,49 @@ export function ContainerScene({
     let dragState: DragState | null = null
     const Z_PIXELS_PER_MM = 0.5 // 1mm = 0.5 px → 1000mm = 500px vertical drag
 
+    const evaluateManualGeometry = (
+      boxId: string | null,
+      x: number,
+      y: number,
+      z: number,
+      l: number,
+      w: number,
+      h: number,
+      cargoMeta?: Partial<ManualPlacedBox> & { cargoId?: string },
+    ) => {
+      const settings = placementSettingsRef.current
+      const candidateId = boxId ?? '__scene-candidate__'
+      const others: ManualPlacedBox[] = []
+      for (const entry of sceneState.meshEntries.values()) {
+        if (boxId && entry.box.id === boxId) continue
+        others.push(entry.box as ManualPlacedBox)
+      }
+      const baseBox = boxId ? sceneState.meshEntries.get(boxId)?.box : undefined
+      const candidate = {
+        ...(baseBox as object | undefined),
+        id: candidateId,
+        cargoId: cargoMeta?.cargoId ?? baseBox?.cargoId ?? 'candidate',
+        label: cargoMeta?.label ?? baseBox?.label ?? 'C',
+        color: cargoMeta?.color ?? baseBox?.color ?? '#888888',
+        weight: cargoMeta?.weight ?? baseBox?.weight ?? 1,
+        canRotate: cargoMeta?.canRotate ?? baseBox?.canRotate ?? true,
+        stackable: cargoMeta?.stackable ?? baseBox?.stackable ?? true,
+        maxStackLayers: cargoMeta?.maxStackLayers ?? baseBox?.maxStackLayers,
+        groundOnly: cargoMeta?.groundOnly ?? baseBox?.groundOnly,
+        orientationKey: baseBox?.orientationKey ?? 'LWH',
+        labelRotationDeg: baseBox?.labelRotationDeg ?? 0,
+        x,
+        y,
+        z,
+        length: l,
+        width: w,
+        height: h,
+      } as ManualPlacedBox
+      const draft: ManualDraft = { boxes: [...others, candidate] }
+      const issues = validateBox(draft, candidateId, container, settings.supportPolicy).filter(isBlockingManualIssue)
+      return { invalid: issues.length > 0, issues }
+    }
+
     const computeInvalidByGeometry = (
       boxId: string | null,
       x: number,
@@ -404,32 +459,8 @@ export function ContainerScene({
       l: number,
       w: number,
       h: number,
-    ) => {
-      const settings = placementSettingsRef.current
-      if (isOutOfBounds(x, y, l, w, container)) return true
-      if (z < -0.01 || z + h > container.height + 0.01) return true
-      let supportedArea = z <= 0.01 ? l * w : 0
-      const baseArea = l * w
-      for (const other of sceneState.meshEntries.values()) {
-        if (boxId && other.box.id === boxId) continue
-        if (other.box.z >= z + h || z >= other.box.z + other.box.height) continue
-        if (rectsOverlap(x, y, l, w, other.box.x, other.box.y, other.box.length, other.box.width)) {
-          return true
-        }
-      }
-      if (z > 0.01) {
-        for (const other of sceneState.meshEntries.values()) {
-          if (boxId && other.box.id === boxId) continue
-          if (Math.abs(other.box.z + other.box.height - z) > 0.01) continue
-          supportedArea += overlapAreaXY(x, y, l, w, other.box.x, other.box.y, other.box.length, other.box.width)
-        }
-      }
-      const minSupportRatio = settings.supportPolicy.allowPartialOverhang
-        ? settings.supportPolicy.minSupportRatio
-        : MIN_SUPPORT_OVERLAP_RATIO
-      if (baseArea <= 0 || supportedArea / baseArea < minSupportRatio) return true
-      return false
-    }
+      cargoMeta?: Partial<ManualPlacedBox> & { cargoId?: string },
+    ) => evaluateManualGeometry(boxId, x, y, z, l, w, h, cargoMeta).invalid
 
     const computeDragInvalid = (entry: MeshEntry, x: number, y: number, z: number) =>
       computeInvalidByGeometry(entry.box.id, x, y, z, entry.box.length, entry.box.width, entry.box.height)
@@ -458,6 +489,10 @@ export function ContainerScene({
       const boxId = hit ? sceneState.boxByUuid.get(hit.object.uuid) : undefined
       if (boxId) {
         onSelectBoxRef.current?.(boxId)
+        if (manualEditableRef.current) {
+          event.preventDefault()
+          mountRef.current?.focus({ preventScroll: true })
+        }
       }
       if (!manualEditableRef.current || !boxId) return
       const entry = sceneState.meshEntries.get(boxId)
@@ -490,6 +525,7 @@ export function ContainerScene({
       if (hitBoxId) {
         selectedManualBoxIdRef.current = hitBoxId
         onSelectBoxRef.current?.(hitBoxId)
+        mountRef.current?.focus({ preventScroll: true })
       }
       event.preventDefault()
       event.stopPropagation()
@@ -668,7 +704,10 @@ export function ContainerScene({
             finalZ: finalZmm,
           }))
         } else {
-          onManualOperationRejectedRef.current?.('move', boxId)
+          {
+            const { issues } = evaluateManualGeometry(boxId, finalXmm, finalYmm, finalZmm, entry.box.length, entry.box.width, entry.box.height)
+            onManualOperationRejectedRef.current?.('move', boxId, entry.box.cargoId, issues)
+          }
           applyBoxTransform(entry, scale, length, width)
         }
         renderer.domElement.releasePointerCapture?.(event.pointerId)
@@ -789,7 +828,13 @@ export function ContainerScene({
       sceneState.poolDrop = null
       if (!cargoId) return
       if (!finalDrop || finalDrop.invalid) {
-        onManualOperationRejectedRef.current?.('drop', undefined, cargoId)
+        {
+          const info = poolDragInfoRef.current
+          const evaluated = info && finalDrop
+            ? evaluateManualGeometry(null, finalDrop.x, finalDrop.y, finalDrop.z, info.length, info.width, info.height, { cargoId })
+            : { issues: [] as ValidationIssue[] }
+          onManualOperationRejectedRef.current?.('drop', undefined, cargoId, evaluated.issues)
+        }
         return
       }
       const poolInfo = poolDragInfoRef.current
@@ -806,49 +851,6 @@ export function ContainerScene({
       const snappedX = snapped.x
       const snappedY = snapped.y
       onManualDropFromPoolRef.current?.(cargoId, snappedX, snappedY, finalDrop.z)
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!manualEditableRef.current) return
-      const target = event.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
-      const boxId = selectedManualBoxIdRef.current
-      if (!boxId) return
-      const entry = sceneState.meshEntries.get(boxId)
-      if (!entry) return
-      const step = event.shiftKey ? 100 : event.ctrlKey || event.metaKey ? 1 : 10
-      let handled = true
-      switch (event.key) {
-        case 'Delete':
-        case 'Backspace':
-          onManualDeleteRef.current?.(boxId)
-          break
-        case 'Escape':
-          setSceneGizmoVisible(false)
-          onClearSelectionRef.current?.()
-          break
-        case 'ArrowLeft':
-          onManualMoveRef.current?.(boxId, entry.box.x - step, entry.box.y)
-          break
-        case 'ArrowRight':
-          onManualMoveRef.current?.(boxId, entry.box.x + step, entry.box.y)
-          break
-        case 'ArrowDown':
-          onManualMoveRef.current?.(boxId, entry.box.x, entry.box.y - step)
-          break
-        case 'ArrowUp':
-          onManualMoveRef.current?.(boxId, entry.box.x, entry.box.y + step)
-          break
-        case 'PageUp':
-          onManualMoveRef.current?.(boxId, entry.box.x, entry.box.y, Math.max(0, entry.box.z + step))
-          break
-        case 'PageDown':
-          onManualMoveRef.current?.(boxId, entry.box.x, entry.box.y, Math.max(0, entry.box.z - step))
-          break
-        default:
-          handled = false
-      }
-      if (handled) event.preventDefault()
     }
 
     renderer.domElement.addEventListener('pointerdown', onPointerDown)
@@ -868,22 +870,33 @@ export function ContainerScene({
       controls.update()
     }
     mount.addEventListener('test-camera-command', onTestCameraCommand)
-    window.addEventListener('keydown', onKeyDown)
 
-    let frame = 0
     const animate = () => {
-      frame = requestAnimationFrame(animate)
+      animationFrameRef.current = null
+      if (!renderEnabledRef.current) return
       if (controls.enabled) {
         controls.update()
       }
       advanceBoxAnimations(sceneState, performance.now())
       syncRotationGizmo(sceneState, selectedManualBoxIdRef.current)
       renderer.render(scene, camera)
+      animationFrameRef.current = requestAnimationFrame(animate)
     }
-    animate()
+    const startAnimation = () => {
+      if (!renderEnabledRef.current || animationFrameRef.current !== null) return
+      animate()
+    }
+    startAnimationRef.current = startAnimation
+    startAnimation()
 
     return () => {
-      cancelAnimationFrame(frame)
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
+      }
+      if (startAnimationRef.current === startAnimation) {
+        startAnimationRef.current = null
+      }
       observer.disconnect()
       controls.dispose()
       if (sceneState.ghost) {
@@ -934,7 +947,6 @@ export function ContainerScene({
       renderer.domElement.removeEventListener('dragleave', onDragLeave)
       renderer.domElement.removeEventListener('drop', onDrop)
       mount.removeEventListener('test-camera-command', onTestCameraCommand)
-      window.removeEventListener('keydown', onKeyDown)
       mount.removeChild(renderer.domElement)
       if (sceneStateRef.current === sceneState) {
         sceneStateRef.current = null
@@ -1283,7 +1295,8 @@ export function ContainerScene({
   return (
     <div
       ref={mountRef}
-      className="h-full min-h-[420px] w-full"
+      className="h-full min-h-[420px] w-full outline-none"
+      tabIndex={manualEditable ? 0 : undefined}
       data-testid="container-scene"
       data-controls-enabled="true"
       data-interaction-mode={interactionMode}

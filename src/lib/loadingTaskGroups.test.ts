@@ -126,4 +126,12 @@ describe('buildLoadingTaskGroups', () => {
     expect(groups.flatMap((group) => group.boxIds)).toEqual(['a', 'b', 'c'])
     expect(groups.map((group) => [group.stepStart, group.stepEnd])).toEqual([[1, 2], [3, 3]])
   })
+  it('rejects malformed missing depth layers instead of emitting an impossible group', () => {
+    const malformed = makeBox({ id: 'missing-depth', workStep: 1 }) as Partial<PlacedBox> & Pick<PlacedBox, 'id' | 'workStep'>
+    delete malformed.depthLayer
+
+    expect(() => buildLoadingTaskGroups(makeResult([malformed as PlacedBox]))).toThrow(
+      'Placed box missing-depth has invalid depthLayer',
+    )
+  })
 })

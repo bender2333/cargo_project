@@ -20,7 +20,10 @@ export type ManualCargoPlanItem = {
   stackable?: boolean
   maxStackLayers?: number
   groundOnly?: boolean
+  label?: string
+  color?: string
 }
+
 
 export type ManualPlacementSessionState = {
   mode: ManualPlacementMode
@@ -38,7 +41,7 @@ export type ManualPlacementSessionAction =
   | { type: 'redo' }
   | { type: 'continuedFromAutomatic'; draft: ManualDraft; cargoPlan: ManualCargoPlanItem[] }
   | { type: 'cargoPlanChanged'; cargoPlan: ManualCargoPlanItem[] }
-  | { type: 'historyDraftRestored'; draft: ManualDraft; mode: ManualPlacementMode; draftInitialized: boolean; cargoPlan: ManualCargoPlanItem[] }
+  | { type: 'historyDraftRestored'; draft: ManualDraft; mode: ManualPlacementMode; draftInitialized: boolean; snapshotCargoPlan: ManualCargoPlanItem[] }
 
 function selectionInDraft(selectedId: string | null, draft: ManualDraft) {
   if (selectedId === null) return null
@@ -52,39 +55,41 @@ function cargoQuantityLimits(cargoPlan: ManualCargoPlanItem[]) {
   ]))
 }
 
-function effectiveMaxStackLayers(cargo: ManualCargoPlanItem) {
-  if ('maxStackLayers' in cargo) return cargo.maxStackLayers
-  return undefined
-}
 
 function syncBoxGeometry(box: ManualPlacedBox, cargo: ManualCargoPlanItem): ManualPlacedBox {
   const nextWeight = cargo.weight ?? box.weight
   const nextStackable = cargo.stackable ?? box.stackable
-  const nextMaxStackLayers = effectiveMaxStackLayers(cargo)
+  const nextMaxStackLayers = cargo.maxStackLayers
   const nextGroundOnly = 'groundOnly' in cargo ? cargo.groundOnly : box.groundOnly
   const nextCanRotate = cargo.canRotate ?? box.canRotate
-
+  const nextLabel = cargo.label ?? box.label
+  const nextColor = cargo.color ?? box.color
   const baseLength = cargo.length ?? box.baseLength ?? box.length
   const baseWidth = cargo.width ?? box.baseWidth ?? box.width
   const baseHeight = cargo.height ?? box.baseHeight ?? box.height
-
-  let orientationKey = box.orientationKey
-  // Only collapse orientation when the cargo rule newly forbids rotation.
-  if (box.canRotate !== false && nextCanRotate === false && orientationKey !== 'LWH') {
-    orientationKey = 'LWH'
-  }
-
+  const canonicalizePose = nextCanRotate === false
+  const orientationKey = canonicalizePose ? 'LWH' : box.orientationKey
   const sized = dimensionsForManualOrientation(
     { length: baseLength, width: baseWidth, height: baseHeight },
     orientationKey as OrientationKey,
   )
-
+  const poseAlreadyCanonical = !canonicalizePose || (
+    box.labelRotationDeg === 0
+    && box.yawQuarterTurn === 0
+    && box.pitchQuarterTurn === 0
+    && box.orientationAxes?.x === 'L+'
+    && box.orientationAxes?.y === 'W+'
+    && box.orientationAxes?.z === 'H+'
+    && box.orientationLabel === 'X:L+ Y:W+ Z:T+'
+  )
   if (
     nextWeight === box.weight
     && nextStackable === box.stackable
     && nextMaxStackLayers === box.maxStackLayers
     && nextGroundOnly === box.groundOnly
     && nextCanRotate === box.canRotate
+    && nextLabel === box.label
+    && nextColor === box.color
     && baseLength === (box.baseLength ?? box.length)
     && baseWidth === (box.baseWidth ?? box.width)
     && baseHeight === (box.baseHeight ?? box.height)
@@ -92,10 +97,8 @@ function syncBoxGeometry(box: ManualPlacedBox, cargo: ManualCargoPlanItem): Manu
     && sized.width === box.width
     && sized.height === box.height
     && orientationKey === box.orientationKey
-  ) {
-    return box
-  }
-
+    && poseAlreadyCanonical
+  ) return box
   return {
     ...box,
     weight: nextWeight,
@@ -103,6 +106,8 @@ function syncBoxGeometry(box: ManualPlacedBox, cargo: ManualCargoPlanItem): Manu
     maxStackLayers: nextMaxStackLayers,
     groundOnly: nextGroundOnly,
     canRotate: nextCanRotate,
+    label: nextLabel,
+    color: nextColor,
     baseLength,
     baseWidth,
     baseHeight,
@@ -110,25 +115,39 @@ function syncBoxGeometry(box: ManualPlacedBox, cargo: ManualCargoPlanItem): Manu
     width: sized.width,
     height: sized.height,
     orientationKey,
+    ...(canonicalizePose ? {
+      labelRotationDeg: 0 as const,
+      yawQuarterTurn: 0 as const,
+      pitchQuarterTurn: 0 as const,
+      orientationAxes: { x: 'L+', y: 'W+', z: 'H+' } as const,
+      orientationLabel: 'X:L+ Y:W+ Z:T+',
+    } : {}),
   }
 }
 function reconcileDraft(draft: ManualDraft, limits: Map<string, number>, attrs: Map<string, ManualCargoPlanItem>) {
   const used = new Map<string, number>()
-  let attrChanged = false
-  const boxes = draft.boxes.filter((box) => {
+  let boxes: ManualPlacedBox[] | undefined
+  draft.boxes.forEach((box, index) => {
     const count = used.get(box.cargoId) ?? 0
-    const keep = count < (limits.get(box.cargoId) ?? 0)
-    if (keep) used.set(box.cargoId, count + 1)
-    return keep
-  }).map((box) => {
+    if (count >= (limits.get(box.cargoId) ?? 0)) {
+      boxes ??= draft.boxes.slice(0, index)
+      return
+    }
+    used.set(box.cargoId, count + 1)
     const cargo = attrs.get(box.cargoId)
-    if (!cargo) return box
-    const next = syncBoxGeometry(box, cargo)
-    if (next !== box) attrChanged = true
-    return next
+    const next = cargo ? syncBoxGeometry(box, cargo) : box
+    if (next !== box) boxes ??= draft.boxes.slice(0, index)
+    boxes?.push(next)
   })
-  const countChanged = boxes.length !== draft.boxes.length
-  return countChanged || attrChanged ? { ...draft, boxes } : draft
+  return boxes ? { ...draft, boxes } : draft
+}
+
+function reconcileDraftAgainstCargoPlan(draft: ManualDraft, cargoPlan: ManualCargoPlanItem[]) {
+  return reconcileDraft(
+    draft,
+    cargoQuantityLimits(cargoPlan),
+    new Map(cargoPlan.map((item) => [item.id, item])),
+  )
 }
 
 export function reconcileManualPlacementSessionState(
@@ -178,15 +197,15 @@ export function manualPlacementSessionReducer(
           : { ...state, selectedId }
       }
     case 'draftCommitted': {
-      const history = commitManualHistory(state.history, action.draft)
+      const draft = reconcileDraftAgainstCargoPlan(action.draft, action.cargoPlan)
+      const history = commitManualHistory(state.history, draft)
       const requestedSelection = 'selectedId' in action ? action.selectedId ?? null : state.selectedId
-      const next: ManualPlacementSessionState = {
+      return {
         ...state,
         history,
         selectedId: selectionInDraft(requestedSelection, history.present),
         draftInitialized: true,
       }
-      return reconcileManualPlacementSessionState(next, action.cargoPlan)
     }
     case 'undo': {
       const history = undoManualHistory(state.history)
@@ -201,28 +220,28 @@ export function manualPlacementSessionReducer(
       return { ...state, history, selectedId }
     }
     case 'continuedFromAutomatic': {
-      const next: ManualPlacementSessionState = {
+      const draft = reconcileDraftAgainstCargoPlan(action.draft, action.cargoPlan)
+      return {
         mode: 'manual',
-        history: commitManualHistory(state.history, action.draft),
+        history: commitManualHistory(state.history, draft),
         selectedId: null,
         draftInitialized: true,
       }
-      return reconcileManualPlacementSessionState(next, action.cargoPlan)
     }
     case 'cargoPlanChanged':
       return reconcileManualPlacementSessionState(state, action.cargoPlan)
     case 'historyDraftRestored': {
-      const next: ManualPlacementSessionState = {
+      const draft = reconcileDraftAgainstCargoPlan(action.draft, action.snapshotCargoPlan)
+      return {
         mode: action.mode,
         history: {
           past: [],
-          present: action.draft,
+          present: draft,
           future: [],
         },
         selectedId: null,
         draftInitialized: action.draftInitialized,
       }
-      return reconcileManualPlacementSessionState(next, action.cargoPlan)
     }
   }
 }

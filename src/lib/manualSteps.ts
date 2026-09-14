@@ -1,12 +1,13 @@
-import type { CargoItem, ContainerSpec, PackingDiagnostic, PackingResult, PlacedBox } from '../types'
+import type { CargoItem, ContainerSpec, PackingDiagnostic, PackingResult, PlacementBox, PlacedBox } from '../types'
 import { finalizePlacementGeometry } from './finalizePackingResult'
 import { buildLabelStats } from './labels'
 import type { ValidationIssue } from './manualPlacement'
+import { manualIssueIdentity } from './planCompliance'
 
 export const MANUAL_UNPLACED_REASON_CODE = 'manual-not-placed'
 const MANUAL_UNPLACED_REASON = 'Not placed in manual plan'
 
-function enrichPlacedBoxes(boxes: PlacedBox[], cargoItems: CargoItem[]) {
+function enrichPlacedBoxes(boxes: PlacementBox[], cargoItems: CargoItem[]) {
   const cargoById = new Map(cargoItems.map((cargo) => [cargo.id, cargo]))
   const indexes = new Map<string, number>()
   return boxes.map((box) => {
@@ -19,7 +20,6 @@ function enrichPlacedBoxes(boxes: PlacedBox[], cargoItems: CargoItem[]) {
       label: cargo?.label || box.label,
       color: cargo?.color ?? box.color,
       index,
-      supportedBy: [...box.supportedBy],
     }
   })
 }
@@ -39,7 +39,8 @@ function buildManualDiagnostics(
   }
 
   const usedWeight = placed.reduce((sum, box) => sum + box.weight, 0)
-  if (container.maxWeight && usedWeight > container.maxWeight) {
+  const hasProjectedOverweight = validationIssues?.some((issue) => issue.type === 'overweight') ?? false
+  if (!hasProjectedOverweight && container.maxWeight && usedWeight > container.maxWeight) {
     pushUnique({
       id: 'weight-check',
       severity: 'error',
@@ -49,10 +50,14 @@ function buildManualDiagnostics(
 
   if (validationIssues) {
     for (const issue of validationIssues) {
-      const diagId = issueToDiagnosticId(issue.type)
-      if (!diagId) continue
+      const code = issueToDiagnosticCode(issue.type)
+      if (!code) continue
+      const sourceIssueId = manualIssueIdentity(issue)
       pushUnique({
-        id: diagId,
+        id: `${code}:${sourceIssueId}`,
+        code,
+        source: 'manual',
+        sourceIssueId,
         severity: issue.severity === 'warning' ? 'warning' : 'error',
         message: issue.message,
       })
@@ -62,7 +67,7 @@ function buildManualDiagnostics(
   return diagnostics
 }
 
-function issueToDiagnosticId(type: ValidationIssue['type']): string | null {
+function issueToDiagnosticCode(type: ValidationIssue['type']): string | null {
   switch (type) {
     case 'boundary': return 'boundary-check'
     case 'overlap': return 'overlap-check'
@@ -76,21 +81,20 @@ function issueToDiagnosticId(type: ValidationIssue['type']): string | null {
 }
 
 export function buildManualPackingResult(
-  boxes: PlacedBox[],
+  boxes: PlacementBox[],
   container: ContainerSpec,
   cargoItems?: CargoItem[],
   validationIssues?: ValidationIssue[],
 ): PackingResult {
-  const inputBoxes = cargoItems
-    ? enrichPlacedBoxes(boxes, cargoItems)
-    : boxes.map((box) => ({ ...box, supportedBy: [...box.supportedBy] }))
+  const inputBoxes = cargoItems ? enrichPlacedBoxes(boxes, cargoItems) : boxes
   const { placed, layers, workSteps } = finalizePlacementGeometry(inputBoxes, container)
 
-  const usedVolume = placed.reduce((sum, box) => sum + box.length * box.width * box.height, 0)
+  const counted = placed.filter((box) => !box.blockingInvalid)
+  const usedVolume = counted.reduce((sum, box) => sum + box.length * box.width * box.height, 0)
   const containerVolume = container.length * container.width * container.height
-  const usedWeight = placed.reduce((sum, box) => sum + box.weight, 0)
+  const usedWeight = counted.reduce((sum, box) => sum + box.weight, 0)
   const placedByCargoId = new Map<string, number>()
-  for (const box of placed) {
+  for (const box of counted) {
     placedByCargoId.set(box.cargoId, (placedByCargoId.get(box.cargoId) ?? 0) + 1)
   }
   const unplaced = (cargoItems ?? []).flatMap((cargo) => {
@@ -110,14 +114,14 @@ export function buildManualPackingResult(
   return {
     placed,
     unplaced,
-    layers,
+    layers: layers.filter((layer) => layer.count > 0),
     workSteps,
-    labelStats: buildLabelStats(cargoItems ?? [], placed),
+    labelStats: buildLabelStats(cargoItems ?? [], counted),
     diagnostics: buildManualDiagnostics(placed, container, validationIssues),
     totalCargoCount: cargoItems
       ? cargoItems.reduce((sum, cargo) => sum + cargo.quantity, 0)
-      : placed.length,
-    placedCount: placed.length,
+      : counted.length,
+    placedCount: counted.length,
     usedVolume,
     containerVolume,
     volumeUtilization: containerVolume ? (usedVolume / containerVolume) * 100 : 0,

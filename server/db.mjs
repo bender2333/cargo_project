@@ -268,7 +268,14 @@ function hashPassword(plain) {
 
 // 2. Initialize default admin account
 const initAdmin = () => {
-  const desiredPassword = process.env.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD
+  const isProduction = process.env.NODE_ENV === 'production'
+  const configuredPassword = process.env.ADMIN_PASSWORD
+  if (isProduction && !configuredPassword) {
+    if (db.open) db.close()
+    throw new Error('[security] ADMIN_PASSWORD must be set in production')
+  }
+
+  const desiredPassword = configuredPassword || DEFAULT_ADMIN_PASSWORD
   const existing = db.prepare('SELECT id, password_hash FROM users WHERE username = ?').get('admin')
   const now = new Date().toISOString()
   if (!existing) {
@@ -285,21 +292,20 @@ const initAdmin = () => {
     return
   }
   // If operator provided ADMIN_PASSWORD env, rotate to it (idempotent reset).
-  if (process.env.ADMIN_PASSWORD) {
+  if (configuredPassword) {
     const matches = bcrypt.compareSync(desiredPassword, existing.password_hash)
     if (!matches) {
       db.prepare('UPDATE users SET password_hash = ?, password_changed_at = ? WHERE id = ?')
         .run(hashPassword(desiredPassword), now, existing.id)
       console.log('[security] admin password rotated from ADMIN_PASSWORD env')
     }
-  } else if (process.env.NODE_ENV === 'production') {
-    console.warn('[security] admin account exists but ADMIN_PASSWORD not set — password may still be the default')
   }
 }
 
+
 // 3. Initialize default test user account (dev / E2E support; skipped if SKIP_TESTUSER=1)
 const initTestUser = () => {
-  if (process.env.SKIP_TESTUSER === '1') return
+  if (process.env.NODE_ENV === 'production' || process.env.SKIP_TESTUSER === '1') return
   const existing = db.prepare('SELECT id FROM users WHERE username = ?').get('testuser')
   if (!existing) {
     const id = randomUUID()
@@ -312,7 +318,9 @@ const initTestUser = () => {
   }
 }
 
+
 initAdmin()
 initTestUser()
+export { initAdmin, initTestUser }
 
 export default db

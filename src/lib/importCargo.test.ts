@@ -1,8 +1,68 @@
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import * as XLSX from 'xlsx'
-import { buildTemplateImportConfig, IMPORT_CODES, parseCargoRows, parseCargoRowsWithMapping, parseCargoRowsWithTemplate } from './importCargo'
+import {
+  buildTemplateImportConfig,
+  IMPORT_CODES,
+  MAX_IMPORT_CELLS,
+  MAX_IMPORT_COLUMNS,
+  MAX_IMPORT_ROWS,
+  importWorksheetSizeWithinLimits,
+  parseCargoRows,
+  parseCargoRowsWithMapping,
+  parseCargoRowsWithTemplate,
+} from './importCargo'
 import type { ImportCargoRow, ImportTemplateConfig } from './importCargo'
+
+
+
+const dimensionsOnlyRows: ImportCargoRow[] = [
+  ['L', 'W', 'H'],
+  [100, 80, 60],
+]
+const dimensionsOnlyTemplate: ImportTemplateConfig = {
+  mapping: { length: 'L', width: 'W', height: 'H' },
+  headerRow: 1,
+  startRow: 2,
+}
+
+describe('optional cargo weight mapping', () => {
+  it('uses an internal 1kg weight when weight is unmapped', () => {
+    const result = parseCargoRowsWithTemplate(
+      dimensionsOnlyRows,
+      dimensionsOnlyTemplate,
+      { createId: () => 'unmapped-weight' },
+    )
+    expect(result.errors).toEqual([])
+    expect(result.warnings).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'invalid-weight' }),
+    ]))
+    expect(result.items[0].weight).toBe(1)
+  })
+
+  it('uses an internal 1kg weight for a blank mapped cell', () => {
+    const result = parseCargoRowsWithTemplate(
+      [['L', 'W', 'H', 'Weight'], [100, 80, 60, '']],
+      { ...dimensionsOnlyTemplate, mapping: { ...dimensionsOnlyTemplate.mapping, weight: 'Weight' } },
+      { createId: () => 'blank-weight' },
+    )
+    expect(result.errors).toEqual([])
+    expect(result.items[0].weight).toBe(1)
+  })
+
+  it.each(['bad', 0, -1])('rejects a non-empty invalid mapped weight %p', (weight) => {
+    const result = parseCargoRowsWithTemplate(
+      [['L', 'W', 'H', 'Weight'], [100, 80, 60, weight]],
+      { ...dimensionsOnlyTemplate, mapping: { ...dimensionsOnlyTemplate.mapping, weight: 'Weight' } },
+      { createId: () => 'invalid-weight' },
+    )
+    expect(result.errors).toEqual([
+      expect.objectContaining({ code: 'invalid-weight', row: 2 }),
+    ])
+    expect(result.items).toEqual([])
+  })
+})
+
 
 describe('parseCargoRows', () => {
   it('maps Chinese headers and converts centimeter dimensions to millimeters', () => {
@@ -187,7 +247,7 @@ describe('parseCargoRowsWithMapping', () => {
           quantity: 'Qty',
         },
         units: { length: 'cm', width: 'cm', height: 'cm' },
-        defaultValues: { weight: 12 },
+        defaultValues: {},
       },
       { createId: () => 'template-1' },
     )
@@ -224,7 +284,6 @@ describe('parseCargoRowsWithMapping', () => {
         defaultValues: {
           label: 'TPL',
           quantity: 2,
-          weight: 12,
           color: '#123456',
           canRotate: false,
           stackable: false,
@@ -291,6 +350,8 @@ describe('parseCargoRowsWithMapping', () => {
     const workbook = XLSX.readFile(workbookPath)
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
     const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true }) as ImportCargoRow[]
+    const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1:A1')
+    expect(importWorksheetSizeWithinLimits(range.e.r - range.s.r + 1, range.e.c - range.s.c + 1)).toBe(true)
 
     const result = parseCargoRowsWithTemplate(rows, buildTemplateImportConfig({
       name: 'Vietnam combined dimensions',
@@ -308,7 +369,7 @@ describe('parseCargoRowsWithMapping', () => {
       dimensionMode: 'combined',
       combinedColumn: '外箱尺寸（mm）',
       dimensionOrder: ['length', 'width', 'height'],
-      defaultValues: { quantity: 1, weight: 10, canRotate: true, stackable: true },
+      defaultValues: { quantity: 1, canRotate: true, stackable: true },
     }))
 
     expect(result.errors).toEqual([])
@@ -323,6 +384,45 @@ describe('parseCargoRowsWithMapping', () => {
     })
   })
 
+  it('parses Vietnam weight after the title row is skipped with an explicit mapping', () => {
+    const workbookPath = path.join(process.cwd(), 'test-data', 'excel', '越南第十一批6.2海运.xlsx')
+    const workbook = XLSX.readFile(workbookPath)
+    const sheet = workbook.Sheets[workbook.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true }) as ImportCargoRow[]
+    const mapping = {
+      label: '物料代码SKU',
+      name: '物料名称',
+      quantity: '箱数',
+      dimensions: '外箱尺寸（mm）',
+      weight: '产品毛重(KG)/箱',
+    }
+
+    const untitled = parseCargoRowsWithTemplate(rows, buildTemplateImportConfig({
+      mapping: {},
+      headerRow: 1,
+      startRow: 2,
+      dimensionMode: 'combined',
+      combinedColumn: '外箱尺寸（mm）',
+      defaultValues: { quantity: 1, canRotate: true, stackable: true },
+    }))
+    expect(untitled.summary.importedRows).toBe(0)
+
+    const result = parseCargoRowsWithTemplate(rows, buildTemplateImportConfig({
+      mapping,
+      headerRow: 2,
+      startRow: 3,
+      dimensionMode: 'combined',
+      combinedColumn: '外箱尺寸（mm）',
+      defaultValues: { quantity: 1, canRotate: true, stackable: true },
+    }))
+
+    expect(result.errors).toEqual([])
+    expect(result.summary.importedRows).toBe(24)
+    expect(result.items[0]).toMatchObject({ weight: 8.27, length: 530, width: 305, height: 310 })
+  })
+
+
+
   it('applies default quantity when no quantity column is mapped', () => {
     const result = parseCargoRowsWithTemplate(
       [{ Item: 'Template crate', L: 80, W: 60, H: 40, Wt: 12 }],
@@ -332,9 +432,10 @@ describe('parseCargoRowsWithMapping', () => {
           length: 'L',
           width: 'W',
           height: 'H',
+          weight: 'Wt',
         },
         units: { length: 'cm', width: 'cm', height: 'cm' },
-        defaultValues: { label: 'TP', quantity: 3, weight: 12 },
+        defaultValues: { label: 'TP', quantity: 3 },
       },
       { createId: () => 'template-default-quantity' },
     )
@@ -408,7 +509,6 @@ describe('parseCargoRowsWithMapping', () => {
         quantity: 'Cartons',
         dimensions: 'Size',
       },
-      defaultValues: { weight: 10 },
       units: { length: 'cm', width: 'cm', height: 'cm' },
       dimensionMode: 'combined' as const,
       combinedColumn: 'Size',
@@ -505,7 +605,6 @@ describe('parseCargoRowsWithMapping', () => {
   it('combined dimensions respect user-selected order (width,length,height)', () => {
     const template: ImportTemplateConfig = {
       mapping: { dimensions: '外箱尺寸（mm）' },
-      defaultValues: { weight: 10 },
       headerRow: 1,
       startRow: 2,
       dimensionMode: 'combined',
@@ -526,7 +625,6 @@ describe('parseCargoRowsWithMapping', () => {
   it('default dimension order is LWH when not set', () => {
     const template: ImportTemplateConfig = {
       mapping: { dimensions: '尺寸' },
-      defaultValues: { weight: 10 },
       headerRow: 1,
       startRow: 2,
       dimensionMode: 'combined',
@@ -542,10 +640,88 @@ describe('parseCargoRowsWithMapping', () => {
     expect(result.items[0]!.height).toBe(435)
   })
 
+  it('keeps the Russian pallet fixture within the import boundary and parses all rows', () => {
+    const workbookPath = path.join(process.cwd(), 'test-data', 'excel', '俄罗斯整托装柜尺寸.xlsx')
+    const workbook = XLSX.readFile(workbookPath)
+    const sheet = workbook.Sheets[workbook.SheetNames[0]]
+    const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1:A1')
+    const rows = XLSX.utils.sheet_to_json<Record<string, string | number | null>>(sheet) as ImportCargoRow[]
+
+    expect(importWorksheetSizeWithinLimits(range.e.r - range.s.r + 1, range.e.c - range.s.c + 1)).toBe(true)
+    const result = parseCargoRows(rows, { createId: () => 'russian-fixture' })
+    expect(result.errors).toEqual([])
+    expect(result.items).toHaveLength(31)
+  })
+
+  it('parses the Russian pallet fixture with an explicit template mapping', () => {
+    const workbookPath = path.join(process.cwd(), 'test-data', 'excel', '俄罗斯整托装柜尺寸.xlsx')
+    const workbook = XLSX.readFile(workbookPath)
+    const sheet = workbook.Sheets[workbook.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true }) as ImportCargoRow[]
+    const result = parseCargoRowsWithTemplate(rows, {
+      mapping: {
+        label: '托盘',
+        length: '长cm',
+        width: '宽cm',
+        height: '高cm',
+        weight: '整托重量kg',
+      },
+      units: { length: 'cm', width: 'cm', height: 'cm' },
+      headerRow: 1,
+      startRow: 2,
+    }, { createId: () => 'russian-explicit' })
+
+    expect(result.errors).toEqual([])
+    expect(result.items).toHaveLength(31)
+    expect(result.items[0]).toMatchObject({
+      label: '1',
+      length: 1250,
+      width: 830,
+      height: 2500,
+    })
+  })
+
+  it('uses an internal 1kg weight for a blank mapped cell even if a historical default is present', () => {
+    const result = parseCargoRowsWithTemplate(
+      [{ L: 400, W: 500, H: 600, Weight: '' }],
+      {
+        mapping: { length: 'L', width: 'W', height: 'H', weight: 'Weight' },
+        defaultValues: { quantity: 1 },
+      },
+      { createId: () => 'mapped-blank-weight' },
+    )
+
+    expect(result.errors).toEqual([])
+    expect(result.items).toEqual([expect.objectContaining({ weight: 1 })])
+  })
+
+  it('uses an internal 1kg weight when no weight column is mapped', () => {
+    const result = parseCargoRowsWithTemplate(
+      [{ L: 400, W: 500, H: 600 }],
+      {
+        mapping: { length: 'L', width: 'W', height: 'H' },
+        defaultValues: { quantity: 1 },
+      },
+      { createId: () => 'unmapped-default-weight' },
+    )
+
+    expect(result.errors).toEqual([])
+    expect(result.items).toEqual([expect.objectContaining({ weight: 1 })])
+  })
+
+
+  it('enforces deterministic expanded worksheet row and cell limits', () => {
+    expect(importWorksheetSizeWithinLimits(MAX_IMPORT_ROWS, Math.floor(MAX_IMPORT_CELLS / MAX_IMPORT_ROWS))).toBe(true)
+    expect(importWorksheetSizeWithinLimits(MAX_IMPORT_ROWS + 1, 1)).toBe(false)
+    expect(importWorksheetSizeWithinLimits(1, MAX_IMPORT_CELLS + 1)).toBe(false)
+    expect(importWorksheetSizeWithinLimits(1, MAX_IMPORT_COLUMNS)).toBe(true)
+    expect(importWorksheetSizeWithinLimits(1, MAX_IMPORT_COLUMNS + 1)).toBe(false)
+    expect(importWorksheetSizeWithinLimits(1_001, 200)).toBe(false)
+  })
+
   it('falls back to mapping.dimensions when saved combinedColumn is an empty string', () => {
     const template: ImportTemplateConfig = {
       mapping: { dimensions: '尺寸' },
-      defaultValues: { weight: 10 },
       headerRow: 1,
       startRow: 2,
       dimensionMode: 'combined',
@@ -577,14 +753,15 @@ describe('weight validation in parseCargoRows', () => {
     ])
   })
 
-  it('rejects missing weight as a row error', () => {
+  it('uses an internal 1kg weight when weight is missing', () => {
     const result = parseCargoRows([
       { Label: 'A', Length: 400, Width: 500, Height: 600, Quantity: 1 },
     ], { createId: () => 'w-missing' })
 
-    expect(result.items).toEqual([])
-    expect(result.errors).toEqual([
-      expect.objectContaining({ code: 'invalid-weight', row: 2 }),
-    ])
+    expect(result.errors).toEqual([])
+    expect(result.warnings).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'invalid-weight' }),
+    ]))
+    expect(result.items[0].weight).toBe(1)
   })
 })

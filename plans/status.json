@@ -1,0 +1,401 @@
+{
+  "schemaVersion": 1,
+  "round": "2026-08-07-p5-props-aggregation-and-spatial-wiring",
+  "updatedAt": "2026-08-07",
+  "tasks": [
+    {
+      "id": "P1-1",
+      "plan": "plans/2026-08-04-p1-production-safety-and-0802-redeploy.md",
+      "status": "deployed",
+      "commit": "aecb1ee",
+      "verification": {
+        "commands": [
+          "npm run test:rollback",
+          "npm run rollback:dry"
+        ],
+        "result": "rollback script and dry-run green; production rollback later used this path"
+      }
+    },
+    {
+      "id": "P1-2",
+      "plan": "plans/2026-08-04-p1-production-safety-and-0802-redeploy.md",
+      "status": "deployed",
+      "commit": "b620584",
+      "verification": {
+        "commands": [
+          "npm test",
+          "npm run build"
+        ],
+        "result": "production no longer seeds known credentials"
+      }
+    },
+    {
+      "id": "P1-2b",
+      "plan": "plans/2026-08-04-p1-production-safety-and-0802-redeploy.md",
+      "status": "committed",
+      "commit": "85090fb",
+      "verification": {
+        "commands": [
+          "rg -n \"纯前端|localStorage\" README.md"
+        ],
+        "result": "README architecture/security claims corrected"
+      }
+    },
+    {
+      "id": "P1-3",
+      "plan": "plans/2026-08-04-p1-production-safety-and-0802-redeploy.md",
+      "status": "deployed",
+      "commit": "94f4b7f",
+      "verification": {
+        "commands": [
+          "npm run deploy",
+          "remote e2e x2"
+        ],
+        "result": "two consecutive remote 128/128; 0802 acceptance live"
+      }
+    },
+    {
+      "id": "P2-1",
+      "plan": "plans/2026-08-05-p2-test-and-gate-integrity.md",
+      "status": "committed",
+      "commit": "244cf28",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/packing.test.ts src/lib/packing.31pallet.test.ts src/lib/packing.blockEngine.test.ts --pool=threads --maxWorkers=1"
+        ],
+        "result": "3 files / 52 tests; unplaced conservation restored"
+      }
+    },
+    {
+      "id": "P2-2",
+      "plan": "plans/2026-08-05-p2-test-and-gate-integrity.md",
+      "status": "committed",
+      "commit": "015ae5a",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/packingInvariants.test.ts"
+        ],
+        "result": "15/15; geometry recomputed independently of diagnostics"
+      }
+    },
+    {
+      "id": "P2-3",
+      "plan": "plans/2026-08-05-p2-test-and-gate-integrity.md",
+      "status": "committed",
+      "commit": "139acc5",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/packing.test.ts"
+        ],
+        "result": "51/51; named 0.5 support-ratio and warning contracts"
+      }
+    },
+    {
+      "id": "P2-4",
+      "plan": "plans/2026-08-05-p2-test-and-gate-integrity.md",
+      "status": "committed",
+      "commit": "2067009",
+      "verification": {
+        "commands": [
+          "npx vitest run scripts/updatePackingContracts.test.mjs",
+          "npm run test:contracts:update"
+        ],
+        "result": "1/1; golden update refuses silent regressions; baseline hash unchanged"
+      }
+    },
+    {
+      "id": "P2-5",
+      "plan": "plans/2026-08-05-p2-test-and-gate-integrity.md",
+      "status": "committed",
+      "commit": "c17039e",
+      "verification": {
+        "commands": [
+          "npx vitest run scripts/frontendBenchmark.test.mjs",
+          "npm run benchmark"
+        ],
+        "result": "26/26 gate tests; first-pixel baseline still BLOCKED after mixed benchmark hard-gate REDs"
+      }
+    },
+    {
+      "id": "P2-6",
+      "plan": "plans/2026-08-05-p2-test-and-gate-integrity.md",
+      "status": "committed",
+      "commit": "46d5943",
+      "verification": {
+        "commands": [
+          "npx playwright test e2e/container-calc.spec.ts -g \"adds cargo and recalculates utilization\"",
+          "npx vitest run src/components/containerScene/rendering.test.ts"
+        ],
+        "result": "E2E 1/1 and rendering 27/27; placebo utilization/camera assertions replaced"
+      }
+    },
+    {
+      "id": "P2-7",
+      "plan": "plans/2026-08-05-p2-test-and-gate-integrity.md",
+      "status": "committed",
+      "verification": {
+        "commands": [
+          "node scripts/check-round-status.mjs"
+        ],
+        "result": "RED on open completed checkbox, GREEN after supersede notes/release notes; commit d0894c2"
+      },
+      "commit": "d0894c2"
+    },
+    {
+      "id": "P3-1",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "committed",
+      "commit": "0784e76",
+      "verification": {
+        "commands": [
+          "node scripts/p3-0802-block-route-baseline.mjs"
+        ],
+        "result": "Read-only baseline fixed 0802 fixture; sensitivity matrix recorded in decision.md"
+      }
+    },
+    {
+      "id": "P3-2",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "committed",
+      "commit": "562eced",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/packing.test.ts src/lib/packing.blockEngine.test.ts"
+        ],
+        "result": "RED before, GREEN after; non-binding maxStackLayers=99 now shares unlimited path; golden placedCount unchanged"
+      }
+    },
+    {
+      "id": "P3-3",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "committed",
+      "commit": "ae50646",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/packing.blockEngine.test.ts src/lib/packingInvariants.test.ts"
+        ],
+        "result": "Per-SKU gate; mixed-height case rewritten by authorization; 0802 one-SKU msl=12 no longer flips load; focused 6/6"
+      }
+    },
+    {
+      "id": "P3-4",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "committed",
+      "commit": "ad13419",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/quickPlace.test.ts src/lib/packing.blockEngine.test.ts src/lib/packing.test.ts"
+        ],
+        "result": "quickPlace 10/10; 0802 groundOnly 28/28 z=0; 0629 regression green; focused packing 5 golden hashes unchanged"
+      },
+      "note": "quickPlace groundOnly + block fallback groundOnly; second commit 915c059"
+    },
+    {
+      "id": "P3-5",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "committed",
+      "commit": "93c2f23",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/packing.test.ts src/lib/manualDraftFromAutomatic.test.ts"
+        ],
+        "result": "Auto accepts shared supportPolicy.minSupportRatio; default 0.5 golden hash unchanged; focused green"
+      }
+    },
+    {
+      "id": "P3-6",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "committed",
+      "commit": "673d835",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/manualPlacementSession.test.ts src/lib/historySnapshot.test.ts"
+        ],
+        "result": "Manual draft reconciles label/color; save after sidebar edit no longer throws; focused green"
+      }
+    },
+    {
+      "id": "P3-7",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "committed",
+      "commit": "5d1d492",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/packingSession.test.ts"
+        ],
+        "result": "Editing selected custom container dispatches resultInvalidated; reducer test green"
+      }
+    },
+    {
+      "id": "P3-8",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "committed",
+      "commit": "1056c95",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/historySnapshot.test.ts && npm run test:contracts:update"
+        ],
+        "result": "blockingInvalid excluded from counts/volume/layers; goldens refreshed, placedCount unchanged 31/463/462/839/823"
+      }
+    },
+    {
+      "id": "P3-9",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "committed",
+      "commit": "41c7027",
+      "verification": {
+        "commands": [
+          "npx tsc --noEmit",
+          "grep -r \"from .*/components/\" src/lib --include=\"*.ts\" (empty)"
+        ],
+        "result": "ImportMappingValue/SceneViewMode moved to lib; no lib->components imports remain"
+      }
+    },
+    {
+      "id": "P3-10",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "committed",
+      "commit": "3b9878e",
+      "verification": {
+        "commands": [
+          "npx vitest run src/components/containerScene",
+          "npm run test:e2e -- e2e/manual-3d.spec.ts"
+        ],
+        "result": "Scene validity delegates to manualPlacement.validateBox; rejections flow to manual issues; e2e manual-3d green"
+      }
+    },
+    {
+      "id": "P3-11",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "committed",
+      "commit": "916db8d",
+      "note": "Knives 1-4 landed 2026-08-06 (67377e1); knife5 (916db8d) moved state ownership; interface-area targets tracked in P4-1-knife5",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/visibleWorkspaceBoxes.test.ts src/lib/boxVisualState.test.ts",
+          "node scripts/check-round-status.mjs",
+          "architect review 2026-08-07"
+        ],
+        "result": "Knives 1-4 landed 2026-08-06; knife5 (916db8d) moved state ownership; remaining interface-area targets tracked in P4-1-knife5"
+      }
+    },
+    {
+      "id": "P3-12",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "in-progress",
+      "commit": "9ed13cf",
+      "note": "12a validated custom container payloads; 12b i18n alerts + 12c quotas/deps remain backlog"
+    },
+    {
+      "id": "P3-13",
+      "plan": "plans/2026-08-06-p3-packing-root-cause-and-boundaries.md",
+      "status": "in-progress",
+      "commit": "66ecb35 (13a history atomic)",
+      "note": "13a landed; 13b scene stateful tests + 13c 0802 fixture provenance test remain | 2026-08-07 partial: 13a landed (66ecb35); 13b/13c outstanding"
+    },
+    {
+      "id": "round4-P2-7",
+      "plan": "CHANGELOG.md#2026-07-31-第四轮复审整改",
+      "status": "superseded",
+      "supersededBy": "P2-5",
+      "note": "Stale open checkbox under a completed heading; first-pixel/contract-hash work continued in current P2-5"
+    },
+    {
+      "id": "decision-2026-07-08-no-widen-gates",
+      "plan": "decision.md#2026-07-08-块引擎适用范围扩展",
+      "status": "superseded",
+      "supersededBy": "d037df0",
+      "note": "Historical 'do not keep widening gates' note was later reversed by d037df0 without inline supersede; documented here"
+    },
+    {
+      "id": "R6-review",
+      "plan": "issues/2026-08-07-refactor-review-round-6-recap.md",
+      "status": "verified",
+      "verification": {
+        "commands": [
+          "npx vitest run src/lib/packingInvariants.test.ts --pool=threads --maxWorkers=1",
+          "npx vitest run src/lib/packing.blockEngine.test.ts --pool=threads --maxWorkers=1",
+          "npx vitest run --exclude scripts/rollback.test.mjs"
+        ],
+        "result": "15/15, 6/6, 98 files / 856 tests / 0 failed; benchmark compared against 2026-07-28 baseline"
+      },
+      "note": "Architecture B+; root-cause fixes A-; 0802 A (877/877 in production); perf B (vietnam-40hq-volume +38%, load pollution + real regression)"
+    },
+    {
+      "id": "P4-1-knife5",
+      "plan": "plans/2026-08-07-knife5-visual-selection-ownership.md",
+      "status": "superseded",
+      "commit": "916db8d",
+      "verification": {
+        "commands": [
+          "architect review 2026-08-07: grep state owners in Workbench.tsx/ResultsPanel.tsx, count props, measure workbench lines"
+        ],
+        "result": "state ownership moved to ResultsPanel (Workbensh.tsx contains zero setState for the three); derived compare/cog inputs sunk; codex e2e 128/128. BUT VisualizationWorkspaceProps still 67 (target <=30) and Workbench.tsx 1862 lines (target <=1500)"
+      },
+      "acceptance": "NOT met as written. Functional ownership goal met; quantitative interface-area targets (props<=30, Workbench<=1500) still open. M-7 not closed.",
+      "note": "Superseded by P5-A: ownership done earlier; interface-area closed via domain prop aggregation (props<=30). Workbench line count still open per decision.md.",
+      "supersededBy": "P5-A-props-aggregation"
+    },
+    {
+      "id": "P4-2-spatial-index",
+      "plan": "plans/2026-08-07-packing-spatial-index.md",
+      "status": "superseded",
+      "commit": "9e471d7 + c22c963",
+      "verification": {
+        "commands": [
+          "node scripts/p3-0802-block-route-baseline.mjs",
+          "node --expose-gc scripts/frontendBenchmark.mjs --algorithm-case vietnam-40hq-volume (idle; current HEAD vs 9e471d7 worktree baseline, 2 runs each)",
+          "npx vitest run src/lib/spatialGrid.test.ts src/lib/packing.blockEngine.test.ts src/lib/visibleWorkspaceBoxes.test.ts src/Workbench.sessionBoundary.test.ts --pool=threads --maxWorkers=1"
+        ],
+        "result": "5 golden hashes unchanged; 0802 877/877 identical; 32/32 focused tests green. Idle median: baseline 5105/5642 vs grid 5879/6192 -> grid ~+4-13% slower. Only 2/5 hot paths wired (canPlace, placementScore via bestPlacement); directRiders packing.ts:253 / dependents :269 / buildPlacedBox :1009 unswitched"
+      },
+      "acceptance": "NOT met: behavior equivalence yes (all contract hashes unchanged), 40HQ-volume target <=6233ms no (~5879-6238 observed); P-D wiring of remaining paths plus block-commit support sharing must land before any baseline write",
+      "note": "Superseded by P5-B full wiring attempt; behavior equivalence kept, perf still open.",
+      "supersededBy": "P5-B-spatial-full-wiring"
+    },
+    {
+      "id": "P5-A-props-aggregation",
+      "plan": "plans/2026-08-07-p5-props-aggregation-and-spatial-wiring.md",
+      "status": "deployed",
+      "verification": {
+        "commands": [
+          "wc -l src/Workbench.tsx",
+          "npm run test:e2e",
+          "npm run build"
+        ],
+        "result": "Workbench 1495 lines; VisualizationWorkspaceProps=19; ResultsPanelProps=23; e2e 128/128; build 0; deploy backup /root/cargo_project-backup-20260811-033808; local e2e 128/128; remote tunnel e2e 104/24 fail auth-env; remote e2e x2 128/128 via tunnel with ADMIN_PASSWORD"
+      },
+      "acceptance": "props<=30 met; Workbench.tsx=1495<=1500 met; e2e 128/128; no Context",
+      "commit": "c463daf"
+    },
+    {
+      "id": "P5-B-spatial-full-wiring",
+      "plan": "plans/2026-08-07-p5-props-aggregation-and-spatial-wiring.md",
+      "status": "deployed",
+      "verification": {
+        "commands": [
+          "npm run test:contracts:update",
+          "node --expose-gc scripts/frontendBenchmark.mjs --algorithm-case vietnam-40hq-volume x2",
+          "npx vitest run src/lib/packing*.test.ts"
+        ],
+        "result": "hashes unchanged; dual medians 6158.463/5137.822; 9e471d7=7333.771; current confirm 5833.981; packing tests 91/91; deploy backup /root/cargo_project-backup-20260811-033808; local e2e 128/128; remote tunnel e2e 104/24 fail auth-env; remote e2e x2 128/128 via tunnel with ADMIN_PASSWORD"
+      },
+      "acceptance": "5 golden hashes unchanged; official idle vietnam-40hq-volume better-of dual medians 5137.822<=6233 and faster than 9e471d7 7333; e2e previously 128/128",
+      "commit": "a405c6a"
+    },
+    {
+      "id": "P4-1-knife5-note",
+      "plan": "plans/2026-08-07-p5-props-aggregation-and-spatial-wiring.md",
+      "status": "superseded",
+      "supersededBy": "P5-A-props-aggregation",
+      "note": "P4-1 knife5 ownership achieved in 916db8d; remaining interface-area work (props<=30/Workbench<=1500) carries into P5-A"
+    },
+    {
+      "id": "P4-2-spatial-index-note",
+      "plan": "plans/2026-08-07-p5-props-aggregation-and-spatial-wiring.md",
+      "status": "superseded",
+      "supersededBy": "P5-B-spatial-full-wiring",
+      "note": "P4-2 grid built and 2/5 hot paths wired in 9e471d7+c22c963; behavior equivalence verified, perf acceptance not met; full wiring carries into P5-B"
+    }
+  ]
+}

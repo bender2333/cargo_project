@@ -36,6 +36,7 @@ function makeBox(overrides: Partial<PlacedBox> & Pick<PlacedBox, 'id' | 'workSte
     canRotate: true,
     stackable: true,
     physicalLayer: overrides.physicalLayer ?? 1,
+    depthLayer: overrides.depthLayer ?? 1,
     workStep: overrides.workStep,
     supportType: overrides.supportType ?? 'floor',
     supportedBy: overrides.supportedBy ?? [],

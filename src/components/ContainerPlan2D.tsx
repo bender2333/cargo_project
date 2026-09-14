@@ -1,4 +1,5 @@
 import type { ContainerSpec, PlacedBox } from '../types'
+import { boxVisualState } from '../lib/boxVisualState'
 import { buildBoxLabelModes } from '../lib/labelDeconfliction'
 import { faceLabelRotation, orientationAxesOf } from '../lib/orientationTransform'
 
@@ -69,13 +70,10 @@ export function ContainerPlan2D({ container, boxes, activeLayerId, activeLabelId
       />
       {boxes.map((box) => {
         const projected = projectBox(box, mode)
-        const isCurrentLayer = activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId
-        const isCurrentLabel = activeLabelId === 'all' || box.label === activeLabelId
-        const isHighlighted = highlightBoxIds?.has(box.id) ?? false
-        const isSelected = box.id === selectedBoxId
-        const opacity = highlightBoxIds
-          ? isHighlighted ? 0.94 : 0.16
-          : isCurrentLayer && isCurrentLabel ? 0.88 : 0.18
+        const visual = boxVisualState(box, activeLayerId, activeLabelId, selectedBoxId, highlightBoxIds, false)
+        const opacity = visual.opacity
+        const isHighlighted = visual.highlighted
+        const isSelected = visual.selected
         const textX = padding + projected.x + projected.width / 2
         const textY = padding + size.height - projected.y - projected.height / 2
         const rotation = faceLabelRotation(orientationAxesOf(box), mode)

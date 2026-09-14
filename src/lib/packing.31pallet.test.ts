@@ -7,6 +7,7 @@ import type { ContainerSpec } from '../types'
 import { parseCargoRows } from './importCargo'
 import { calculatePacking } from './packing'
 import { expectPackingResultContract } from './packingContract.testSupport'
+import { expectQuantityConservation } from './packingContract.testSupport'
 
 const moduleDir = dirname(fileURLToPath(import.meta.url))
 
@@ -63,5 +64,6 @@ describe('calculatePacking — 31 Russian pallets in a custom 13400×2450×2650 
     }
 
     expectPackingResultContract('russia-volume', result)
+    expectQuantityConservation(items, result)
   })
 })

@@ -65,6 +65,7 @@ describe('HistoryPage', () => {
         plans={[plan]}
         loadFailed={false}
         onRetry={onRetry}
+        saveDisabled={false}
         onSave={onSave}
         onRestore={onRestore}
         onDelete={onDelete}
@@ -93,6 +94,7 @@ describe('HistoryPage', () => {
         plans={[]}
         loadFailed
         onRetry={onRetry}
+        saveDisabled={false}
         onSave={vi.fn()}
         onRestore={vi.fn()}
         onDelete={vi.fn()}
@@ -116,6 +118,7 @@ describe('HistoryPage', () => {
         loadFailed={false}
         onRetry={vi.fn()}
         onSave={vi.fn()}
+        saveDisabled={false}
         onRestore={vi.fn()}
         onDelete={onDelete}
         onBack={vi.fn()}
@@ -136,6 +139,7 @@ describe('HistoryPage', () => {
       <HistoryPage
         labels={labels}
         plans={[plan]}
+        saveDisabled={false}
         loadFailed={false}
         onRetry={vi.fn()}
         onSave={vi.fn().mockRejectedValue(new Error('save failed'))}
@@ -152,5 +156,42 @@ describe('HistoryPage', () => {
       expect(alertMock).toHaveBeenCalledWith('Failed to save plan')
       expect(alertMock).toHaveBeenCalledWith('Failed to delete')
     })
+  })
+  it('disables save with a visible linked reason and re-enables it when compliant', () => {
+    const view = render(
+      <HistoryPage
+        labels={labels}
+        plans={[]}
+        loadFailed={false}
+        onRetry={vi.fn()}
+        onSave={vi.fn()}
+        saveDisabled
+        saveDisabledReason="Resolve the overlap before saving."
+        onRestore={vi.fn()}
+        onDelete={vi.fn()}
+        onBack={vi.fn()}
+      />,
+    )
+    const blocked = view.getByRole('button', { name: 'Save plan' }) as HTMLButtonElement
+    expect(blocked.disabled).toBe(true)
+    expect(blocked.getAttribute('aria-describedby')).toBe('history-save-disabled-reason')
+    expect(view.getByText('Resolve the overlap before saving.')).toBeTruthy()
+
+    view.rerender(
+      <HistoryPage
+        labels={labels}
+        plans={[]}
+        loadFailed={false}
+        onRetry={vi.fn()}
+        onSave={vi.fn()}
+        saveDisabled={false}
+        saveDisabledReason={null}
+        onRestore={vi.fn()}
+        onDelete={vi.fn()}
+        onBack={vi.fn()}
+      />,
+    )
+    expect((view.getByRole('button', { name: 'Save plan' }) as HTMLButtonElement).disabled).toBe(false)
+    expect(view.queryByText('Resolve the overlap before saving.')).toBeNull()
   })
 })

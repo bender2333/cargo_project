@@ -1,225 +1,236 @@
-import type { DragEvent as ReactDragEvent } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ContainerScene } from './ContainerScene'
 import type { SceneViewMode } from './ContainerScene'
 import { ContainerPlan2D } from './ContainerPlan2D'
 import type { PlanViewMode } from './ContainerPlan2D'
 import { ManualPlacement2D } from './ManualPlacement2D'
-import type { ContainerSpec, Locale, PackingResult, PlacedBox } from '../types'
-import type { ValidationIssue, PoolEntry, OrientationKey, ManualDraft, ManualRotationDirection } from '../lib/manualPlacement'
-import type { ManualOperationNotice } from '../lib/manualFeedback'
-import type { PlacementSettings } from '../lib/placementSettings'
-import type { ClearanceAnnotation } from '../lib/measurement'
-import type { CogOverlay } from '../lib/cogVisual'
+import { deriveVisibleWorkspaceBoxes } from '../lib/visibleWorkspaceBoxes'
+import { useWorkspaceHotkeys } from '../hooks/useWorkspaceHotkeys'
+import type {
+  VisualizationWorkspaceProps,
+  WorkspaceView,
+} from './workspaceProps'
 
-type WorkspaceView = '3d' | '2d'
-type PlacementMode = 'auto' | 'manual'
+export type { HoverInfo, PlacementMode, VisualizationChrome, VisualizationWorkspaceProps, WorkspaceView } from './workspaceProps'
 
-type HoverInfo = {
-  id: string
-  label: string
-  length: number
-  width: number
-  height: number
-  orientationKey: OrientationKey
-  x: number
-  y: number
-  z: number
-  clientX: number
-  clientY: number
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
-type PoolDragInfo = {
-  cargoId: string
-  length: number
-  width: number
-  height: number
-  color: string
+function filenameSlug(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, '-')
+    .replace(/^-+|-+$/g, '')
 }
 
-type TranslationKeys = {
-  loaded: string
-  weight: string
-  weightUse: string
-  volumeUse: string
-  autoMode: string
-  manualMode: string
-  continueManually: string
-  view2d: string
-  view3d: string
-  topView: string
-  frontView: string
-  sideView: string
-  isoView: string
-  resetView: string
-  clearanceTitle: string
-  exportView: string
-  dismissNotice: string
-  manualIssues: string
-  placementPool: string
-  poolEmpty: string
-  poolRemaining: string
-  quickPlace: string
-  restoreManual: string
-  maximizeManual: string
-  manualKeyboardHelp: string
-  manualKeyboardHelpItems: string[]
-  autoKeyboardHelp: string
-  autoKeyboardHelpItems: string[]
-  load: string
-  hoverTooltipLabel: string
-  hoverTooltipSize: string
-  hoverTooltipOrientation: string
-  hoverTooltipPosition: string
-  manualIssueBoundary: string
-  manualIssueOverlap: string
-  manualIssueFloating: string
-  manualIssueRotationDisabled: string
-  manualIssueStacking: string
-  manualIssueMaxStackLayers: string
-}
-
-export type VisualizationWorkspaceProps = {
-  workspaceMaximized: boolean
-  setWorkspaceMaximized: (fn: (current: boolean) => boolean) => void
-  activeResult: PackingResult
-  formatCubicMeters: (volume: number) => string
-  t: TranslationKeys
-  placementMode: PlacementMode
-  setPlacementMode: (mode: PlacementMode) => void
-  hasCalculated: boolean
-  handleContinueManually: () => void
-  workspaceView: WorkspaceView
-  setWorkspaceView: (view: WorkspaceView) => void
-  planViewMode: PlanViewMode
-  setPlanViewMode: (mode: PlanViewMode) => void
-  sceneViewMode: SceneViewMode
-  selectSceneView: (mode: SceneViewMode) => void
-  resetSceneView: () => void
-  clearanceEnabled: boolean
-  setClearanceEnabled: (fn: (enabled: boolean) => boolean) => void
-  exportCurrentView: () => void
-  containerChangeNotice: string
-  customContainerLoadFailed: boolean
-  locale: Locale
-  manualNotice: ManualOperationNotice | null
-  setManualNotice: (notice: ManualOperationNotice | null) => void
-  rotationNotice: string
-  setRotationNotice: (notice: string) => void
-  manualIssues: ValidationIssue[]
-  localizeManualIssue: (issue: ValidationIssue) => string
-  manualPool: PoolEntry[]
-  handleManualPoolDragStart: (event: ReactDragEvent<HTMLDivElement>, cargoId: string) => void
-  handleManualPoolDragEnd: () => void
-  handleQuickPlaceCargo: (cargoId: string) => void
-  manualHelpOpen: boolean
-  setManualHelpOpen: (fn: (current: boolean) => boolean) => void
-  visibleManualBoxes: PlacedBox[]
-  renderingContainer: ContainerSpec
-  gridSnap: boolean
-  edgeSnap: boolean
-  placementSettings: PlacementSettings
-  manualInvalidBoxIds: Set<string>
-  poolDragInfo: PoolDragInfo | null
-  loadingStepsActive: boolean
-  activeLoadingGroupBoxIds: Set<string> | undefined
-  resetViewTick: number
-  manualSelectedId: string | null
-  selectManualBox: (id: string | null) => void
-  setHoverInfo: (info: HoverInfo | null) => void
-  handleManualDeleteBox: (boxId: string) => void
-  handleManualDropFromPool: (cargoId: string, x: number, y: number, z?: number) => void
-  handleManualMoveBox: (boxId: string, x: number, y: number, z?: number) => void
-  notifyManualRejected: (
-    operation: 'move' | 'drop' | 'rotate' | 'delete',
-    boxId?: string,
-    cargoId?: string,
-    issues?: ValidationIssue[],
-    reasonCode?: ManualOperationNotice['reasonCode']
-  ) => void
-  handleManualRotateBox: (boxId: string, direction?: ManualRotationDirection) => void
-  clearanceAnnotations: ClearanceAnnotation[]
-  manualDraft: ManualDraft
-  autoHelpOpen: boolean
-  setAutoHelpOpen: (fn: (current: boolean) => boolean) => void
-  visibleAutoBoxes: PlacedBox[]
-  activeLabelId: string
-  activeLayerId: string
-  cogViewState: { boxOpacity: number | null; showOverlay: boolean }
-  cogOverlay: CogOverlay | null
-  selectedBoxId: string | null
-  setSelectedBoxId: (id: string | null) => void
-  calculateAndShowPlacement: () => void
-  hoverInfo: HoverInfo | null
-}
 export function VisualizationWorkspace({
-  workspaceMaximized,
-  setWorkspaceMaximized,
   activeResult,
   formatCubicMeters,
   t,
-  placementMode,
-  setPlacementMode,
   hasCalculated,
   handleContinueManually,
-  workspaceView,
-  setWorkspaceView,
-  planViewMode,
-  setPlanViewMode,
-  sceneViewMode,
-  selectSceneView,
-  resetSceneView,
-  clearanceEnabled,
-  setClearanceEnabled,
-  exportCurrentView,
+  exportCurrentViewDisabled,
+  exportCurrentViewDisabledReason,
+  exportShipmentName,
+  onExportView,
   containerChangeNotice,
   customContainerLoadFailed,
   locale,
-  manualNotice,
-  setManualNotice,
-  rotationNotice,
-  setRotationNotice,
-  manualIssues,
-  localizeManualIssue,
-  manualPool,
-  handleManualPoolDragStart,
-  handleManualPoolDragEnd,
-  handleQuickPlaceCargo,
-  manualHelpOpen,
-  setManualHelpOpen,
-  visibleManualBoxes,
-  renderingContainer,
-  gridSnap,
-  edgeSnap,
-  placementSettings,
-  manualInvalidBoxIds,
-  poolDragInfo,
-  loadingStepsActive,
-  activeLoadingGroupBoxIds,
-  resetViewTick,
-  manualSelectedId,
-  selectManualBox,
-  setHoverInfo,
-  handleManualDeleteBox,
-  handleManualDropFromPool,
-  handleManualMoveBox,
-  notifyManualRejected,
-  handleManualRotateBox,
-  clearanceAnnotations,
-  manualDraft,
-  autoHelpOpen,
-  setAutoHelpOpen,
-  visibleAutoBoxes,
-  activeLabelId,
-  activeLayerId,
-  cogViewState,
-  cogOverlay,
-  selectedBoxId,
-  setSelectedBoxId,
   calculateAndShowPlacement,
-  hoverInfo,
+  onChromeChange,
+  manual,
+  playback,
+  render,
+  selection,
 }: VisualizationWorkspaceProps) {
+  const {
+    manualNotice,
+    setManualNotice,
+    rotationNotice,
+    setRotationNotice,
+    manualIssues,
+    localizeManualIssue,
+    manualPool,
+    handleManualPoolDragStart,
+    handleManualPoolDragEnd,
+    handleQuickPlaceCargo,
+    manualHelpOpen,
+    setManualHelpOpen,
+    automaticPlaced,
+    manualPlacedBoxes,
+    manualInvalidBoxIds,
+    poolDragInfo,
+    manualSelectedId,
+    selectManualBox,
+    setHoverInfo,
+    handleManualDeleteBox,
+    handleManualDropFromPool,
+    handleManualMoveBox,
+    notifyManualRejected,
+    handleManualRotateBox,
+    undoManualPlacement,
+    redoManualPlacement,
+    clearanceAnnotations,
+    manualDraft,
+    autoHelpOpen,
+    setAutoHelpOpen,
+    hoverInfo,
+  } = manual
+  const {
+    playbackActive,
+    playbackSequence,
+    playbackCursor,
+    loadingStepsActive,
+    activeLoadingGroupBoxIds,
+  } = playback
+  const {
+    placementMode,
+    setPlacementMode,
+    renderingContainer,
+    gridSnap,
+    edgeSnap,
+    placementSettings,
+  } = render
+  const {
+    activeLabelId,
+    activeLayerId,
+    cogViewState,
+    cogOverlay,
+    selectedBoxId,
+    setSelectedBoxId,
+  } = selection
+
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('3d')
+  const [sceneViewMode, setSceneViewMode] = useState<SceneViewMode>('iso')
+  const [planViewMode, setPlanViewMode] = useState<PlanViewMode>('top')
+  const [clearanceEnabled, setClearanceEnabled] = useState(false)
+  const [workspaceMaximized, setWorkspaceMaximized] = useState(false)
+  const [resetViewTick, setResetViewTick] = useState(0)
+  const workspaceRef = useRef<HTMLDivElement | null>(null)
+  const selectedHotkeyBox = useMemo(() => {
+    if (!manualSelectedId) return null
+    const box = manualDraft.boxes.find((candidate) => candidate.id === manualSelectedId)
+    if (!box) return null
+    return { id: box.id, x: box.x, y: box.y, z: box.z }
+  }, [manualDraft.boxes, manualSelectedId])
+
+  const { visibleAutoBoxes, visibleManualBoxes } = useMemo(
+    () => deriveVisibleWorkspaceBoxes({
+      placementMode,
+      playbackActive,
+      playbackSequence,
+      playbackCursor,
+      hasCalculated,
+      automaticPlaced,
+      manualPlacedBoxes,
+    }),
+    [
+      automaticPlaced,
+      hasCalculated,
+      manualPlacedBoxes,
+      placementMode,
+      playbackActive,
+      playbackCursor,
+      playbackSequence,
+    ],
+  )
+
+  useEffect(() => {
+    onChromeChange?.({
+      workspaceMaximized,
+      workspaceView,
+      sceneViewMode,
+      planViewMode,
+      clearanceEnabled,
+    })
+  }, [
+    clearanceEnabled,
+    onChromeChange,
+    planViewMode,
+    sceneViewMode,
+    workspaceMaximized,
+    workspaceView,
+  ])
+
+  useWorkspaceHotkeys({
+    placementMode,
+    workspaceRef,
+    selectedBox: selectedHotkeyBox,
+    maximized: workspaceMaximized,
+    onUndo: undoManualPlacement,
+    onRedo: redoManualPlacement,
+    onRotate: handleManualRotateBox,
+    onDelete: handleManualDeleteBox,
+    onMove: handleManualMoveBox,
+    onClearSelection: () => selectManualBox(null),
+    onToggleClearance: () => setClearanceEnabled((enabled) => !enabled),
+    onExitMaximize: () => setWorkspaceMaximized(false),
+  })
+
+  const selectSceneView = (view: SceneViewMode) => {
+    setSceneViewMode(view)
+  }
+
+  const resetSceneView = () => {
+    setSceneViewMode('iso')
+    setWorkspaceView('3d')
+    setResetViewTick((tick) => tick + 1)
+  }
+
+  const exportCurrentView = () => onExportView(async () => {
+    if (workspaceView === '2d') {
+      const selector = placementMode === 'manual'
+        ? '[data-testid="manual-placement-2d"]'
+        : '[data-testid="container-plan-2d"]'
+      const root = document.querySelector('[data-testid="visual-workspace"]')
+      const svg = root?.querySelector(selector)
+      if (!(svg instanceof SVGSVGElement)) {
+        throw new Error('2D plan is not available for export')
+      }
+      const source = new XMLSerializer().serializeToString(svg)
+      const prefix = filenameSlug(exportShipmentName)
+      downloadBlob(new Blob([source], { type: 'image/svg+xml;charset=utf-8' }), `${prefix ? `${prefix}-` : ''}packing-plan-${planViewMode}.svg`)
+      return
+    }
+
+    const root = document.querySelector('[data-testid="visual-workspace"]')
+    const canvas = root?.querySelector('canvas')
+    if (!(canvas instanceof HTMLCanvasElement)) {
+      throw new Error('3D canvas is not available for export')
+    }
+    await new Promise<void>((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('3D canvas export failed'))
+          return
+        }
+        try {
+          const prefix = filenameSlug(exportShipmentName)
+          downloadBlob(blob, `${prefix ? `${prefix}-` : ''}packing-plan-${sceneViewMode}.png`)
+          resolve()
+        } catch (error) {
+          reject(error)
+        }
+      }, 'image/png')
+    })
+  })
+
+  const [hasMounted3d, setHasMounted3d] = useState(workspaceView === '3d')
+  useEffect(() => {
+    if (workspaceView === '3d') setHasMounted3d(true)
+  }, [workspaceView])
   return (
-    <>
+    <div
+      ref={workspaceRef}
+      tabIndex={0}
+    >
       <div className={`grid grid-cols-5 gap-3 max-xl:grid-cols-2 ${workspaceMaximized ? 'hidden' : ''}`} data-testid="archive-stat-grid">
         <div className="archive-stat"><div className="archive-stat-value">{activeResult.placedCount}</div><div className="archive-stat-key">{t.loaded}</div></div>
         <div className="archive-stat"><div className="archive-stat-value">{Math.round(activeResult.usedWeight)}</div><div className="archive-stat-key">{t.weight}</div></div>
@@ -323,7 +334,10 @@ export function VisualizationWorkspace({
             </svg>
             {t.clearanceTitle}
           </button>
-          <button className="archive-button success" type="button" onClick={exportCurrentView}>
+          {exportCurrentViewDisabled && exportCurrentViewDisabledReason && (
+            <span id="visual-export-disabled-reason" className="self-center text-xs text-red-700">{exportCurrentViewDisabledReason}</span>
+          )}
+          <button className="archive-button success" type="button" onClick={exportCurrentView} aria-describedby={exportCurrentViewDisabled && exportCurrentViewDisabledReason ? 'visual-export-disabled-reason' : undefined} disabled={exportCurrentViewDisabled}>
             {t.exportView}
           </button>
         </div>
@@ -487,10 +501,9 @@ export function VisualizationWorkspace({
                       viewMode={sceneViewMode}
                       onClearSelection={() => selectManualBox(null)}
                       onHoverBox={setHoverInfo}
-                      onManualDelete={handleManualDeleteBox}
                       onManualDropFromPool={handleManualDropFromPool}
                       onManualMove={handleManualMoveBox}
-                      onManualOperationRejected={(operation, boxId, cargoId) => notifyManualRejected(operation, boxId, cargoId)}
+                      onManualOperationRejected={(operation, boxId, cargoId, issues) => notifyManualRejected(operation, boxId, cargoId, issues)}
                       onManualRotate={handleManualRotateBox}
                       clearanceEnabled={clearanceEnabled}
                       clearanceAnnotations={clearanceAnnotations}
@@ -512,59 +525,49 @@ export function VisualizationWorkspace({
                 </div>
               </div>
             </div>
-          ) : workspaceView === '3d' ? (
-            <>
-              <div className="relative h-full w-full" data-testid="auto-view-container">
-                <div className="absolute left-3 top-3 z-30">
-                  <button
-                    className="archive-tab bg-white/95 shadow-lg"
-                    type="button"
-                    aria-expanded={autoHelpOpen}
-                    data-testid="auto-keyboard-help"
-                    onClick={() => setAutoHelpOpen((current) => !current)}
-                  >
-                    {t.autoKeyboardHelp}
-                  </button>
-                  {autoHelpOpen && (
-                    <div
-                      className="mt-2 w-64 rounded-lg border border-[#cbd5e1] bg-white p-3 text-xs text-[#334155] shadow-xl"
-                      data-testid="auto-keyboard-help-popover"
-                    >
-                      <ul className="list-inside list-disc space-y-1">
-                        {t.autoKeyboardHelpItems.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-                <button
-                  className={`archive-tab absolute right-3 top-3 z-30 inline-flex items-center gap-2 bg-white/95 shadow-lg ${workspaceMaximized ? 'active' : ''}`}
-                  type="button"
-                  data-testid="maximize-workspace"
-                  aria-pressed={workspaceMaximized}
-                  onClick={() => setWorkspaceMaximized((current) => !current)}
-                >
-                  {workspaceMaximized ? t.restoreManual : t.maximizeManual}
-                </button>
-                <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} boxOpacityOverride={cogViewState.boxOpacity} clearanceAnnotations={clearanceAnnotations} clearanceEnabled={clearanceEnabled} cogOverlay={cogOverlay} container={renderingContainer} edgeSnap={edgeSnap} gridSnap={gridSnap} highlightBoxIds={loadingStepsActive ? activeLoadingGroupBoxIds : undefined} placementSettings={placementSettings} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
-              </div>
-            </>
           ) : (
-            <>
-              <div className="relative h-full w-full" data-testid="auto-view-container">
-                <button
-                  className={`archive-tab absolute right-3 top-3 z-30 inline-flex items-center gap-2 bg-white/95 shadow-lg ${workspaceMaximized ? 'active' : ''}`}
-                  type="button"
-                  data-testid="maximize-workspace"
-                  aria-pressed={workspaceMaximized}
-                  onClick={() => setWorkspaceMaximized((current) => !current)}
-                >
-                  {workspaceMaximized ? t.restoreManual : t.maximizeManual}
-                </button>
+            <div className="relative h-full w-full" data-testid="auto-view-container">
+              <button
+                className={`archive-tab absolute right-3 top-3 z-30 inline-flex items-center gap-2 bg-white/95 shadow-lg ${workspaceMaximized ? 'active' : ''}`}
+                type="button"
+                data-testid="maximize-workspace"
+                aria-pressed={workspaceMaximized}
+                onClick={() => setWorkspaceMaximized((current) => !current)}
+              >
+                {workspaceMaximized ? t.restoreManual : t.maximizeManual}
+              </button>
+              {hasMounted3d && (
+                <div className={workspaceView === '3d' ? 'relative h-full w-full' : 'hidden'}>
+                  <div className="absolute left-3 top-3 z-30">
+                    <button
+                      className="archive-tab bg-white/95 shadow-lg"
+                      type="button"
+                      aria-expanded={autoHelpOpen}
+                      data-testid="auto-keyboard-help"
+                      onClick={() => setAutoHelpOpen((current) => !current)}
+                    >
+                      {t.autoKeyboardHelp}
+                    </button>
+                    {autoHelpOpen && (
+                      <div
+                        className="mt-2 w-64 rounded-lg border border-[#cbd5e1] bg-white p-3 text-xs text-[#334155] shadow-xl"
+                        data-testid="auto-keyboard-help-popover"
+                      >
+                        <ul className="list-inside list-disc space-y-1">
+                          {t.autoKeyboardHelpItems.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                  <ContainerScene activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} boxOpacityOverride={cogViewState.boxOpacity} clearanceAnnotations={clearanceAnnotations} clearanceEnabled={clearanceEnabled} cogOverlay={cogOverlay} container={renderingContainer} edgeSnap={edgeSnap} gridSnap={gridSnap} highlightBoxIds={loadingStepsActive ? activeLoadingGroupBoxIds : undefined} placementSettings={placementSettings} renderEnabled={workspaceView === '3d'} resetViewTick={resetViewTick} selectedBoxId={selectedBoxId} viewMode={sceneViewMode} onHoverBox={setHoverInfo} onSelectBox={setSelectedBoxId} />
+                </div>
+              )}
+              <div className={workspaceView === '2d' ? 'relative h-full w-full' : 'hidden'}>
                 <ContainerPlan2D activeLabelId={activeLabelId} activeLayerId={activeLayerId} boxes={visibleAutoBoxes} container={renderingContainer} highlightBoxIds={loadingStepsActive ? activeLoadingGroupBoxIds : undefined} mode={planViewMode} selectedBoxId={selectedBoxId} onSelectBox={setSelectedBoxId} />
               </div>
-            </>
+            </div>
           )}
           <button
             className="archive-button success absolute bottom-6 right-6"
@@ -587,7 +590,7 @@ export function VisualizationWorkspace({
           )}
         </div>
       </section>
-    </>
+    </div>
   )
 }
 

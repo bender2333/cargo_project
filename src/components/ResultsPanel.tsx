@@ -1,26 +1,29 @@
-import type { Ref } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react'
 import { PlaybackPanel } from './PlaybackPanel'
+import type { PlaybackSpeed } from '../hooks/usePlaybackController'
 import { LoadingStepsPanel } from './LoadingStepsPanel'
 import { CenterOfGravityPanel } from './CenterOfGravityPanel'
 import { ContainerComparisonPanel } from './ContainerComparisonPanel'
 import { FillSuggestionPanel } from './FillSuggestionPanel'
 import type { Locale, PackingResult, ContainerSpec, PackingDiagnostic, PackingLayer } from '../types'
-import type { PlaybackSpeed } from '../hooks/usePlaybackController'
-import type { PlaybackController } from '../hooks/usePlaybackController'
-import type { PlaybackSequence } from '../lib/playback'
-import type { LoadingTaskGroup } from '../lib/loadingTaskGroups'
 import type { ExportPlanRow } from '../lib/exportPlan'
-import type { ReviewChecklist } from '../lib/reviewChecklist'
-import type { CogResult } from '../lib/centerOfGravity'
-import type { ContainerComparisonRow } from '../lib/containerCompare'
-import type { FillSuggestion } from '../lib/fillSuggestion'
-import type { ExportTemplate } from '../types'
-import type { VehicleProfileId } from '../data/vehicleProfiles'
-import type { ValidationIssue } from '../lib/manualPlacement'
-import { evaluatePlanCompliance } from '../lib/planCompliance'
+import { formatPlanComplianceMessage, localizePlanComplianceBlocker, type ActivePlanCompliance } from '../lib/planCompliance'
 import { formatCubicMeters, getContainerVolume } from '../data/containers'
 import { countDistinctLabels } from '../lib/labels'
 import { isGapFillBox } from '../lib/placementSource'
+import { deriveCogOverlayState } from '../lib/cogView'
+import { compareContainers } from '../lib/containerCompare'
+import type { CargoItem, LoadingMode } from '../types'
+import type { CogViewState } from '../lib/cogView'
+import type {
+  ResultsPlaybackProps,
+  ResultsLoadingStepsProps,
+  ResultsCogProps,
+  ResultsCompareProps,
+  ResultsFillProps,
+  ResultsExportActionsProps,
+  ResultsSelectionProps,
+} from './resultsPanelDomainProps'
 
 type ResultTab = 'layers' | 'details' | 'diagnostics' | 'importLog' | 'playback' | 'loadingSteps' | 'cog' | 'compare' | 'fill' | 'reviewChecklist'
 
@@ -78,7 +81,7 @@ function diagnosticMessage(diagnostic: PackingDiagnostic, locale: Locale) {
       ? '优化建议：检查未装入货物、柜型、预留间隙、载重限制或堆叠规则。'
       : '优化建议：当前方案没有明显合规阻塞。',
   }
-  return zhMessages[diagnostic.id] ?? diagnostic.message
+  return zhMessages[diagnostic.source === 'manual' ? diagnostic.code ?? diagnostic.id : diagnostic.id] ?? diagnostic.message
 }
 
 function failureReason(reason: string, locale: Locale, reasonCode?: string) {
@@ -158,8 +161,17 @@ type ResultsPanelTranslations = {
   showLayer: string
   unloaded: string
   reviewChecklistEmpty: string
+  reviewChecklistErrors: string
+  reviewChecklistWarnings: string
   reviewChecklistExportJson: string
   reviewChecklistExportExcel: string
+}
+
+export interface ResultsPanelState {
+  activeLayerId: string
+  activeLabelId: string
+  activeResultTab: ResultTab
+  cogViewState: CogViewState
 }
 
 export type ResultsPanelProps = {
@@ -167,140 +179,195 @@ export type ResultsPanelProps = {
   workspaceMaximized: boolean
   locale: Locale
   t: ResultsPanelTranslations
-  activeResultTab: ResultTab
-  setActiveResultTab: (tab: ResultTab) => void
   activeResult: PackingResult
   selectedContainer: ContainerSpec
-  activeLayerId: string
-  setActiveLayerId: (id: string) => void
-  activeLabelId: string
-  setActiveLabelId: (id: string) => void
   labelOptions: string[]
-  activeLayer: PackingLayer | undefined
-  visibleBoxes: ReturnType<PackingResult['placed']['filter']>
-  activeSelectedBoxId: string | null
   detailRows: ExportPlanRow[]
-  importMessages: string[]
-  exportTemplates: ExportTemplate[]
-  exportTemplateLoadFailed: boolean
-  selectedExportTemplateId: string
-  setSelectedExportTemplateId: (id: string) => void
-  fetchExportTemplates: () => void
-  playbackAvailable: boolean
-  playback: PlaybackController
-  playbackSequence: PlaybackSequence
-  loadingStepsAvailable: boolean
-  loadingTaskGroups: LoadingTaskGroup[]
-  activeLoadingGroupIndex: number
-  loadingGroupsPlaying: boolean
-  setActiveLoadingGroupIndex: (index: number) => void
-  setLoadingGroupsPlaying: (playing: boolean | ((current: boolean) => boolean)) => void
-  cogResult: CogResult
-  showCogOverlay: boolean
-  vehicleProfile: VehicleProfileId
-  toggleCogOverlay: (show: boolean) => void
-  setVehicleProfile: (id: VehicleProfileId) => void
-  compareCandidates: ContainerSpec[]
-  compareRows: ContainerComparisonRow[]
-  compareSelection: string[]
-  setCompareSelection: (fn: (current: string[]) => string[]) => void
-  selectContainerById: (id: string) => void
   hasCalculated: boolean
-  fillSuggestions: FillSuggestion[]
-  handleAddFillCargo: (presetId: string, quantity: number) => void
-  handleAddAllFillCargo: (rows: { preset: { id: string }; maxCount: number }[]) => void
-  reviewChecklist: ReviewChecklist
-  exportReviewChecklistJson: () => void
-  exportReviewChecklistExcel: () => void
-  selectLayerByOffset: (offset: -1 | 1) => void
-  selectStepBox: (boxId: string, layerId: string) => void
-  importExcel: (file: File | null) => void
-  downloadImportTemplate: () => void
-  exportExcel: () => void
-  saveCurrentPlan: () => void
-  exportPlaybackInstructions: () => void
-  exportLoadingSheet: () => void
   displayCargoItemsCount: number
   placementMode: 'auto' | 'manual'
-  manualIssues: ValidationIssue[]
-  selectManualBox: (id: string | null) => void
-  setSelectedBoxId: (id: string | null) => void
+  planCompliance: ActivePlanCompliance
+  onStateChange?: (state: ResultsPanelState) => void
+  displayCargoItems?: CargoItem[]
+  loadingMode?: LoadingMode
+  defaultMaxStackLayers?: number
+  playback: ResultsPlaybackProps
+  loadingSteps: ResultsLoadingStepsProps
+  cog: ResultsCogProps
+  compare: ResultsCompareProps
+  fill: ResultsFillProps
+  exportActions: ResultsExportActionsProps
+  selection: ResultsSelectionProps
 }
 
-export function ResultsPanel({
+export interface ResultsPanelHandle {
+  showImportLog(): void
+  activateReport(): void
+  resetFilters(): void
+}
+
+export const ResultsPanel = forwardRef<ResultsPanelHandle, ResultsPanelProps>(function ResultsPanel({
   reportRef,
   workspaceMaximized,
   locale,
   t,
-  activeResultTab,
-  setActiveResultTab,
   activeResult,
   selectedContainer,
-  activeLayerId,
-  setActiveLayerId,
-  activeLabelId,
-  setActiveLabelId,
   labelOptions,
-  activeLayer,
-  visibleBoxes,
-  activeSelectedBoxId,
   detailRows,
-  importMessages,
-  exportTemplates,
-  exportTemplateLoadFailed,
-  selectedExportTemplateId,
-  setSelectedExportTemplateId,
-  fetchExportTemplates,
-  playbackAvailable,
-  playback,
-  playbackSequence,
-  loadingStepsAvailable,
-  loadingTaskGroups,
-  activeLoadingGroupIndex,
-  loadingGroupsPlaying,
-  setActiveLoadingGroupIndex,
-  setLoadingGroupsPlaying,
-  cogResult,
-  showCogOverlay,
-  vehicleProfile,
-  toggleCogOverlay,
-  setVehicleProfile,
-  compareCandidates,
-  compareRows,
-  compareSelection,
-  setCompareSelection,
-  selectContainerById,
   hasCalculated,
-  fillSuggestions,
-  handleAddFillCargo,
-  handleAddAllFillCargo,
-  reviewChecklist,
-  exportReviewChecklistJson,
-  exportReviewChecklistExcel,
-  selectLayerByOffset,
-  selectStepBox,
-  importExcel,
-  downloadImportTemplate,
-  exportExcel,
-  saveCurrentPlan,
-  exportPlaybackInstructions,
-  exportLoadingSheet,
   displayCargoItemsCount,
   placementMode,
-  manualIssues,
-  selectManualBox,
-  setSelectedBoxId,
-}: ResultsPanelProps) {
+  planCompliance,
+  onStateChange,
+  displayCargoItems,
+  loadingMode,
+  defaultMaxStackLayers,
+  playback: playbackDomain,
+  loadingSteps: loadingStepsDomain,
+  cog: cogDomain,
+  compare: compareDomain,
+  fill: fillDomain,
+  exportActions,
+  selection,
+}, ref) {
+  const {
+    playbackAvailable,
+    playback,
+    playbackSequence,
+  } = playbackDomain
+  const {
+    loadingStepsAvailable,
+    loadingTaskGroups,
+    activeLoadingGroupIndex,
+    loadingGroupsPlaying,
+    setActiveLoadingGroupIndex,
+    setLoadingGroupsPlaying,
+  } = loadingStepsDomain
+  const {
+    cogResult,
+    showCogOverlay,
+    vehicleProfile,
+    toggleCogOverlay,
+    setVehicleProfile,
+  } = cogDomain
+  const {
+    compareCandidates,
+    compareSelection,
+    setCompareSelection,
+    selectContainerById,
+  } = compareDomain
+  const {
+    fillSuggestions,
+    handleAddFillCargo,
+    handleAddAllFillCargo,
+  } = fillDomain
+  const {
+    exportTemplates,
+    exportTemplateLoadFailed,
+    selectedExportTemplateId,
+    setSelectedExportTemplateId,
+    fetchExportTemplates,
+    importMessages,
+    reviewChecklist,
+    exportReviewChecklistJson,
+    exportReviewChecklistExcel,
+    importExcel,
+    downloadImportTemplate,
+    exportExcel,
+    saveCurrentPlan,
+    exportPlaybackInstructions,
+    exportLoadingSheet,
+  } = exportActions
+  const {
+    activeSelectedBoxId,
+    selectManualBox,
+    setSelectedBoxId,
+  } = selection
+
+  // --- Owned state (moved from Workbench, Knife 5) ---
+  const [activeLayerId, setActiveLayerId] = useState('all')
+  const [activeLabelId, setActiveLabelId] = useState('all')
+  const [activeResultTab, setActiveResultTab] = useState<ResultTab>('layers')
+
+  // --- Derived values ---
+  const visibleBoxes = useMemo(() => activeResult.placed.filter((box) => (
+    (activeLayerId === 'all' || String(box.physicalLayer) === activeLayerId)
+    && (activeLabelId === 'all' || box.label === activeLabelId)
+  )), [activeResult.placed, activeLayerId, activeLabelId])
+
+  const activeLayer = useMemo(() => activeResult.layers.find((layer) => layer.id === activeLayerId), [activeResult.layers, activeLayerId])
+  const activeLayerIndex = useMemo(() => activeResult.layers.findIndex((layer) => layer.id === activeLayerId), [activeResult.layers, activeLayerId])
+
+  const cogViewState = useMemo(
+    () => deriveCogOverlayState({ activeResultTab, placementMode, overlayEnabled: showCogOverlay }),
+    [activeResultTab, placementMode, showCogOverlay],
+  )
+
+  const compareRows = useMemo(() => {
+    if (activeResultTab !== 'compare' || !hasCalculated) return []
+    if (compareSelection.length === 0) return []
+    const chosen = compareCandidates.filter((c) => compareSelection.includes(c.id))
+    return compareContainers(chosen, displayCargoItems ?? [], loadingMode ?? 'volume', defaultMaxStackLayers)
+  }, [activeResultTab, compareSelection, compareCandidates, defaultMaxStackLayers, displayCargoItems, hasCalculated, loadingMode])
+
+  // --- Imperative handle for Workbench to trigger actions ---
+  useImperativeHandle(ref, () => ({
+    showImportLog() { setActiveResultTab('importLog') },
+    activateReport() { setActiveResultTab('layers') },
+    resetFilters() {
+      setActiveLayerId('all')
+      setActiveLabelId('all')
+      setActiveResultTab('layers')
+    },
+  }))
+
+  // --- Push state upward to Workbench for workspace consumption ---
+  const onStateChangeRef = useRef(onStateChange)
+  onStateChangeRef.current = onStateChange
+  useEffect(() => {
+    onStateChangeRef.current?.({ activeLayerId, activeLabelId, activeResultTab, cogViewState })
+  }, [activeLayerId, activeLabelId, activeResultTab, cogViewState])
+
+  // --- Internal keyboard/shortcut handlers ---
+  const selectLayerByOffset = useCallback((offset: -1 | 1) => {
+    if (!activeResult.layers.length) return
+    if (activeLayerId === 'all') {
+      setActiveLayerId(activeResult.layers[0].id)
+      return
+    }
+    const nextIndex = Math.min(activeResult.layers.length - 1, Math.max(0, activeLayerIndex + offset))
+    setActiveLayerId(activeResult.layers[nextIndex]?.id ?? 'all')
+  }, [activeResult.layers, activeLayerId, activeLayerIndex])
+
+  const selectStepBox = useCallback((boxId: string, layerId: string) => {
+    if (placementMode === 'manual') {
+      selectManualBox(boxId)
+    } else {
+      setSelectedBoxId(boxId)
+    }
+    setActiveLayerId(layerId)
+  }, [placementMode, selectManualBox, setSelectedBoxId])
+
   const layerHasGapFill = (physicalLayer: number) => activeResult.placed.some((box) => box.physicalLayer === physicalLayer && isGapFillBox(box))
-  const hasBlockingComplianceIssues = !evaluatePlanCompliance(activeResult, manualIssues).ok
+  const hasBlockingComplianceIssues = !planCompliance.ok
+  const planComplianceMessage = formatPlanComplianceMessage(planCompliance, locale) ?? ''
 
   return (
     <section className={`archive-card overflow-hidden ${workspaceMaximized ? 'hidden' : ''}`} ref={reportRef} data-testid="report-panel">
+      {!planCompliance.ok && (
+        <div id="plan-compliance-blockers" data-testid="plan-compliance-blockers" role="alert" className="border-b border-red-300 bg-red-50 p-3 text-sm text-red-800">
+          <strong>{locale === 'zh' ? '方案存在阻塞问题' : 'Plan blockers'}</strong>
+          <ul className="mt-1 list-disc pl-5">
+            {planCompliance.blockers.map((blocker) => <li key={blocker.id}>{localizePlanComplianceBlocker(blocker, locale)}</li>)}
+          </ul>
+        </div>
+      )}
       <div className="border-b border-[#e5e7eb] p-[18px]">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3" data-testid="import-export-toolbar">
           <h2 className="text-lg font-bold">{t.results}</h2>
           <div className="flex flex-wrap gap-2 text-xs">
-            <label className="cursor-pointer border border-[#b8b8b8] bg-white px-3 py-2 font-semibold">{t.importExcel}<input className="hidden" accept=".xlsx,.xls,.csv" type="file" onChange={(event) => {
+            <label className="cursor-pointer border border-[#b8b8b8] bg-white px-3 py-2 font-semibold">{t.importExcel}<input className="sr-only" accept=".xlsx,.xls,.csv" type="file" onChange={(event) => {
               const file = event.target.files?.[0] ?? null
               event.currentTarget.value = ''
               void importExcel(file)
@@ -326,8 +393,8 @@ export function ResultsPanel({
                 <option key={template.id} value={template.id}>{template.name}</option>
               ))}
             </select>
-            <button className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold" data-testid="export-excel" type="button" onClick={exportExcel} disabled={hasBlockingComplianceIssues}>{t.exportExcel}</button>
-            <button className="border border-[#9b9b9b] bg-white px-3 py-2 font-semibold" type="button" onClick={saveCurrentPlan} disabled={hasBlockingComplianceIssues}>{t.savePlan}</button>
+            <button className="border border-[#b8b8b8] bg-white px-3 py-2 font-semibold" data-testid="export-excel" type="button" onClick={exportExcel} aria-describedby={hasBlockingComplianceIssues ? 'plan-compliance-blockers' : undefined} disabled={hasBlockingComplianceIssues}>{t.exportExcel}</button>
+            <button className="border border-[#9b9b9b] bg-white px-3 py-2 font-semibold" type="button" onClick={saveCurrentPlan} aria-describedby={hasBlockingComplianceIssues ? 'plan-compliance-blockers' : undefined} disabled={hasBlockingComplianceIssues}>{t.savePlan}</button>
           </div>
         </div>
         <div className="flex flex-wrap gap-2 text-sm font-bold">
@@ -493,6 +560,8 @@ export function ResultsPanel({
               onSpeedChange={(next: PlaybackSpeed) => playback.setSpeed(next)}
               onTogglePlay={playback.togglePlay}
               onExport={exportPlaybackInstructions}
+              exportDisabled={hasBlockingComplianceIssues}
+              exportDisabledReason={planComplianceMessage}
             />
           </div>
         )}
@@ -502,7 +571,8 @@ export function ResultsPanel({
             <LoadingStepsPanel
               activeIndex={activeLoadingGroupIndex}
               available={loadingStepsAvailable}
-              exportDisabled={!loadingStepsAvailable}
+              exportDisabled={!loadingStepsAvailable || hasBlockingComplianceIssues}
+              exportDisabledReason={planComplianceMessage}
               groups={loadingTaskGroups}
               locale={locale}
               playing={loadingGroupsPlaying}
@@ -579,12 +649,12 @@ export function ResultsPanel({
           <div className="mt-3 space-y-3 text-xs" data-testid="review-checklist-panel">
             <div className="flex flex-wrap items-center gap-2">
               <strong>{t.reviewChecklistTab}: {reviewChecklist.summary.total}</strong>
-              <span className="text-[#991b1b]">errors {reviewChecklist.summary.errorCount}</span>
-              <span className="text-[#92400e]">warnings {reviewChecklist.summary.warningCount}</span>
-              <button className="archive-button ml-auto" type="button" data-testid="export-review-json" onClick={exportReviewChecklistJson}>
+              <span className="text-[#991b1b]">{t.reviewChecklistErrors} {reviewChecklist.summary.errorCount}</span>
+              <span className="text-[#92400e]">{t.reviewChecklistWarnings} {reviewChecklist.summary.warningCount}</span>
+              <button className="archive-button ml-auto" type="button" data-testid="export-review-json" onClick={exportReviewChecklistJson} aria-describedby={hasBlockingComplianceIssues ? 'plan-compliance-blockers' : undefined} disabled={hasBlockingComplianceIssues}>
                 {t.reviewChecklistExportJson}
               </button>
-              <button className="archive-button" type="button" data-testid="export-review-excel" onClick={exportReviewChecklistExcel}>
+              <button className="archive-button" type="button" data-testid="export-review-excel" onClick={exportReviewChecklistExcel} aria-describedby={hasBlockingComplianceIssues ? 'plan-compliance-blockers' : undefined} disabled={hasBlockingComplianceIssues}>
                 {t.reviewChecklistExportExcel}
               </button>
             </div>
@@ -633,4 +703,4 @@ export function ResultsPanel({
       </div>
     </section>
   )
-}
+})

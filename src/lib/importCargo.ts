@@ -5,6 +5,21 @@ import { excelStyleLabel } from './excelStyleLabel'
 type RowValue = string | number | boolean | null | undefined
 export type ImportCargoRow = Record<string, RowValue> | RowValue[]
 
+export const MAX_IMPORT_ROWS = 10_000
+export const MAX_IMPORT_COLUMNS = 256
+export const MAX_IMPORT_CELLS = 200_000
+export const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024
+
+export function importWorksheetSizeWithinLimits(rowCount: number, columnCount: number): boolean {
+  return Number.isInteger(rowCount)
+    && Number.isInteger(columnCount)
+    && rowCount >= 0
+    && columnCount >= 0
+    && rowCount <= MAX_IMPORT_ROWS
+    && columnCount <= MAX_IMPORT_COLUMNS
+    && rowCount * columnCount <= MAX_IMPORT_CELLS
+}
+
 export const IMPORT_CODES = {
   CM_CONVERTED: 'cm-converted',
   INVALID_DIMENSIONS: 'invalid-dimensions',
@@ -279,16 +294,10 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
     const color = colorPattern.test(rawColor.trim()) ? rawColor.trim() : colors[index % colors.length]
 
     const rawWeight = valueFor(row, fields.weight)
-    if (rawWeight === undefined || rawWeight === null || String(rawWeight).trim() === '') {
-      errors.push({
-        row: rowNumber,
-        code: IMPORT_CODES.INVALID_WEIGHT,
-        params: { row: rowNumber },
-        message: 'Missing or invalid weight.',
-      })
-      return
-    }
-    const weight = Number(rawWeight)
+    const weight = rawWeight === undefined || rawWeight === null || String(rawWeight).trim() === ''
+      ? 1
+      : Number(rawWeight)
+
     if (!Number.isFinite(weight) || weight <= 0) {
       errors.push({
         row: rowNumber,
@@ -298,7 +307,6 @@ export function parseCargoRows(rows: ImportCargoRow[], options: ParseOptions = {
       })
       return
     }
-
     items.push({
       id: createId(),
       label,
@@ -413,18 +421,15 @@ export function parseCargoRowsWithTemplate(
     const next: Record<string, RowValue> = { ...row }
     const applyDefault = (field: keyof ImportTemplateDefaults, key: string, value: RowValue) => {
       const mapped = template.mapping[field]
-      if (mapped) {
-        if (next[mapped] === undefined || next[mapped] === null || String(next[mapped]).trim() === '') {
-          next[mapped] = value
-        }
-      } else {
+      if (!mapped) {
         next[key] = value
+      } else if (next[mapped] === undefined || next[mapped] === null || String(next[mapped]).trim() === '') {
+        next[mapped] = value
       }
     }
     if (defaults.label) applyDefault('label', '__default_label', defaults.label)
     if (defaults.name) applyDefault('name', '__default_name', defaults.name)
     if (defaults.quantity !== undefined) applyDefault('quantity', '__default_quantity', defaults.quantity)
-    if (defaults.weight !== undefined) applyDefault('weight', '__default_weight', defaults.weight)
     if (defaults.color) applyDefault('color', '__default_color', defaults.color)
     if (defaults.canRotate !== undefined) applyDefault('canRotate', '__default_canRotate', defaults.canRotate)
     if (defaults.stackable !== undefined) applyDefault('stackable', '__default_stackable', defaults.stackable)
@@ -435,7 +440,6 @@ export function parseCargoRowsWithTemplate(
   if (defaults.label && !effectiveMapping.label) effectiveMapping.label = '__default_label'
   if (defaults.name && !effectiveMapping.name) effectiveMapping.name = '__default_name'
   if (defaults.quantity !== undefined && !effectiveMapping.quantity) effectiveMapping.quantity = '__default_quantity'
-  if (defaults.weight !== undefined && !effectiveMapping.weight) effectiveMapping.weight = '__default_weight'
   if (defaults.color && !effectiveMapping.color) effectiveMapping.color = '__default_color'
   if (defaults.canRotate !== undefined && !effectiveMapping.canRotate) effectiveMapping.canRotate = '__default_canRotate'
   if (defaults.stackable !== undefined && !effectiveMapping.stackable) effectiveMapping.stackable = '__default_stackable'
