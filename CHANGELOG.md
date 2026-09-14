@@ -5,6 +5,8 @@
 - 20 英尺级货柜的数量和体积模式都先完成当前垂直装载前沿（`z → y → x`）再打开下一纵向空位。越南第十一批 20GP 体积模式实测占用体积由 **29,937,044,000** 提升至 **30,813,509,000 mm³**，50 mm 网格最大上层货物间槽由 **1000 mm** 降至 **650 mm**，封闭空腔保持 **0**。
 - 体积模式的越南 20GP 件数由 **473** 变为 **464**；这是体积优先目标下以更高占用体积换取更紧凑上层前沿的有意取舍，已更新契约快照并记录在 `decision.md`。
 - 发布说明：`src/data/releaseNotes.ts` 的 `2026-09-14-r77-volume-front-compaction`。
+- 生产部署：`npm run deploy` 7/7 通过，备份为 `/root/cargo_project-backup-20260914-024431`；首页 HTTP 和未认证 `/api/import-templates` 401 健康检查通过，`cargo-server.service` 已重启。
+- 部署后经 SSH 回环隧道运行 `npm run test:e2e:remote`：**3 passed / 0 failed / 0 skipped**。
 
 ## 2026-09-11 远程部署回归入口整理
 
